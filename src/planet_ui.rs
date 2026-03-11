@@ -1,7 +1,21 @@
 use crate::{GameState, Player, Ship};
 use avian2d::prelude::{Physics, PhysicsTime};
 use bevy::prelude::*;
-use bevy_egui::EguiContexts;
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
+
+pub fn planet_plugin(app: &mut App) {
+    app.add_plugins(EguiPlugin::default())
+        .insert_resource::<LandedContext>(LandedContext {
+            planet: None,
+            active_tab: PlanetTab::Trade,
+        })
+        .add_systems(
+            EguiPrimaryContextPass,
+            planet_ui.run_if(in_state(GameState::Landed)),
+        )
+        .add_systems(OnEnter(GameState::Landed), pause_physics)
+        .add_systems(OnExit(GameState::Landed), unpause_physics);
+}
 
 #[derive(Resource)]
 pub struct LandedContext {
