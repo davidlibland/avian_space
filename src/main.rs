@@ -5,11 +5,23 @@ use bevy::{
 };
 use rand::Rng;
 
+mod hud;
+mod planet_ui;
 mod starfield;
+use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
+use hud::HudPlugin;
+use planet_ui::{LandedContext, PlanetTab, pause_physics, planet_ui, unpause_physics};
 use starfield::{Star, StarfieldPlugin, WorldOffset};
 
 // Define your boundary
 const BOUNDS: f32 = 900.0;
+
+#[derive(States, Default, PartialEq, Eq, Hash, Clone, Debug)]
+enum GameState {
+    #[default]
+    Flying,
+    Landed,
+}
 
 fn main() {
     App::new()
@@ -18,25 +30,38 @@ fn main() {
             // Add physics plugins and specify a units-per-meter scaling factor, 1 meter = 20 pixels.
             // The unit allows the engine to tune its parameters for the scale of the world, improving stability.
             PhysicsPlugins::default().with_length_unit(20.0),
+            EguiPlugin::default(), // ← add this
             StarfieldPlugin,
+            HudPlugin,
         ))
+        .insert_resource::<LandedContext>(LandedContext {
+            planet: None,
+            active_tab: PlanetTab::Trade,
+        })
+        .init_state::<GameState>()
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0)) // Set custom gravity
         .init_resource::<WorldOffset>()
         .add_message::<ShipCommand>()
         .add_systems(Startup, setup)
+        .add_systems(Update, keyboard_input.run_if(in_state(GameState::Flying)))
         .add_systems(
             FixedUpdate,
-            (keyboard_input, ship_movement)
-                .chain()
-                .before(PhysicsSystems::StepSimulation),
+            ship_movement.run_if(in_state(GameState::Flying)),
         )
-        .add_systems(Update, collision_system)
+        .add_systems(Update, collision_system.run_if(in_state(GameState::Flying)))
         .add_systems(
             Update,
             (screen_wrapping_system, recenter_world)
                 .chain()
-                .after(PhysicsSystems::Writeback),
+                .after(PhysicsSystems::Writeback)
+                .run_if(in_state(GameState::Flying)),
         )
+        .add_systems(
+            EguiPrimaryContextPass,
+            planet_ui.run_if(in_state(GameState::Landed)),
+        )
+        .add_systems(OnEnter(GameState::Landed), pause_physics)
+        .add_systems(OnExit(GameState::Landed), unpause_physics)
         .run();
 }
 
@@ -60,6 +85,8 @@ pub struct Ship {
     // PD gains for reverse heading correction
     pub reverse_kp: Scalar,
     pub reverse_kd: Scalar,
+    pub max_health: i32,
+    pub health: i32,
 }
 
 impl Default for Ship {
@@ -73,6 +100,8 @@ impl Default for Ship {
             thrust_kd: 1.0,
             reverse_kp: 20.0,
             reverse_kd: 1.5,
+            max_health: 100,
+            health: 100,
         }
     }
 }
@@ -92,14 +121,17 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials_3d: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     let ship = Ship::default();
     // Player
     commands.spawn((
         Player, // Mark the player
         ship.clone(),
-        Mesh2d(meshes.add(build_ship_mesh())),
-        MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
+        // Mesh2d(meshes.add(build_ship_mesh())),
+        // MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
+        Sprite::from_image(asset_server.load("spaceship.png")),
         Transform::from_xyz(0.0, 0.0, 0.0),
         Collider::circle(15.),
         RigidBody::Dynamic,
@@ -195,6 +227,7 @@ fn keyboard_input(
     mut writer: MessageWriter<ShipCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     player_query: Query<Entity, With<Player>>,
+    mut state: ResMut<NextState<GameState>>,
 ) {
     let Ok(player_entity) = player_query.single() else {
         return; // Player not spawned yet
@@ -220,6 +253,11 @@ fn keyboard_input(
             turn,
             reverse,
         });
+    }
+
+    let land = keyboard_input.any_pressed([KeyCode::KeyL]);
+    if land {
+        state.set(GameState::Landed);
     }
 }
 
@@ -361,7 +399,7 @@ fn collision_system(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut collisions: MessageReader<CollisionStart>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
-    ships: Query<&Player>,
+    mut ships: Query<&mut Ship>,
 ) {
     let mut rng = rand::thread_rng();
     for event in collisions.read() {
@@ -369,15 +407,15 @@ fn collision_system(
 
         // Determine which entity is the asteroid and which is the ship,
         // handling both orderings since Avian2D can emit either way.
-        let asteroid_entity = if asteroids.contains(a) && ships.contains(b) {
-            Some(a)
+        let asteroid_ship_entity = if asteroids.contains(a) && ships.contains(b) {
+            Some((a, b))
         } else if asteroids.contains(b) && ships.contains(a) {
-            Some(b)
+            Some((b, a))
         } else {
             None
         };
 
-        if let Some(asteroid_entity) = asteroid_entity {
+        if let Some((asteroid_entity, ship_entity)) = asteroid_ship_entity {
             if let Ok((asteroid, transform, vel)) = asteroids.get(asteroid_entity) {
                 let pos = transform.translation.truncate();
                 let size = asteroid.size;
@@ -397,6 +435,10 @@ fn collision_system(
                         );
                     }
                 }
+            }
+            if let Ok(mut ship) = ships.get_mut(ship_entity) {
+                ship.health -= 10;
+                ship.health = if ship.health < 0 { 0 } else { ship.health };
             }
         }
     }
