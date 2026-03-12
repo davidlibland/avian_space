@@ -6,14 +6,16 @@ mod hud;
 mod planet_ui;
 mod ship;
 mod starfield;
-mod torus;
 mod utils;
+mod weapons;
 use asteroids::{Asteroid, build_asteroid_field, shatter_asteroid};
 use hud::HudPlugin;
 use planet_ui::planet_plugin;
 use ship::{Ship, ShipCommand, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
-// use torus::ToroidalWorldPlugin;
+use weapons::{FireCommand, Weapon, WeaponType, weapons_plugin};
+
+use crate::weapons::WeaponSystems;
 
 // Define your boundary
 const BOUNDS: f32 = 1000.0;
@@ -23,6 +25,16 @@ enum GameState {
     #[default]
     Flying,
     Landed,
+}
+
+#[derive(PhysicsLayer, Default)]
+pub enum Layer {
+    Ship,
+    Weapon,
+    Asteroid,
+    Planet,
+    #[default]
+    Other,
 }
 
 fn main() {
@@ -36,6 +48,7 @@ fn main() {
             StarfieldPlugin::default(),
             HudPlugin,
             ship_plugin,
+            weapons_plugin,
         ))
         .init_state::<GameState>()
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0)) // Set custom gravity
@@ -72,11 +85,12 @@ fn setup(
 /// Sends [`MovementAction`] events based on keyboard input.
 fn keyboard_input(
     mut writer: MessageWriter<ShipCommand>,
+    mut weapons_writer: MessageWriter<FireCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    player_query: Query<Entity, With<Player>>,
+    player_query: Query<(Entity, &WeaponSystems), With<Player>>,
     mut state: ResMut<NextState<GameState>>,
 ) {
-    let Ok(player_entity) = player_query.single() else {
+    let Ok((player_entity, weapons)) = player_query.single() else {
         return; // Player not spawned yet
     };
 
@@ -106,6 +120,14 @@ fn keyboard_input(
     if land {
         state.set(GameState::Landed);
     }
+
+    let fire = keyboard_input.any_pressed([KeyCode::Space]);
+    if fire && weapons.primary.cooldown.just_finished() {
+        weapons_writer.write(FireCommand {
+            ship: player_entity,
+            weapon_type: WeaponType::Laser,
+        });
+    }
 }
 
 fn collision_system(
@@ -115,6 +137,7 @@ fn collision_system(
     mut collisions: MessageReader<CollisionStart>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
     mut ships: Query<&mut Ship>,
+    mut weapons: Query<&Weapon>,
 ) {
     for event in collisions.read() {
         let (a, b) = (event.collider1, event.collider2);
@@ -142,6 +165,27 @@ fn collision_system(
                 ship.health -= 10;
                 ship.health = if ship.health < 0 { 0 } else { ship.health };
             }
+        }
+
+        // Determine which entity is the asteroid and which is the ship,
+        // handling both orderings since Avian2D can emit either way.
+        let asteroid_weapon_entity = if asteroids.contains(a) && weapons.contains(b) {
+            Some((a, b))
+        } else if asteroids.contains(b) && weapons.contains(a) {
+            Some((b, a))
+        } else {
+            None
+        };
+
+        if let Some((asteroid_entity, weapon_entity)) = asteroid_weapon_entity {
+            shatter_asteroid(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &asteroid_entity,
+                &asteroids,
+            );
+            commands.entity(weapon_entity).despawn();
         }
     }
 }

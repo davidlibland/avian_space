@@ -1,5 +1,6 @@
-use crate::GameState;
 use crate::utils::polygon_mesh;
+use crate::weapons::WeaponSystems;
+use crate::{GameState, Layer};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
@@ -41,12 +42,14 @@ pub struct ShipBundle {
     ship: Ship,
     sprite: Sprite,
     transform: Transform,
-    collider: Collider,
-    colider_density: ColliderDensity,
     body: RigidBody,
-    collision_events: CollisionEventsEnabled,
     angular_damping: AngularDamping,
     max_speed: MaxLinearSpeed,
+    collider: Collider,
+    colider_density: ColliderDensity,
+    collision_events: CollisionEventsEnabled,
+    layer: CollisionLayers,
+    weapons: WeaponSystems,
 }
 
 pub fn ship_bundle(asset_server: &Res<AssetServer>) -> ShipBundle {
@@ -57,12 +60,14 @@ pub fn ship_bundle(asset_server: &Res<AssetServer>) -> ShipBundle {
         // MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
         sprite: Sprite::from_image(asset_server.load("spaceship.png")),
         transform: Transform::from_xyz(0.0, 0.0, 0.0),
-        collider: Collider::circle(15.),
         body: RigidBody::Dynamic,
-        colider_density: ColliderDensity(2.0),
-        collision_events: CollisionEventsEnabled,
         angular_damping: AngularDamping(ship.angular_drag), // equivalent to angular_drag = 3.0
         max_speed: MaxLinearSpeed(ship.max_speed),          // Restitution::new(1.5),
+        collider: Collider::circle(15.),
+        colider_density: ColliderDensity(2.0),
+        collision_events: CollisionEventsEnabled,
+        layer: CollisionLayers::new(Layer::Ship, [Layer::Weapon, Layer::Asteroid, Layer::Planet]),
+        weapons: WeaponSystems::default(),
     }
 }
 

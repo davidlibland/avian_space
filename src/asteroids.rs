@@ -1,3 +1,4 @@
+use crate::Layer;
 use crate::utils::{polygon_mesh, random_velocity};
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -36,6 +37,7 @@ pub fn spawn_asteroid(
             MeshMaterial2d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
             Transform::from_xyz(pos.x, pos.y, 0.0),
             Collider::circle(size),
+            CollisionLayers::new(Layer::Asteroid, [Layer::Ship, Layer::Weapon]),
             LinearVelocity(vel),
             AngularVelocity(rot),
             RigidBody::Dynamic,
