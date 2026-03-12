@@ -18,7 +18,7 @@ use weapons::{FireCommand, Weapon, WeaponType, weapons_plugin};
 use crate::weapons::WeaponSystems;
 
 // Define your boundary
-const BOUNDS: f32 = 1000.0;
+const BOUNDS: f32 = 5000.0;
 
 #[derive(States, Default, PartialEq, Eq, Hash, Clone, Debug)]
 enum GameState {

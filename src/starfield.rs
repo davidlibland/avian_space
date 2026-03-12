@@ -1,30 +1,27 @@
 use crate::{BOUNDS, Player};
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use rand::Rng;
 
 // ── Plugin ───────────────────────────────────────────────────────────────────
 
 pub struct StarfieldPlugin {
     pub world_size: f32,
-    pub origin_shift_threshold: f32,
 }
 
 impl Default for StarfieldPlugin {
     fn default() -> Self {
-        StarfieldPlugin {
-            world_size: BOUNDS,
-            origin_shift_threshold: BOUNDS / 4.0,
-        }
+        StarfieldPlugin { world_size: BOUNDS }
     }
 }
 
 impl Plugin for StarfieldPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WorldOffset>()
+            .init_resource::<WindowSize>()
             .insert_resource(ToroidalWorld {
                 size: self.world_size,
-                threshold: self.origin_shift_threshold,
             })
             .add_systems(Startup, spawn_starfield)
             .add_systems(
@@ -44,17 +41,6 @@ impl Plugin for StarfieldPlugin {
             .add_systems(FixedUpdate, camera_follow_player);
     }
 }
-
-// pub struct ToroidalWorldPlugin
-
-// impl Plugin for ToroidalWorldPlugin {
-//     fn build(&self, app: &mut App) {
-//         app.insert_resource(ToroidalWorld {
-//             size: self.world_size,
-//             threshold: self.origin_shift_threshold,
-//         })
-//     }
-// }
 
 // ── Components ────────────────────────────────────────────────────────────────
 
@@ -107,16 +93,23 @@ const STAR_Z: f32 = -10.0;
 
 // ── Systems ───────────────────────────────────────────────────────────────────
 
-fn spawn_starfield(mut commands: Commands, world: Res<ToroidalWorld>) {
+fn spawn_starfield(
+    mut commands: Commands,
+    window_query: Query<&Window, With<PrimaryWindow>>,
+    mut window_size: ResMut<WindowSize>,
+) {
     let mut rng = rand::thread_rng();
+    let window = window_query.single().unwrap();
+    window_size.0.x = window.width();
+    window_size.0.y = window.height();
 
     for layer in STAR_LAYERS {
-        let count = (layer.count as f32 * (world.size / 900.).powi(2)) as usize;
+        let count =
+            (layer.count as f32 * window_size.x * window_size.y / (900f32).powi(2)) as usize;
         // let count = layer.count;
         for _ in 0..count {
-            let effective_bounds = world.size / layer.parallax;
-            let x = rng.gen_range(-effective_bounds..effective_bounds);
-            let y = rng.gen_range(-effective_bounds..effective_bounds);
+            let x = rng.gen_range(-window_size.x..window_size.x);
+            let y = rng.gen_range(-window_size.y..window_size.y);
             let size = rng.gen_range(layer.size_range.0..layer.size_range.1);
 
             let red_shift = layer.parallax + (1.0 - layer.parallax) * 0.5;
@@ -141,7 +134,7 @@ fn spawn_starfield(mut commands: Commands, world: Res<ToroidalWorld>) {
 ///
 /// We store the world offset in a resource so the two systems stay decoupled.
 #[derive(Resource, Default)]
-pub struct WorldOffset(pub Vec2);
+struct WorldOffset(pub Vec2);
 
 /// Your `recenter_world` system should insert this resource and write to it
 /// each frame before `shift_starfield` runs. See the example at the bottom
@@ -169,30 +162,30 @@ fn shift_starfield(
 /// Wraps stars back onto the torus. Because each layer moves at a different
 /// speed, its effective world size is `BOUNDS / parallax`; we wrap at that
 /// boundary so stars tile seamlessly within their own layer.
-fn wrap_starfield(mut query: Query<(&Star, &mut Transform)>, world: Res<ToroidalWorld>) {
-    for (star, mut transform) in query.iter_mut() {
-        // Each parallax layer lives on a torus scaled by 1/parallax.
-        // Wrapping at ±(BOUNDS / parallax) keeps the density uniform.
-        let effective_bounds = world.size / star.parallax;
-        let diameter = 2.0 * effective_bounds;
+fn wrap_starfield(mut query: Query<&mut Transform, With<Star>>, window_size: Res<WindowSize>) {
+    for mut transform in query.iter_mut() {
+        // let diameter = 2.0 * world.size;
 
-        transform.translation.x =
-            ((transform.translation.x + effective_bounds).rem_euclid(diameter)) - effective_bounds;
-        transform.translation.y =
-            ((transform.translation.y + effective_bounds).rem_euclid(diameter)) - effective_bounds;
+        transform.translation.x = ((transform.translation.x + window_size.x)
+            .rem_euclid(2.0 * window_size.x))
+            - window_size.x;
+        transform.translation.y = ((transform.translation.y + window_size.y)
+            .rem_euclid(2.0 * window_size.y))
+            - window_size.y;
     }
 }
 
 #[derive(Resource)]
-pub struct ToroidalWorld {
-    pub size: f32,
-    pub threshold: f32,
+struct ToroidalWorld {
+    size: f32,
 }
+
+#[derive(Resource, Deref, Default)]
+struct WindowSize(Vec2);
 
 /// Shift everything when the player drifts too far from origin.
 /// Run occasionally — could also be in PostUpdate or triggered via run condition.
 fn origin_shift_system(
-    world: Res<ToroidalWorld>,
     mut player_q: Query<(&mut Transform, &mut Position), With<Player>>,
     mut others_q: Query<(&mut Transform, &mut Position), Without<Player>>,
     mut visual_query: Query<&mut Transform, (Without<Player>, Without<Position>)>,
@@ -202,9 +195,6 @@ fn origin_shift_system(
         return;
     };
     let shift = pt.translation.truncate();
-    if shift.length_squared() < world.threshold * world.threshold {
-        return;
-    }
 
     // Shift player to origin
     pt.translation = pt.translation.with_xy(Vec2::ZERO);
@@ -251,12 +241,19 @@ fn wrap(pos: Vec2, size: Vec2) -> Vec2 {
     )
 }
 fn player_is_far_from_origin(
-    world: Res<ToroidalWorld>,
+    // world: Res<ToroidalWorld>,
     player_q: Query<&Transform, With<Player>>,
+    window_size: Res<WindowSize>,
 ) -> bool {
+    let min_dim = if window_size.x < window_size.y {
+        window_size.x
+    } else {
+        window_size.y
+    };
+    let threshold = min_dim / 2.0;
     player_q
         .single()
-        .map(|t| t.translation.truncate().length_squared() > world.threshold * world.threshold)
+        .map(|t| t.translation.truncate().length_squared() > threshold * threshold)
         .unwrap_or(false)
 }
 
