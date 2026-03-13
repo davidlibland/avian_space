@@ -10,12 +10,15 @@ use crate::item_universe::ItemUniverse;
 use crate::planet_ui::LandedContext;
 use crate::{CurrentStarSystem, GameLayer, GameState, Player};
 
-const PLANET_RADIUS: f32 = 60.0;
+use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize)]
 pub struct PlanetData {
     pub location: Vec2,
     pub description: String,
+    pub commodities: HashMap<String, u16>, // Map of commodities to prices
+    pub radius: f32,
+    pub color: [f32; 3],
 }
 
 #[derive(Component)]
@@ -46,15 +49,17 @@ fn spawn_planets(
     };
 
     for (planet_name, planet_data) in &star_system.planets {
+        let r = planet_data.radius;
+        let [cr, cg, cb] = planet_data.color;
         commands.spawn((
             Planet(planet_name.clone()),
             RigidBody::Static,
-            Collider::circle(PLANET_RADIUS),
+            Collider::circle(r),
             CollisionLayers::new(GameLayer::Planet, [GameLayer::Ship, GameLayer::Radar]),
             CollisionEventsEnabled,
             Sensor,
-            Mesh2d(meshes.add(Circle::new(PLANET_RADIUS))),
-            MeshMaterial2d(materials.add(Color::srgb(0.2, 0.6, 0.3))),
+            Mesh2d(meshes.add(Circle::new(r))),
+            MeshMaterial2d(materials.add(Color::srgb(cr, cg, cb))),
             Transform::from_xyz(planet_data.location.x, planet_data.location.y, -1.0),
         ));
     }

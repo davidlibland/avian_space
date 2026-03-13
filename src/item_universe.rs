@@ -15,6 +15,8 @@ use std::path::Path;
 pub struct ItemUniverse {
     pub weapons: HashMap<String, Weapon>,
     pub star_systems: HashMap<String, StarSystem>,
+    // A list of commodities
+    // pub commodities: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize)]

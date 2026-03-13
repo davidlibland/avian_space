@@ -71,19 +71,51 @@ pub fn planet_ui(
         ui.horizontal(|ui| {
             if ui.button("Repair").clicked() {
                 if let Ok(mut ship) = player_query.single_mut() {
-                    ship.health = ship.max_health;
+                    ship.health = ship.data.max_health;
                 }
             }
             if ui.button("Launch").clicked() {
                 state.set(GameState::Flying);
             }
         });
-        // match ctx.active_tab {
-        //     PlanetTab::Trade => trade_ui(ui /* ... */),
-        //     PlanetTab::Shipyard => shipyard_ui(ui /* ... */),
-        //     PlanetTab::Bar => bar_ui(ui /* ... */),
-        //     PlanetTab::Missions => missions_ui(ui /* ... */),
-        // }
+        match landed.active_tab {
+            PlanetTab::Trade => {
+                if let Ok(mut ship) = player_query.single_mut() {
+                    ui.label(format!("Credits: {}", ship.credits));
+                    ui.separator();
+                    egui::Grid::new("trade_grid")
+                        .num_columns(5)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.strong("Commodity");
+                            ui.strong("Price");
+                            ui.strong("Cargo");
+                            ui.label("");
+                            ui.label("");
+                            ui.end_row();
+                            let commodities: Vec<(String, u16)> = planet
+                                .commodities
+                                .iter()
+                                .map(|(k, v)| (k.clone(), *v))
+                                .collect();
+                            for (commodity, price) in commodities {
+                                let qty = *ship.cargo.get(&commodity).unwrap_or(&0);
+                                ui.label(&commodity);
+                                ui.label(price.to_string());
+                                ui.label(qty.to_string());
+                                if ui.button("Buy").clicked() {
+                                    ship.buy_cargo(&commodity, 1, price as u128);
+                                }
+                                if ui.button("Sell").clicked() {
+                                    ship.sell_cargo(&commodity, 1, price as u128);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                }
+            }
+            _ => {}
+        }
     });
 }
 

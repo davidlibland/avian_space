@@ -12,6 +12,12 @@ const CHEVRON_EDGE: f32 = 52.0;
 struct HealthBarFill;
 
 #[derive(Component)]
+struct CreditsText;
+
+#[derive(Component)]
+struct CargoText;
+
+#[derive(Component)]
 struct RadarDisplay;
 
 #[derive(Resource)]
@@ -40,7 +46,7 @@ impl Plugin for HudPlugin {
             range: self.radar_range,
         })
         .add_systems(Startup, spawn_hud)
-        .add_systems(Update, (update_health_bar, update_radar_dots));
+        .add_systems(Update, (update_health_bar, update_radar_dots, update_cargo_credits));
     }
 }
 
@@ -146,6 +152,48 @@ fn spawn_hud(mut commands: Commands) {
                     TextColor(Color::srgb(0.5, 0.5, 0.55)),
                 ));
             });
+
+            // ── Credits ──────────────────────────────────────────────────
+            root.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+            ))
+            .with_children(|w| {
+                w.spawn((
+                    CreditsText,
+                    Text::new("Credits: 0"),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.9, 0.85, 0.3)),
+                ));
+            });
+
+            // ── Cargo space ───────────────────────────────────────────────
+            root.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+            ))
+            .with_children(|w| {
+                w.spawn((
+                    CargoText,
+                    Text::new("Free: 10"),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.6, 0.85, 0.9)),
+                ));
+            });
         });
 
     commands.insert_resource(RadarEntity(radar_id));
@@ -161,7 +209,7 @@ fn update_health_bar(
     let Ok(mut node) = fill_query.single_mut() else {
         return;
     };
-    let pct = (ship.health as f32 / ship.max_health as f32 * 100.0).clamp(0.0, 100.0);
+    let pct = (ship.health as f32 / ship.data.max_health as f32 * 100.0).clamp(0.0, 100.0);
     node.width = Val::Percent(pct);
 }
 
@@ -263,6 +311,23 @@ fn update_radar_dots(
             }
         }
     });
+}
+
+fn update_cargo_credits(
+    player_query: Query<&Ship, With<Player>>,
+    mut credits_query: Query<&mut Text, (With<CreditsText>, Without<CargoText>)>,
+    mut cargo_query: Query<&mut Text, (With<CargoText>, Without<CreditsText>)>,
+) {
+    let Ok(ship) = player_query.single() else {
+        return;
+    };
+    if let Ok(mut text) = credits_query.single_mut() {
+        **text = format!("Credits: {}", ship.credits);
+    }
+    if let Ok(mut text) = cargo_query.single_mut() {
+        let free = ship.data.cargo_space - ship.cargo.values().sum::<u16>();
+        **text = format!("Free: {}/{}", free, ship.data.cargo_space);
+    }
 }
 
 fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {

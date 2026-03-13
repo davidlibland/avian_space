@@ -1,9 +1,23 @@
-sol: 
-  planets: 
-    earth: 
+sol:
+  planets:
+    earth:
       location: [500.0, 300.0]
       description: "Home sweet home. It's always nice to come down to earth."
-  astroid_fields: 
+      radius: 60.0
+      color: [0.2, 0.6, 0.3]
+      commodities:
+        iron: 10
+        gold: 100
+        water: 5
+    moon:
+      location: [700.0, 450.0]
+      description: "Barren and grey, but surprisingly well-stocked with water ice."
+      radius: 30.0
+      color: [0.6, 0.6, 0.65]
+      commodities:
+        iron: 7
+        water: 15
+  astroid_fields:
     -
       location: [500., 300.]
       number: 10
