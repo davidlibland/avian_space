@@ -1,7 +1,7 @@
 use crate::item_universe::ItemUniverse;
 use crate::utils::polygon_mesh;
 use crate::weapons::{WeaponSystem, WeaponSystems};
-use crate::{GameState, Layer};
+use crate::{GameLayer, GameState};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
@@ -71,7 +71,15 @@ pub fn ship_bundle(
         collider: Collider::circle(15.),
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,
-        layer: CollisionLayers::new(Layer::Ship, [Layer::Weapon, Layer::Asteroid, Layer::Planet]),
+        layer: CollisionLayers::new(
+            GameLayer::Ship,
+            [
+                GameLayer::Weapon,
+                GameLayer::Asteroid,
+                GameLayer::Planet,
+                GameLayer::Radar,
+            ],
+        ),
         weapons: WeaponSystems {
             primary: WeaponSystem::from_type("laser", 1, &item_universe.weapons)
                 .into_iter()

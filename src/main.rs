@@ -34,11 +34,12 @@ enum GameState {
 }
 
 #[derive(PhysicsLayer, Default)]
-pub enum Layer {
+pub enum GameLayer {
     Ship,
     Weapon,
     Asteroid,
     Planet,
+    Radar,
     #[default]
     Other,
 }

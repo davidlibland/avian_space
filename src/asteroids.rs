@@ -1,4 +1,4 @@
-use crate::Layer;
+use crate::GameLayer;
 use crate::utils::{polygon_mesh, random_velocity};
 use avian2d::prelude::*;
 use bevy::math::FloatPow;
@@ -65,8 +65,13 @@ pub fn spawn_asteroid(
             Transform::from_xyz(pos.x, pos.y, 0.0),
             Collider::circle(size),
             CollisionLayers::new(
-                Layer::Asteroid,
-                [Layer::Ship, Layer::Weapon, Layer::Asteroid],
+                GameLayer::Asteroid,
+                [
+                    GameLayer::Ship,
+                    GameLayer::Weapon,
+                    GameLayer::Asteroid,
+                    GameLayer::Radar,
+                ],
             ),
             LinearVelocity(vel),
             AngularVelocity(rot),

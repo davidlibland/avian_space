@@ -1,4 +1,4 @@
-use crate::Layer;
+use crate::GameLayer;
 use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
 use avian2d::prelude::*;
@@ -49,6 +49,11 @@ pub struct Weapon {
     pub cooldown: f32,
 }
 
+impl Weapon {
+    pub fn range(&self) -> f32 {
+        self.speed * self.lifetime
+    }
+}
 pub struct WeaponSystem {
     pub cooldown: Timer,
     pub weapon_type: String,
@@ -95,7 +100,7 @@ pub fn weapon_fire(
                 weapon_type: cmd.weapon_type.clone(),
             },
             Collider::circle(10.),
-            CollisionLayers::new(Layer::Weapon, [Layer::Asteroid, Layer::Ship]),
+            CollisionLayers::new(GameLayer::Weapon, [GameLayer::Asteroid, GameLayer::Ship]),
             RigidBody::Dynamic,
             LinearVelocity(vel),
             Transform::from_translation(tip).with_rotation(ship_transform.rotation),

@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use crate::item_universe::ItemUniverse;
 use crate::planet_ui::LandedContext;
-use crate::{CurrentStarSystem, GameState, Layer, Player};
+use crate::{CurrentStarSystem, GameLayer, GameState, Player};
 
 const PLANET_RADIUS: f32 = 60.0;
 
@@ -47,7 +47,7 @@ fn spawn_planets(
             Planet,
             RigidBody::Static,
             Collider::circle(PLANET_RADIUS),
-            CollisionLayers::new(Layer::Planet, [Layer::Ship]),
+            CollisionLayers::new(GameLayer::Planet, [GameLayer::Ship, GameLayer::Radar]),
             CollisionEventsEnabled,
             Sensor,
             Mesh2d(meshes.add(Circle::new(PLANET_RADIUS))),
