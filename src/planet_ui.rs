@@ -1,4 +1,6 @@
-use crate::{GameState, Player, Ship};
+use crate::{
+    CurrentStarSystem, GameState, Player, Ship, item_universe::ItemUniverse, planets::Planet,
+};
 use avian2d::prelude::{Physics, PhysicsTime};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
@@ -36,11 +38,29 @@ pub fn planet_ui(
     mut state: ResMut<NextState<GameState>>,
     mut landed: ResMut<LandedContext>,
     mut player_query: Query<&mut Ship, With<Player>>,
+    planet_query: Query<&Planet>,
+    current_system: Res<CurrentStarSystem>,
+    item_universe: Res<ItemUniverse>,
 ) {
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
-    egui::Window::new("Docked").show(ctx, |ui| {
+    let Some(current_system) = item_universe.star_systems.get(&current_system.0) else {
+        return;
+    };
+    let Some(planet_name) = landed
+        .planet
+        .and_then(|e| planet_query.get(e).map(|p| p.0.clone()).ok())
+    else {
+        return;
+    };
+    // Lookup the planet data:
+    let Some(planet) = current_system.planets.get(&planet_name) else {
+        return;
+    };
+    egui::Window::new(format!("Docked on {}", planet_name)).show(ctx, |ui| {
+        ui.label(&planet.description);
+        ui.separator();
         ui.horizontal(|ui| {
             ui.selectable_value(&mut landed.active_tab, PlanetTab::Trade, "Trade");
             ui.selectable_value(&mut landed.active_tab, PlanetTab::Shipyard, "Shipyard");

@@ -4,6 +4,7 @@
 // They live in the planet layer.
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::item_universe::ItemUniverse;
 use crate::planet_ui::LandedContext;
@@ -11,12 +12,14 @@ use crate::{CurrentStarSystem, GameLayer, GameState, Player};
 
 const PLANET_RADIUS: f32 = 60.0;
 
+#[derive(Deserialize, Serialize)]
 pub struct PlanetData {
     pub location: Vec2,
+    pub description: String,
 }
 
 #[derive(Component)]
-pub struct Planet;
+pub struct Planet(pub String);
 
 /// Tracks which planet (if any) the player is currently overlapping.
 #[derive(Resource, Default)]
@@ -42,9 +45,9 @@ fn spawn_planets(
         return;
     };
 
-    for planet_data in &star_system.planets {
+    for (planet_name, planet_data) in &star_system.planets {
         commands.spawn((
-            Planet,
+            Planet(planet_name.clone()),
             RigidBody::Static,
             Collider::circle(PLANET_RADIUS),
             CollisionLayers::new(GameLayer::Planet, [GameLayer::Ship, GameLayer::Radar]),

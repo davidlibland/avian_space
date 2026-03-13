@@ -1,0 +1,11 @@
+sol: 
+  planets: 
+    earth: 
+      location: [500.0, 300.0]
+      description: "Home sweet home. It's always nice to come down to earth."
+  astroid_fields: 
+    -
+      location: [500., 300.]
+      number: 10
+      radius: 300.
+  ships: 3

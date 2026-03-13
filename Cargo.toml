@@ -9,5 +9,5 @@ bevy = "0.18.1"
 bevy_egui = "0.39.1"
 egui = "0.33.3"
 rand = "0.8.0"
-ron = "0.12.0"
 serde = {version="1.0.228", features = ["derive"] }
+serde_yaml = "0.9.34"

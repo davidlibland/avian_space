@@ -4,6 +4,7 @@ use avian2d::prelude::*;
 use bevy::math::FloatPow;
 use bevy::prelude::*;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 pub fn asteroid_plugin(app: &mut App) {
     app.add_systems(Update, asteroid_field_gravity);
@@ -16,6 +17,8 @@ pub struct Asteroid {
     size: f32,
     field: Entity,
 }
+
+#[derive(Deserialize, Serialize)]
 pub struct AsteroidFieldData {
     pub location: Vec2,
     pub radius: f32,
