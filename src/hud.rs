@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::planets::Planet;
-use crate::{Player, Ship};
+use crate::{GameState, Player, Ship};
 
 const RADAR_SIZE: f32 = 144.0;
 const DOT_SIZE: f32 = 4.0;
@@ -19,6 +19,9 @@ struct CargoText;
 
 #[derive(Component)]
 struct RadarDisplay;
+
+#[derive(Component)]
+struct RadarDot;
 
 #[derive(Resource)]
 struct RadarEntity(Entity);
@@ -46,7 +49,11 @@ impl Plugin for HudPlugin {
             range: self.radar_range,
         })
         .add_systems(Startup, spawn_hud)
-        .add_systems(Update, (update_health_bar, update_radar_dots, update_cargo_credits));
+        .add_systems(Update, (update_health_bar, update_cargo_credits))
+        .add_systems(
+            Update,
+            update_radar_dots.run_if(in_state(GameState::Flying)),
+        );
     }
 }
 
@@ -220,6 +227,7 @@ fn update_radar_dots(
     player_query: Query<&Transform, With<Player>>,
     ships_query: Query<&Transform, (With<Ship>, Without<Player>)>,
     planets_query: Query<&Transform, With<Planet>>,
+    dots_query: Query<Entity, With<RadarDot>>,
 ) {
     let Ok(player_tf) = player_query.single() else {
         return;
@@ -234,7 +242,9 @@ fn update_radar_dots(
         .map(|tf| tf.translation.truncate())
         .collect();
 
-    commands.entity(radar.0).despawn_related::<Children>();
+    for entity in dots_query.iter() {
+        commands.entity(entity).despawn();
+    }
 
     commands.entity(radar.0).with_children(|parent| {
         // ── Ships (white dots) ───────────────────────────────────────────
@@ -245,7 +255,7 @@ fn update_radar_dots(
             }
             let rx = half + (offset.x / config.range) * half - DOT_SIZE / 2.0;
             let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
-            parent.spawn(dot_bundle(rx, ry, Color::WHITE));
+            parent.spawn((RadarDot, dot_bundle(rx, ry, Color::WHITE)));
         }
 
         // ── Planets (blue dots) ──────────────────────────────────────────
@@ -258,7 +268,7 @@ fn update_radar_dots(
             any_planet_visible = true;
             let rx = half + (offset.x / config.range) * half - DOT_SIZE / 2.0;
             let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
-            parent.spawn(dot_bundle(rx, ry, Color::srgb(0.3, 0.5, 1.0)));
+            parent.spawn((RadarDot, dot_bundle(rx, ry, Color::srgb(0.3, 0.5, 1.0))));
         }
 
         // ── Off-radar planet chevron ─────────────────────────────────────
@@ -284,6 +294,7 @@ fn update_radar_dots(
                 // than at the text's top-left corner.
                 parent
                     .spawn((
+                        RadarDot,
                         Node {
                             position_type: PositionType::Absolute,
                             left: Val::Px(cx),
@@ -294,6 +305,7 @@ fn update_radar_dots(
                     ))
                     .with_children(|inner| {
                         inner.spawn((
+                            RadarDot,
                             Text::new(">"),
                             TextFont {
                                 font_size: 16.0,
