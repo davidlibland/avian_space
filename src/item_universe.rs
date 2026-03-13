@@ -15,6 +15,7 @@ pub struct ItemUniverse {
 pub struct StarSystem {
     pub planets: Vec<PlanetData>,
     pub astroid_fields: Vec<AsteroidFieldData>,
+    pub ships: u8,
 }
 
 impl Default for ItemUniverse {
@@ -40,6 +41,7 @@ impl Default for ItemUniverse {
                         number: 10,
                         radius: 300.,
                     }],
+                    ships: 3,
                 },
             )]),
         }

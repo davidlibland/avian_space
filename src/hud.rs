@@ -1,45 +1,85 @@
 use bevy::prelude::*;
 
+use crate::planets::Planet;
 use crate::{Player, Ship};
+
+const RADAR_SIZE: f32 = 144.0;
+const DOT_SIZE: f32 = 4.0;
+// How far from center to place the chevron tip (px), leaving room for border
+const CHEVRON_EDGE: f32 = 52.0;
 
 #[derive(Component)]
 struct HealthBarFill;
 
-pub struct HudPlugin;
+#[derive(Component)]
+struct RadarDisplay;
+
+#[derive(Resource)]
+struct RadarEntity(Entity);
+
+#[derive(Resource)]
+pub struct RadarConfig {
+    pub range: f32,
+}
+
+pub struct HudPlugin {
+    pub radar_range: f32,
+}
+
+impl Default for HudPlugin {
+    fn default() -> Self {
+        Self {
+            radar_range: 2000.0,
+        }
+    }
+}
 
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_hud)
-            .add_systems(Update, update_health_bar);
+        app.insert_resource(RadarConfig {
+            range: self.radar_range,
+        })
+        .add_systems(Startup, spawn_hud)
+        .add_systems(Update, (update_health_bar, update_radar_dots));
     }
 }
 
 fn spawn_hud(mut commands: Commands) {
-    // Root: absolute top-right column
+    let mut radar_id = Entity::PLACEHOLDER;
+
     commands
-        .spawn(Node {
-            position_type: PositionType::Absolute,
-            right: Val::Px(16.0),
-            top: Val::Px(16.0),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Stretch,
-            row_gap: Val::Px(6.0),
-            width: Val::Px(144.0),
-            ..default()
-        })
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(16.0),
+                top: Val::Px(16.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Stretch,
+                row_gap: Val::Px(6.0),
+                width: Val::Px(144.0),
+                ..default()
+            },
+            Transform::default(),
+        ))
         .with_children(|root| {
             // ── Radar ────────────────────────────────────────────────────
-            root.spawn((
-                Node {
-                    width: Val::Px(144.0),
-                    height: Val::Px(144.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(72.0)), // full circle
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.06, 0.0, 0.85)),
-                BorderColor::all(Color::srgb(0.1, 0.8, 0.3)),
-            ));
+            radar_id = root
+                .spawn((
+                    RadarDisplay,
+                    Node {
+                        width: Val::Px(RADAR_SIZE),
+                        height: Val::Px(RADAR_SIZE),
+                        border: UiRect::all(Val::Px(2.0)),
+                        border_radius: BorderRadius::all(Val::Px(72.0)), // full circle
+                        overflow: Overflow::clip(),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.0, 0.06, 0.0, 0.85)),
+                    BorderColor::all(Color::srgb(0.1, 0.8, 0.3)),
+                    // Required so children with Transform have a GlobalTransform ancestor.
+                    Transform::default(),
+                ))
+                .id();
 
             // ── Health bar ───────────────────────────────────────────────
             root.spawn((
@@ -107,6 +147,8 @@ fn spawn_hud(mut commands: Commands) {
                 ));
             });
         });
+
+    commands.insert_resource(RadarEntity(radar_id));
 }
 
 fn update_health_bar(
@@ -121,4 +163,119 @@ fn update_health_bar(
     };
     let pct = (ship.health as f32 / ship.max_health as f32 * 100.0).clamp(0.0, 100.0);
     node.width = Val::Percent(pct);
+}
+
+fn update_radar_dots(
+    mut commands: Commands,
+    radar: Res<RadarEntity>,
+    config: Res<RadarConfig>,
+    player_query: Query<&Transform, With<Player>>,
+    ships_query: Query<&Transform, (With<Ship>, Without<Player>)>,
+    planets_query: Query<&Transform, With<Planet>>,
+) {
+    let Ok(player_tf) = player_query.single() else {
+        return;
+    };
+    let player_pos = player_tf.translation.truncate();
+    let half = RADAR_SIZE / 2.0;
+
+    // Collect planet world positions up front so we can check visibility
+    // and compute the mean outside the with_children closure.
+    let planet_positions: Vec<Vec2> = planets_query
+        .iter()
+        .map(|tf| tf.translation.truncate())
+        .collect();
+
+    commands.entity(radar.0).despawn_related::<Children>();
+
+    commands.entity(radar.0).with_children(|parent| {
+        // ── Ships (white dots) ───────────────────────────────────────────
+        for ship_tf in ships_query.iter() {
+            let offset = ship_tf.translation.truncate() - player_pos;
+            if offset.length() > config.range {
+                continue;
+            }
+            let rx = half + (offset.x / config.range) * half - DOT_SIZE / 2.0;
+            let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
+            parent.spawn(dot_bundle(rx, ry, Color::WHITE));
+        }
+
+        // ── Planets (blue dots) ──────────────────────────────────────────
+        let mut any_planet_visible = false;
+        for &pos in &planet_positions {
+            let offset = pos - player_pos;
+            if offset.length() > config.range {
+                continue;
+            }
+            any_planet_visible = true;
+            let rx = half + (offset.x / config.range) * half - DOT_SIZE / 2.0;
+            let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
+            parent.spawn(dot_bundle(rx, ry, Color::srgb(0.3, 0.5, 1.0)));
+        }
+
+        // ── Off-radar planet chevron ─────────────────────────────────────
+        // When no planets appear on the radar, show a ">" at the edge that
+        // is rotated to point toward the mean planet location.
+        if !any_planet_visible && !planet_positions.is_empty() {
+            let mean: Vec2 =
+                planet_positions.iter().copied().sum::<Vec2>() / planet_positions.len() as f32;
+            let offset = mean - player_pos;
+            if offset.length() > f32::EPSILON {
+                let dir = offset.normalize();
+                let cx = half + dir.x * CHEVRON_EDGE;
+                let cy = half - dir.y * CHEVRON_EDGE; // screen Y is flipped
+
+                // Bevy's from_rotation_z is CCW in world space (+Y up), which
+                // renders CW on screen (+Y down). Negate to get the correct
+                // screen-space visual direction.
+                let angle = -dir.y.atan2(dir.x);
+
+                // Use a zero-sized container node as the rotation pivot, then
+                // offset the ">" text inside it so its glyph centre sits at
+                // (cx, cy). This keeps the transform anchor at (cx, cy) rather
+                // than at the text's top-left corner.
+                parent
+                    .spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(cx),
+                            top: Val::Px(cy),
+                            ..default()
+                        },
+                        UiTransform::from_rotation(Rot2::radians(angle)),
+                    ))
+                    .with_children(|inner| {
+                        inner.spawn((
+                            Text::new(">"),
+                            TextFont {
+                                font_size: 16.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.4, 0.6, 1.0)),
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: Val::Px(-5.0),
+                                top: Val::Px(-8.0),
+                                ..default()
+                            },
+                        ));
+                    });
+            }
+        }
+    });
+}
+
+fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {
+    (
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(left),
+            top: Val::Px(top),
+            width: Val::Px(DOT_SIZE),
+            height: Val::Px(DOT_SIZE),
+            border_radius: BorderRadius::all(Val::Px(DOT_SIZE / 2.0)),
+            ..default()
+        },
+        BackgroundColor(color),
+    )
 }

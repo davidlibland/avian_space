@@ -1,5 +1,5 @@
 use avian2d::{math::*, prelude::*};
-use bevy::prelude::*;
+use bevy::{math::VectorSpace, prelude::*};
 
 mod asteroids;
 mod hud;
@@ -7,10 +7,12 @@ mod item_universe;
 mod planet_ui;
 mod planets;
 use planets::planets_plugin;
+mod ai_ships;
 mod ship;
 mod starfield;
 mod utils;
 mod weapons;
+use ai_ships::ai_ship_bundle;
 use asteroids::{Asteroid, asteroid_plugin, build_asteroid_field, shatter_asteroid};
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
@@ -22,7 +24,7 @@ use weapons::{FireCommand, Projectile, weapons_plugin};
 use crate::weapons::WeaponSystems;
 
 // Define your boundary
-const BOUNDS: f32 = 3000.0;
+const BOUNDS: f32 = 10000.0;
 
 #[derive(States, Default, PartialEq, Eq, Hash, Clone, Debug)]
 enum GameState {
@@ -53,12 +55,13 @@ fn main() {
             PhysicsPlugins::default().with_length_unit(20.0),
             planet_ui_plugin,
             StarfieldPlugin::default(),
-            HudPlugin,
+            HudPlugin::default(),
             ship_plugin,
             weapons_plugin,
             item_universe_plugin,
             planets_plugin,
             asteroid_plugin,
+            ai_ship_bundle,
         ))
         .init_state::<GameState>()
         .insert_resource(CurrentStarSystem("sol".to_string())) // Set custom gravity
@@ -85,7 +88,7 @@ fn setup(
     // Player
     commands.spawn((
         Player, // Mark the player
-        ship_bundle(&asset_server, &item_universe),
+        ship_bundle(&asset_server, &item_universe, Vec2::ZERO),
     ));
 
     if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {

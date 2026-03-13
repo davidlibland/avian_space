@@ -56,14 +56,15 @@ pub struct ShipBundle {
 pub fn ship_bundle(
     asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
+    pos: Vec2,
 ) -> ShipBundle {
     let ship = Ship::default();
     ShipBundle {
         ship: ship.clone(),
-        // Mesh2d(meshes.add(build_ship_mesh())),
-        // MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
+        // mesh: Mesh2d(meshes.add(build_ship_mesh())),
+        // material: MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
         sprite: Sprite::from_image(asset_server.load("spaceship.png")),
-        transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
         angular_damping: AngularDamping(ship.angular_drag), // equivalent to angular_drag = 3.0
         max_speed: MaxLinearSpeed(ship.max_speed),          // Restitution::new(1.5),
