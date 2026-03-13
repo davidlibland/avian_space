@@ -3,7 +3,7 @@ use avian2d::prelude::{Physics, PhysicsTime};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
-pub fn planet_plugin(app: &mut App) {
+pub fn planet_ui_plugin(app: &mut App) {
     app.add_plugins(EguiPlugin::default())
         .insert_resource::<LandedContext>(LandedContext {
             planet: None,

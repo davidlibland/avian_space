@@ -2,6 +2,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::asteroids::AsteroidFieldData;
 use crate::planets::PlanetData;
 use crate::weapons::Weapon;
 
@@ -13,7 +14,7 @@ pub struct ItemUniverse {
 
 pub struct StarSystem {
     pub planets: Vec<PlanetData>,
-    pub astroid_density: f32,
+    pub astroid_fields: Vec<AsteroidFieldData>,
 }
 
 impl Default for ItemUniverse {
@@ -34,7 +35,11 @@ impl Default for ItemUniverse {
                     planets: vec![PlanetData {
                         location: Vec2::new(500., 300.),
                     }],
-                    astroid_density: 1.0,
+                    astroid_fields: vec![AsteroidFieldData {
+                        location: Vec2::new(500., 300.),
+                        number: 10,
+                        radius: 300.,
+                    }],
                 },
             )]),
         }

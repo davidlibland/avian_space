@@ -1,17 +1,44 @@
 use crate::Layer;
 use crate::utils::{polygon_mesh, random_velocity};
 use avian2d::prelude::*;
+use bevy::math::FloatPow;
 use bevy::prelude::*;
 use rand::Rng;
+
+pub fn asteroid_plugin(app: &mut App) {
+    app.add_systems(Update, asteroid_field_gravity);
+}
+
+const ASTEROID_VELOCITY: f32 = 50.0;
 
 #[derive(Component)]
 pub struct Asteroid {
     size: f32,
+    field: Entity,
 }
+pub struct AsteroidFieldData {
+    pub location: Vec2,
+    pub radius: f32,
+    pub number: usize,
+}
+
+#[derive(Component)]
+pub struct AsteroidField {
+    pub radius: f32,
+    pub number: usize,
+}
+
+impl AsteroidField {
+    fn gmass(&self) -> f32 {
+        return self.radius * ASTEROID_VELOCITY.powi(2);
+    }
+}
+
 pub fn spawn_asteroid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<ColorMaterial>>,
+    field: Entity,
     size: f32,
     pos: Vec2,
     vel: Vec2,
@@ -32,7 +59,7 @@ pub fn spawn_asteroid(
     // Asteroids
     commands
         .spawn((
-            Asteroid { size },
+            Asteroid { size, field },
             Mesh2d(meshes.add(mesh)),
             MeshMaterial2d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
             Transform::from_xyz(pos.x, pos.y, 0.0),
@@ -55,22 +82,40 @@ pub fn build_asteroid_field(
     mut commands: &mut Commands,
     mut meshes: &mut ResMut<Assets<Mesh>>,
     mut materials: &mut ResMut<Assets<ColorMaterial>>,
-    density: f32,
-    bound: f32,
+    field_data: &AsteroidFieldData,
 ) {
+    // Asteroids
+    let field = commands
+        .spawn((
+            AsteroidField {
+                radius: field_data.radius,
+                number: field_data.number,
+            },
+            Transform::from_xyz(field_data.location.x, field_data.location.y, 0.0),
+        ))
+        .id();
     let mut rng = rand::thread_rng();
-    let count = (density * (bound / 450.).powi(2)) as usize;
-    for _ in 0..count {
+    for _ in 0..field_data.number {
+        let r = rng.gen_range((field_data.radius * 0.5)..(field_data.radius * 1.5));
+        let theta = rng.gen_range(0.0..(2.0 * std::f32::consts::PI));
+        let (s, c) = theta.sin_cos();
+        let x = r * c;
+        let y = r * s;
         let size: f32 = rng.gen_range(15f32..30f32);
-        let x = rng.gen_range(-bound..bound);
-        let y = rng.gen_range(-bound..bound);
+        let v = (field_data.radius / r).sqrt() * ASTEROID_VELOCITY;
+        let vx = -s * v;
+        let vy = c * v;
+        let vel = Vec2 { x: vx, y: vy } + random_velocity(ASTEROID_VELOCITY * 0.3);
+        // Possibly orbit in other direction.
+        let vel = if rng.gen_bool(0.5) { vel } else { -vel };
         spawn_asteroid(
             &mut commands,
             &mut meshes,
             &mut materials,
+            field,
             size,
-            Vec2 { x, y },
-            random_velocity(10.0),
+            Vec2 { x, y } + field_data.location,
+            vel,
         );
     }
 }
@@ -86,6 +131,8 @@ pub fn shatter_asteroid(
         let mut rng = rand::thread_rng();
         let pos = transform.translation.truncate();
         let size = asteroid.size;
+        let field = asteroid.field;
+        // Remove the asteroid:
         commands.entity(*asteroid_entity).despawn();
         if size > 10.0 {
             for _ in 0..2 {
@@ -96,11 +143,33 @@ pub fn shatter_asteroid(
                     &mut commands,
                     &mut meshes,
                     &mut materials,
+                    field,
                     new_size,
                     pos + offset,
                     new_vel,
                 );
             }
         }
+    }
+}
+
+// Apply gravity towards the center of the asteroid field
+pub fn asteroid_field_gravity(
+    asteroids: Query<(Entity, &Asteroid, &Transform, &ComputedMass), With<RigidBody>>,
+    fields: Query<(&AsteroidField, &Transform)>,
+    mut forces: Query<Forces>,
+) {
+    for (asteroid_entity, asteroid, asteroid_transform, mass) in asteroids.iter() {
+        let Ok((field, field_transform)) = fields.get(asteroid.field) else {
+            continue;
+        };
+        let Ok(mut force) = forces.get_mut(asteroid_entity) else {
+            continue;
+        };
+        let gmass = field.gmass();
+        let offset = (field_transform.translation.xy() - asteroid_transform.translation.xy());
+        let force_strength = mass.value() * gmass / offset.length().squared();
+
+        force.apply_force(offset.normalize() * force_strength);
     }
 }

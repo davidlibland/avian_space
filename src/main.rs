@@ -1,6 +1,5 @@
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
-use core::time::Duration;
 
 mod asteroids;
 mod hud;
@@ -12,10 +11,10 @@ mod ship;
 mod starfield;
 mod utils;
 mod weapons;
-use asteroids::{Asteroid, build_asteroid_field, shatter_asteroid};
+use asteroids::{Asteroid, asteroid_plugin, build_asteroid_field, shatter_asteroid};
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
-use planet_ui::planet_plugin;
+use planet_ui::planet_ui_plugin;
 use ship::{Ship, ShipCommand, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
 use weapons::{FireCommand, Projectile, weapons_plugin};
@@ -52,13 +51,14 @@ fn main() {
             // Add physics plugins and specify a units-per-meter scaling factor, 1 meter = 20 pixels.
             // The unit allows the engine to tune its parameters for the scale of the world, improving stability.
             PhysicsPlugins::default().with_length_unit(20.0),
-            planet_plugin,
+            planet_ui_plugin,
             StarfieldPlugin::default(),
             HudPlugin,
             ship_plugin,
             weapons_plugin,
             item_universe_plugin,
             planets_plugin,
+            asteroid_plugin,
         ))
         .init_state::<GameState>()
         .insert_resource(CurrentStarSystem("sol".to_string())) // Set custom gravity
@@ -80,6 +80,7 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
     item_universe: Res<ItemUniverse>,
+    star_system: Res<CurrentStarSystem>,
 ) {
     // Player
     commands.spawn((
@@ -87,8 +88,12 @@ fn setup(
         ship_bundle(&asset_server, &item_universe),
     ));
 
-    // Asteroids
-    build_asteroid_field(&mut commands, &mut meshes, &mut materials, 1.0, BOUNDS);
+    if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {
+        for field in system_data.astroid_fields.iter() {
+            // Asteroids
+            build_asteroid_field(&mut commands, &mut meshes, &mut materials, &field);
+        }
+    }
 
     // Camera
     commands.spawn(Camera2d);
@@ -100,7 +105,6 @@ fn keyboard_input(
     mut weapons_writer: MessageWriter<FireCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     player_query: Query<(Entity, &WeaponSystems), With<Player>>,
-    item_universe: Res<ItemUniverse>,
 ) {
     let Ok((player_entity, weapons)) = player_query.single() else {
         return; // Player not spawned yet
@@ -148,7 +152,7 @@ fn collision_system(
     mut collisions: MessageReader<CollisionStart>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
     mut ships: Query<&mut Ship>,
-    mut weapons: Query<&Projectile>,
+    weapons: Query<&Projectile>,
 ) {
     for event in collisions.read() {
         let (a, b) = (event.collider1, event.collider2);
