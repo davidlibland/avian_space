@@ -1,5 +1,6 @@
+use crate::item_universe::ItemUniverse;
 use crate::utils::polygon_mesh;
-use crate::weapons::WeaponSystems;
+use crate::weapons::{WeaponSystem, WeaponSystems};
 use crate::{GameState, Layer};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
@@ -52,7 +53,10 @@ pub struct ShipBundle {
     weapons: WeaponSystems,
 }
 
-pub fn ship_bundle(asset_server: &Res<AssetServer>) -> ShipBundle {
+pub fn ship_bundle(
+    asset_server: &Res<AssetServer>,
+    item_universe: &Res<ItemUniverse>,
+) -> ShipBundle {
     let ship = Ship::default();
     ShipBundle {
         ship: ship.clone(),
@@ -67,7 +71,11 @@ pub fn ship_bundle(asset_server: &Res<AssetServer>) -> ShipBundle {
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,
         layer: CollisionLayers::new(Layer::Ship, [Layer::Weapon, Layer::Asteroid, Layer::Planet]),
-        weapons: WeaponSystems::default(),
+        weapons: WeaponSystems {
+            primary: WeaponSystem::from_type("laser", 1, &item_universe.weapons)
+                .into_iter()
+                .collect(),
+        },
     }
 }
 

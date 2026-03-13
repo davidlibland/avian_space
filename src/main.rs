@@ -1,24 +1,29 @@
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
+use core::time::Duration;
 
 mod asteroids;
 mod hud;
+mod item_universe;
 mod planet_ui;
+mod planets;
+use planets::planets_plugin;
 mod ship;
 mod starfield;
 mod utils;
 mod weapons;
 use asteroids::{Asteroid, build_asteroid_field, shatter_asteroid};
 use hud::HudPlugin;
+use item_universe::{ItemUniverse, item_universe_plugin};
 use planet_ui::planet_plugin;
 use ship::{Ship, ShipCommand, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
-use weapons::{FireCommand, Weapon, WeaponType, weapons_plugin};
+use weapons::{FireCommand, Projectile, weapons_plugin};
 
 use crate::weapons::WeaponSystems;
 
 // Define your boundary
-const BOUNDS: f32 = 5000.0;
+const BOUNDS: f32 = 3000.0;
 
 #[derive(States, Default, PartialEq, Eq, Hash, Clone, Debug)]
 enum GameState {
@@ -37,6 +42,9 @@ pub enum Layer {
     Other,
 }
 
+#[derive(Resource)]
+pub struct CurrentStarSystem(pub String);
+
 fn main() {
     App::new()
         .add_plugins((
@@ -49,8 +57,11 @@ fn main() {
             HudPlugin,
             ship_plugin,
             weapons_plugin,
+            item_universe_plugin,
+            planets_plugin,
         ))
         .init_state::<GameState>()
+        .insert_resource(CurrentStarSystem("sol".to_string())) // Set custom gravity
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0)) // Set custom gravity
         .add_systems(Startup, setup)
         .add_systems(
@@ -61,18 +72,19 @@ fn main() {
 }
 
 #[derive(Component)]
-struct Player;
+pub struct Player;
 
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
+    item_universe: Res<ItemUniverse>,
 ) {
     // Player
     commands.spawn((
         Player, // Mark the player
-        ship_bundle(&asset_server),
+        ship_bundle(&asset_server, &item_universe),
     ));
 
     // Asteroids
@@ -88,7 +100,7 @@ fn keyboard_input(
     mut weapons_writer: MessageWriter<FireCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     player_query: Query<(Entity, &WeaponSystems), With<Player>>,
-    mut state: ResMut<NextState<GameState>>,
+    item_universe: Res<ItemUniverse>,
 ) {
     let Ok((player_entity, weapons)) = player_query.single() else {
         return; // Player not spawned yet
@@ -116,17 +128,16 @@ fn keyboard_input(
         });
     }
 
-    let land = keyboard_input.any_pressed([KeyCode::KeyL]);
-    if land {
-        state.set(GameState::Landed);
-    }
-
     let fire = keyboard_input.any_pressed([KeyCode::Space]);
-    if fire && weapons.primary.cooldown.just_finished() {
-        weapons_writer.write(FireCommand {
-            ship: player_entity,
-            weapon_type: WeaponType::Laser,
-        });
+    if fire {
+        for specific in weapons.primary.iter() {
+            if specific.cooldown.just_finished() {
+                weapons_writer.write(FireCommand {
+                    ship: player_entity,
+                    weapon_type: specific.weapon_type.clone(),
+                });
+            }
+        }
     }
 }
 
@@ -137,7 +148,7 @@ fn collision_system(
     mut collisions: MessageReader<CollisionStart>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
     mut ships: Query<&mut Ship>,
-    mut weapons: Query<&Weapon>,
+    mut weapons: Query<&Projectile>,
 ) {
     for event in collisions.read() {
         let (a, b) = (event.collider1, event.collider2);

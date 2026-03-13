@@ -406,6 +406,8 @@ dependencies = [
  "bevy_egui",
  "egui",
  "rand 0.8.5",
+ "ron",
+ "serde",
 ]
 
 [[package]]
