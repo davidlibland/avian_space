@@ -114,6 +114,11 @@ pub fn planet_ui(
             PlanetTab::Outfitter => {
                 if let Ok((mut ship, mut weapon_systems)) = player_query.single_mut() {
                     ui.label(format!("Credits: {}", ship.credits));
+                    ui.label(format!(
+                        "Free space: {}/{}",
+                        ship.remaining_item_space(),
+                        ship.data.item_space
+                    ));
                     ui.separator();
                     egui::Grid::new("outfitter_grid")
                         .num_columns(5)

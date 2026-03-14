@@ -27,7 +27,7 @@ pub struct FireCommand {
 #[derive(Component)]
 pub struct Projectile {
     pub lifetime: f32,
-    pub owner: Option<(Entity, usize)>,
+    pub owner: Option<Entity>,
     pub weapon_type: String,
 }
 
@@ -119,6 +119,7 @@ pub struct Weapon {
     pub speed: f32,
     pub cooldown: f32,
     pub color: [f32; 3],
+    pub damage: i16,
 }
 
 impl Weapon {
@@ -178,7 +179,7 @@ pub fn weapon_fire(
             DespawnOnExit(GameState::Flying),
             Projectile {
                 lifetime: weapon.lifetime,
-                owner: None,
+                owner: Some(cmd.ship),
                 weapon_type: cmd.weapon_type.clone(),
             },
             Collider::circle(10.),

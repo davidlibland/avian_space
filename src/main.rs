@@ -20,7 +20,7 @@ use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
-use ship::{Ship, ShipCommand, ship_bundle, ship_plugin};
+use ship::{DamageShip, Ship, ShipCommand, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
 use utils::safe_despawn;
 use weapons::{FireCommand, Projectile, weapon_lifetime, weapons_plugin};
@@ -279,9 +279,11 @@ fn collision_system(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut collisions: MessageReader<CollisionStart>,
+    mut damage_writer: MessageWriter<DamageShip>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
-    mut ships: Query<&mut Ship>,
+    ships: Query<&Ship>,
     weapons: Query<&Projectile>,
+    item_universe: Res<ItemUniverse>,
 ) {
     use std::collections::HashSet;
     let mut shattered: HashSet<Entity> = HashSet::new();
@@ -308,10 +310,10 @@ fn collision_system(
                     &asteroids,
                 );
             }
-            if let Ok(mut ship) = ships.get_mut(ship_entity) {
-                ship.health -= 10;
-                ship.health = ship.health.max(0);
-            }
+            damage_writer.write(DamageShip {
+                entity: ship_entity,
+                damage: 10.0,
+            });
         }
 
         let asteroid_weapon_entity = if asteroids.contains(a) && weapons.contains(b) {
@@ -334,6 +336,33 @@ fn collision_system(
             }
             if despawned_weapons.insert(weapon_entity) {
                 safe_despawn(&mut commands, weapon_entity);
+            }
+        }
+
+        let weapon_ship_entity = if weapons.contains(a) && ships.contains(b) {
+            Some((a, b))
+        } else if weapons.contains(b) && ships.contains(a) {
+            Some((b, a))
+        } else {
+            None
+        };
+
+        if let Some((weapon_entity, ship_entity)) = weapon_ship_entity {
+            if let Ok(projectile) = weapons.get(weapon_entity) {
+                if projectile.owner == Some(ship_entity) {
+                    continue;
+                }
+                if despawned_weapons.insert(weapon_entity) {
+                    safe_despawn(&mut commands, weapon_entity);
+                    let damage = item_universe
+                        .weapons
+                        .get(&projectile.weapon_type)
+                        .map_or(0.0, |w| w.damage as f32);
+                    damage_writer.write(DamageShip {
+                        entity: ship_entity,
+                        damage,
+                    });
+                }
             }
         }
     }

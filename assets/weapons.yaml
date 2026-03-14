@@ -1,14 +1,16 @@
 laser:
     name: laser
-    lifetime: .2
+    lifetime: 0.5
     speed: 500.0
     cooldown: 1.0
     price: 100
     color: [1.0, 0.0, 0.0]
+    damage: 5
 proton_beam:
     name: proton_beam
-    lifetime: 1.8
-    speed: 500.0
+    lifetime: 1.25
+    speed: 400.0
     cooldown: 1.0
     price: 250
     color: [0.2, 0.4, 1.0]
+    damage: 10

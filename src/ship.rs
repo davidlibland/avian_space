@@ -7,12 +7,13 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 pub fn ship_plugin(app: &mut App) {
-    app.add_message::<ShipCommand>().add_systems(
-        FixedUpdate,
-        ship_movement.run_if(in_state(GameState::Flying)),
-    );
-    // app.init_resource::<MyCustomResource>();
-    // app.add_systems(Update, (do_some_things, do_other_things));
+    app.add_message::<ShipCommand>()
+        .add_message::<DamageShip>()
+        .add_systems(
+            FixedUpdate,
+            ship_movement.run_if(in_state(GameState::Flying)),
+        )
+        .add_systems(Update, apply_damage.run_if(in_state(GameState::Flying)));
 }
 
 #[derive(Event, Message)]
@@ -21,6 +22,12 @@ pub struct ShipCommand {
     pub thrust: Scalar,
     pub turn: Scalar,
     pub reverse: Scalar,
+}
+
+#[derive(Event, Message)]
+pub struct DamageShip {
+    pub entity: Entity,
+    pub damage: Scalar,
 }
 
 #[derive(Clone)]
@@ -233,6 +240,23 @@ fn ship_movement(
                 .clamp(-ship.data.torque, ship.data.torque);
             (*ang_vel).0 += pd_torque * cmd.reverse * dt;
             // forces.apply_angular_impulse(pd_torque * cmd.reverse * dt);
+        }
+    }
+}
+
+fn apply_damage(
+    mut commands: Commands,
+    mut reader: MessageReader<DamageShip>,
+    mut ships: Query<&mut Ship>,
+    ai_ships: Query<(), With<crate::ai_ships::AIShip>>,
+) {
+    for event in reader.read() {
+        let Ok(mut ship) = ships.get_mut(event.entity) else {
+            continue;
+        };
+        ship.health = (ship.health - event.damage as i32).max(0);
+        if ship.health == 0 && ai_ships.contains(event.entity) {
+            crate::utils::safe_despawn(&mut commands, event.entity);
         }
     }
 }
