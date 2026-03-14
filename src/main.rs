@@ -15,6 +15,7 @@ mod utils;
 mod weapons;
 use ai_ships::ai_ship_bundle;
 use asteroids::{Asteroid, asteroid_plugin, build_asteroid_field, shatter_asteroid};
+use utils::safe_despawn;
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
@@ -51,11 +52,31 @@ pub enum GameLayer {
 #[derive(Resource)]
 pub struct CurrentStarSystem(pub String);
 
-/// Set when a jump is initiated; consumed by `travel_system`.
+/// Acceleration to apply each second during the pre-jump boost (units/s²).
+const JUMP_ACCEL: f32 = 2500.0;
+/// Target speed the ship reaches before the hyperspace flash triggers.
+const JUMP_SPEED: f32 = 1600.0;
+/// Duration of the hyperspace flash (seconds).
+const FLASH_DURATION: f32 = 0.7;
+
+#[derive(Default, PartialEq, Clone, Debug)]
+pub enum TravelPhase {
+    #[default]
+    Idle,
+    /// Ship is accelerating toward JUMP_SPEED (still in Flying state).
+    Accelerating,
+    /// Hyperspace flash is playing (in Traveling state).
+    Flashing,
+}
+
 #[derive(Resource, Default)]
 pub struct TravelContext {
     pub destination: String,
-    pub timer: Timer,
+    pub phase: TravelPhase,
+    /// 0.0..=1.0, advances during Flashing.
+    pub flash_t: f32,
+    /// Normal MaxLinearSpeed saved before boosting, restored on arrival.
+    pub saved_max_speed: f32,
 }
 
 fn main() {
@@ -81,11 +102,12 @@ fn main() {
         .insert_resource(CurrentStarSystem("sol".to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
         .add_systems(Startup, setup)
-        .add_systems(OnEnter(GameState::Flying), spawn_asteroids)
+        .add_systems(OnEnter(GameState::Flying), (spawn_asteroids, set_arrival_velocity))
         .add_systems(OnEnter(GameState::Traveling), reset_nearby_planet)
         .add_systems(
             Update,
-            (keyboard_input, collision_system).run_if(in_state(GameState::Flying)),
+            (keyboard_input, collision_system, accelerate_for_jump)
+                .run_if(in_state(GameState::Flying)),
         )
         .add_systems(
             Update,
@@ -136,17 +158,80 @@ fn reset_nearby_planet(mut nearby: ResMut<NearbyPlanet>) {
     nearby.0 = None;
 }
 
+/// Runs during Flying state: boosts the player ship toward JUMP_SPEED, then triggers Traveling.
+fn accelerate_for_jump(
+    mut ctx: ResMut<TravelContext>,
+    mut player_q: Query<
+        (&Transform, &mut LinearVelocity, &mut MaxLinearSpeed, &Ship),
+        With<Player>,
+    >,
+    time: Res<Time>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if ctx.phase != TravelPhase::Accelerating {
+        return;
+    }
+    let Ok((transform, mut vel, mut max_speed, ship)) = player_q.single_mut() else {
+        return;
+    };
+    // Save the normal cap on the first tick.
+    if ctx.saved_max_speed == 0.0 {
+        ctx.saved_max_speed = ship.data.max_speed;
+    }
+
+    let forward = (transform.rotation * Vec3::Y).xy();
+    let new_speed = (vel.0.length() + JUMP_ACCEL * time.delta_secs()).min(JUMP_SPEED);
+    // Drive in the ship's nose direction so the jump always looks intentional.
+    vel.0 = forward * new_speed;
+    // Raise the Avian2d velocity cap to match — otherwise physics clamps us back.
+    max_speed.0 = new_speed;
+
+    if new_speed >= JUMP_SPEED {
+        ctx.phase = TravelPhase::Flashing;
+        ctx.flash_t = 0.0;
+        next_state.set(GameState::Traveling);
+    }
+}
+
+/// Runs during Traveling state: advances the hyperspace flash and handles the system switch.
 fn travel_system(
-    mut travel_ctx: ResMut<TravelContext>,
+    mut ctx: ResMut<TravelContext>,
     mut current_system: ResMut<CurrentStarSystem>,
     mut state: ResMut<NextState<GameState>>,
     time: Res<Time>,
 ) {
-    travel_ctx.timer.tick(time.delta());
-    if travel_ctx.timer.just_finished() {
-        current_system.0 = travel_ctx.destination.clone();
+    if ctx.phase != TravelPhase::Flashing {
+        return;
+    }
+    ctx.flash_t = (ctx.flash_t + time.delta_secs() / FLASH_DURATION).min(1.0);
+
+    // Switch the star system at the visual peak of the flash (midpoint).
+    if ctx.flash_t >= 0.5 {
+        current_system.0 = ctx.destination.clone();
+    }
+
+    if ctx.flash_t >= 1.0 {
+        ctx.phase = TravelPhase::Idle;
         state.set(GameState::Flying);
     }
+}
+
+/// Runs OnEnter(Flying): if we just completed a jump, restore max speed and set arrival velocity.
+fn set_arrival_velocity(
+    mut ctx: ResMut<TravelContext>,
+    mut player_q: Query<(&Transform, &mut LinearVelocity, &mut MaxLinearSpeed), With<Player>>,
+) {
+    // Only act when returning from a jump (saved_max_speed was set by accelerate_for_jump).
+    if ctx.saved_max_speed == 0.0 {
+        return;
+    }
+    let Ok((transform, mut vel, mut max_speed)) = player_q.single_mut() else {
+        return;
+    };
+    let normal_speed = ctx.saved_max_speed;
+    max_speed.0 = normal_speed;
+    vel.0 = (transform.rotation * Vec3::Y).xy() * normal_speed;
+    ctx.saved_max_speed = 0.0; // clear so this doesn't re-run on planet launches
 }
 
 /// Sends [`MovementAction`] events based on keyboard input.
@@ -254,7 +339,7 @@ fn collision_system(
                 );
             }
             if despawned_weapons.insert(weapon_entity) {
-                commands.entity(weapon_entity).despawn();
+                safe_despawn(&mut commands, weapon_entity);
             }
         }
     }

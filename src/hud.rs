@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::planets::Planet;
+use crate::utils::safe_despawn;
 use crate::{GameState, Player, Ship};
 
 const RADAR_SIZE: f32 = 144.0;
@@ -243,7 +244,7 @@ fn update_radar_dots(
         .collect();
 
     for entity in dots_query.iter() {
-        commands.entity(entity).despawn();
+        safe_despawn(&mut commands, entity);
     }
 
     commands.entity(radar.0).with_children(|parent| {

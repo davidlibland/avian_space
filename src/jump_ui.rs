@@ -3,7 +3,9 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use egui::{Align2, Color32, FontId, Pos2, Sense, Stroke};
 use std::collections::HashSet;
 
-use crate::{CurrentStarSystem, GameState, TravelContext, item_universe::ItemUniverse};
+use crate::{
+    CurrentStarSystem, GameState, TravelContext, TravelPhase, item_universe::ItemUniverse,
+};
 
 // Canvas is larger than the visible viewport — the ScrollArea lets the user pan around.
 const CANVAS_W: f32 = 1400.0;
@@ -14,10 +16,6 @@ const CANVAS_CENTER_Y: f32 = 450.0;
 // Visible viewport of the scroll area.
 const VIEWPORT_W: f32 = 600.0;
 const VIEWPORT_H: f32 = 400.0;
-
-// Initial scroll so the origin (sol) appears near the center of the viewport.
-const INITIAL_SCROLL_X: f32 = CANVAS_CENTER_X - VIEWPORT_W * 0.5;
-const INITIAL_SCROLL_Y: f32 = CANVAS_CENTER_Y - VIEWPORT_H * 0.5;
 
 const NODE_R: f32 = 3.5;   // visual dot radius
 const CLICK_R: f32 = 12.0; // invisible click hit radius
@@ -36,7 +34,10 @@ pub fn jump_ui_plugin(app: &mut App) {
         )
         .add_systems(
             EguiPrimaryContextPass,
-            jump_ui.run_if(in_state(GameState::Flying)),
+            (
+                jump_ui.run_if(in_state(GameState::Flying)),
+                jump_flash.run_if(in_state(GameState::Traveling)),
+            ),
         );
 }
 
@@ -44,16 +45,54 @@ fn toggle_jump_ui(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<JumpUiO
     if keyboard.just_pressed(KeyCode::KeyJ) {
         state.open = !state.open;
         if state.open {
-            // Reset scroll so the map re-centers on the origin (current system area).
             state.scroll_initialized = false;
         }
     }
 }
 
+/// Full-screen hyperspace flash drawn over everything while in Traveling state.
+fn jump_flash(mut egui_contexts: EguiContexts, travel_ctx: Res<TravelContext>) {
+    if travel_ctx.phase != TravelPhase::Flashing {
+        return;
+    }
+    let Ok(ctx) = egui_contexts.ctx_mut() else {
+        return;
+    };
+
+    let t = travel_ctx.flash_t; // 0..1
+    // Triangle envelope: fade in 0→0.5, fade out 0.5→1.
+    let alpha = if t < 0.5 { t * 2.0 } else { 2.0 - t * 2.0 };
+    let screen = ctx.viewport_rect();
+    let center = screen.center();
+
+    egui::Area::new(egui::Id::new("jump_flash"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(egui::Pos2::ZERO)
+        .interactable(false)
+        .show(ctx, |ui| {
+            let p = ui.painter();
+
+            // Expanding radial burst — a circle that races outward from screen center.
+            let burst_r = t * screen.size().max_elem() * 1.3;
+            let burst_alpha = ((1.0 - t) * 230.0) as u8;
+            p.circle_filled(center, burst_r, Color32::from_white_alpha(burst_alpha));
+
+            // Bright ring at the leading edge of the burst.
+            let ring_width = (1.0 - t) * 12.0 + 2.0;
+            p.circle_stroke(
+                center,
+                burst_r,
+                Stroke::new(ring_width, Color32::from_white_alpha((alpha * 255.0) as u8)),
+            );
+
+            // Overall white-out overlay — peaks at the midpoint.
+            p.rect_filled(screen, 0.0, Color32::from_white_alpha((alpha * 200.0) as u8));
+        });
+}
+
 fn jump_ui(
     mut egui_contexts: EguiContexts,
     mut ui_state: ResMut<JumpUiOpen>,
-    mut game_state: ResMut<NextState<GameState>>,
     mut travel_ctx: ResMut<TravelContext>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
@@ -81,7 +120,14 @@ fn jump_ui(
         .show(ctx, |ui| {
             let mut scroll = egui::ScrollArea::both().id_salt("star_map_scroll");
             if !ui_state.scroll_initialized {
-                scroll = scroll.scroll_offset(egui::Vec2::new(INITIAL_SCROLL_X, INITIAL_SCROLL_Y));
+                let map_pos = item_universe
+                    .star_systems
+                    .get(&current_system.0)
+                    .map(|s| s.map_position)
+                    .unwrap_or_default();
+                let offset_x = CANVAS_CENTER_X + map_pos.x - VIEWPORT_W * 0.5;
+                let offset_y = CANVAS_CENTER_Y + map_pos.y - VIEWPORT_H * 0.5;
+                scroll = scroll.scroll_offset(egui::Vec2::new(offset_x, offset_y));
                 ui_state.scroll_initialized = true;
             }
 
@@ -90,8 +136,6 @@ fn jump_ui(
                     ui.allocate_painter(egui::Vec2::new(CANVAS_W, CANVAS_H), Sense::click());
 
                 let origin = response.rect.min;
-
-                // Convert a map-space Vec2 to screen Pos2.
                 let to_screen = |mp: bevy::math::Vec2| -> Pos2 {
                     Pos2::new(
                         origin.x + CANVAS_CENTER_X + mp.x,
@@ -99,18 +143,16 @@ fn jump_ui(
                     )
                 };
 
-                // Background
                 painter.rect_filled(response.rect, 0.0, Color32::from_rgb(4, 4, 18));
 
-                // Edges — draw each undirected edge once (smaller name → larger name lexicographically)
+                // Edges
                 for (sys_name, sys) in &item_universe.star_systems {
                     let from = to_screen(sys.map_position);
                     for conn in &sys.connections {
                         if conn > sys_name {
                             if let Some(other) = item_universe.star_systems.get(conn) {
-                                let to = to_screen(other.map_position);
                                 painter.line_segment(
-                                    [from, to],
+                                    [from, to_screen(other.map_position)],
                                     Stroke::new(1.0, Color32::from_rgb(40, 50, 90)),
                                 );
                             }
@@ -118,7 +160,6 @@ fn jump_ui(
                     }
                 }
 
-                // Collect pointer state once.
                 let hover_pos = ctx.pointer_hover_pos();
                 let click_pos = if response.clicked() {
                     response.interact_pointer_pos()
@@ -132,7 +173,6 @@ fn jump_ui(
                     let is_current = *sys_name == current_system.0;
                     let is_neighbor = neighbors.contains(sys_name);
 
-                    // Hover glow for jumpable neighbors
                     if is_neighbor {
                         let hovered =
                             hover_pos.map_or(false, |hp| (hp - pos).length() < CLICK_R);
@@ -150,7 +190,6 @@ fn jump_ui(
                         }
                     }
 
-                    // Dot fill
                     let fill = if is_current {
                         Color32::from_rgb(100, 190, 255)
                     } else if is_neighbor {
@@ -160,8 +199,6 @@ fn jump_ui(
                     };
 
                     painter.circle_filled(pos, NODE_R, fill);
-
-                    // Subtle border only on current and neighbors
                     if is_current || is_neighbor {
                         painter.circle_stroke(
                             pos,
@@ -170,7 +207,6 @@ fn jump_ui(
                         );
                     }
 
-                    // Name label
                     let display = sys_name.replace('_', " ");
                     painter.text(
                         Pos2::new(pos.x, pos.y + NODE_R + 5.0),
@@ -184,7 +220,6 @@ fn jump_ui(
                         },
                     );
 
-                    // Click to jump
                     if is_neighbor {
                         if let Some(cp) = click_pos {
                             if (cp - pos).length() < CLICK_R {
@@ -203,8 +238,8 @@ fn jump_ui(
 
     if let Some(dest) = jump_target {
         travel_ctx.destination = dest;
-        travel_ctx.timer = Timer::from_seconds(3.0, TimerMode::Once);
-        game_state.set(GameState::Traveling);
+        travel_ctx.phase = TravelPhase::Accelerating;
+        // The state transition to Traveling happens in accelerate_for_jump once JUMP_SPEED is reached.
         ui_state.open = false;
     }
     if close {

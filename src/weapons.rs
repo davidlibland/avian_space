@@ -1,3 +1,4 @@
+use crate::utils::safe_despawn;
 use crate::{GameLayer, GameState};
 use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
@@ -123,7 +124,7 @@ pub(crate) fn weapon_lifetime(
     for (entity, mut weapon) in &mut query {
         weapon.lifetime -= dt;
         if weapon.lifetime <= 0.0 {
-            commands.entity(entity).despawn();
+            safe_despawn(&mut commands, entity);
         }
     }
 }

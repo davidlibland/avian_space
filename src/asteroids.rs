@@ -1,5 +1,5 @@
 use crate::{GameLayer, GameState};
-use crate::utils::{polygon_mesh, random_velocity};
+use crate::utils::{polygon_mesh, random_velocity, safe_despawn};
 use avian2d::prelude::*;
 use bevy::math::FloatPow;
 use bevy::prelude::*;
@@ -143,7 +143,7 @@ pub fn shatter_asteroid(
         let size = asteroid.size;
         let field = asteroid.field;
         // Remove the asteroid:
-        commands.entity(*asteroid_entity).despawn();
+        safe_despawn(&mut commands, *asteroid_entity);
         if size > 10.0 {
             for _ in 0..2 {
                 let new_size = rng.gen_range((size * 0.3)..(size * 0.8));
