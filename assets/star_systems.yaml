@@ -1,5 +1,6 @@
 sol:
-  connections: [alpha_centauri]
+  map_position: [0.0, 0.0]
+  connections: [alpha_centauri, tau_ceti, vega]
   planets:
     earth:
       location: [500.0, 300.0]
@@ -26,7 +27,8 @@ sol:
   ships: 3
 
 alpha_centauri:
-  connections: [sol]
+  map_position: [220.0, -90.0]
+  connections: [sol, sirius, procyon]
   planets:
     proxima:
       location: [400.0, 200.0]
@@ -43,3 +45,140 @@ alpha_centauri:
       number: 5
       radius: 500.
   ships: 2
+
+sirius:
+  map_position: [420.0, 60.0]
+  connections: [alpha_centauri, procyon, rigel]
+  planets:
+    sirius_b:
+      location: [300.0, -200.0]
+      description: "A scorched metal world baking under Sirius's intense light. Rich in rare alloys."
+      radius: 50.0
+      color: [0.8, 0.7, 0.3]
+      commodities:
+        titanium: 200
+        cooling_gel: 80
+        iron: 15
+  astroid_fields:
+    -
+      location: [0., 200.]
+      number: 8
+      radius: 400.
+  ships: 3
+
+procyon:
+  map_position: [270.0, 160.0]
+  connections: [alpha_centauri, sirius, barnard]
+  planets:
+    procyon_prime:
+      location: [200.0, 300.0]
+      description: "A bustling trade hub at the crossroads of three systems. Everything's for sale."
+      radius: 55.0
+      color: [0.4, 0.5, 0.7]
+      commodities:
+        electronics: 150
+        food: 20
+        water: 10
+        gold: 80
+  astroid_fields: []
+  ships: 4
+
+barnard:
+  map_position: [-130.0, 180.0]
+  connections: [procyon, tau_ceti]
+  planets:
+    barnard_rock:
+      location: [-100.0, 200.0]
+      description: "A desolate rock at the frontier. The miners here will sell anything for a hot meal."
+      radius: 35.0
+      color: [0.45, 0.4, 0.35]
+      commodities:
+        uranium: 300
+        water: 40
+        iron: 8
+  astroid_fields:
+    -
+      location: [0., 0.]
+      number: 15
+      radius: 600.
+  ships: 1
+
+tau_ceti:
+  map_position: [-280.0, 60.0]
+  connections: [sol, barnard, epsilon_eridani]
+  planets:
+    tau_ceti_4:
+      location: [400.0, -100.0]
+      description: "Ancient ruins dot this world. Scholars come from across the sector seeking artifacts."
+      radius: 52.0
+      color: [0.5, 0.4, 0.6]
+      commodities:
+        artifacts: 800
+        iron: 12
+        water: 8
+  astroid_fields:
+    -
+      location: [200., 200.]
+      number: 6
+      radius: 350.
+  ships: 2
+
+epsilon_eridani:
+  map_position: [-350.0, -100.0]
+  connections: [tau_ceti, vega]
+  planets:
+    eridani_station:
+      location: [0.0, 400.0]
+      description: "A young, turbulent system. The station here refines exotic matter from stellar winds."
+      radius: 40.0
+      color: [0.3, 0.6, 0.5]
+      commodities:
+        exotic_matter: 400
+        fuel_cells: 120
+        water: 25
+  astroid_fields:
+    -
+      location: [-200., 100.]
+      number: 12
+      radius: 450.
+  ships: 2
+
+vega:
+  map_position: [-160.0, -220.0]
+  connections: [sol, epsilon_eridani]
+  planets:
+    vega_1:
+      location: [300.0, 300.0]
+      description: "A glittering mining colony around one of the brightest stars. Gold flows like water."
+      radius: 48.0
+      color: [0.8, 0.8, 0.4]
+      commodities:
+        gold: 60
+        titanium: 180
+        iron: 5
+  astroid_fields:
+    -
+      location: [0., 0.]
+      number: 20
+      radius: 700.
+  ships: 3
+
+rigel:
+  map_position: [580.0, -120.0]
+  connections: [sirius]
+  planets:
+    rigel_outpost:
+      location: [-200.0, 200.0]
+      description: "The edge of known space. Smugglers and frontier traders are the only law out here."
+      radius: 42.0
+      color: [0.6, 0.35, 0.5]
+      commodities:
+        weapons_parts: 350
+        exotic_matter: 450
+        water: 35
+  astroid_fields:
+    -
+      location: [300., -100.]
+      number: 10
+      radius: 500.
+  ships: 5

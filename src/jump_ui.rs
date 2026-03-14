@@ -1,12 +1,32 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use egui::{Align2, Color32, FontId, Pos2, Sense, Stroke};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 
 use crate::{CurrentStarSystem, GameState, TravelContext, item_universe::ItemUniverse};
 
+// Canvas is larger than the visible viewport — the ScrollArea lets the user pan around.
+const CANVAS_W: f32 = 1400.0;
+const CANVAS_H: f32 = 900.0;
+// Map origin (0,0) is placed at this pixel in the canvas.
+const CANVAS_CENTER_X: f32 = 700.0;
+const CANVAS_CENTER_Y: f32 = 450.0;
+// Visible viewport of the scroll area.
+const VIEWPORT_W: f32 = 600.0;
+const VIEWPORT_H: f32 = 400.0;
+
+// Initial scroll so the origin (sol) appears near the center of the viewport.
+const INITIAL_SCROLL_X: f32 = CANVAS_CENTER_X - VIEWPORT_W * 0.5;
+const INITIAL_SCROLL_Y: f32 = CANVAS_CENTER_Y - VIEWPORT_H * 0.5;
+
+const NODE_R: f32 = 3.5;   // visual dot radius
+const CLICK_R: f32 = 12.0; // invisible click hit radius
+
 #[derive(Resource, Default)]
-struct JumpUiOpen(bool);
+struct JumpUiOpen {
+    open: bool,
+    scroll_initialized: bool,
+}
 
 pub fn jump_ui_plugin(app: &mut App) {
     app.init_resource::<JumpUiOpen>()
@@ -20,75 +40,25 @@ pub fn jump_ui_plugin(app: &mut App) {
         );
 }
 
-fn toggle_jump_ui(keyboard: Res<ButtonInput<KeyCode>>, mut open: ResMut<JumpUiOpen>) {
+fn toggle_jump_ui(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<JumpUiOpen>) {
     if keyboard.just_pressed(KeyCode::KeyJ) {
-        open.0 = !open.0;
-    }
-}
-
-/// BFS layout: current system at center, neighbors at radius_step, their neighbors at 2*radius_step, etc.
-fn star_map_positions(
-    universe: &ItemUniverse,
-    current: &str,
-    center: Pos2,
-    radius_step: f32,
-) -> HashMap<String, Pos2> {
-    let mut positions: HashMap<String, Pos2> = HashMap::new();
-    let mut visited: HashSet<String> = HashSet::new();
-    let mut queue: VecDeque<(String, usize)> = VecDeque::new();
-    // layer_nodes[k] = names of nodes at BFS depth k
-    let mut layer_nodes: Vec<Vec<String>> = vec![vec![current.to_string()]];
-
-    positions.insert(current.to_string(), center);
-    visited.insert(current.to_string());
-    queue.push_back((current.to_string(), 0));
-
-    while let Some((name, depth)) = queue.pop_front() {
-        if let Some(sys) = universe.star_systems.get(&name) {
-            let next_depth = depth + 1;
-            for neighbor in &sys.connections {
-                if visited.contains(neighbor) {
-                    continue;
-                }
-                visited.insert(neighbor.clone());
-                queue.push_back((neighbor.clone(), next_depth));
-                while layer_nodes.len() <= next_depth {
-                    layer_nodes.push(vec![]);
-                }
-                layer_nodes[next_depth].push(neighbor.clone());
-            }
+        state.open = !state.open;
+        if state.open {
+            // Reset scroll so the map re-centers on the origin (current system area).
+            state.scroll_initialized = false;
         }
     }
-
-    for (layer_idx, layer) in layer_nodes.iter().enumerate() {
-        if layer_idx == 0 {
-            continue;
-        }
-        let r = layer_idx as f32 * radius_step;
-        let count = layer.len();
-        for (i, name) in layer.iter().enumerate() {
-            // Start at top (-π/2) and distribute evenly
-            let angle = (i as f32 / count as f32) * std::f32::consts::TAU
-                - std::f32::consts::FRAC_PI_2;
-            positions.insert(
-                name.clone(),
-                Pos2::new(center.x + r * angle.cos(), center.y + r * angle.sin()),
-            );
-        }
-    }
-
-    positions
 }
 
 fn jump_ui(
     mut egui_contexts: EguiContexts,
-    mut open: ResMut<JumpUiOpen>,
-    mut state: ResMut<NextState<GameState>>,
+    mut ui_state: ResMut<JumpUiOpen>,
+    mut game_state: ResMut<NextState<GameState>>,
     mut travel_ctx: ResMut<TravelContext>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
-    if !open.0 {
+    if !ui_state.open {
         return;
     }
     let Ok(ctx) = egui_contexts.ctx_mut() else {
@@ -106,94 +76,124 @@ fn jump_ui(
 
     egui::Window::new("Star Map")
         .collapsible(false)
-        .resizable(false)
-        .default_size([500.0, 440.0])
+        .resizable(true)
+        .default_size([VIEWPORT_W + 16.0, VIEWPORT_H + 60.0])
         .show(ctx, |ui| {
-            let map_size = egui::Vec2::new(480.0, 380.0);
-            let (response, painter) = ui.allocate_painter(map_size, Sense::click());
-            let rect = response.rect;
-            let center = rect.center();
+            let mut scroll = egui::ScrollArea::both().id_salt("star_map_scroll");
+            if !ui_state.scroll_initialized {
+                scroll = scroll.scroll_offset(egui::Vec2::new(INITIAL_SCROLL_X, INITIAL_SCROLL_Y));
+                ui_state.scroll_initialized = true;
+            }
 
-            let positions = star_map_positions(&item_universe, &current_system.0, center, 130.0);
+            scroll.show(ui, |ui| {
+                let (response, painter) =
+                    ui.allocate_painter(egui::Vec2::new(CANVAS_W, CANVAS_H), Sense::click());
 
-            // Background
-            painter.rect_filled(rect, 6.0, Color32::from_rgb(5, 5, 20));
+                let origin = response.rect.min;
 
-            // Edges — draw all edges (deduplicated by only drawing when sys_name < conn lexicographically)
-            for (sys_name, sys) in &item_universe.star_systems {
-                if let Some(&from) = positions.get(sys_name) {
+                // Convert a map-space Vec2 to screen Pos2.
+                let to_screen = |mp: bevy::math::Vec2| -> Pos2 {
+                    Pos2::new(
+                        origin.x + CANVAS_CENTER_X + mp.x,
+                        origin.y + CANVAS_CENTER_Y + mp.y,
+                    )
+                };
+
+                // Background
+                painter.rect_filled(response.rect, 0.0, Color32::from_rgb(4, 4, 18));
+
+                // Edges — draw each undirected edge once (smaller name → larger name lexicographically)
+                for (sys_name, sys) in &item_universe.star_systems {
+                    let from = to_screen(sys.map_position);
                     for conn in &sys.connections {
                         if conn > sys_name {
-                            if let Some(&to) = positions.get(conn) {
+                            if let Some(other) = item_universe.star_systems.get(conn) {
+                                let to = to_screen(other.map_position);
                                 painter.line_segment(
                                     [from, to],
-                                    Stroke::new(1.5, Color32::from_rgb(50, 60, 110)),
+                                    Stroke::new(1.0, Color32::from_rgb(40, 50, 90)),
                                 );
                             }
                         }
                     }
                 }
-            }
 
-            let node_r = 22.0f32;
-            let label_offset = node_r + 10.0;
-
-            // Pointer positions for hover highlight and click
-            let hover_pos = ctx.pointer_hover_pos();
-            let click_pos = if response.clicked() {
-                response.interact_pointer_pos()
-            } else {
-                None
-            };
-
-            // Nodes
-            for (sys_name, &pos) in &positions {
-                let is_current = *sys_name == current_system.0;
-                let is_neighbor = neighbors.contains(sys_name);
-
-                let fill = if is_current {
-                    Color32::from_rgb(80, 170, 255) // light blue
-                } else if is_neighbor {
-                    Color32::from_rgb(200, 205, 225)
+                // Collect pointer state once.
+                let hover_pos = ctx.pointer_hover_pos();
+                let click_pos = if response.clicked() {
+                    response.interact_pointer_pos()
                 } else {
-                    Color32::from_rgb(55, 55, 80)
+                    None
                 };
 
-                // Glow ring on hover (only for jump-able neighbors)
-                if is_neighbor {
-                    let hovered = hover_pos.map_or(false, |hp| (hp - pos).length() < node_r + 6.0);
-                    if hovered {
-                        painter.circle_filled(pos, node_r + 6.0, Color32::from_rgba_unmultiplied(255, 220, 80, 60));
-                        painter.circle_stroke(pos, node_r + 4.0, Stroke::new(2.0, Color32::from_rgb(255, 220, 80)));
+                // Nodes
+                for (sys_name, sys) in &item_universe.star_systems {
+                    let pos = to_screen(sys.map_position);
+                    let is_current = *sys_name == current_system.0;
+                    let is_neighbor = neighbors.contains(sys_name);
+
+                    // Hover glow for jumpable neighbors
+                    if is_neighbor {
+                        let hovered =
+                            hover_pos.map_or(false, |hp| (hp - pos).length() < CLICK_R);
+                        if hovered {
+                            painter.circle_filled(
+                                pos,
+                                NODE_R + 5.0,
+                                Color32::from_rgba_unmultiplied(255, 220, 80, 50),
+                            );
+                            painter.circle_stroke(
+                                pos,
+                                NODE_R + 4.0,
+                                Stroke::new(1.5, Color32::from_rgb(255, 220, 80)),
+                            );
+                        }
                     }
-                }
 
-                painter.circle_filled(pos, node_r, fill);
-                painter.circle_stroke(
-                    pos,
-                    node_r,
-                    Stroke::new(1.5, Color32::from_rgb(140, 150, 200)),
-                );
+                    // Dot fill
+                    let fill = if is_current {
+                        Color32::from_rgb(100, 190, 255)
+                    } else if is_neighbor {
+                        Color32::from_rgb(200, 210, 230)
+                    } else {
+                        Color32::from_rgb(90, 95, 120)
+                    };
 
-                // Name label
-                let display = sys_name.replace('_', " ");
-                painter.text(
-                    Pos2::new(pos.x, pos.y + label_offset),
-                    Align2::CENTER_TOP,
-                    &display,
-                    FontId::proportional(13.0),
-                    Color32::from_rgb(210, 215, 240),
-                );
+                    painter.circle_filled(pos, NODE_R, fill);
 
-                // Click on a neighbor → jump
-                if is_neighbor {
-                    if let Some(cp) = click_pos {
-                        if (cp - pos).length() < node_r {
-                            jump_target = Some(sys_name.clone());
+                    // Subtle border only on current and neighbors
+                    if is_current || is_neighbor {
+                        painter.circle_stroke(
+                            pos,
+                            NODE_R,
+                            Stroke::new(1.0, Color32::from_rgb(160, 170, 210)),
+                        );
+                    }
+
+                    // Name label
+                    let display = sys_name.replace('_', " ");
+                    painter.text(
+                        Pos2::new(pos.x, pos.y + NODE_R + 5.0),
+                        Align2::CENTER_TOP,
+                        &display,
+                        FontId::proportional(11.0),
+                        if is_current {
+                            Color32::from_rgb(140, 210, 255)
+                        } else {
+                            Color32::from_rgb(170, 175, 200)
+                        },
+                    );
+
+                    // Click to jump
+                    if is_neighbor {
+                        if let Some(cp) = click_pos {
+                            if (cp - pos).length() < CLICK_R {
+                                jump_target = Some(sys_name.clone());
+                            }
                         }
                     }
                 }
-            }
+            });
 
             ui.separator();
             if ui.button("Close  [J]").clicked() {
@@ -204,10 +204,10 @@ fn jump_ui(
     if let Some(dest) = jump_target {
         travel_ctx.destination = dest;
         travel_ctx.timer = Timer::from_seconds(3.0, TimerMode::Once);
-        state.set(GameState::Traveling);
-        open.0 = false;
+        game_state.set(GameState::Traveling);
+        ui_state.open = false;
     }
     if close {
-        open.0 = false;
+        ui_state.open = false;
     }
 }

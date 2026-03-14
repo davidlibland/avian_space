@@ -1,4 +1,5 @@
 // This file loads configs for the weapons, ships, planets, etc.
+use bevy::math::Vec2;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -19,6 +20,8 @@ pub struct ItemUniverse {
 
 #[derive(Deserialize, Serialize)]
 pub struct StarSystem {
+    #[serde(default)]
+    pub map_position: Vec2,
     #[serde(default)]
     pub connections: Vec<String>,
     pub planets: HashMap<String, PlanetData>,
