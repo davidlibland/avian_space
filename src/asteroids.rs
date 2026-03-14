@@ -1,4 +1,4 @@
-use crate::GameLayer;
+use crate::{GameLayer, GameState};
 use crate::utils::{polygon_mesh, random_velocity};
 use avian2d::prelude::*;
 use bevy::math::FloatPow;
@@ -62,6 +62,7 @@ pub fn spawn_asteroid(
     // Asteroids
     commands
         .spawn((
+            DespawnOnExit(GameState::Flying),
             Asteroid { size, field },
             Mesh2d(meshes.add(mesh)),
             MeshMaterial2d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
@@ -95,6 +96,7 @@ pub fn build_asteroid_field(
     // Asteroids
     let field = commands
         .spawn((
+            DespawnOnExit(GameState::Flying),
             AsteroidField {
                 radius: field_data.radius,
                 number: field_data.number,

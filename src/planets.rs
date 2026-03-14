@@ -30,7 +30,7 @@ pub struct NearbyPlanet(pub Option<Entity>);
 
 pub fn planets_plugin(app: &mut App) {
     app.init_resource::<NearbyPlanet>()
-        .add_systems(Startup, spawn_planets)
+        .add_systems(OnEnter(GameState::Flying), spawn_planets)
         .add_systems(
             Update,
             (track_nearby_planet, landing_input).run_if(in_state(GameState::Flying)),
@@ -52,6 +52,7 @@ fn spawn_planets(
         let r = planet_data.radius;
         let [cr, cg, cb] = planet_data.color;
         commands.spawn((
+            DespawnOnExit(GameState::Flying),
             Planet(planet_name.clone()),
             RigidBody::Static,
             Collider::circle(r),
@@ -95,11 +96,15 @@ fn landing_input(
     nearby: Res<NearbyPlanet>,
     mut state: ResMut<NextState<GameState>>,
     mut landed_context: ResMut<LandedContext>,
+    planet_query: Query<(&Planet, &Transform)>,
 ) {
     if keyboard_input.just_pressed(KeyCode::KeyL) {
         if let Some(planet_entity) = nearby.0 {
-            landed_context.planet = Some(planet_entity);
-            state.set(GameState::Landed);
+            if let Ok((planet, transform)) = planet_query.get(planet_entity) {
+                landed_context.planet_name = Some(planet.0.clone());
+                landed_context.planet_position = Some(transform.translation.truncate());
+                state.set(GameState::Landed);
+            }
         }
     }
 }

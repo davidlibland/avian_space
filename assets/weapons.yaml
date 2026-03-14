@@ -2,4 +2,4 @@ laser:
     name: laser
     lifetime: 1.2
     speed: 500.0
-    cooldown: 0.25
+    cooldown: 1.0

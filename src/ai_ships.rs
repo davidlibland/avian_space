@@ -1,8 +1,7 @@
 use std::f32::consts::PI;
 
 // Some AI for the ships
-use crate::CurrentStarSystem;
-use crate::GameLayer;
+use crate::{CurrentStarSystem, GameLayer, GameState};
 use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
 use crate::planets::Planet;
@@ -20,7 +19,7 @@ const DETECTION_RADIUS: f32 = 2000.;
 pub struct AIShip;
 
 pub fn ai_ship_bundle(app: &mut App) {
-    app.add_systems(Startup, spawn_ai_ships)
+    app.add_systems(OnEnter(crate::GameState::Flying), spawn_ai_ships)
         .add_systems(Update, simple_ai_control);
 }
 
@@ -40,7 +39,8 @@ pub fn spawn_ai_ships(
             // Player
             commands
                 .spawn((
-                    AIShip, // Mark the player
+                    DespawnOnExit(GameState::Flying),
+                    AIShip,
                     ship_bundle(&asset_server, &item_universe, Vec2::new(x, y)),
                 ))
                 .with_child((

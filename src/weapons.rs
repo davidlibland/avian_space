@@ -1,4 +1,4 @@
-use crate::GameLayer;
+use crate::{GameLayer, GameState};
 use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
 use avian2d::prelude::*;
@@ -94,6 +94,7 @@ pub fn weapon_fire(
         let tip = ship_transform.translation + forward * 20.0;
         let vel = forward.truncate() * weapon.speed;
         commands.spawn((
+            DespawnOnExit(GameState::Flying),
             Projectile {
                 lifetime: weapon.lifetime,
                 owner: None,

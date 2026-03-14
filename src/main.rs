@@ -4,6 +4,7 @@ use bevy::{math::VectorSpace, prelude::*};
 mod asteroids;
 mod hud;
 mod item_universe;
+mod jump_ui;
 mod planet_ui;
 mod planets;
 use planets::planets_plugin;
@@ -16,7 +17,9 @@ use ai_ships::ai_ship_bundle;
 use asteroids::{Asteroid, asteroid_plugin, build_asteroid_field, shatter_asteroid};
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
+use jump_ui::jump_ui_plugin;
 use planet_ui::planet_ui_plugin;
+use planets::NearbyPlanet;
 use ship::{Ship, ShipCommand, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
 use weapons::{FireCommand, Projectile, weapons_plugin};
@@ -27,10 +30,11 @@ use crate::weapons::WeaponSystems;
 const BOUNDS: f32 = 10000.0;
 
 #[derive(States, Default, PartialEq, Eq, Hash, Clone, Debug)]
-enum GameState {
+pub enum GameState {
     #[default]
     Flying,
     Landed,
+    Traveling,
 }
 
 #[derive(PhysicsLayer, Default)]
@@ -47,6 +51,13 @@ pub enum GameLayer {
 #[derive(Resource)]
 pub struct CurrentStarSystem(pub String);
 
+/// Set when a jump is initiated; consumed by `travel_system`.
+#[derive(Resource, Default)]
+pub struct TravelContext {
+    pub destination: String,
+    pub timer: Timer,
+}
+
 fn main() {
     App::new()
         .add_plugins((
@@ -55,6 +66,7 @@ fn main() {
             // The unit allows the engine to tune its parameters for the scale of the world, improving stability.
             PhysicsPlugins::default().with_length_unit(20.0),
             planet_ui_plugin,
+            jump_ui_plugin,
             StarfieldPlugin::default(),
             HudPlugin::default(),
             ship_plugin,
@@ -65,12 +77,19 @@ fn main() {
             ai_ship_bundle,
         ))
         .init_state::<GameState>()
-        .insert_resource(CurrentStarSystem("sol".to_string())) // Set custom gravity
-        .insert_resource(Gravity(Vec2::NEG_Y * 0.0)) // Set custom gravity
+        .init_resource::<TravelContext>()
+        .insert_resource(CurrentStarSystem("sol".to_string()))
+        .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
         .add_systems(Startup, setup)
+        .add_systems(OnEnter(GameState::Flying), spawn_asteroids)
+        .add_systems(OnEnter(GameState::Traveling), reset_nearby_planet)
         .add_systems(
             Update,
             (keyboard_input, collision_system).run_if(in_state(GameState::Flying)),
+        )
+        .add_systems(
+            Update,
+            travel_system.run_if(in_state(GameState::Traveling)),
         )
         .run();
 }
@@ -80,27 +99,48 @@ pub struct Player;
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
     item_universe: Res<ItemUniverse>,
-    star_system: Res<CurrentStarSystem>,
 ) {
-    // Player
+    // Player (persists across system travel — not StateScoped)
     commands.spawn((
-        Player, // Mark the player
+        Player,
         ship_bundle(&asset_server, &item_universe, Vec2::ZERO),
     ));
 
+    // Camera (persists across system travel)
+    commands.spawn(Camera2d);
+}
+
+fn spawn_asteroids(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    item_universe: Res<ItemUniverse>,
+    star_system: Res<CurrentStarSystem>,
+) {
     if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {
         for field in system_data.astroid_fields.iter() {
-            // Asteroids
-            build_asteroid_field(&mut commands, &mut meshes, &mut materials, &field);
+            build_asteroid_field(&mut commands, &mut meshes, &mut materials, field);
         }
     }
+}
 
-    // Camera
-    commands.spawn(Camera2d);
+fn reset_nearby_planet(mut nearby: ResMut<NearbyPlanet>) {
+    nearby.0 = None;
+}
+
+fn travel_system(
+    mut travel_ctx: ResMut<TravelContext>,
+    mut current_system: ResMut<CurrentStarSystem>,
+    mut state: ResMut<NextState<GameState>>,
+    time: Res<Time>,
+) {
+    travel_ctx.timer.tick(time.delta());
+    if travel_ctx.timer.just_finished() {
+        current_system.0 = travel_ctx.destination.clone();
+        state.set(GameState::Flying);
+    }
 }
 
 /// Sends [`MovementAction`] events based on keyboard input.

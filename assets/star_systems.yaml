@@ -1,4 +1,5 @@
 sol:
+  connections: [alpha_centauri]
   planets:
     earth:
       location: [500.0, 300.0]
@@ -23,3 +24,22 @@ sol:
       number: 10
       radius: 300.
   ships: 3
+
+alpha_centauri:
+  connections: [sol]
+  planets:
+    proxima:
+      location: [400.0, 200.0]
+      description: "A dim red world orbiting the nearest star. Exotic goods flow through here."
+      radius: 45.0
+      color: [0.7, 0.3, 0.2]
+      commodities:
+        exotic_matter: 500
+        water: 20
+        iron: 25
+  astroid_fields:
+    -
+      location: [0., 0.]
+      number: 5
+      radius: 500.
+  ships: 2
