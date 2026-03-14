@@ -64,7 +64,7 @@ impl WeaponSystems {
             return;
         }
         match self.find_weapon_entry(weapon_type) {
-            Entry::Occupied(mut view) => {
+            Entry::Occupied(view) => {
                 view.into_mut().number += 1;
                 ship.credits -= outfitter_item.price();
                 ship.consumed_item_space += outfitter_item.space();

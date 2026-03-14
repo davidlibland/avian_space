@@ -240,7 +240,7 @@ fn keyboard_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut player_query: Query<(Entity, &mut WeaponSystems), With<Player>>,
 ) {
-    let Ok((player_entity, mut weapons)) = player_query.single_mut() else {
+    let Ok((player_entity, weapons)) = player_query.single_mut() else {
         return; // Player not spawned yet
     };
 

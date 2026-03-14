@@ -39,6 +39,13 @@ pub struct BuyShip {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub enum Personality {
+    Trader,  // Likes to trade, traveling from planet to planet
+    Fighter, // Will attack other ships
+    Miner,   // Will mine asteroids
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShipData {
     pub thrust: Scalar,    // N — forward force
@@ -51,6 +58,7 @@ pub struct ShipData {
     pub sprite_path: String,
     pub radius: f32,
     pub price: i128,
+    pub personality: Personality,
 
     // Some serde defaults (typically not defined in the serialized data):
     pub angular_drag: Scalar, // s⁻¹ — exponential decay rate for angular velocity
@@ -75,6 +83,7 @@ impl Default for ShipData {
             sprite_path: "shuttle.png".to_string(),
             radius: 10.0,
             price: 1000,
+            personality: Personality::Trader,
             // Defaults
             angular_drag: 3.0,
             thrust_kp: 5.0,
@@ -85,6 +94,13 @@ impl Default for ShipData {
     }
 }
 
+#[derive(Clone)]
+pub enum Target {
+    Ship(Entity),
+    Planet(Entity),
+    Asteroid(Entity),
+}
+
 #[derive(Component, Clone)]
 pub struct Ship {
     pub ship_type: String, // The type of the ship
@@ -93,6 +109,11 @@ pub struct Ship {
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
     pub credits: i128,
     pub consumed_item_space: u16, // Space in the ship filled with outfitter items
+    // An optional target for the ship.
+    // Traders will tend to target planets,
+    // Miners will tend to target asteroids,
+    // Fighters will tend to target ships
+    pub target: Option<Target>,
 }
 
 impl Default for Ship {
@@ -105,6 +126,7 @@ impl Default for Ship {
             cargo: HashMap::new(),
             credits: 100000,
             consumed_item_space: 0,
+            target: None,
         }
     }
 }
@@ -118,6 +140,7 @@ impl Ship {
             cargo: HashMap::new(),
             credits: 100000,
             consumed_item_space: 0,
+            target: None,
         }
     }
     pub fn remaining_item_space(&self) -> u16 {
@@ -169,6 +192,12 @@ pub struct ShipBundle {
     collision_events: CollisionEventsEnabled,
     layer: CollisionLayers,
     weapons: WeaponSystems,
+}
+
+impl ShipBundle {
+    pub fn get_personality(&self) -> Personality {
+        self.ship.data.personality.clone()
+    }
 }
 
 pub fn ship_bundle(

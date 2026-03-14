@@ -2,27 +2,64 @@ sol:
   map_position: [0.0, 0.0]
   connections: [alpha_centauri, tau_ceti, vega]
   planets:
+    mercury:
+      location: [120.0, 60.0]
+      description: "A scorched rock barely above the sun. Iron ore practically falls out of the ground."
+      radius: 20.0
+      color: [0.55, 0.5, 0.45]
+      commodities:
+        iron: 3
+        silicates: 5
+        food: 65
+        water: 40
+      outfitter: []
+    venus:
+      location: [280.0, -200.0]
+      description: "Toxic atmosphere, crushing pressure, and the cheapest food in the system."
+      radius: 35.0
+      color: [0.75, 0.65, 0.3]
+      commodities:
+        food: 15
+        water: 20
+        iron: 25
+        chemicals: 6
+      outfitter: []
     earth:
       location: [500.0, 300.0]
       description: "Home sweet home. It's always nice to come down to earth."
       radius: 60.0
       color: [0.2, 0.6, 0.3]
       commodities:
-        iron: 10
-        gold: 100
+        food: 10
         water: 5
+        iron: 20
+        chemicals: 35
+        gold: 100
       outfitter: [laser, proton_beam]
       shipyard: [shuttle, fighter, asteroid_miner, hauler]
     moon:
-      location: [700.0, 450.0]
+      location: [650.0, 380.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."
-      radius: 30.0
+      radius: 22.0
       color: [0.6, 0.6, 0.65]
       commodities:
-        iron: 7
-        water: 15
+        water: 7
+        iron: 20
+        food: 40
       outfitter: []
       shipyard: [shuttle]
+    mars:
+      location: [-350.0, 400.0]
+      description: "Rust-red and cold. Colonists here sell cheap iron and pay dearly for food."
+      radius: 30.0
+      color: [0.7, 0.35, 0.2]
+      commodities:
+        iron: 8
+        silicates: 10
+        food: 45
+        water: 30
+        chemicals: 18
+      outfitter: []
   astroid_fields:
     -
       location: [500., 300.]
@@ -31,7 +68,7 @@ sol:
   ships:
     shuttle: 2
     fighter: 2
-    hauler: 1
+    hauler: 2
     asteroid_miner: 3
 
 alpha_centauri:
@@ -40,15 +77,25 @@ alpha_centauri:
   planets:
     proxima:
       location: [400.0, 200.0]
-      description: "A dim red world orbiting the nearest star. Exotic goods flow through here."
+      description: "A dim red world orbiting the nearest star. Carries the cheapest water in the system."
       radius: 45.0
       color: [0.7, 0.3, 0.2]
       commodities:
-        exotic_matter: 500
-        water: 20
-        iron: 25
+        exotic_matter: 600
+        water: 8
+        iron: 15
       outfitter: []
       shipyard: [shuttle, fighter]
+    proxima_station:
+      location: [520.0, 290.0]
+      description: "An orbital waystation where exotic-matter traders stock up before the long haul."
+      radius: 18.0
+      color: [0.5, 0.5, 0.6]
+      commodities:
+        exotic_matter: 350
+        water: 25
+        iron: 30
+      outfitter: []
   astroid_fields:
     -
       location: [0., 0.]
@@ -65,13 +112,23 @@ sirius:
   planets:
     sirius_b:
       location: [300.0, -200.0]
-      description: "A scorched metal world baking under Sirius's intense light. Rich in rare alloys."
+      description: "A scorched metal world baking under Sirius's intense light. Cooling gel flows out cheap."
       radius: 50.0
       color: [0.8, 0.7, 0.3]
       commodities:
         titanium: 200
         cooling_gel: 80
         iron: 15
+      outfitter: []
+    sirius_c:
+      location: [100.0, 350.0]
+      description: "A cooler companion world where titanium ore sits cheap in long-abandoned mines."
+      radius: 32.0
+      color: [0.6, 0.6, 0.4]
+      commodities:
+        titanium: 120
+        cooling_gel: 150
+        iron: 30
       outfitter: []
   astroid_fields:
     -
@@ -89,7 +146,7 @@ procyon:
   planets:
     procyon_prime:
       location: [200.0, 300.0]
-      description: "A bustling trade hub at the crossroads of three systems. Everything's for sale."
+      description: "A bustling trade hub. Water and food are cheap; electronics command a premium."
       radius: 55.0
       color: [0.4, 0.5, 0.7]
       commodities:
@@ -99,6 +156,17 @@ procyon:
         gold: 80
       outfitter: [laser]
       shipyard: [shuttle, fighter, hauler, asteroid_miner]
+    procyon_ii:
+      location: [-200.0, -100.0]
+      description: "An industrial moon where electronics are assembled cheaply from imported parts."
+      radius: 28.0
+      color: [0.3, 0.4, 0.55]
+      commodities:
+        electronics: 60
+        food: 50
+        water: 35
+        gold: 120
+      outfitter: []
   astroid_fields: []
   ships:
     hauler: 4
@@ -109,7 +177,7 @@ barnard:
   planets:
     barnard_rock:
       location: [-100.0, 200.0]
-      description: "A desolate rock at the frontier. The miners here will sell anything for a hot meal."
+      description: "A desolate rock at the frontier. Uranium ore is dug up cheap and sold to anyone."
       radius: 35.0
       color: [0.45, 0.4, 0.35]
       commodities:
@@ -118,6 +186,16 @@ barnard:
         iron: 8
       outfitter: []
       shipyard: [shuttle, asteroid_miner]
+    barnard_station:
+      location: [100.0, 350.0]
+      description: "A refinery station that pays top credit for raw uranium and sells cheap purified water."
+      radius: 20.0
+      color: [0.5, 0.45, 0.5]
+      commodities:
+        uranium: 450
+        water: 12
+        iron: 20
+      outfitter: []
   astroid_fields:
     -
       location: [0., 0.]
@@ -133,13 +211,23 @@ tau_ceti:
   planets:
     tau_ceti_4:
       location: [400.0, -100.0]
-      description: "Ancient ruins dot this world. Scholars come from across the sector seeking artifacts."
+      description: "Ancient ruins dot this world. Scholars pay a fortune for artifacts from the deep dig sites."
       radius: 52.0
       color: [0.5, 0.4, 0.6]
       commodities:
         artifacts: 800
         iron: 12
         water: 8
+      outfitter: []
+    tau_ceti_2:
+      location: [-200.0, 200.0]
+      description: "A younger colony that excavates artifacts cheaply but needs water badly."
+      radius: 38.0
+      color: [0.45, 0.35, 0.55]
+      commodities:
+        artifacts: 500
+        iron: 25
+        water: 30
       outfitter: []
   astroid_fields:
     -
@@ -157,7 +245,7 @@ epsilon_eridani:
   planets:
     eridani_station:
       location: [0.0, 400.0]
-      description: "A young, turbulent system. The station here refines exotic matter from stellar winds."
+      description: "A young, turbulent system. The station here has fuel cells cheap but pays well for exotic matter."
       radius: 40.0
       color: [0.3, 0.6, 0.5]
       commodities:
@@ -165,6 +253,16 @@ epsilon_eridani:
         fuel_cells: 120
         water: 25
       outfitter: [laser]
+    eridani_moon:
+      location: [60.0, 500.0]
+      description: "A tidally-locked moon. Exotic matter collects in the shadow zone, sold at a discount."
+      radius: 18.0
+      color: [0.25, 0.5, 0.45]
+      commodities:
+        exotic_matter: 280
+        fuel_cells: 200
+        water: 10
+      outfitter: []
   astroid_fields:
     -
       location: [-200., 100.]
@@ -180,13 +278,23 @@ vega:
   planets:
     vega_1:
       location: [300.0, 300.0]
-      description: "A glittering mining colony around one of the brightest stars. Gold flows like water."
+      description: "A glittering mining colony. Gold is abundant and cheap; titanium gets a premium."
       radius: 48.0
       color: [0.8, 0.8, 0.4]
       commodities:
         gold: 60
         titanium: 180
         iron: 5
+      outfitter: []
+    vega_2:
+      location: [-100.0, -200.0]
+      description: "A quieter world where titanium ore is mined cheaply. Gold buyers pay top credit here."
+      radius: 30.0
+      color: [0.65, 0.65, 0.35]
+      commodities:
+        gold: 110
+        titanium: 100
+        iron: 20
       outfitter: []
   astroid_fields:
     -
@@ -204,7 +312,7 @@ rigel:
   planets:
     rigel_outpost:
       location: [-200.0, 200.0]
-      description: "The edge of known space. Smugglers and frontier traders are the only law out here."
+      description: "The edge of known space. Weapons parts come cheap; exotic matter commands a fortune."
       radius: 42.0
       color: [0.6, 0.35, 0.5]
       commodities:
@@ -212,6 +320,16 @@ rigel:
         exotic_matter: 450
         water: 35
       outfitter: [laser]
+    rigel_station:
+      location: [-80.0, 350.0]
+      description: "A refuelling depot near Rigel. Exotic matter is surplus here; weapons parts sell high."
+      radius: 22.0
+      color: [0.5, 0.3, 0.45]
+      commodities:
+        weapons_parts: 500
+        exotic_matter: 300
+        water: 15
+      outfitter: []
   astroid_fields:
     -
       location: [300., -100.]
