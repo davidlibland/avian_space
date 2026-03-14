@@ -22,7 +22,7 @@ use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
 use ship::{Ship, ShipCommand, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
-use weapons::{FireCommand, Projectile, weapons_plugin};
+use weapons::{FireCommand, Projectile, weapon_lifetime, weapons_plugin};
 
 use crate::weapons::WeaponSystems;
 
@@ -86,6 +86,12 @@ fn main() {
         .add_systems(
             Update,
             (keyboard_input, collision_system).run_if(in_state(GameState::Flying)),
+        )
+        .add_systems(
+            Update,
+            ApplyDeferred
+                .after(collision_system)
+                .before(weapon_lifetime),
         )
         .add_systems(
             Update,
@@ -198,11 +204,13 @@ fn collision_system(
     mut ships: Query<&mut Ship>,
     weapons: Query<&Projectile>,
 ) {
+    use std::collections::HashSet;
+    let mut shattered: HashSet<Entity> = HashSet::new();
+    let mut despawned_weapons: HashSet<Entity> = HashSet::new();
+
     for event in collisions.read() {
         let (a, b) = (event.collider1, event.collider2);
 
-        // Determine which entity is the asteroid and which is the ship,
-        // handling both orderings since Avian2D can emit either way.
         let asteroid_ship_entity = if asteroids.contains(a) && ships.contains(b) {
             Some((a, b))
         } else if asteroids.contains(b) && ships.contains(a) {
@@ -212,22 +220,21 @@ fn collision_system(
         };
 
         if let Some((asteroid_entity, ship_entity)) = asteroid_ship_entity {
-            shatter_asteroid(
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                &asteroid_entity,
-                &asteroids,
-            );
+            if shattered.insert(asteroid_entity) {
+                shatter_asteroid(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    &asteroid_entity,
+                    &asteroids,
+                );
+            }
             if let Ok(mut ship) = ships.get_mut(ship_entity) {
-                // Send a damage Event:
                 ship.health -= 10;
-                ship.health = if ship.health < 0 { 0 } else { ship.health };
+                ship.health = ship.health.max(0);
             }
         }
 
-        // Determine which entity is the asteroid and which is the ship,
-        // handling both orderings since Avian2D can emit either way.
         let asteroid_weapon_entity = if asteroids.contains(a) && weapons.contains(b) {
             Some((a, b))
         } else if asteroids.contains(b) && weapons.contains(a) {
@@ -237,14 +244,18 @@ fn collision_system(
         };
 
         if let Some((asteroid_entity, weapon_entity)) = asteroid_weapon_entity {
-            shatter_asteroid(
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                &asteroid_entity,
-                &asteroids,
-            );
-            commands.entity(weapon_entity).despawn();
+            if shattered.insert(asteroid_entity) {
+                shatter_asteroid(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    &asteroid_entity,
+                    &asteroids,
+                );
+            }
+            if despawned_weapons.insert(weapon_entity) {
+                commands.entity(weapon_entity).despawn();
+            }
         }
     }
 }

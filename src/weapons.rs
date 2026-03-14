@@ -114,7 +114,7 @@ pub fn weapon_fire(
     }
 }
 
-pub fn weapon_lifetime(
+pub(crate) fn weapon_lifetime(
     mut commands: Commands,
     time: Res<Time>,
     mut query: Query<(Entity, &mut Projectile)>,
