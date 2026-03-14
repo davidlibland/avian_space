@@ -2,6 +2,7 @@ use avian2d::{math::*, prelude::*};
 use bevy::{math::VectorSpace, prelude::*};
 
 mod asteroids;
+mod explosions;
 mod hud;
 mod item_universe;
 mod jump_ui;
@@ -14,7 +15,8 @@ mod starfield;
 mod utils;
 mod weapons;
 use ai_ships::ai_ship_bundle;
-use asteroids::{Asteroid, asteroid_plugin, build_asteroid_field, shatter_asteroid};
+use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
+use explosions::explosions_plugin;
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
@@ -96,6 +98,7 @@ fn main() {
             planets_plugin,
             asteroid_plugin,
             ai_ship_bundle,
+            explosions_plugin,
         ))
         .init_state::<GameState>()
         .init_resource::<TravelContext>()
@@ -275,12 +278,11 @@ fn keyboard_input(
 }
 
 fn collision_system(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
     mut collisions: MessageReader<CollisionStart>,
     mut damage_writer: MessageWriter<DamageShip>,
-    asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
+    mut shatter_writer: MessageWriter<ShatterAsteroid>,
+    mut commands: Commands,
+    asteroids: Query<(), With<Asteroid>>,
     ships: Query<&Ship>,
     weapons: Query<&Projectile>,
     item_universe: Res<ItemUniverse>,
@@ -302,13 +304,7 @@ fn collision_system(
 
         if let Some((asteroid_entity, ship_entity)) = asteroid_ship_entity {
             if shattered.insert(asteroid_entity) {
-                shatter_asteroid(
-                    &mut commands,
-                    &mut meshes,
-                    &mut materials,
-                    &asteroid_entity,
-                    &asteroids,
-                );
+                shatter_writer.write(ShatterAsteroid(asteroid_entity));
             }
             damage_writer.write(DamageShip {
                 entity: ship_entity,
@@ -326,13 +322,7 @@ fn collision_system(
 
         if let Some((asteroid_entity, weapon_entity)) = asteroid_weapon_entity {
             if shattered.insert(asteroid_entity) {
-                shatter_asteroid(
-                    &mut commands,
-                    &mut meshes,
-                    &mut materials,
-                    &asteroid_entity,
-                    &asteroids,
-                );
+                shatter_writer.write(ShatterAsteroid(asteroid_entity));
             }
             if despawned_weapons.insert(weapon_entity) {
                 safe_despawn(&mut commands, weapon_entity);

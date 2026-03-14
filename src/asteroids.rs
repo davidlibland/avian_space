@@ -7,14 +7,19 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 pub fn asteroid_plugin(app: &mut App) {
-    app.add_systems(Update, asteroid_field_gravity);
+    app.add_message::<ShatterAsteroid>()
+        .add_systems(Update, asteroid_field_gravity)
+        .add_systems(Update, handle_shatter.run_if(in_state(GameState::Flying)));
 }
+
+#[derive(Event, Message)]
+pub struct ShatterAsteroid(pub Entity);
 
 const ASTEROID_VELOCITY: f32 = 50.0;
 
 #[derive(Component)]
 pub struct Asteroid {
-    size: f32,
+    pub size: f32,
     field: Entity,
 }
 
@@ -160,6 +165,30 @@ pub fn shatter_asteroid(
                 );
             }
         }
+    }
+}
+
+fn handle_shatter(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut reader: MessageReader<ShatterAsteroid>,
+    mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+    asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
+) {
+    use std::collections::HashSet;
+    let mut shattered: HashSet<Entity> = HashSet::new();
+    for ShatterAsteroid(entity) in reader.read() {
+        if !shattered.insert(*entity) {
+            continue;
+        }
+        if let Ok((asteroid, transform, _)) = asteroids.get(*entity) {
+            explosion_writer.write(crate::explosions::TriggerExplosion {
+                location: transform.translation.xy(),
+                size: asteroid.size,
+            });
+        }
+        shatter_asteroid(&mut commands, &mut meshes, &mut materials, entity, &asteroids);
     }
 }
 

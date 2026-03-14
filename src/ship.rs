@@ -247,15 +247,20 @@ fn ship_movement(
 fn apply_damage(
     mut commands: Commands,
     mut reader: MessageReader<DamageShip>,
-    mut ships: Query<&mut Ship>,
+    mut ships: Query<(&mut Ship, &Transform)>,
     ai_ships: Query<(), With<crate::ai_ships::AIShip>>,
+    mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
 ) {
     for event in reader.read() {
-        let Ok(mut ship) = ships.get_mut(event.entity) else {
+        let Ok((mut ship, transform)) = ships.get_mut(event.entity) else {
             continue;
         };
         ship.health = (ship.health - event.damage as i32).max(0);
         if ship.health == 0 && ai_ships.contains(event.entity) {
+            explosion_writer.write(crate::explosions::TriggerExplosion {
+                location: transform.translation.xy(),
+                size: 20.0,
+            });
             crate::utils::safe_despawn(&mut commands, event.entity);
         }
     }
