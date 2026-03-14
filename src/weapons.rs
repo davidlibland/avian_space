@@ -1,8 +1,9 @@
-use crate::utils::safe_despawn;
-use crate::{GameLayer, GameState};
 use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
+use crate::utils::safe_despawn;
+use crate::{GameLayer, GameState};
 use avian2d::prelude::*;
+use bevy::platform::collections::hash_map::OccupiedEntry;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -33,12 +34,78 @@ pub struct Projectile {
 
 #[derive(Component)]
 pub struct WeaponSystems {
-    pub primary: Vec<WeaponSystem>,
+    pub primary: HashMap<String, WeaponSystem>,
+}
+impl WeaponSystems {
+    fn find_weapon_entry(
+        &mut self,
+        weapon_type: &str,
+    ) -> std::collections::hash_map::Entry<String, WeaponSystem> {
+        self.primary.entry(weapon_type.to_string())
+    }
+    fn find_weapon(&mut self, weapon_type: &str) -> Option<&mut WeaponSystem> {
+        match self.find_weapon_entry(weapon_type) {
+            std::collections::hash_map::Entry::Vacant(_) => None,
+            std::collections::hash_map::Entry::Occupied(mut view) => Some(view.into_mut()),
+        }
+    }
+    // fn buy_weapon(
+    //     &mut self,
+    //     weapon_type: &str,
+    //     ship: &mut Ship,
+    //     item_universe: &Res<ItemUniverse>,
+    // ) {
+    //     let Some(weapon) = item_universe.weapons.get(weapon_type) else {
+    //         return;
+    //     };
+    //     if weapon.price > ship.credits {
+    //         return;
+    //     }
+    //     let maybe_index = self
+    //         .primary
+    //         .iter()
+    //         .position(|w| w.weapon_type == weapon_type);
+    //     if let Some(index) = maybe_index {
+    //         self.primary[index].number += 1;
+    //         ship.credits -= weapon.price;
+    //     } else {
+    //         if let Some(new_weapon) =
+    //             WeaponSystem::from_type(weapon_type, 1, &item_universe.weapons)
+    //         {
+    //             self.primary.push(new_weapon);
+    //             ship.credits -= weapon.price;
+    //         }
+    //     }
+    // }
+    // fn sell_weapon(
+    //     &mut self,
+    //     weapon_type: &str,
+    //     ship: &mut Ship,
+    //     item_universe: &Res<ItemUniverse>,
+    // ) {
+    //     let Some(weapon) = item_universe.weapons.get(weapon_type) else {
+    //         return;
+    //     };
+    //     let maybe_index = self
+    //         .primary
+    //         .iter()
+    //         .position(|w| w.weapon_type == weapon_type);
+    //     if let Some(index) = maybe_index {
+    //         ship.credits += weapon.price;
+    //         self.primary[index].number -= 1;
+    //         // If there are no more weapons, remove the weapon from the list
+    //         if self.primary[index].number <= 0 {
+    //             self.primary.remove(index);
+    //         }
+    //     }
+    // }
 }
 
 impl Default for WeaponSystems {
     fn default() -> Self {
-        WeaponSystems { primary: vec![] }
+        WeaponSystems {
+            primary: HashMap::new(),
+        }
     }
 }
 
@@ -48,6 +115,7 @@ pub struct Weapon {
     pub lifetime: f32,
     pub speed: f32,
     pub cooldown: f32,
+    pub price: i128,
 }
 
 impl Weapon {
@@ -72,7 +140,7 @@ impl WeaponSystem {
         };
         return Some(WeaponSystem {
             weapon_type: weapon_type.to_string(),
-            cooldown: Timer::from_seconds(weapon.cooldown / number as f32, TimerMode::Repeating),
+            cooldown: Timer::from_seconds(weapon.cooldown / number as f32, TimerMode::Once),
             number: number,
         });
     }
@@ -81,13 +149,21 @@ impl WeaponSystem {
 pub fn weapon_fire(
     mut reader: MessageReader<FireCommand>,
     mut commands: Commands,
-    ships: Query<(&Transform, &Ship)>,
+    mut ships: Query<(&Transform, &Ship, &mut WeaponSystems)>,
     item_universe: Res<ItemUniverse>,
 ) {
     for cmd in reader.read() {
-        let Ok((ship_transform, ship)) = ships.get(cmd.ship) else {
+        let Ok((ship_transform, ship, mut weapons_system)) = ships.get_mut(cmd.ship) else {
             continue;
         };
+        let Some(specific) = weapons_system.find_weapon(&cmd.weapon_type) else {
+            continue;
+        };
+        // Check that the weapon is ready to fire:
+        if !specific.cooldown.is_finished() {
+            continue;
+        }
+        specific.cooldown.reset();
         let Some(weapon) = item_universe.weapons.get(&cmd.weapon_type) else {
             continue;
         };
@@ -131,7 +207,7 @@ pub(crate) fn weapon_lifetime(
 
 pub fn weapon_system_cooldown(time: Res<Time>, mut query: Query<&mut WeaponSystems>) {
     for mut system in &mut query {
-        for specific in system.primary.iter_mut() {
+        for specific in system.primary.values_mut() {
             specific
                 .cooldown
                 .tick(time.delta() * (specific.number as u32));

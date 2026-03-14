@@ -86,7 +86,7 @@ pub fn planet_ui(
                             ui.label("");
                             ui.label("");
                             ui.end_row();
-                            let commodities: Vec<(String, u16)> = planet
+                            let commodities: Vec<(String, i128)> = planet
                                 .commodities
                                 .iter()
                                 .map(|(k, v)| (k.clone(), *v))
@@ -97,10 +97,10 @@ pub fn planet_ui(
                                 ui.label(price.to_string());
                                 ui.label(qty.to_string());
                                 if ui.button("Buy").clicked() {
-                                    ship.buy_cargo(&commodity, 1, price as u128);
+                                    ship.buy_cargo(&commodity, 1, price);
                                 }
                                 if ui.button("Sell").clicked() {
-                                    ship.sell_cargo(&commodity, 1, price as u128);
+                                    ship.sell_cargo(&commodity, 1, price);
                                 }
                                 ui.end_row();
                             }

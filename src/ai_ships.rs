@@ -1,7 +1,6 @@
 use std::f32::consts::PI;
 
 // Some AI for the ships
-use crate::{CurrentStarSystem, GameLayer, GameState};
 use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
 use crate::planets::Planet;
@@ -9,6 +8,7 @@ use crate::ship::{Ship, ShipCommand, ship_bundle};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::weapons::FireCommand;
 use crate::weapons::WeaponSystems;
+use crate::{CurrentStarSystem, GameLayer, GameState};
 use avian2d::prelude::*;
 use bevy::prelude::*;
 use rand::Rng;
@@ -151,20 +151,18 @@ pub fn simple_ai_control(
             reverse: 0.,
         });
 
-        for specific in weapons.primary.iter() {
-            if specific.cooldown.just_finished() {
-                let Some(weapon) = item_universe.weapons.get(&specific.weapon_type) else {
-                    continue;
-                };
-                if asteroid_offset.length() < weapon.range() {
-                    let fire_angle = angle_to_hit(weapon.speed, &asteroid_offset, &asteroid_vel);
-                    let fire_indicator = angle_indicator(fire_angle);
-                    if fire_indicator > 0.5 {
-                        weapons_writer.write(FireCommand {
-                            ship: entity,
-                            weapon_type: specific.weapon_type.clone(),
-                        });
-                    }
+        for specific in weapons.primary.values() {
+            let Some(weapon) = item_universe.weapons.get(&specific.weapon_type) else {
+                continue;
+            };
+            if asteroid_offset.length() < weapon.range() {
+                let fire_angle = angle_to_hit(weapon.speed, &asteroid_offset, &asteroid_vel);
+                let fire_indicator = angle_indicator(fire_angle);
+                if fire_indicator > 0.5 {
+                    weapons_writer.write(FireCommand {
+                        ship: entity,
+                        weapon_type: specific.weapon_type.clone(),
+                    });
                 }
             }
         }

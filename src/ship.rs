@@ -61,7 +61,7 @@ pub struct Ship {
     pub data: ShipData,
     pub health: i32,
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
-    pub credits: u128,
+    pub credits: i128,
 }
 
 impl Default for Ship {
@@ -84,14 +84,14 @@ impl Ship {
         return self.data.cargo_space - self.current_cargo();
     }
     fn add_cargo(&mut self, commodity: &str, quantity_desired: u16) -> u16 {
-        let quantity_added = std::cmp::min(quantity_desired, self.remaining_cargo_space());
+        let quantity_added = std::cmp::max(quantity_desired, self.remaining_cargo_space());
         *self.cargo.entry(commodity.to_string()).or_insert(0) += quantity_added;
         return quantity_added;
     }
-    pub fn sell_cargo(&mut self, commodity: &str, quantity: u16, price: u128) {
+    pub fn sell_cargo(&mut self, commodity: &str, quantity: u16, price: i128) {
         let quantity = std::cmp::min(*self.cargo.get(commodity).unwrap_or(&0u16), quantity);
         *self.cargo.entry(commodity.to_string()).or_insert(0) -= quantity;
-        self.credits += (quantity as u128) * price;
+        self.credits += (quantity as i128) * price;
         if let std::collections::hash_map::Entry::Occupied(entry) =
             self.cargo.entry(commodity.to_string())
         {
@@ -100,10 +100,10 @@ impl Ship {
             }
         }
     }
-    pub fn buy_cargo(&mut self, commodity: &str, quantity_desired: u16, price: u128) {
+    pub fn buy_cargo(&mut self, commodity: &str, quantity_desired: u16, price: i128) {
         let quantity_desired = std::cmp::min(quantity_desired, (self.credits / price) as u16);
         let quantity_added = self.add_cargo(commodity, quantity_desired);
-        self.credits -= (quantity_added as u128) * price;
+        self.credits -= (quantity_added as i128) * price;
     }
 }
 
@@ -128,6 +128,11 @@ pub fn ship_bundle(
     pos: Vec2,
 ) -> ShipBundle {
     let ship = Ship::default();
+    let primary_weapons: HashMap<String, WeaponSystem> =
+        match WeaponSystem::from_type("laser", 1, &item_universe.weapons) {
+            Some(weapon_system) => HashMap::from([("laser".to_string(), weapon_system)]),
+            _ => HashMap::new(),
+        };
     ShipBundle {
         ship: ship.clone(),
         // mesh: Mesh2d(meshes.add(build_ship_mesh())),
@@ -150,9 +155,7 @@ pub fn ship_bundle(
             ],
         ),
         weapons: WeaponSystems {
-            primary: WeaponSystem::from_type("laser", 1, &item_universe.weapons)
-                .into_iter()
-                .collect(),
+            primary: primary_weapons,
         },
     }
 }

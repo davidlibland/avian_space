@@ -15,7 +15,6 @@ mod utils;
 mod weapons;
 use ai_ships::ai_ship_bundle;
 use asteroids::{Asteroid, asteroid_plugin, build_asteroid_field, shatter_asteroid};
-use utils::safe_despawn;
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
@@ -23,6 +22,7 @@ use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
 use ship::{Ship, ShipCommand, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
+use utils::safe_despawn;
 use weapons::{FireCommand, Projectile, weapon_lifetime, weapons_plugin};
 
 use crate::weapons::WeaponSystems;
@@ -102,7 +102,10 @@ fn main() {
         .insert_resource(CurrentStarSystem("sol".to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
         .add_systems(Startup, setup)
-        .add_systems(OnEnter(GameState::Flying), (spawn_asteroids, set_arrival_velocity))
+        .add_systems(
+            OnEnter(GameState::Flying),
+            (spawn_asteroids, set_arrival_velocity),
+        )
         .add_systems(OnEnter(GameState::Traveling), reset_nearby_planet)
         .add_systems(
             Update,
@@ -115,21 +118,14 @@ fn main() {
                 .after(collision_system)
                 .before(weapon_lifetime),
         )
-        .add_systems(
-            Update,
-            travel_system.run_if(in_state(GameState::Traveling)),
-        )
+        .add_systems(Update, travel_system.run_if(in_state(GameState::Traveling)))
         .run();
 }
 
 #[derive(Component)]
 pub struct Player;
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    item_universe: Res<ItemUniverse>,
-) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, item_universe: Res<ItemUniverse>) {
     // Player (persists across system travel — not StateScoped)
     commands.spawn((
         Player,
@@ -239,9 +235,9 @@ fn keyboard_input(
     mut writer: MessageWriter<ShipCommand>,
     mut weapons_writer: MessageWriter<FireCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    player_query: Query<(Entity, &WeaponSystems), With<Player>>,
+    mut player_query: Query<(Entity, &mut WeaponSystems), With<Player>>,
 ) {
-    let Ok((player_entity, weapons)) = player_query.single() else {
+    let Ok((player_entity, mut weapons)) = player_query.single_mut() else {
         return; // Player not spawned yet
     };
 
@@ -269,13 +265,11 @@ fn keyboard_input(
 
     let fire = keyboard_input.any_pressed([KeyCode::Space]);
     if fire {
-        for specific in weapons.primary.iter() {
-            if specific.cooldown.just_finished() {
-                weapons_writer.write(FireCommand {
-                    ship: player_entity,
-                    weapon_type: specific.weapon_type.clone(),
-                });
-            }
+        for specific in weapons.primary.values() {
+            weapons_writer.write(FireCommand {
+                ship: player_entity,
+                weapon_type: specific.weapon_type.clone(),
+            });
         }
     }
 }

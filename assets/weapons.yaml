@@ -3,3 +3,4 @@ laser:
     lifetime: 1.2
     speed: 500.0
     cooldown: 1.0
+    price: 100

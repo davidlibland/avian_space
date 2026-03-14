@@ -16,7 +16,7 @@ use std::collections::HashMap;
 pub struct PlanetData {
     pub location: Vec2,
     pub description: String,
-    pub commodities: HashMap<String, u16>, // Map of commodities to prices
+    pub commodities: HashMap<String, i128>, // Map of commodities to prices
     pub radius: f32,
     pub color: [f32; 3],
 }
