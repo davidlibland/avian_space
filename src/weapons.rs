@@ -60,10 +60,14 @@ impl WeaponSystems {
         if outfitter_item.price() > ship.credits {
             return;
         }
+        if outfitter_item.space() > ship.remaining_item_space() {
+            return;
+        }
         match self.find_weapon_entry(weapon_type) {
             Entry::Occupied(mut view) => {
                 view.into_mut().number += 1;
                 ship.credits -= outfitter_item.price();
+                ship.consumed_item_space += outfitter_item.space();
             }
             Entry::Vacant(vacant) => {
                 if let Some(new_weapon) =
@@ -71,6 +75,7 @@ impl WeaponSystems {
                 {
                     vacant.insert(new_weapon);
                     ship.credits -= outfitter_item.price();
+                    ship.consumed_item_space += outfitter_item.space();
                 }
             }
         }
@@ -89,6 +94,9 @@ impl WeaponSystems {
         };
         if let Some(weapon) = self.find_weapon(weapon_type) {
             ship.credits += outfitter_item.price();
+            ship.consumed_item_space = ship
+                .consumed_item_space
+                .saturating_sub(outfitter_item.space());
             weapon.number -= 1;
             // If there are no more weapons, remove the weapon from the list
             self.primary.remove(weapon_type);

@@ -37,6 +37,7 @@ pub struct ShipData {
     pub reverse_kd: Scalar,
     pub max_health: i32,
     pub cargo_space: u16,
+    pub item_space: u16,
 }
 
 impl Default for ShipData {
@@ -52,6 +53,7 @@ impl Default for ShipData {
             reverse_kd: 1.5,
             max_health: 100,
             cargo_space: 10,
+            item_space: 5,
         }
     }
 }
@@ -62,6 +64,7 @@ pub struct Ship {
     pub health: i32,
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
     pub credits: i128,
+    pub consumed_item_space: u16, // Space in the ship filled with outfitter items
 }
 
 impl Default for Ship {
@@ -72,16 +75,23 @@ impl Default for Ship {
             health: data.max_health,
             cargo: HashMap::new(),
             credits: 10000,
+            consumed_item_space: 0,
         }
     }
 }
 
 impl Ship {
+    pub fn remaining_item_space(&self) -> u16 {
+        return self
+            .data
+            .item_space
+            .saturating_sub(self.consumed_item_space);
+    }
     fn current_cargo(&self) -> u16 {
         self.cargo.values().sum()
     }
-    fn remaining_cargo_space(&self) -> u16 {
-        return self.data.cargo_space - self.current_cargo();
+    pub fn remaining_cargo_space(&self) -> u16 {
+        return self.data.cargo_space.saturating_sub(self.current_cargo());
     }
     fn add_cargo(&mut self, commodity: &str, quantity_desired: u16) -> u16 {
         let quantity_added = std::cmp::max(quantity_desired, self.remaining_cargo_space());
