@@ -1,4 +1,6 @@
-use crate::{CurrentStarSystem, GameState, Player, Ship, item_universe::ItemUniverse};
+use crate::{
+    CurrentStarSystem, GameState, Player, Ship, WeaponSystems, item_universe::ItemUniverse,
+};
 use avian2d::prelude::{LinearVelocity, Physics, PhysicsTime, Position};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
@@ -27,6 +29,7 @@ pub enum PlanetTab {
     #[default]
     Trade,
     Shipyard,
+    Outfitter,
     Bar,
     Missions,
 }
@@ -35,7 +38,7 @@ pub fn planet_ui(
     mut egui_contexts: EguiContexts,
     mut state: ResMut<NextState<GameState>>,
     mut landed: ResMut<LandedContext>,
-    mut player_query: Query<&mut Ship, With<Player>>,
+    mut player_query: Query<(&mut Ship, &mut WeaponSystems), With<Player>>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
@@ -57,13 +60,14 @@ pub fn planet_ui(
         ui.horizontal(|ui| {
             ui.selectable_value(&mut landed.active_tab, PlanetTab::Trade, "Trade");
             ui.selectable_value(&mut landed.active_tab, PlanetTab::Shipyard, "Shipyard");
+            ui.selectable_value(&mut landed.active_tab, PlanetTab::Outfitter, "Outfitter");
             ui.selectable_value(&mut landed.active_tab, PlanetTab::Bar, "Bar");
             ui.selectable_value(&mut landed.active_tab, PlanetTab::Missions, "Missions");
         });
         ui.separator();
         ui.horizontal(|ui| {
             if ui.button("Repair").clicked() {
-                if let Ok(mut ship) = player_query.single_mut() {
+                if let Ok((mut ship, _)) = player_query.single_mut() {
                     ship.health = ship.data.max_health;
                 }
             }
@@ -73,7 +77,7 @@ pub fn planet_ui(
         });
         match landed.active_tab {
             PlanetTab::Trade => {
-                if let Ok(mut ship) = player_query.single_mut() {
+                if let Ok((mut ship, _)) = player_query.single_mut() {
                     ui.label(format!("Credits: {}", ship.credits));
                     ui.separator();
                     egui::Grid::new("trade_grid")
@@ -101,6 +105,46 @@ pub fn planet_ui(
                                 }
                                 if ui.button("Sell").clicked() {
                                     ship.sell_cargo(&commodity, 1, price);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                }
+            }
+            PlanetTab::Outfitter => {
+                if let Ok((mut ship, mut weapon_systems)) = player_query.single_mut() {
+                    ui.label(format!("Credits: {}", ship.credits));
+                    ui.separator();
+                    egui::Grid::new("outfitter_grid")
+                        .num_columns(5)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.strong("Item");
+                            ui.strong("Price");
+                            ui.strong("Space");
+                            ui.label("");
+                            ui.label("");
+                            ui.end_row();
+                            let items: Vec<(String, i128, u16)> = planet
+                                .outfitter
+                                .iter()
+                                .filter_map(|k| {
+                                    item_universe
+                                        .outfitter_items
+                                        .get(k)
+                                        .map(|item| (k.clone(), item.price(), item.space()))
+                                })
+                                .collect();
+                            for (item, price, space) in items {
+                                // let qty = *ship.cargo.get(&commodity).unwrap_or(&0);
+                                ui.label(&item);
+                                ui.label(price.to_string());
+                                ui.label(space.to_string());
+                                if ui.button("Buy").clicked() {
+                                    weapon_systems.buy_weapon(&item, &mut ship, &item_universe);
+                                }
+                                if ui.button("Sell").clicked() {
+                                    weapon_systems.sell_weapon(&item, &mut ship, &item_universe);
                                 }
                                 ui.end_row();
                             }

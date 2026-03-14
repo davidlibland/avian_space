@@ -17,6 +17,7 @@ pub struct PlanetData {
     pub location: Vec2,
     pub description: String,
     pub commodities: HashMap<String, i128>, // Map of commodities to prices
+    pub outfitter: Vec<String>,             // Map of outfitter items to prices
     pub radius: f32,
     pub color: [f32; 3],
 }

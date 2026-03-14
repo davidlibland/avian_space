@@ -3,10 +3,9 @@ use crate::ship::Ship;
 use crate::utils::safe_despawn;
 use crate::{GameLayer, GameState};
 use avian2d::prelude::*;
-use bevy::platform::collections::hash_map::OccupiedEntry;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 
 pub fn weapons_plugin(app: &mut App) {
     app.add_message::<FireCommand>().add_systems(
@@ -37,68 +36,64 @@ pub struct WeaponSystems {
     pub primary: HashMap<String, WeaponSystem>,
 }
 impl WeaponSystems {
-    fn find_weapon_entry(
-        &mut self,
-        weapon_type: &str,
-    ) -> std::collections::hash_map::Entry<String, WeaponSystem> {
+    fn find_weapon_entry(&mut self, weapon_type: &str) -> Entry<'_, String, WeaponSystem> {
         self.primary.entry(weapon_type.to_string())
     }
     fn find_weapon(&mut self, weapon_type: &str) -> Option<&mut WeaponSystem> {
         match self.find_weapon_entry(weapon_type) {
-            std::collections::hash_map::Entry::Vacant(_) => None,
-            std::collections::hash_map::Entry::Occupied(mut view) => Some(view.into_mut()),
+            Entry::Vacant(_) => None,
+            Entry::Occupied(view) => Some(view.into_mut()),
         }
     }
-    // fn buy_weapon(
-    //     &mut self,
-    //     weapon_type: &str,
-    //     ship: &mut Ship,
-    //     item_universe: &Res<ItemUniverse>,
-    // ) {
-    //     let Some(weapon) = item_universe.weapons.get(weapon_type) else {
-    //         return;
-    //     };
-    //     if weapon.price > ship.credits {
-    //         return;
-    //     }
-    //     let maybe_index = self
-    //         .primary
-    //         .iter()
-    //         .position(|w| w.weapon_type == weapon_type);
-    //     if let Some(index) = maybe_index {
-    //         self.primary[index].number += 1;
-    //         ship.credits -= weapon.price;
-    //     } else {
-    //         if let Some(new_weapon) =
-    //             WeaponSystem::from_type(weapon_type, 1, &item_universe.weapons)
-    //         {
-    //             self.primary.push(new_weapon);
-    //             ship.credits -= weapon.price;
-    //         }
-    //     }
-    // }
-    // fn sell_weapon(
-    //     &mut self,
-    //     weapon_type: &str,
-    //     ship: &mut Ship,
-    //     item_universe: &Res<ItemUniverse>,
-    // ) {
-    //     let Some(weapon) = item_universe.weapons.get(weapon_type) else {
-    //         return;
-    //     };
-    //     let maybe_index = self
-    //         .primary
-    //         .iter()
-    //         .position(|w| w.weapon_type == weapon_type);
-    //     if let Some(index) = maybe_index {
-    //         ship.credits += weapon.price;
-    //         self.primary[index].number -= 1;
-    //         // If there are no more weapons, remove the weapon from the list
-    //         if self.primary[index].number <= 0 {
-    //             self.primary.remove(index);
-    //         }
-    //     }
-    // }
+    pub fn buy_weapon(
+        &mut self,
+        weapon_type: &str,
+        ship: &mut Ship,
+        item_universe: &Res<ItemUniverse>,
+    ) {
+        let Some(weapon) = item_universe.weapons.get(weapon_type) else {
+            return;
+        };
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            return;
+        };
+        if outfitter_item.price() > ship.credits {
+            return;
+        }
+        match self.find_weapon_entry(weapon_type) {
+            Entry::Occupied(mut view) => {
+                view.into_mut().number += 1;
+                ship.credits -= outfitter_item.price();
+            }
+            Entry::Vacant(vacant) => {
+                if let Some(new_weapon) =
+                    WeaponSystem::from_type(weapon_type, 1, &item_universe.weapons)
+                {
+                    vacant.insert(new_weapon);
+                    ship.credits -= outfitter_item.price();
+                }
+            }
+        }
+    }
+    pub fn sell_weapon(
+        &mut self,
+        weapon_type: &str,
+        ship: &mut Ship,
+        item_universe: &Res<ItemUniverse>,
+    ) {
+        let Some(weapon) = item_universe.weapons.get(weapon_type) else {
+            return;
+        };
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            return;
+        };
+        if let Some(weapon) = self.find_weapon(weapon_type) {
+            ship.credits += outfitter_item.price();
+            weapon.number -= 1;
+            // If there are no more weapons, remove the weapon from the list
+            self.primary.remove(weapon_type);
+        }
+    }
 }
 
 impl Default for WeaponSystems {
@@ -115,7 +110,6 @@ pub struct Weapon {
     pub lifetime: f32,
     pub speed: f32,
     pub cooldown: f32,
-    pub price: i128,
 }
 
 impl Weapon {

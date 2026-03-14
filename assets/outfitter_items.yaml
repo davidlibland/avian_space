@@ -1,0 +1,5 @@
+laser:
+  !Weapon
+    price: 100
+    space: 2
+    weapon_type: laser

@@ -11,6 +11,7 @@ sol:
         iron: 10
         gold: 100
         water: 5
+      outfitter: [laser]
     moon:
       location: [700.0, 450.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."
@@ -19,6 +20,7 @@ sol:
       commodities:
         iron: 7
         water: 15
+      outfitter: []
   astroid_fields:
     -
       location: [500., 300.]
@@ -39,6 +41,7 @@ alpha_centauri:
         exotic_matter: 500
         water: 20
         iron: 25
+      outfitter: []
   astroid_fields:
     -
       location: [0., 0.]
@@ -59,6 +62,7 @@ sirius:
         titanium: 200
         cooling_gel: 80
         iron: 15
+      outfitter: []
   astroid_fields:
     -
       location: [0., 200.]
@@ -80,6 +84,7 @@ procyon:
         food: 20
         water: 10
         gold: 80
+      outfitter: [laser]
   astroid_fields: []
   ships: 4
 
@@ -96,6 +101,7 @@ barnard:
         uranium: 300
         water: 40
         iron: 8
+      outfitter: []
   astroid_fields:
     -
       location: [0., 0.]
@@ -116,6 +122,7 @@ tau_ceti:
         artifacts: 800
         iron: 12
         water: 8
+      outfitter: []
   astroid_fields:
     -
       location: [200., 200.]
@@ -136,6 +143,7 @@ epsilon_eridani:
         exotic_matter: 400
         fuel_cells: 120
         water: 25
+      outfitter: [laser]
   astroid_fields:
     -
       location: [-200., 100.]
@@ -156,6 +164,7 @@ vega:
         gold: 60
         titanium: 180
         iron: 5
+      outfitter: []
   astroid_fields:
     -
       location: [0., 0.]
@@ -176,6 +185,7 @@ rigel:
         weapons_parts: 350
         exotic_matter: 450
         water: 35
+      outfitter: [laser]
   astroid_fields:
     -
       location: [300., -100.]

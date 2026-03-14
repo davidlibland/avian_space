@@ -16,6 +16,29 @@ use std::path::Path;
 pub struct ItemUniverse {
     pub weapons: HashMap<String, Weapon>,
     pub star_systems: HashMap<String, StarSystem>,
+    pub outfitter_items: HashMap<String, OutfitterItem>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub enum OutfitterItem {
+    Weapon {
+        price: i128,
+        space: u16,
+        weapon_type: String,
+    },
+}
+
+impl OutfitterItem {
+    pub fn price(&self) -> i128 {
+        match self {
+            OutfitterItem::Weapon { price, .. } => *price,
+        }
+    }
+    pub fn space(&self) -> u16 {
+        match self {
+            OutfitterItem::Weapon { space, .. } => *space,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
