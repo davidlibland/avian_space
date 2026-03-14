@@ -1,7 +1,5 @@
-use crate::{
-    CurrentStarSystem, GameState, Player, Ship, item_universe::ItemUniverse,
-};
-use avian2d::prelude::{Physics, PhysicsTime, Position};
+use crate::{CurrentStarSystem, GameState, Player, Ship, item_universe::ItemUniverse};
+use avian2d::prelude::{LinearVelocity, Physics, PhysicsTime, Position};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
@@ -21,8 +19,6 @@ pub fn planet_ui_plugin(app: &mut App) {
 pub struct LandedContext {
     /// Name of the planet the player is docked at.
     pub planet_name: Option<String>,
-    /// World position of the planet — used to place the ship on launch.
-    pub planet_position: Option<Vec2>,
     pub active_tab: PlanetTab,
 }
 
@@ -116,18 +112,34 @@ pub fn planet_ui(
     });
 }
 
-/// When re-entering Flying from a landing, place the ship at the planet and clear the context.
+/// When re-entering Flying from a landing, place the ship at the planet's YAML position
+/// and zero its velocity. Only runs when planet_name is set (i.e. coming from a landing,
+/// not from a jump).
 fn place_player_at_launch_site(
     mut landed: ResMut<LandedContext>,
-    mut player_query: Query<(&mut Transform, &mut Position), With<Player>>,
+    mut player_query: Query<(&mut Transform, &mut Position, &mut LinearVelocity), With<Player>>,
+    mut camera_query: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,
+    current_system: Res<CurrentStarSystem>,
+    item_universe: Res<ItemUniverse>,
 ) {
-    if let Some(pos) = landed.planet_position.take() {
-        if let Ok((mut tf, mut physics_pos)) = player_query.single_mut() {
-            tf.translation = pos.extend(tf.translation.z);
-            physics_pos.0 = pos;
+    let Some(planet_name) = landed.planet_name.take() else {
+        return;
+    };
+    let Some(system) = item_universe.star_systems.get(&current_system.0) else {
+        return;
+    };
+    let Some(planet_data) = system.planets.get(&planet_name) else {
+        return;
+    };
+    let pos = planet_data.location;
+    if let Ok((mut tf, mut physics_pos, mut vel)) = player_query.single_mut() {
+        tf.translation = pos.extend(tf.translation.z);
+        physics_pos.0 = pos;
+        vel.0 = Vec2::ZERO;
+        if let Ok(mut cam_tf) = camera_query.single_mut() {
+            cam_tf.translation = pos.extend(cam_tf.translation.z);
         }
     }
-    landed.planet_name = None;
 }
 
 pub fn pause_physics(mut time: ResMut<Time<Physics>>) {

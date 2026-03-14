@@ -96,13 +96,12 @@ fn landing_input(
     nearby: Res<NearbyPlanet>,
     mut state: ResMut<NextState<GameState>>,
     mut landed_context: ResMut<LandedContext>,
-    planet_query: Query<(&Planet, &Transform)>,
+    planet_query: Query<&Planet>,
 ) {
     if keyboard_input.just_pressed(KeyCode::KeyL) {
         if let Some(planet_entity) = nearby.0 {
-            if let Ok((planet, transform)) = planet_query.get(planet_entity) {
+            if let Ok(planet) = planet_query.get(planet_entity) {
                 landed_context.planet_name = Some(planet.0.clone());
-                landed_context.planet_position = Some(transform.translation.truncate());
                 state.set(GameState::Landed);
             }
         }
