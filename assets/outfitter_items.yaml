@@ -3,3 +3,8 @@ laser:
     price: 100
     space: 2
     weapon_type: laser
+proton_beam:
+  !Weapon
+    price: 250
+    space: 3
+    weapon_type: proton_beam

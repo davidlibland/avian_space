@@ -11,7 +11,7 @@ sol:
         iron: 10
         gold: 100
         water: 5
-      outfitter: [laser]
+      outfitter: [laser, proton_beam]
     moon:
       location: [700.0, 450.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."

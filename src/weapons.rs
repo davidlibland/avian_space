@@ -118,6 +118,7 @@ pub struct Weapon {
     pub lifetime: f32,
     pub speed: f32,
     pub cooldown: f32,
+    pub color: [f32; 3],
 }
 
 impl Weapon {
@@ -172,6 +173,7 @@ pub fn weapon_fire(
         let forward = ship_transform.rotation * Vec3::Y;
         let tip = ship_transform.translation + forward * 20.0;
         let vel = forward.truncate() * weapon.speed;
+        let [r, g, b] = weapon.color;
         commands.spawn((
             DespawnOnExit(GameState::Flying),
             Projectile {
@@ -185,7 +187,7 @@ pub fn weapon_fire(
             LinearVelocity(vel),
             Transform::from_translation(tip).with_rotation(ship_transform.rotation),
             Sprite {
-                color: Color::srgb(1.0, 0.8, 0.2),
+                color: Color::srgb(r, g, b),
                 custom_size: Some(Vec2::new(3.0, 12.0)),
                 ..default()
             },
