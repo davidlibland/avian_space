@@ -12,6 +12,7 @@ sol:
         gold: 100
         water: 5
       outfitter: [laser, proton_beam]
+      shipyard: [shuttle, fighter, asteroid_miner, hauler]
     moon:
       location: [700.0, 450.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."
@@ -21,12 +22,17 @@ sol:
         iron: 7
         water: 15
       outfitter: []
+      shipyard: [shuttle]
   astroid_fields:
     -
       location: [500., 300.]
       number: 10
       radius: 300.
-  ships: 3
+  ships:
+    shuttle: 2
+    fighter: 2
+    hauler: 1
+    asteroid_miner: 3
 
 alpha_centauri:
   map_position: [220.0, -90.0]
@@ -42,12 +48,16 @@ alpha_centauri:
         water: 20
         iron: 25
       outfitter: []
+      shipyard: [shuttle, fighter]
   astroid_fields:
     -
       location: [0., 0.]
       number: 5
       radius: 500.
-  ships: 2
+  ships:
+    fighter: 1
+    hauler: 2
+    asteroid_miner: 3
 
 sirius:
   map_position: [420.0, 60.0]
@@ -68,7 +78,10 @@ sirius:
       location: [0., 200.]
       number: 8
       radius: 400.
-  ships: 3
+  ships:
+    fighter: 1
+    hauler: 2
+    asteroid_miner: 3
 
 procyon:
   map_position: [270.0, 160.0]
@@ -85,8 +98,10 @@ procyon:
         water: 10
         gold: 80
       outfitter: [laser]
+      shipyard: [shuttle, fighter, hauler, asteroid_miner]
   astroid_fields: []
-  ships: 4
+  ships:
+    hauler: 4
 
 barnard:
   map_position: [-130.0, 180.0]
@@ -102,12 +117,15 @@ barnard:
         water: 40
         iron: 8
       outfitter: []
+      shipyard: [shuttle, asteroid_miner]
   astroid_fields:
     -
       location: [0., 0.]
       number: 15
       radius: 600.
-  ships: 1
+  ships:
+    hauler: 2
+    asteroid_miner: 4
 
 tau_ceti:
   map_position: [-280.0, 60.0]
@@ -128,7 +146,10 @@ tau_ceti:
       location: [200., 200.]
       number: 6
       radius: 350.
-  ships: 2
+  ships:
+    fighter: 1
+    hauler: 2
+    asteroid_miner: 3
 
 epsilon_eridani:
   map_position: [-350.0, -100.0]
@@ -149,7 +170,9 @@ epsilon_eridani:
       location: [-200., 100.]
       number: 12
       radius: 450.
-  ships: 2
+  ships:
+    hauler: 2
+    asteroid_miner: 4
 
 vega:
   map_position: [-160.0, -220.0]
@@ -170,7 +193,10 @@ vega:
       location: [0., 0.]
       number: 20
       radius: 700.
-  ships: 3
+  ships:
+    fighter: 1
+    hauler: 2
+    asteroid_miner: 4
 
 rigel:
   map_position: [580.0, -120.0]
@@ -191,4 +217,6 @@ rigel:
       location: [300., -100.]
       number: 10
       radius: 500.
-  ships: 5
+  ships:
+    hauler: 1
+    asteroid_miner: 2

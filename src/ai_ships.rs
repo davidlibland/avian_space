@@ -33,25 +33,27 @@ pub fn spawn_ai_ships(
 ) {
     if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {
         let mut rng = rand::thread_rng();
-        for _ in (0..system_data.ships) {
-            let x = rng.gen_range(-1000.0..1000.0);
-            let y = rng.gen_range(-1000.0..1000.0);
-            // Player
-            commands
-                .spawn((
-                    DespawnOnExit(GameState::Flying),
-                    AIShip,
-                    ship_bundle(&asset_server, &item_universe, Vec2::new(x, y)),
-                ))
-                .with_child((
-                    Collider::circle(DETECTION_RADIUS),
-                    Sensor,
-                    CollisionLayers::new(
-                        GameLayer::Radar,
-                        [GameLayer::Planet, GameLayer::Asteroid, GameLayer::Ship],
-                    ),
-                    // ProximitySensor, // marker so we can query this child
-                ));
+        for (ship_type, count) in system_data.ships.iter() {
+            for _ in 0..*count {
+                let x = rng.gen_range(-1000.0..1000.0);
+                let y = rng.gen_range(-1000.0..1000.0);
+                // Player
+                commands
+                    .spawn((
+                        DespawnOnExit(GameState::Flying),
+                        AIShip,
+                        ship_bundle(ship_type, &asset_server, &item_universe, Vec2::new(x, y)),
+                    ))
+                    .with_child((
+                        Collider::circle(DETECTION_RADIUS),
+                        Sensor,
+                        CollisionLayers::new(
+                            GameLayer::Radar,
+                            [GameLayer::Planet, GameLayer::Asteroid, GameLayer::Ship],
+                        ),
+                        // ProximitySensor, // marker so we can query this child
+                    ));
+            }
         }
     }
 }

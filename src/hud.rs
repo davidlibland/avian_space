@@ -338,7 +338,7 @@ fn update_cargo_credits(
         **text = format!("Credits: {}", ship.credits);
     }
     if let Ok(mut text) = cargo_query.single_mut() {
-        let free = ship.data.cargo_space - ship.cargo.values().sum::<u16>();
+        let free = ship.remaining_cargo_space();
         **text = format!("Free: {}/{}", free, ship.data.cargo_space);
     }
 }

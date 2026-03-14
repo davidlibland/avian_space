@@ -4,16 +4,19 @@ use crate::weapons::{WeaponSystem, WeaponSystems};
 use crate::{GameLayer, GameState};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub fn ship_plugin(app: &mut App) {
     app.add_message::<ShipCommand>()
         .add_message::<DamageShip>()
+        .add_message::<BuyShip>()
         .add_systems(
             FixedUpdate,
             ship_movement.run_if(in_state(GameState::Flying)),
         )
-        .add_systems(Update, apply_damage.run_if(in_state(GameState::Flying)));
+        .add_systems(Update, apply_damage.run_if(in_state(GameState::Flying)))
+        .add_systems(Update, handle_buy_ship);
 }
 
 #[derive(Event, Message)]
@@ -30,11 +33,26 @@ pub struct DamageShip {
     pub damage: Scalar,
 }
 
-#[derive(Clone)]
+#[derive(Event, Message)]
+pub struct BuyShip {
+    pub ship_type: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ShipData {
-    pub thrust: Scalar,       // N — forward force
-    pub max_speed: Scalar,    // m/s — speed cap
-    pub torque: Scalar,       // N·m — maximum turning torque
+    pub thrust: Scalar,    // N — forward force
+    pub max_speed: Scalar, // m/s — speed cap
+    pub torque: Scalar,    // N·m — maximum turning torque
+    pub max_health: i32,
+    pub cargo_space: u16,
+    pub item_space: u16,
+    pub base_weapons: HashMap<String, u8>, // A list of the basic weapons this ship starts with, along with counts
+    pub sprite_path: String,
+    pub radius: f32,
+    pub price: i128,
+
+    // Some serde defaults (typically not defined in the serialized data):
     pub angular_drag: Scalar, // s⁻¹ — exponential decay rate for angular velocity
     // PD gains for thrust: F = kp*(v_target - v) - kd*dv
     pub thrust_kp: Scalar,
@@ -42,9 +60,6 @@ pub struct ShipData {
     // PD gains for reverse heading correction
     pub reverse_kp: Scalar,
     pub reverse_kd: Scalar,
-    pub max_health: i32,
-    pub cargo_space: u16,
-    pub item_space: u16,
 }
 
 impl Default for ShipData {
@@ -53,21 +68,27 @@ impl Default for ShipData {
             thrust: 200.0,
             max_speed: 300.0,
             torque: 20.0,
+            max_health: 100,
+            cargo_space: 10,
+            item_space: 5,
+            base_weapons: HashMap::new(),
+            sprite_path: "shuttle.png".to_string(),
+            radius: 10.0,
+            price: 1000,
+            // Defaults
             angular_drag: 3.0,
             thrust_kp: 5.0,
             thrust_kd: 1.0,
             reverse_kp: 20.0,
             reverse_kd: 1.5,
-            max_health: 100,
-            cargo_space: 10,
-            item_space: 5,
         }
     }
 }
 
 #[derive(Component, Clone)]
 pub struct Ship {
-    pub data: ShipData,
+    pub ship_type: String, // The type of the ship
+    pub data: ShipData, // The ship data, can be looked up in the item universe, but stored here for convenience
     pub health: i32,
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
     pub credits: i128,
@@ -78,16 +99,27 @@ impl Default for Ship {
     fn default() -> Self {
         let data = ShipData::default();
         Self {
+            ship_type: "shuttle".to_string(),
             data: data.clone(),
             health: data.max_health,
             cargo: HashMap::new(),
-            credits: 10000,
+            credits: 100000,
             consumed_item_space: 0,
         }
     }
 }
 
 impl Ship {
+    pub fn from_ship_data(data: &ShipData, ship_type: &str) -> Self {
+        Self {
+            ship_type: ship_type.to_string(),
+            data: data.clone(),
+            health: data.max_health,
+            cargo: HashMap::new(),
+            credits: 100000,
+            consumed_item_space: 0,
+        }
+    }
     pub fn remaining_item_space(&self) -> u16 {
         return self
             .data
@@ -140,26 +172,34 @@ pub struct ShipBundle {
 }
 
 pub fn ship_bundle(
+    ship_type: &str,
     asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
     pos: Vec2,
 ) -> ShipBundle {
-    let ship = Ship::default();
-    let primary_weapons: HashMap<String, WeaponSystem> =
-        match WeaponSystem::from_type("laser", 1, &item_universe.weapons) {
-            Some(weapon_system) => HashMap::from([("laser".to_string(), weapon_system)]),
-            _ => HashMap::new(),
-        };
+    let default_data = ShipData::default();
+    let ship_data = item_universe.ships.get(ship_type).unwrap_or(&default_data);
+    let ship = Ship::from_ship_data(ship_data, ship_type);
+    let mut primary_weapons: HashMap<String, WeaponSystem> = HashMap::new();
+    for (weapon_type, count) in ship_data.base_weapons.iter() {
+        if let Some(weapon_system) =
+            WeaponSystem::from_type(&weapon_type, *count, &item_universe.weapons)
+        {
+            primary_weapons
+                .entry(weapon_type.clone())
+                .insert_entry(weapon_system);
+        }
+    }
     ShipBundle {
         ship: ship.clone(),
         // mesh: Mesh2d(meshes.add(build_ship_mesh())),
         // material: MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
-        sprite: Sprite::from_image(asset_server.load("spaceship.png")),
+        sprite: Sprite::from_image(asset_server.load(ship_data.sprite_path.to_string())),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
         angular_damping: AngularDamping(ship.data.angular_drag), // equivalent to angular_drag = 3.0
         max_speed: MaxLinearSpeed(ship.data.max_speed),          // Restitution::new(1.5),
-        collider: Collider::circle(15.),
+        collider: Collider::circle(ship_data.radius),
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,
         layer: CollisionLayers::new(
@@ -263,5 +303,59 @@ fn apply_damage(
             });
             crate::utils::safe_despawn(&mut commands, event.entity);
         }
+    }
+}
+
+fn handle_buy_ship(
+    mut commands: Commands,
+    mut reader: MessageReader<BuyShip>,
+    mut player_query: Query<(Entity, &mut Ship, &mut WeaponSystems), With<crate::Player>>,
+    item_universe: Res<ItemUniverse>,
+    asset_server: Res<AssetServer>,
+) {
+    for event in reader.read() {
+        let Ok((entity, mut ship, mut weapons)) = player_query.single_mut() else {
+            continue;
+        };
+        let Some(new_data) = item_universe.ships.get(&event.ship_type) else {
+            continue;
+        };
+        if ship.credits < new_data.price {
+            continue;
+        }
+        ship.credits -= new_data.price;
+
+        // Build new weapon systems from the ship's base loadout.
+        let mut primary = HashMap::new();
+        for (weapon_type, count) in &new_data.base_weapons {
+            if let Some(ws) = WeaponSystem::from_type(weapon_type, *count, &item_universe.weapons) {
+                primary.insert(weapon_type.clone(), ws);
+            }
+        }
+        *weapons = WeaponSystems { primary };
+
+        // Replace the ship component, preserving credits and cargo (capped to new space).
+        let mut new_ship = Ship::from_ship_data(new_data, &event.ship_type);
+        new_ship.credits = ship.credits;
+        new_ship.consumed_item_space = 0;
+        for (commodity, qty) in &ship.cargo {
+            let space_left = new_ship
+                .data
+                .cargo_space
+                .saturating_sub(new_ship.cargo.values().sum::<u16>());
+            let transfer = (*qty).min(space_left);
+            if transfer > 0 {
+                *new_ship.cargo.entry(commodity.clone()).or_insert(0) += transfer;
+            }
+        }
+        *ship = new_ship;
+
+        // Replace physics/render components.
+        commands.entity(entity).insert((
+            Sprite::from_image(asset_server.load(new_data.sprite_path.clone())),
+            Collider::circle(new_data.radius),
+            MaxLinearSpeed(new_data.max_speed),
+            AngularDamping(new_data.angular_drag),
+        ));
     }
 }

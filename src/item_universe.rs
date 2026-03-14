@@ -4,9 +4,9 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::asteroids::AsteroidFieldData;
 use crate::planets::PlanetData;
 use crate::weapons::Weapon;
+use crate::{asteroids::AsteroidFieldData, ship::ShipData};
 
 use serde::de::DeserializeOwned;
 use serde_yaml::{Mapping, Value};
@@ -15,6 +15,7 @@ use std::path::Path;
 #[derive(Resource, Deserialize, Serialize)]
 pub struct ItemUniverse {
     pub weapons: HashMap<String, Weapon>,
+    pub ships: HashMap<String, ShipData>,
     pub star_systems: HashMap<String, StarSystem>,
     pub outfitter_items: HashMap<String, OutfitterItem>,
 }
@@ -49,7 +50,7 @@ pub struct StarSystem {
     pub connections: Vec<String>,
     pub planets: HashMap<String, PlanetData>,
     pub astroid_fields: Vec<AsteroidFieldData>,
-    pub ships: u8,
+    pub ships: HashMap<String, u16>,
 }
 
 pub fn item_universe_plugin(app: &mut App) {

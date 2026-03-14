@@ -1,0 +1,50 @@
+shuttle:
+  thrust: 50.0
+  max_speed: 100.0
+  torque: 20.0
+  max_health: 30
+  cargo_space: 10
+  item_space: 5
+  base_weapons:
+    "laser": 1
+  radius: 10.0
+  price: 5000
+  sprite_path: ship_sprites/shuttle.png
+
+fighter:
+  thrust: 120.0
+  max_speed: 200.0
+  torque: 35.0
+  max_health: 40
+  cargo_space: 4
+  item_space: 4
+  base_weapons:
+    laser: 2
+  radius: 12.0
+  price: 25000
+  sprite_path: ship_sprites/fighter.png
+
+asteroid_miner:
+  thrust: 70.0
+  max_speed: 70.0
+  torque: 12.0
+  max_health: 90
+  cargo_space: 25
+  item_space: 6
+  base_weapons:
+    laser: 1
+  radius: 20.0
+  price: 35000
+  sprite_path: ship_sprites/asteroid_miner.png
+
+hauler:
+  thrust: 40.0
+  max_speed: 50.0
+  torque: 6.0
+  max_health: 150
+  cargo_space: 80
+  item_space: 3
+  base_weapons: {}
+  radius: 40.0
+  price: 50000
+  sprite_path: ship_sprites/hauler.png

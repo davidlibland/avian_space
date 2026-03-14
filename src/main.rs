@@ -132,7 +132,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, item_universe: 
     // Player (persists across system travel — not StateScoped)
     commands.spawn((
         Player,
-        ship_bundle(&asset_server, &item_universe, Vec2::ZERO),
+        ship_bundle("shuttle", &asset_server, &item_universe, Vec2::ZERO),
     ));
 
     // Camera (persists across system travel)

@@ -1,5 +1,6 @@
 use crate::{
     CurrentStarSystem, GameState, Player, Ship, WeaponSystems, item_universe::ItemUniverse,
+    ship::BuyShip,
 };
 use avian2d::prelude::{LinearVelocity, Physics, PhysicsTime, Position};
 use bevy::prelude::*;
@@ -39,6 +40,7 @@ pub fn planet_ui(
     mut state: ResMut<NextState<GameState>>,
     mut landed: ResMut<LandedContext>,
     mut player_query: Query<(&mut Ship, &mut WeaponSystems), With<Player>>,
+    mut buy_ship_writer: MessageWriter<BuyShip>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
@@ -150,6 +152,68 @@ pub fn planet_ui(
                                 }
                                 if ui.button("Sell").clicked() {
                                     weapon_systems.sell_weapon(&item, &mut ship, &item_universe);
+                                }
+                                ui.end_row();
+                            }
+                        });
+                }
+            }
+            PlanetTab::Shipyard => {
+                let player_credits = player_query
+                    .single()
+                    .map(|(s, _)| s.credits)
+                    .unwrap_or(0);
+                let player_ship_type = player_query
+                    .single()
+                    .map(|(s, _)| s.ship_type.clone())
+                    .unwrap_or_default();
+                ui.label(format!("Credits: {}", player_credits));
+                ui.separator();
+                if planet.shipyard.is_empty() {
+                    ui.label("No ships for sale here.");
+                } else {
+                    egui::Grid::new("shipyard_grid")
+                        .num_columns(7)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            ui.strong("Ship");
+                            ui.strong("Price");
+                            ui.strong("Speed");
+                            ui.strong("Health");
+                            ui.strong("Cargo");
+                            ui.strong("Slots");
+                            ui.label("");
+                            ui.end_row();
+                            let ships: Vec<(String, _)> = planet
+                                .shipyard
+                                .iter()
+                                .filter_map(|k| {
+                                    item_universe.ships.get(k).map(|d| (k.clone(), d.clone()))
+                                })
+                                .collect();
+                            for (ship_type, data) in ships {
+                                let is_current = ship_type == player_ship_type;
+                                let can_afford = player_credits >= data.price;
+                                if is_current {
+                                    ui.strong(&ship_type);
+                                } else {
+                                    ui.label(&ship_type);
+                                }
+                                ui.label(format!("${}", data.price));
+                                ui.label(format!("{}", data.max_speed as i32));
+                                ui.label(format!("{}", data.max_health));
+                                ui.label(format!("{}", data.cargo_space));
+                                ui.label(format!("{}", data.item_space));
+                                if is_current {
+                                    ui.label("(current)");
+                                } else {
+                                    ui.add_enabled_ui(can_afford, |ui| {
+                                        if ui.button("Buy").clicked() {
+                                            buy_ship_writer.write(BuyShip {
+                                                ship_type: ship_type.clone(),
+                                            });
+                                        }
+                                    });
                                 }
                                 ui.end_row();
                             }
