@@ -10,11 +10,13 @@ mod planet_ui;
 mod planets;
 use planets::planets_plugin;
 mod ai_ships;
+mod pickups;
 mod ship;
 mod starfield;
 mod utils;
 mod weapons;
 use ai_ships::ai_ship_bundle;
+use pickups::pickup_plugin;
 use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
 use explosions::explosions_plugin;
 use hud::HudPlugin;
@@ -47,6 +49,7 @@ pub enum GameLayer {
     Asteroid,
     Planet,
     Radar,
+    Pickup,
     #[default]
     Other,
 }
@@ -99,6 +102,7 @@ fn main() {
             asteroid_plugin,
             ai_ship_bundle,
             explosions_plugin,
+            pickup_plugin,
         ))
         .init_state::<GameState>()
         .init_resource::<TravelContext>()

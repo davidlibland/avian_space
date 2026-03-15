@@ -1,3 +1,4 @@
+use crate::pickups::PickupDrop;
 use crate::{GameLayer, GameState};
 use crate::utils::{polygon_mesh, random_velocity, safe_despawn};
 use avian2d::prelude::*;
@@ -5,6 +6,9 @@ use bevy::math::FloatPow;
 use bevy::prelude::*;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+
+/// Max units dropped per unit of asteroid size when shattered.
+const ASTEROID_DROP_SCALE: f32 = 0.2;
 
 pub fn asteroid_plugin(app: &mut App) {
     app.add_message::<ShatterAsteroid>()
@@ -28,12 +32,19 @@ pub struct AsteroidFieldData {
     pub location: Vec2,
     pub radius: f32,
     pub number: usize,
+    #[serde(default = "default_asteroid_commodity")]
+    pub commodity: String,
+}
+
+fn default_asteroid_commodity() -> String {
+    "iron".to_string()
 }
 
 #[derive(Component)]
 pub struct AsteroidField {
     pub radius: f32,
     pub number: usize,
+    pub commodity: String,
 }
 
 impl AsteroidField {
@@ -105,6 +116,7 @@ pub fn build_asteroid_field(
             AsteroidField {
                 radius: field_data.radius,
                 number: field_data.number,
+                commodity: field_data.commodity.clone(),
             },
             Transform::from_xyz(field_data.location.x, field_data.location.y, 0.0),
         ))
@@ -174,9 +186,12 @@ fn handle_shatter(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut reader: MessageReader<ShatterAsteroid>,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+    mut pickup_writer: MessageWriter<PickupDrop>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
+    fields: Query<&AsteroidField>,
 ) {
     use std::collections::HashSet;
+    let mut rng = rand::thread_rng();
     let mut shattered: HashSet<Entity> = HashSet::new();
     for ShatterAsteroid(entity) in reader.read() {
         if !shattered.insert(*entity) {
@@ -186,6 +201,17 @@ fn handle_shatter(
             explosion_writer.write(crate::explosions::TriggerExplosion {
                 location: transform.translation.xy(),
                 size: asteroid.size,
+            });
+            let commodity = fields
+                .get(asteroid.field)
+                .map(|f| f.commodity.clone())
+                .unwrap_or_else(|_| "iron".to_string());
+            let max_qty = ((asteroid.size * ASTEROID_DROP_SCALE) as u16).max(1);
+            let qty = rng.gen_range(1..=max_qty);
+            pickup_writer.write(PickupDrop {
+                location: transform.translation.xy(),
+                commodity,
+                quantity: qty,
             });
         }
         shatter_asteroid(&mut commands, &mut meshes, &mut materials, entity, &asteroids);

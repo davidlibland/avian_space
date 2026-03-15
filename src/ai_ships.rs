@@ -3,6 +3,7 @@ use std::f32::consts::PI;
 // Some AI for the ships
 use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
+use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::ship::{Personality, Ship, ShipCommand, Target, ship_bundle};
 use crate::utils::{angle_indicator, angle_to_hit};
@@ -132,6 +133,7 @@ pub fn simple_ai_control(
     planet_marker: Query<(), With<Planet>>,
     asteroid_marker: Query<(), With<Asteroid>>,
     ship_marker: Query<(), With<Ship>>,
+    pickup_marker: Query<(), With<Pickup>>,
     planet_names: Query<(Entity, &Planet)>,
     current_star_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
@@ -142,11 +144,11 @@ pub fn simple_ai_control(
         // 1. Validate existing target: clear if entity gone or (for combat targets) out of range.
         if let Some(ref tgt) = ai_ship.target.clone() {
             let target_entity = match tgt {
-                Target::Ship(e) | Target::Asteroid(e) | Target::Planet(e) => *e,
+                Target::Ship(e) | Target::Asteroid(e) | Target::Planet(e) | Target::Pickup(e) => *e,
             };
             let valid = match tgt {
                 Target::Planet(_) => all_positions.get(target_entity).is_ok(),
-                Target::Ship(_) | Target::Asteroid(_) => all_positions
+                Target::Ship(_) | Target::Asteroid(_) | Target::Pickup(_) => all_positions
                     .get(target_entity)
                     .map(|p| (p.0 - position.0).length() <= DETECTION_RADIUS)
                     .unwrap_or(false),
@@ -196,6 +198,7 @@ pub fn simple_ai_control(
                     GameLayer::Planet,
                     GameLayer::Asteroid,
                     GameLayer::Ship,
+                    GameLayer::Pickup,
                 ])
                 .with_excluded_entities([entity]);
 
@@ -217,6 +220,10 @@ pub fn simple_ai_control(
 
                 hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
+                let nearest_pickup = hits
+                    .iter()
+                    .find(|(e, _)| pickup_marker.get(*e).is_ok())
+                    .map(|(e, _)| *e);
                 let nearest_asteroid = hits
                     .iter()
                     .find(|(e, _)| asteroid_marker.get(*e).is_ok())
@@ -230,14 +237,19 @@ pub fn simple_ai_control(
                     .find(|(e, _)| ship_marker.get(*e).is_ok())
                     .map(|(e, _)| *e);
 
-                ai_ship.target = match ai_ship.personality {
-                    Personality::Miner => nearest_asteroid
-                        .map(Target::Asteroid)
-                        .or_else(|| nearest_planet.map(Target::Planet)),
-                    Personality::Fighter => nearest_ship
-                        .map(Target::Ship)
-                        .or_else(|| nearest_planet.map(Target::Planet)),
-                    Personality::Trader => nearest_planet.map(Target::Planet),
+                // All personalities grab nearby pickups first.
+                ai_ship.target = if let Some(pickup) = nearest_pickup {
+                    Some(Target::Pickup(pickup))
+                } else {
+                    match ai_ship.personality {
+                        Personality::Miner => nearest_asteroid
+                            .map(Target::Asteroid)
+                            .or_else(|| nearest_planet.map(Target::Planet)),
+                        Personality::Fighter => nearest_ship
+                            .map(Target::Ship)
+                            .or_else(|| nearest_planet.map(Target::Planet)),
+                        Personality::Trader => nearest_planet.map(Target::Planet),
+                    }
                 };
             }
         }
@@ -294,6 +306,27 @@ pub fn simple_ai_control(
                         }
                     }
                 }
+            }
+
+            // ── Collect pickup ──────────────────────────────────────────────
+            Target::Pickup(target_e) => {
+                let Ok(target_pos) = all_positions.get(*target_e) else {
+                    ai_ship.target = None;
+                    continue;
+                };
+                let local_offset = rotate_r(&(target_pos.0 - position.0));
+                let Some(bearing_angle) =
+                    angle_to_hit(max_speed.0, &local_offset, &Vec2::ZERO)
+                else {
+                    continue;
+                };
+                let (turn, thrust) = angle_to_controls(bearing_angle);
+                ship_writer.write(ShipCommand {
+                    entity,
+                    thrust,
+                    turn,
+                    reverse: 0.,
+                });
             }
 
             // ── Fly to planet, land, trade ───────────────────────────────────

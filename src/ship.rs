@@ -99,6 +99,7 @@ pub enum Target {
     Ship(Entity),
     Planet(Entity),
     Asteroid(Entity),
+    Pickup(Entity),
 }
 
 #[derive(Component, Clone)]
@@ -238,6 +239,7 @@ pub fn ship_bundle(
                 GameLayer::Asteroid,
                 GameLayer::Planet,
                 GameLayer::Radar,
+                GameLayer::Pickup,
             ],
         ),
         weapons: WeaponSystems {
@@ -319,17 +321,31 @@ fn apply_damage(
     mut ships: Query<(&mut Ship, &Transform)>,
     ai_ships: Query<(), With<crate::ai_ships::AIShip>>,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+    mut pickup_writer: MessageWriter<crate::pickups::PickupDrop>,
 ) {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
     for event in reader.read() {
         let Ok((mut ship, transform)) = ships.get_mut(event.entity) else {
             continue;
         };
         ship.health = (ship.health - event.damage as i32).max(0);
         if ship.health == 0 && ai_ships.contains(event.entity) {
+            let location = transform.translation.xy();
             explosion_writer.write(crate::explosions::TriggerExplosion {
-                location: transform.translation.xy(),
+                location,
                 size: 20.0,
             });
+            for (commodity, &qty) in &ship.cargo {
+                if qty > 0 {
+                    let drop_qty = rng.gen_range(1..=qty);
+                    pickup_writer.write(crate::pickups::PickupDrop {
+                        location,
+                        commodity: commodity.clone(),
+                        quantity: drop_qty,
+                    });
+                }
+            }
             crate::utils::safe_despawn(&mut commands, event.entity);
         }
     }

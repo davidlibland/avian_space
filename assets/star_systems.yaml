@@ -135,6 +135,7 @@ sirius:
       location: [0., 200.]
       number: 8
       radius: 400.
+      commodity: titanium
   ships:
     fighter: 1
     hauler: 2
@@ -301,6 +302,7 @@ vega:
       location: [0., 0.]
       number: 20
       radius: 700.
+      commodity: gold
   ships:
     fighter: 1
     hauler: 2
