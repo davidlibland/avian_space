@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::planets::Planet;
+use crate::ship::Target;
 use crate::utils::safe_despawn;
 use crate::{GameState, Player, Ship};
 
@@ -17,6 +18,9 @@ struct CreditsText;
 
 #[derive(Component)]
 struct CargoText;
+
+#[derive(Component)]
+struct TargetText;
 
 #[derive(Component)]
 struct RadarDisplay;
@@ -50,7 +54,7 @@ impl Plugin for HudPlugin {
             range: self.radar_range,
         })
         .add_systems(Startup, spawn_hud)
-        .add_systems(Update, (update_health_bar, update_cargo_credits))
+        .add_systems(Update, (update_health_bar, update_cargo_credits, update_target_display))
         .add_systems(
             Update,
             update_radar_dots.run_if(in_state(GameState::Flying)),
@@ -158,6 +162,27 @@ fn spawn_hud(mut commands: Commands) {
                         ..default()
                     },
                     TextColor(Color::srgb(0.5, 0.5, 0.55)),
+                ));
+            });
+
+            // ── Target ───────────────────────────────────────────────────
+            root.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+            ))
+            .with_children(|w| {
+                w.spawn((
+                    TargetText,
+                    Text::new("Target: None"),
+                    TextFont {
+                        font_size: 13.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(1.0, 0.5, 0.2)),
                 ));
             });
 
@@ -341,6 +366,29 @@ fn update_cargo_credits(
         let free = ship.remaining_cargo_space();
         **text = format!("Free: {}/{}", free, ship.data.cargo_space);
     }
+}
+
+fn update_target_display(
+    player_query: Query<&Ship, With<Player>>,
+    ships_query: Query<&Ship, Without<Player>>,
+    mut text_query: Query<&mut Text, With<TargetText>>,
+) {
+    let Ok(player_ship) = player_query.single() else {
+        return;
+    };
+    let Ok(mut text) = text_query.single_mut() else {
+        return;
+    };
+    **text = match &player_ship.target {
+        Some(Target::Ship(entity)) => {
+            if let Ok(target_ship) = ships_query.get(*entity) {
+                format!("Target: {}", target_ship.ship_type)
+            } else {
+                "Target: None".to_string()
+            }
+        }
+        _ => "Target: None".to_string(),
+    };
 }
 
 fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {

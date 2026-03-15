@@ -24,7 +24,7 @@ use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
-use ship::{DamageShip, Ship, ShipCommand, ship_bundle, ship_plugin};
+use ship::{DamageShip, Ship, ShipCommand, Target, ship_bundle, ship_plugin};
 use starfield::StarfieldPlugin;
 use utils::safe_despawn;
 use weapons::{FireCommand, Projectile, weapon_lifetime, weapons_plugin};
@@ -242,11 +242,44 @@ fn keyboard_input(
     mut writer: MessageWriter<ShipCommand>,
     mut weapons_writer: MessageWriter<FireCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut player_query: Query<(Entity, &mut WeaponSystems), With<Player>>,
+    mut player_query: Query<(Entity, &Transform, &mut Ship, &mut WeaponSystems), With<Player>>,
+    enemy_ships_query: Query<(Entity, &Transform), (With<Ship>, Without<Player>)>,
 ) {
-    let Ok((player_entity, weapons)) = player_query.single_mut() else {
+    let Ok((player_entity, player_tf, mut player_ship, weapons)) = player_query.single_mut() else {
         return; // Player not spawned yet
     };
+
+    // Tab: cycle through ship targets
+    if keyboard_input.just_pressed(KeyCode::Tab) {
+        let mut entities: Vec<Entity> = enemy_ships_query.iter().map(|(e, _)| e).collect();
+        entities.sort();
+        if !entities.is_empty() {
+            let current = match &player_ship.target {
+                Some(Target::Ship(e)) => Some(*e),
+                _ => None,
+            };
+            let next = match current {
+                None => entities[0],
+                Some(cur) => {
+                    let idx = entities.iter().position(|&e| e == cur).unwrap_or(usize::MAX);
+                    entities[(idx + 1) % entities.len()]
+                }
+            };
+            player_ship.target = Some(Target::Ship(next));
+        }
+    }
+
+    // R: select nearest ship target
+    if keyboard_input.just_pressed(KeyCode::KeyR) {
+        let player_pos = player_tf.translation.truncate();
+        let nearest = enemy_ships_query
+            .iter()
+            .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
+            .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some((entity, _)) = nearest {
+            player_ship.target = Some(Target::Ship(entity));
+        }
+    }
 
     let left = keyboard_input.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
     let right = keyboard_input.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
