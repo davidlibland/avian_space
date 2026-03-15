@@ -2,6 +2,7 @@ use crate::item_universe::ItemUniverse;
 use crate::utils::polygon_mesh;
 use crate::weapons::{WeaponSystem, WeaponSystems};
 use crate::{GameLayer, PlayState};
+use avian2d::parry::simba::scalar;
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -54,7 +55,7 @@ pub struct ShipData {
     pub max_health: i32,
     pub cargo_space: u16,
     pub item_space: u16,
-    pub base_weapons: HashMap<String, u8>, // A list of the basic weapons this ship starts with, along with counts
+    pub base_weapons: HashMap<String, (u8, Option<u32>)>, // A list of the basic weapons this ship starts with, along with counts
     pub sprite_path: String,
     pub radius: f32,
     pub price: i128,
@@ -200,7 +201,9 @@ impl Ship {
                 self.credits -= outfitter_item.price();
             }
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                if let Some(new_weapon) = WeaponSystem::from_type(weapon_type, 1, &item_universe) {
+                if let Some(new_weapon) =
+                    WeaponSystem::from_type(weapon_type, 1, None, &item_universe)
+                {
                     vacant.insert(new_weapon);
                     self.credits -= outfitter_item.price();
                 }
@@ -247,17 +250,8 @@ pub fn ship_bundle(
     let default_data = ShipData::default();
     let ship_data = item_universe.ships.get(ship_type).unwrap_or(&default_data);
     let mut ship = Ship::from_ship_data(ship_data, ship_type);
-    let mut primary_weapons: HashMap<String, WeaponSystem> = HashMap::new();
-    for (weapon_type, count) in ship_data.base_weapons.iter() {
-        if let Some(weapon_system) = WeaponSystem::from_type(&weapon_type, *count, &item_universe) {
-            primary_weapons
-                .entry(weapon_type.clone())
-                .insert_entry(weapon_system);
-        }
-    }
-    ship.weapon_systems = WeaponSystems {
-        primary: primary_weapons,
-    };
+    ship.weapon_systems = WeaponSystems::build(&ship_data.base_weapons, item_universe);
+
     ShipBundle {
         ship,
         // mesh: Mesh2d(meshes.add(build_ship_mesh())),
@@ -287,7 +281,7 @@ pub fn ship_bundle(
 /// and an explicit weapon loadout instead of deriving both from item_universe defaults.
 pub fn ship_bundle_from_pilot(
     mut ship: Ship,
-    weapon_loadout: &HashMap<String, u8>,
+    weapon_loadout: &HashMap<String, (u8, Option<u32>)>,
     asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
     pos: Vec2,
@@ -299,14 +293,7 @@ pub fn ship_bundle_from_pilot(
         .unwrap_or(&default_data);
     // Always use canonical item-universe data for physics/visuals.
     ship.data = ship_data.clone();
-
-    let mut primary: HashMap<String, WeaponSystem> = HashMap::new();
-    for (weapon_type, &count) in weapon_loadout {
-        if let Some(ws) = WeaponSystem::from_type(weapon_type, count, &item_universe) {
-            primary.insert(weapon_type.clone(), ws);
-        }
-    }
-    ship.weapon_systems = WeaponSystems { primary };
+    ship.weapon_systems = WeaponSystems::build(weapon_loadout, item_universe);
     ShipBundle {
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
@@ -452,17 +439,9 @@ fn handle_buy_ship(
         }
         ship.credits -= new_data.price;
 
-        // Build new weapon systems from the ship's base loadout.
-        let mut primary = HashMap::new();
-        for (weapon_type, count) in &new_data.base_weapons {
-            if let Some(ws) = WeaponSystem::from_type(weapon_type, *count, &item_universe) {
-                primary.insert(weapon_type.clone(), ws);
-            }
-        }
-
         // Replace the ship component, preserving credits and cargo (capped to new space).
         let mut new_ship = Ship::from_ship_data(new_data, &event.ship_type);
-        new_ship.weapon_systems = WeaponSystems { primary };
+        new_ship.weapon_systems = WeaponSystems::build(&new_data.base_weapons, &item_universe);
         new_ship.credits = ship.credits;
         for (commodity, qty) in &ship.cargo {
             let space_left = new_ship

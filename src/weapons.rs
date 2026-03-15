@@ -6,7 +6,6 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
-use std::f32::consts::FRAC_PI_2;
 
 pub fn weapons_plugin(app: &mut App) {
     app.add_message::<FireCommand>().add_systems(
@@ -41,15 +40,44 @@ pub struct Projectile {
 #[derive(Clone)]
 pub struct WeaponSystems {
     pub primary: HashMap<String, WeaponSystem>,
+    pub secondary: HashMap<String, WeaponSystem>,
+    pub selected_secondary: Option<String>,
 }
 impl WeaponSystems {
     pub fn find_weapon_entry(&mut self, weapon_type: &str) -> Entry<'_, String, WeaponSystem> {
-        self.primary.entry(weapon_type.to_string())
+        let primary_entry = self.primary.entry(weapon_type.to_string());
+        match primary_entry {
+            Entry::Occupied(_) => primary_entry,
+            Entry::Vacant(_) => self.secondary.entry(weapon_type.to_string()),
+        }
     }
     pub fn find_weapon(&mut self, weapon_type: &str) -> Option<&mut WeaponSystem> {
         match self.find_weapon_entry(weapon_type) {
             Entry::Vacant(_) => None,
             Entry::Occupied(view) => Some(view.into_mut()),
+        }
+    }
+    pub fn build(
+        layout: &HashMap<String, (u8, Option<u32>)>,
+        item_universe: &ItemUniverse,
+    ) -> Self {
+        let mut primary: HashMap<String, WeaponSystem> = HashMap::new();
+        let mut secondary: HashMap<String, WeaponSystem> = HashMap::new();
+        for (weapon_type, &(count, ammo_quantity)) in layout.iter() {
+            if let Some(ws) =
+                WeaponSystem::from_type(weapon_type, count, ammo_quantity, &item_universe)
+            {
+                if ws.ammo_quantity.is_some() {
+                    secondary.insert(weapon_type.clone(), ws);
+                } else {
+                    primary.insert(weapon_type.clone(), ws);
+                }
+            }
+        }
+        WeaponSystems {
+            primary,
+            secondary: secondary,
+            selected_secondary: None,
         }
     }
 }
@@ -58,8 +86,15 @@ impl Default for WeaponSystems {
     fn default() -> Self {
         WeaponSystems {
             primary: HashMap::new(),
+            secondary: HashMap::new(),
+            selected_secondary: None,
         }
     }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct Ammo {
+    pub space: i32,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -70,6 +105,7 @@ pub struct Weapon {
     pub cooldown: f32,
     pub color: [f32; 3],
     pub damage: i16,
+    pub ammo: Option<Ammo>,
     #[serde(default)]
     pub guided: bool,
     #[serde(default)]
@@ -93,10 +129,16 @@ pub struct WeaponSystem {
     pub weapon_type: String,
     pub space_per_system: i32,
     pub number: u8,
+    pub ammo_quantity: Option<u32>,
 }
 
 impl WeaponSystem {
-    pub fn from_type(weapon_type: &str, number: u8, item_universe: &ItemUniverse) -> Option<Self> {
+    pub fn from_type(
+        weapon_type: &str,
+        number: u8,
+        ammo_quantity: Option<u32>,
+        item_universe: &ItemUniverse,
+    ) -> Option<Self> {
         let Some(weapon) = item_universe.weapons.get(weapon_type) else {
             return None;
         };
@@ -109,6 +151,7 @@ impl WeaponSystem {
             cooldown: Timer::from_seconds(weapon.cooldown / number as f32, TimerMode::Once),
             number: number,
             space_per_system: outfitter_item.space() as i32,
+            ammo_quantity: weapon.ammo.clone().map(|_| ammo_quantity.unwrap_or(0)),
         });
     }
     pub fn space_consumed(&self) -> i32 {
@@ -129,6 +172,10 @@ pub fn weapon_fire(
         let Some(specific) = ship.weapon_systems.find_weapon(&cmd.weapon_type) else {
             continue;
         };
+        // If we have no ammo, then don't fire.
+        if specific.ammo_quantity.map(|n| n == 0).unwrap_or(false) {
+            continue;
+        }
         // Check that the weapon is ready to fire:
         if !specific.cooldown.is_finished() {
             continue;
@@ -159,6 +206,8 @@ pub fn weapon_fire(
                 ..default()
             },
         ));
+        // Decrease the ammo:
+        specific.ammo_quantity = specific.ammo_quantity.map(|x| x - 1);
         if weapon.guided {
             entity_cmd.insert(GuidedMissile {
                 target: cmd.target,

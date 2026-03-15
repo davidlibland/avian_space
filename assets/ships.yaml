@@ -6,7 +6,7 @@ shuttle:
   cargo_space: 10
   item_space: 5
   base_weapons:
-    "laser": 1
+    "laser": [1, null]
   radius: 10.0
   price: 5000
   sprite_path: ship_sprites/shuttle.png
@@ -20,7 +20,7 @@ fighter:
   cargo_space: 4
   item_space: 4
   base_weapons:
-    laser: 2
+    laser: [2, null]
   radius: 12.0
   price: 25000
   sprite_path: ship_sprites/fighter.png
@@ -34,7 +34,7 @@ asteroid_miner:
   cargo_space: 25
   item_space: 6
   base_weapons:
-    laser: 1
+    laser: [1, null]
   radius: 20.0
   price: 35000
   sprite_path: ship_sprites/asteroid_miner.png
@@ -63,7 +63,7 @@ corvette:
   cargo_space: 2
   item_space: 3
   base_weapons:
-    proton_beam: 1
+    proton_beam: [1, null]
   radius: 9.0
   price: 18000
   sprite_path: ship_sprites/corvette.png
@@ -77,8 +77,8 @@ frigate:
   cargo_space: 12
   item_space: 10
   base_weapons:
-    proton_beam: 2
-    ir_missile: 1
+    proton_beam: [2, null]
+    ir_missile: [1, 4]
   radius: 32.0
   price: 120000
   sprite_path: ship_sprites/frigate.png
@@ -94,7 +94,7 @@ courier:
   cargo_space: 18
   item_space: 4
   base_weapons:
-    laser: 1
+    laser: [1, null]
   radius: 12.0
   price: 15000
   sprite_path: ship_sprites/courier.png

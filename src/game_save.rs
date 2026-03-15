@@ -17,7 +17,7 @@ pub struct PilotSave {
     pub cargo: HashMap<String, u16>,
     pub credits: i128,
     /// weapon_type → count owned
-    pub weapon_loadout: HashMap<String, u8>,
+    pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
 }
 
 // ── In-memory resource ───────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ pub struct PlayerGameState {
     pub pilot_name: String,
     pub current_star_system: String,
     pub player_ship: Ship,
-    pub weapon_loadout: HashMap<String, u8>,
+    pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
 }
 
 impl PlayerGameState {
@@ -138,7 +138,7 @@ fn sync_player_state(
             .weapon_systems
             .primary
             .iter()
-            .map(|(k, v)| (k.clone(), v.number))
+            .map(|(k, v)| (k.clone(), (v.number, v.ammo_quantity)))
             .collect();
         game_state.player_ship = ship.clone();
     }
@@ -199,7 +199,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             credits: 50_000,
-            weapon_loadout: [("laser".to_string(), 2u8)].into_iter().collect(),
+            weapon_loadout: [("laser".to_string(), (2u8, None))].into_iter().collect(),
         }
     }
 
@@ -236,7 +236,6 @@ mod tests {
             "health",
             "cargo",
             "credits",
-            "consumed_item_space",
             "weapon_loadout",
         ] {
             assert!(yaml.contains(key), "YAML missing key: {key}");
@@ -260,7 +259,9 @@ mod tests {
         state.player_ship.health = 42;
         state.player_ship.credits = 7_777;
         state.player_ship.cargo.insert("ore".to_string(), 3);
-        state.weapon_loadout.insert("missile".to_string(), 1);
+        state
+            .weapon_loadout
+            .insert("missile".to_string(), (1, Some(4)));
         state.current_star_system = "proxima".to_string();
 
         let save = state.to_save();
@@ -268,7 +269,7 @@ mod tests {
         assert_eq!(save.health, 42);
         assert_eq!(save.credits, 7_777);
         assert_eq!(save.cargo.get("ore"), Some(&3));
-        assert_eq!(save.weapon_loadout.get("missile"), Some(&1));
+        assert_eq!(save.weapon_loadout.get("missile"), Some(&(1, Some(4))));
         assert_eq!(save.current_star_system, "proxima");
     }
 
@@ -302,7 +303,9 @@ mod tests {
         original.player_ship.health = 60;
         original.player_ship.credits = 12_345;
         original.player_ship.cargo.insert("fuel".to_string(), 4);
-        original.weapon_loadout.insert("plasma".to_string(), 3);
+        original
+            .weapon_loadout
+            .insert("plasma".to_string(), (3, None));
         original.current_star_system = "tau_ceti".to_string();
 
         let save = original.to_save();
