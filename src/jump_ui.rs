@@ -4,7 +4,7 @@ use egui::{Align2, Color32, FontId, Pos2, Sense, Stroke};
 use std::collections::HashSet;
 
 use crate::{
-    CurrentStarSystem, GameState, TravelContext, TravelPhase, item_universe::ItemUniverse,
+    CurrentStarSystem, PlayState, TravelContext, TravelPhase, item_universe::ItemUniverse,
 };
 
 // Canvas is larger than the visible viewport — the ScrollArea lets the user pan around.
@@ -30,13 +30,13 @@ pub fn jump_ui_plugin(app: &mut App) {
     app.init_resource::<JumpUiOpen>()
         .add_systems(
             Update,
-            toggle_jump_ui.run_if(in_state(GameState::Flying)),
+            toggle_jump_ui.run_if(in_state(PlayState::Flying)),
         )
         .add_systems(
             EguiPrimaryContextPass,
             (
-                jump_ui.run_if(in_state(GameState::Flying)),
-                jump_flash.run_if(in_state(GameState::Traveling)),
+                jump_ui.run_if(in_state(PlayState::Flying)),
+                jump_flash.run_if(in_state(PlayState::Traveling)),
             ),
         );
 }

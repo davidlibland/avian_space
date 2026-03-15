@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
 use crate::utils::{random_velocity, safe_despawn};
-use crate::{GameLayer, GameState};
+use crate::{GameLayer, PlayState};
 use rand::Rng;
 
 const PICKUP_RADIUS: f32 = 15.0;
@@ -26,7 +26,7 @@ pub struct PickupDrop {
 pub fn pickup_plugin(app: &mut App) {
     app.add_message::<PickupDrop>().add_systems(
         Update,
-        (spawn_pickups, collect_pickups).run_if(in_state(GameState::Flying)),
+        (spawn_pickups, collect_pickups).run_if(in_state(PlayState::Flying)),
     );
 }
 
@@ -43,7 +43,7 @@ fn spawn_pickups(
             .map(|c| c.color)
             .unwrap_or([1.0, 0.85, 0.1]);
         commands.spawn((
-            DespawnOnExit(GameState::Flying),
+            DespawnOnExit(PlayState::Flying),
             Pickup {
                 commodity: drop.commodity.clone(),
                 quantity: drop.quantity,

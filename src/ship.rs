@@ -1,7 +1,7 @@
 use crate::item_universe::ItemUniverse;
 use crate::utils::polygon_mesh;
 use crate::weapons::{WeaponSystem, WeaponSystems};
-use crate::{GameLayer, GameState};
+use crate::{GameLayer, PlayState};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -13,9 +13,9 @@ pub fn ship_plugin(app: &mut App) {
         .add_message::<BuyShip>()
         .add_systems(
             FixedUpdate,
-            ship_movement.run_if(in_state(GameState::Flying)),
+            ship_movement.run_if(in_state(PlayState::Flying)),
         )
-        .add_systems(Update, apply_damage.run_if(in_state(GameState::Flying)))
+        .add_systems(Update, apply_damage.run_if(in_state(PlayState::Flying)))
         .add_systems(Update, handle_buy_ship);
 }
 

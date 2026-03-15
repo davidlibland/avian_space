@@ -1,12 +1,12 @@
 use crate::pickups::PickupDrop;
-use crate::{GameLayer, GameState};
 use crate::utils::{polygon_mesh, random_velocity, safe_despawn};
-use std::collections::HashMap;
+use crate::{GameLayer, PlayState};
 use avian2d::prelude::*;
 use bevy::math::FloatPow;
 use bevy::prelude::*;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Max units dropped per unit of asteroid size when shattered.
 const ASTEROID_DROP_SCALE: f32 = 0.2;
@@ -14,7 +14,7 @@ const ASTEROID_DROP_SCALE: f32 = 0.2;
 pub fn asteroid_plugin(app: &mut App) {
     app.add_message::<ShatterAsteroid>()
         .add_systems(Update, asteroid_field_gravity)
-        .add_systems(Update, handle_shatter.run_if(in_state(GameState::Flying)));
+        .add_systems(Update, handle_shatter.run_if(in_state(PlayState::Flying)));
 }
 
 #[derive(Event, Message)]
@@ -81,7 +81,7 @@ pub fn spawn_asteroid(
     // Asteroids
     commands
         .spawn((
-            DespawnOnExit(GameState::Flying),
+            DespawnOnExit(PlayState::Flying),
             Asteroid { size, field },
             Mesh2d(meshes.add(mesh)),
             MeshMaterial2d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
@@ -115,7 +115,7 @@ pub fn build_asteroid_field(
     // Asteroids
     let field = commands
         .spawn((
-            DespawnOnExit(GameState::Flying),
+            DespawnOnExit(PlayState::Flying),
             AsteroidField {
                 radius: field_data.radius,
                 number: field_data.number,
@@ -231,7 +231,13 @@ fn handle_shatter(
                 quantity: qty,
             });
         }
-        shatter_asteroid(&mut commands, &mut meshes, &mut materials, entity, &asteroids);
+        shatter_asteroid(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            entity,
+            &asteroids,
+        );
     }
 }
 

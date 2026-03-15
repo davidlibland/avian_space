@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::planets::Planet;
 use crate::ship::Target;
 use crate::utils::safe_despawn;
-use crate::{GameState, Player, Ship};
+use crate::{PlayState, Player, Ship};
 
 const RADAR_SIZE: f32 = 144.0;
 const DOT_SIZE: f32 = 4.0;
@@ -57,7 +57,7 @@ impl Plugin for HudPlugin {
         .add_systems(Update, (update_health_bar, update_cargo_credits, update_target_display))
         .add_systems(
             Update,
-            update_radar_dots.run_if(in_state(GameState::Flying)),
+            update_radar_dots.run_if(in_state(PlayState::Flying)),
         );
     }
 }

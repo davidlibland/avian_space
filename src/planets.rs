@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::item_universe::ItemUniverse;
 use crate::planet_ui::LandedContext;
-use crate::{CurrentStarSystem, GameLayer, GameState, Player};
+use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 
 use std::collections::HashMap;
 
@@ -33,10 +33,10 @@ pub struct NearbyPlanet(pub Option<Entity>);
 
 pub fn planets_plugin(app: &mut App) {
     app.init_resource::<NearbyPlanet>()
-        .add_systems(OnEnter(GameState::Flying), spawn_planets)
+        .add_systems(OnEnter(PlayState::Flying), spawn_planets)
         .add_systems(
             Update,
-            (track_nearby_planet, landing_input).run_if(in_state(GameState::Flying)),
+            (track_nearby_planet, landing_input).run_if(in_state(PlayState::Flying)),
         );
 }
 
@@ -55,7 +55,7 @@ fn spawn_planets(
         let r = planet_data.radius;
         let [cr, cg, cb] = planet_data.color;
         commands.spawn((
-            DespawnOnExit(GameState::Flying),
+            DespawnOnExit(PlayState::Flying),
             Planet(planet_name.clone()),
             RigidBody::Static,
             Collider::circle(r),
@@ -97,7 +97,7 @@ fn track_nearby_planet(
 fn landing_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     nearby: Res<NearbyPlanet>,
-    mut state: ResMut<NextState<GameState>>,
+    mut state: ResMut<NextState<PlayState>>,
     mut landed_context: ResMut<LandedContext>,
     planet_query: Query<&Planet>,
 ) {
@@ -105,7 +105,7 @@ fn landing_input(
         if let Some(planet_entity) = nearby.0 {
             if let Ok(planet) = planet_query.get(planet_entity) {
                 landed_context.planet_name = Some(planet.0.clone());
-                state.set(GameState::Landed);
+                state.set(PlayState::Landed);
             }
         }
     }

@@ -9,7 +9,7 @@ use crate::ship::{Personality, Ship, ShipCommand, Target, ship_bundle};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::weapons::FireCommand;
 use crate::weapons::WeaponSystems;
-use crate::{CurrentStarSystem, GameLayer, GameState};
+use crate::{CurrentStarSystem, GameLayer, PlayState};
 use avian2d::prelude::*;
 use bevy::prelude::*;
 use rand::Rng;
@@ -58,7 +58,7 @@ pub struct AIShip {
 }
 
 pub fn ai_ship_bundle(app: &mut App) {
-    app.add_systems(OnEnter(crate::GameState::Flying), spawn_ai_ships)
+    app.add_systems(OnEnter(crate::PlayState::Flying), spawn_ai_ships)
         .add_systems(Update, simple_ai_control);
 }
 
@@ -80,7 +80,7 @@ pub fn spawn_ai_ships(
                     ship_bundle(ship_type, &asset_server, &item_universe, Vec2::new(x, y));
                 commands
                     .spawn((
-                        DespawnOnExit(GameState::Flying),
+                        DespawnOnExit(PlayState::Flying),
                         AIShip {
                             personality: ship_bundle.get_personality(),
                             target: None,

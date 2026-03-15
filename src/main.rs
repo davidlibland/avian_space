@@ -16,12 +16,12 @@ mod starfield;
 mod utils;
 mod weapons;
 use ai_ships::ai_ship_bundle;
-use pickups::pickup_plugin;
 use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
 use explosions::explosions_plugin;
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
+use pickups::pickup_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
 use ship::{DamageShip, Ship, ShipCommand, Target, ship_bundle, ship_plugin};
@@ -35,7 +35,7 @@ use crate::weapons::WeaponSystems;
 const BOUNDS: f32 = 10000.0;
 
 #[derive(States, Default, PartialEq, Eq, Hash, Clone, Debug)]
-pub enum GameState {
+pub enum PlayState {
     #[default]
     Flying,
     Landed,
@@ -104,20 +104,20 @@ fn main() {
             explosions_plugin,
             pickup_plugin,
         ))
-        .init_state::<GameState>()
+        .init_state::<PlayState>()
         .init_resource::<TravelContext>()
         .insert_resource(CurrentStarSystem("sol".to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
         .add_systems(Startup, setup)
         .add_systems(
-            OnEnter(GameState::Flying),
+            OnEnter(PlayState::Flying),
             (spawn_asteroids, set_arrival_velocity),
         )
-        .add_systems(OnEnter(GameState::Traveling), reset_nearby_planet)
+        .add_systems(OnEnter(PlayState::Traveling), reset_nearby_planet)
         .add_systems(
             Update,
             (keyboard_input, collision_system, accelerate_for_jump)
-                .run_if(in_state(GameState::Flying)),
+                .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(
             Update,
@@ -125,7 +125,7 @@ fn main() {
                 .after(collision_system)
                 .before(weapon_lifetime),
         )
-        .add_systems(Update, travel_system.run_if(in_state(GameState::Traveling)))
+        .add_systems(Update, travel_system.run_if(in_state(PlayState::Traveling)))
         .run();
 }
 
@@ -169,7 +169,7 @@ fn accelerate_for_jump(
         With<Player>,
     >,
     time: Res<Time>,
-    mut next_state: ResMut<NextState<GameState>>,
+    mut next_state: ResMut<NextState<PlayState>>,
 ) {
     if ctx.phase != TravelPhase::Accelerating {
         return;
@@ -192,7 +192,7 @@ fn accelerate_for_jump(
     if new_speed >= JUMP_SPEED {
         ctx.phase = TravelPhase::Flashing;
         ctx.flash_t = 0.0;
-        next_state.set(GameState::Traveling);
+        next_state.set(PlayState::Traveling);
     }
 }
 
@@ -200,7 +200,7 @@ fn accelerate_for_jump(
 fn travel_system(
     mut ctx: ResMut<TravelContext>,
     mut current_system: ResMut<CurrentStarSystem>,
-    mut state: ResMut<NextState<GameState>>,
+    mut state: ResMut<NextState<PlayState>>,
     time: Res<Time>,
 ) {
     if ctx.phase != TravelPhase::Flashing {
@@ -215,7 +215,7 @@ fn travel_system(
 
     if ctx.flash_t >= 1.0 {
         ctx.phase = TravelPhase::Idle;
-        state.set(GameState::Flying);
+        state.set(PlayState::Flying);
     }
 }
 
@@ -261,7 +261,10 @@ fn keyboard_input(
             let next = match current {
                 None => entities[0],
                 Some(cur) => {
-                    let idx = entities.iter().position(|&e| e == cur).unwrap_or(usize::MAX);
+                    let idx = entities
+                        .iter()
+                        .position(|&e| e == cur)
+                        .unwrap_or(usize::MAX);
                     entities[(idx + 1) % entities.len()]
                 }
             };

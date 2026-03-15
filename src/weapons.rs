@@ -1,7 +1,7 @@
 use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
 use crate::utils::safe_despawn;
-use crate::{GameLayer, GameState};
+use crate::{GameLayer, PlayState};
 use avian2d::prelude::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,12 @@ use std::f32::consts::FRAC_PI_2;
 pub fn weapons_plugin(app: &mut App) {
     app.add_message::<FireCommand>().add_systems(
         Update,
-        (weapon_fire, weapon_lifetime, weapon_system_cooldown, missile_guidance),
+        (
+            weapon_fire,
+            weapon_lifetime,
+            weapon_system_cooldown,
+            missile_guidance,
+        ),
     );
 }
 
@@ -188,7 +193,7 @@ pub fn weapon_fire(
         let vel = forward.truncate() * weapon.speed;
         let [r, g, b] = weapon.color;
         let mut entity_cmd = commands.spawn((
-            DespawnOnExit(GameState::Flying),
+            DespawnOnExit(PlayState::Flying),
             Projectile {
                 lifetime: weapon.lifetime,
                 owner: Some(cmd.ship),
@@ -240,7 +245,12 @@ pub fn weapon_system_cooldown(time: Res<Time>, mut query: Query<&mut WeaponSyste
 
 fn missile_guidance(
     time: Res<Time>,
-    mut missiles: Query<(&mut Transform, &mut LinearVelocity, &mut GuidedMissile, &Projectile)>,
+    mut missiles: Query<(
+        &mut Transform,
+        &mut LinearVelocity,
+        &mut GuidedMissile,
+        &Projectile,
+    )>,
     all_positions: Query<&Position>,
     ships: Query<Entity, With<Ship>>,
 ) {

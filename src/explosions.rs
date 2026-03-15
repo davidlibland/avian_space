@@ -2,12 +2,12 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::GameState;
+use crate::PlayState;
 
 pub fn explosions_plugin(app: &mut App) {
     app.add_message::<TriggerExplosion>()
-        .add_systems(Update, trigger_explosions.run_if(in_state(GameState::Flying)))
-        .add_systems(Update, tick_particles.run_if(in_state(GameState::Flying)));
+        .add_systems(Update, trigger_explosions.run_if(in_state(PlayState::Flying)))
+        .add_systems(Update, tick_particles.run_if(in_state(PlayState::Flying)));
 }
 
 #[derive(Event, Message)]
@@ -55,7 +55,7 @@ fn trigger_explosions(
             let pos = event.location + offset;
 
             commands.spawn((
-                DespawnOnExit(GameState::Flying),
+                DespawnOnExit(PlayState::Flying),
                 Particle {
                     lifetime,
                     max_lifetime: lifetime,

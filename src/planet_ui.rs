@@ -1,5 +1,5 @@
 use crate::{
-    CurrentStarSystem, GameState, Player, Ship, WeaponSystems, item_universe::ItemUniverse,
+    CurrentStarSystem, PlayState, Player, Ship, WeaponSystems, item_universe::ItemUniverse,
     ship::BuyShip,
 };
 use avian2d::prelude::{LinearVelocity, Physics, PhysicsTime, Position};
@@ -11,11 +11,11 @@ pub fn planet_ui_plugin(app: &mut App) {
         .insert_resource(LandedContext::default())
         .add_systems(
             EguiPrimaryContextPass,
-            planet_ui.run_if(in_state(GameState::Landed)),
+            planet_ui.run_if(in_state(PlayState::Landed)),
         )
-        .add_systems(OnEnter(GameState::Landed), pause_physics)
-        .add_systems(OnExit(GameState::Landed), unpause_physics)
-        .add_systems(OnEnter(GameState::Flying), place_player_at_launch_site);
+        .add_systems(OnEnter(PlayState::Landed), pause_physics)
+        .add_systems(OnExit(PlayState::Landed), unpause_physics)
+        .add_systems(OnEnter(PlayState::Flying), place_player_at_launch_site);
 }
 
 #[derive(Resource, Default)]
@@ -37,7 +37,7 @@ pub enum PlanetTab {
 
 pub fn planet_ui(
     mut egui_contexts: EguiContexts,
-    mut state: ResMut<NextState<GameState>>,
+    mut state: ResMut<NextState<PlayState>>,
     mut landed: ResMut<LandedContext>,
     mut player_query: Query<(&mut Ship, &mut WeaponSystems), With<Player>>,
     mut buy_ship_writer: MessageWriter<BuyShip>,
@@ -74,7 +74,7 @@ pub fn planet_ui(
                 }
             }
             if ui.button("Launch").clicked() {
-                state.set(GameState::Flying);
+                state.set(PlayState::Flying);
             }
         });
         match landed.active_tab {
