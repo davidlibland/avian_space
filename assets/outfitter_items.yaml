@@ -8,3 +8,8 @@ proton_beam:
     price: 250
     space: 3
     weapon_type: proton_beam
+ir_missile:
+  !Weapon
+    price: 800
+    space: 3
+    weapon_type: ir_missile

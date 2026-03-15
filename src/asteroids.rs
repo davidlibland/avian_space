@@ -1,6 +1,7 @@
 use crate::pickups::PickupDrop;
 use crate::{GameLayer, GameState};
 use crate::utils::{polygon_mesh, random_velocity, safe_despawn};
+use std::collections::HashMap;
 use avian2d::prelude::*;
 use bevy::math::FloatPow;
 use bevy::prelude::*;
@@ -32,19 +33,21 @@ pub struct AsteroidFieldData {
     pub location: Vec2,
     pub radius: f32,
     pub number: usize,
-    #[serde(default = "default_asteroid_commodity")]
-    pub commodity: String,
+    #[serde(default = "default_asteroid_commodities")]
+    pub commodities: HashMap<String, f32>,
 }
 
-fn default_asteroid_commodity() -> String {
-    "iron".to_string()
+fn default_asteroid_commodities() -> HashMap<String, f32> {
+    let mut m = HashMap::new();
+    m.insert("iron".to_string(), 1.0);
+    m
 }
 
 #[derive(Component)]
 pub struct AsteroidField {
     pub radius: f32,
     pub number: usize,
-    pub commodity: String,
+    pub commodities: HashMap<String, f32>,
 }
 
 impl AsteroidField {
@@ -116,7 +119,7 @@ pub fn build_asteroid_field(
             AsteroidField {
                 radius: field_data.radius,
                 number: field_data.number,
-                commodity: field_data.commodity.clone(),
+                commodities: field_data.commodities.clone(),
             },
             Transform::from_xyz(field_data.location.x, field_data.location.y, 0.0),
         ))
@@ -204,8 +207,22 @@ fn handle_shatter(
             });
             let commodity = fields
                 .get(asteroid.field)
-                .map(|f| f.commodity.clone())
-                .unwrap_or_else(|_| "iron".to_string());
+                .ok()
+                .and_then(|f| {
+                    let total: f32 = f.commodities.values().sum();
+                    if total <= 0.0 {
+                        return None;
+                    }
+                    let mut roll = rng.gen_range(0.0..total);
+                    for (c, &w) in &f.commodities {
+                        roll -= w;
+                        if roll <= 0.0 {
+                            return Some(c.clone());
+                        }
+                    }
+                    f.commodities.keys().next().cloned()
+                })
+                .unwrap_or_else(|| "iron".to_string());
             let max_qty = ((asteroid.size * ASTEROID_DROP_SCALE) as u16).max(1);
             let qty = rng.gen_range(1..=max_qty);
             pickup_writer.write(PickupDrop {

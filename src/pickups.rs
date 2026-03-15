@@ -2,6 +2,7 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
+use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
 use crate::utils::{random_velocity, safe_despawn};
 use crate::{GameLayer, GameState};
@@ -29,9 +30,18 @@ pub fn pickup_plugin(app: &mut App) {
     );
 }
 
-fn spawn_pickups(mut reader: MessageReader<PickupDrop>, mut commands: Commands) {
+fn spawn_pickups(
+    mut reader: MessageReader<PickupDrop>,
+    mut commands: Commands,
+    item_universe: Res<ItemUniverse>,
+) {
     let mut rng = rand::thread_rng();
     for drop in reader.read() {
+        let [r, g, b] = item_universe
+            .commodities
+            .get(&drop.commodity)
+            .map(|c| c.color)
+            .unwrap_or([1.0, 0.85, 0.1]);
         commands.spawn((
             DespawnOnExit(GameState::Flying),
             Pickup {
@@ -40,6 +50,7 @@ fn spawn_pickups(mut reader: MessageReader<PickupDrop>, mut commands: Commands) 
             },
             Transform::from_translation(drop.location.extend(0.0)),
             RigidBody::Dynamic,
+            MassPropertiesBundle::from_shape(&Collider::circle(PICKUP_RADIUS), 1.0),
             LinearVelocity(random_velocity(30.0)),
             AngularVelocity(rng.gen_range(-2.0..2.0)),
             Collider::circle(PICKUP_RADIUS),
@@ -47,7 +58,7 @@ fn spawn_pickups(mut reader: MessageReader<PickupDrop>, mut commands: Commands) 
             CollisionEventsEnabled,
             CollisionLayers::new(GameLayer::Pickup, [GameLayer::Ship]),
             Sprite {
-                color: Color::srgb(1.0, 0.85, 0.1),
+                color: Color::srgb(r, g, b),
                 custom_size: Some(Vec2::splat(10.0)),
                 ..default()
             },

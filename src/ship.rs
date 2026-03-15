@@ -157,7 +157,7 @@ impl Ship {
         return self.data.cargo_space.saturating_sub(self.current_cargo());
     }
     fn add_cargo(&mut self, commodity: &str, quantity_desired: u16) -> u16 {
-        let quantity_added = std::cmp::max(quantity_desired, self.remaining_cargo_space());
+        let quantity_added = std::cmp::min(quantity_desired, self.remaining_cargo_space());
         *self.cargo.entry(commodity.to_string()).or_insert(0) += quantity_added;
         return quantity_added;
     }
@@ -209,7 +209,17 @@ pub fn ship_bundle(
 ) -> ShipBundle {
     let default_data = ShipData::default();
     let ship_data = item_universe.ships.get(ship_type).unwrap_or(&default_data);
-    let ship = Ship::from_ship_data(ship_data, ship_type);
+    let mut ship = Ship::from_ship_data(ship_data, ship_type);
+    ship.consumed_item_space = ship_data
+        .base_weapons
+        .iter()
+        .filter_map(|(weapon_type, &count)| {
+            item_universe
+                .outfitter_items
+                .get(weapon_type)
+                .map(|item| item.space() * count as u16)
+        })
+        .sum();
     let mut primary_weapons: HashMap<String, WeaponSystem> = HashMap::new();
     for (weapon_type, count) in ship_data.base_weapons.iter() {
         if let Some(weapon_system) =

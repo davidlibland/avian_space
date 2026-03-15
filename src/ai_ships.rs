@@ -161,7 +161,13 @@ pub fn simple_ai_control(
         // 2. If no target, pick one.
         if ai_ship.target.is_none() {
             // Ships with cargo override personality and head to the best sell planet.
-            if !ship.cargo.is_empty() {
+            // Traders sell immediately; Miners/Fighters wait until holds are ≥75% full.
+            let cargo_used: u16 = ship.cargo.values().sum();
+            let should_sell = match ai_ship.personality {
+                Personality::Trader => cargo_used > 0,
+                _ => cargo_used * 4 >= ship.data.cargo_space * 3,
+            };
+            if should_sell {
                 let system_name = &current_star_system.0;
                 if let Some(commodity_to_planet) = item_universe
                     .system_commodity_best_planet_to_sell
@@ -298,10 +304,11 @@ pub fn simple_ai_control(
                     if local_offset.length() < weapon.range() {
                         let fire_angle =
                             angle_to_hit(weapon.speed, &local_offset, &local_target_vel);
-                        if angle_indicator(fire_angle) > 0.5 {
+                        if weapon.guided || angle_indicator(fire_angle) > 0.5 {
                             weapons_writer.write(FireCommand {
                                 ship: entity,
                                 weapon_type: specific.weapon_type.clone(),
+                                target: Some(*target_e),
                             });
                         }
                     }

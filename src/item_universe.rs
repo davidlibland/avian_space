@@ -12,12 +12,19 @@ use serde::de::DeserializeOwned;
 use serde_yaml::{Mapping, Value};
 use std::path::Path;
 
+#[derive(Deserialize, Serialize)]
+pub struct CommodityData {
+    pub color: [f32; 3],
+}
+
 #[derive(Resource, Deserialize, Serialize)]
 pub struct ItemUniverse {
     pub weapons: HashMap<String, Weapon>,
     pub ships: HashMap<String, ShipData>,
     pub star_systems: HashMap<String, StarSystem>,
     pub outfitter_items: HashMap<String, OutfitterItem>,
+    #[serde(default)]
+    pub commodities: HashMap<String, CommodityData>,
     /// Average price of each commodity across all planets in all star systems.
     #[serde(skip)]
     pub global_average_price: HashMap<String, f64>,

@@ -83,24 +83,46 @@ pub fn planet_ui(
                     ui.label(format!("Credits: {}", ship.credits));
                     ui.separator();
                     egui::Grid::new("trade_grid")
-                        .num_columns(5)
+                        .num_columns(6)
                         .striped(true)
                         .show(ui, |ui| {
                             ui.strong("Commodity");
                             ui.strong("Price");
+                            ui.strong("Market");
                             ui.strong("Cargo");
                             ui.label("");
                             ui.label("");
                             ui.end_row();
-                            let commodities: Vec<(String, i128)> = planet
+                            let mut commodities: Vec<(String, i128)> = planet
                                 .commodities
                                 .iter()
                                 .map(|(k, v)| (k.clone(), *v))
                                 .collect();
+                            commodities.sort_by(|a, b| a.0.cmp(&b.0));
                             for (commodity, price) in commodities {
                                 let qty = *ship.cargo.get(&commodity).unwrap_or(&0);
                                 ui.label(&commodity);
                                 ui.label(price.to_string());
+                                // Price indicator vs. global average
+                                if let Some(&avg) =
+                                    item_universe.global_average_price.get(&commodity)
+                                {
+                                    let ratio = price as f64 / avg;
+                                    let (label, color) = if ratio < 0.6 {
+                                        ("very cheap", egui::Color32::from_rgb(50, 220, 50))
+                                    } else if ratio < 0.85 {
+                                        ("cheap", egui::Color32::from_rgb(150, 230, 150))
+                                    } else if ratio > 1.6 {
+                                        ("very expensive", egui::Color32::from_rgb(230, 60, 60))
+                                    } else if ratio > 1.15 {
+                                        ("expensive", egui::Color32::from_rgb(230, 160, 100))
+                                    } else {
+                                        ("average", egui::Color32::GRAY)
+                                    };
+                                    ui.colored_label(color, label);
+                                } else {
+                                    ui.label("-");
+                                }
                                 ui.label(qty.to_string());
                                 if ui.button("Buy").clicked() {
                                     ship.buy_cargo(&commodity, 1, price);
@@ -123,12 +145,13 @@ pub fn planet_ui(
                     ));
                     ui.separator();
                     egui::Grid::new("outfitter_grid")
-                        .num_columns(5)
+                        .num_columns(6)
                         .striped(true)
                         .show(ui, |ui| {
                             ui.strong("Item");
                             ui.strong("Price");
                             ui.strong("Space");
+                            ui.strong("Owned");
                             ui.label("");
                             ui.label("");
                             ui.end_row();
@@ -143,10 +166,15 @@ pub fn planet_ui(
                                 })
                                 .collect();
                             for (item, price, space) in items {
-                                // let qty = *ship.cargo.get(&commodity).unwrap_or(&0);
+                                let owned = weapon_systems
+                                    .primary
+                                    .get(&item)
+                                    .map(|ws| ws.number)
+                                    .unwrap_or(0);
                                 ui.label(&item);
                                 ui.label(price.to_string());
                                 ui.label(space.to_string());
+                                ui.label(owned.to_string());
                                 if ui.button("Buy").clicked() {
                                     weapon_systems.buy_weapon(&item, &mut ship, &item_universe);
                                 }

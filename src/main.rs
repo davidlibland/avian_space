@@ -276,6 +276,7 @@ fn keyboard_input(
             weapons_writer.write(FireCommand {
                 ship: player_entity,
                 weapon_type: specific.weapon_type.clone(),
+                target: None, // guided missiles auto-acquire the nearest enemy
             });
         }
     }

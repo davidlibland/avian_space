@@ -35,8 +35,8 @@ sol:
         iron: 20
         chemicals: 35
         gold: 100
-      outfitter: [laser, proton_beam]
-      shipyard: [shuttle, fighter, asteroid_miner, hauler]
+      outfitter: [laser, proton_beam, ir_missile]
+      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier]
     moon:
       location: [650.0, 380.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."
@@ -47,7 +47,7 @@ sol:
         iron: 20
         food: 40
       outfitter: []
-      shipyard: [shuttle]
+      shipyard: [shuttle, courier]
     mars:
       location: [-350.0, 400.0]
       description: "Rust-red and cold. Colonists here sell cheap iron and pay dearly for food."
@@ -68,7 +68,10 @@ sol:
   ships:
     shuttle: 2
     fighter: 2
+    corvette: 2
     hauler: 2
+    freighter: 1
+    courier: 2
     asteroid_miner: 3
 
 alpha_centauri:
@@ -85,7 +88,7 @@ alpha_centauri:
         water: 8
         iron: 15
       outfitter: []
-      shipyard: [shuttle, fighter]
+      shipyard: [shuttle, corvette, fighter, courier]
     proxima_station:
       location: [520.0, 290.0]
       description: "An orbital waystation where exotic-matter traders stock up before the long haul."
@@ -103,7 +106,9 @@ alpha_centauri:
       radius: 500.
   ships:
     fighter: 1
+    corvette: 2
     hauler: 2
+    freighter: 1
     asteroid_miner: 3
 
 sirius:
@@ -119,7 +124,8 @@ sirius:
         titanium: 200
         cooling_gel: 80
         iron: 15
-      outfitter: []
+      outfitter: [laser]
+      shipyard: [corvette, fighter, courier, freighter]
     sirius_c:
       location: [100.0, 350.0]
       description: "A cooler companion world where titanium ore sits cheap in long-abandoned mines."
@@ -135,10 +141,13 @@ sirius:
       location: [0., 200.]
       number: 8
       radius: 400.
-      commodity: titanium
+      commodities:
+        titanium: 1.0
   ships:
     fighter: 1
+    corvette: 1
     hauler: 2
+    freighter: 2
     asteroid_miner: 3
 
 procyon:
@@ -155,8 +164,8 @@ procyon:
         food: 20
         water: 10
         gold: 80
-      outfitter: [laser]
-      shipyard: [shuttle, fighter, hauler, asteroid_miner]
+      outfitter: [laser, proton_beam, ir_missile]
+      shipyard: [shuttle, corvette, fighter, frigate, courier, hauler, freighter, bulk_carrier, asteroid_miner]
     procyon_ii:
       location: [-200.0, -100.0]
       description: "An industrial moon where electronics are assembled cheaply from imported parts."
@@ -170,7 +179,11 @@ procyon:
       outfitter: []
   astroid_fields: []
   ships:
-    hauler: 4
+    hauler: 2
+    freighter: 2
+    bulk_carrier: 1
+    courier: 2
+    frigate: 1
 
 barnard:
   map_position: [-130.0, 180.0]
@@ -186,7 +199,7 @@ barnard:
         water: 40
         iron: 8
       outfitter: []
-      shipyard: [shuttle, asteroid_miner]
+      shipyard: [shuttle, courier, asteroid_miner]
     barnard_station:
       location: [100.0, 350.0]
       description: "A refinery station that pays top credit for raw uranium and sells cheap purified water."
@@ -197,6 +210,7 @@ barnard:
         water: 12
         iron: 20
       outfitter: []
+      shipyard: [courier, freighter, bulk_carrier]
   astroid_fields:
     -
       location: [0., 0.]
@@ -204,6 +218,9 @@ barnard:
       radius: 600.
   ships:
     hauler: 2
+    freighter: 1
+    bulk_carrier: 1
+    courier: 1
     asteroid_miner: 4
 
 tau_ceti:
@@ -220,6 +237,7 @@ tau_ceti:
         iron: 12
         water: 8
       outfitter: []
+      shipyard: [shuttle, courier, hauler, freighter]
     tau_ceti_2:
       location: [-200.0, 200.0]
       description: "A younger colony that excavates artifacts cheaply but needs water badly."
@@ -237,7 +255,10 @@ tau_ceti:
       radius: 350.
   ships:
     fighter: 1
+    corvette: 1
     hauler: 2
+    freighter: 1
+    courier: 1
     asteroid_miner: 3
 
 epsilon_eridani:
@@ -254,6 +275,7 @@ epsilon_eridani:
         fuel_cells: 120
         water: 25
       outfitter: [laser]
+      shipyard: [shuttle, courier, hauler, freighter, bulk_carrier]
     eridani_moon:
       location: [60.0, 500.0]
       description: "A tidally-locked moon. Exotic matter collects in the shadow zone, sold at a discount."
@@ -271,6 +293,8 @@ epsilon_eridani:
       radius: 450.
   ships:
     hauler: 2
+    freighter: 2
+    bulk_carrier: 1
     asteroid_miner: 4
 
 vega:
@@ -286,7 +310,8 @@ vega:
         gold: 60
         titanium: 180
         iron: 5
-      outfitter: []
+      outfitter: [laser]
+      shipyard: [corvette, courier, hauler, asteroid_miner, freighter]
     vega_2:
       location: [-100.0, -200.0]
       description: "A quieter world where titanium ore is mined cheaply. Gold buyers pay top credit here."
@@ -302,10 +327,13 @@ vega:
       location: [0., 0.]
       number: 20
       radius: 700.
-      commodity: gold
+      commodities:
+        gold: 1.0
   ships:
     fighter: 1
+    corvette: 2
     hauler: 2
+    freighter: 1
     asteroid_miner: 4
 
 rigel:
@@ -321,7 +349,8 @@ rigel:
         weapons_parts: 350
         exotic_matter: 450
         water: 35
-      outfitter: [laser]
+      outfitter: [laser, proton_beam, ir_missile]
+      shipyard: [corvette, fighter, frigate]
     rigel_station:
       location: [-80.0, 350.0]
       description: "A refuelling depot near Rigel. Exotic matter is surplus here; weapons parts sell high."
@@ -338,5 +367,8 @@ rigel:
       number: 10
       radius: 500.
   ships:
+    corvette: 2
+    fighter: 1
+    frigate: 1
     hauler: 1
     asteroid_miner: 2

@@ -6,11 +6,12 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
+use std::f32::consts::FRAC_PI_2;
 
 pub fn weapons_plugin(app: &mut App) {
     app.add_message::<FireCommand>().add_systems(
         Update,
-        (weapon_fire, weapon_lifetime, weapon_system_cooldown),
+        (weapon_fire, weapon_lifetime, weapon_system_cooldown, missile_guidance),
     );
 }
 
@@ -18,6 +19,7 @@ pub fn weapons_plugin(app: &mut App) {
 pub struct FireCommand {
     pub ship: Entity,
     pub weapon_type: String,
+    pub target: Option<Entity>,
 }
 
 /// A weapon fired by any ship.
@@ -120,6 +122,16 @@ pub struct Weapon {
     pub cooldown: f32,
     pub color: [f32; 3],
     pub damage: i16,
+    #[serde(default)]
+    pub guided: bool,
+    #[serde(default)]
+    pub turn_rate: f32,
+}
+
+#[derive(Component)]
+pub struct GuidedMissile {
+    pub target: Option<Entity>,
+    pub turn_rate: f32,
 }
 
 impl Weapon {
@@ -175,7 +187,7 @@ pub fn weapon_fire(
         let tip = ship_transform.translation + forward * 20.0;
         let vel = forward.truncate() * weapon.speed;
         let [r, g, b] = weapon.color;
-        commands.spawn((
+        let mut entity_cmd = commands.spawn((
             DespawnOnExit(GameState::Flying),
             Projectile {
                 lifetime: weapon.lifetime,
@@ -193,6 +205,12 @@ pub fn weapon_fire(
                 ..default()
             },
         ));
+        if weapon.guided {
+            entity_cmd.insert(GuidedMissile {
+                target: cmd.target,
+                turn_rate: weapon.turn_rate,
+            });
+        }
     }
 }
 
@@ -217,5 +235,60 @@ pub fn weapon_system_cooldown(time: Res<Time>, mut query: Query<&mut WeaponSyste
                 .cooldown
                 .tick(time.delta() * (specific.number as u32));
         }
+    }
+}
+
+fn missile_guidance(
+    time: Res<Time>,
+    mut missiles: Query<(&mut Transform, &mut LinearVelocity, &mut GuidedMissile, &Projectile)>,
+    all_positions: Query<&Position>,
+    ships: Query<Entity, With<Ship>>,
+) {
+    let dt = time.delta_secs();
+    for (mut transform, mut vel, mut missile, projectile) in &mut missiles {
+        // Auto-assign nearest non-owner ship if no target yet.
+        if missile.target.is_none() {
+            let pos = transform.translation.xy();
+            missile.target = ships
+                .iter()
+                .filter(|&e| projectile.owner.map_or(true, |o| e != o))
+                .filter_map(|e| {
+                    all_positions
+                        .get(e)
+                        .ok()
+                        .map(|p| (e, (p.0 - pos).length_squared()))
+                })
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                .map(|(e, _)| e);
+        }
+
+        let Some(target) = missile.target else {
+            continue;
+        };
+        let Ok(target_pos) = all_positions.get(target) else {
+            missile.target = None;
+            continue;
+        };
+
+        let speed = vel.0.length();
+        if speed < f32::EPSILON {
+            continue;
+        }
+        let current_dir = vel.0 / speed;
+        let to_target = (target_pos.0 - transform.translation.xy()).normalize_or_zero();
+
+        let angle = current_dir.angle_to(to_target);
+        let max_turn = missile.turn_rate * dt;
+        let turn = angle.clamp(-max_turn, max_turn);
+        let (sin_t, cos_t) = turn.sin_cos();
+        let new_dir = Vec2::new(
+            current_dir.x * cos_t - current_dir.y * sin_t,
+            current_dir.x * sin_t + current_dir.y * cos_t,
+        );
+        vel.0 = new_dir * speed;
+
+        // Rotate sprite to match travel direction (+Y is forward).
+        let visual_angle = new_dir.x.atan2(new_dir.y);
+        transform.rotation = Quat::from_rotation_z(-visual_angle);
     }
 }
