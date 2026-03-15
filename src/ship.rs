@@ -1,4 +1,4 @@
-use crate::item_universe::ItemUniverse;
+use crate::item_universe::{ItemUniverse, OutfitterItem};
 use crate::utils::polygon_mesh;
 use crate::weapons::{WeaponSystem, WeaponSystems};
 use crate::{GameLayer, PlayState};
@@ -103,6 +103,17 @@ pub enum Target {
     Pickup(Entity),
 }
 
+impl Target {
+    pub fn get_entity(&self) -> Entity {
+        match self {
+            Target::Ship(e) => e.clone(),
+            Target::Planet(e) => e.clone(),
+            Target::Asteroid(e) => e.clone(),
+            Target::Pickup(e) => e.clone(),
+        }
+    }
+}
+
 #[derive(Component, Clone, Serialize, Deserialize)]
 pub struct Ship {
     pub ship_type: String, // The type of the ship
@@ -138,9 +149,8 @@ impl Default for Ship {
 impl Ship {
     pub fn consumed_item_space(&self) -> i32 {
         self.weapon_systems
-            .primary
-            .values()
-            .map(|s| s.space_consumed())
+            .iter_all()
+            .map(|(_, s)| s.space_consumed())
             .sum()
     }
     pub fn from_ship_data(data: &ShipData, ship_type: &str) -> Self {
@@ -214,9 +224,71 @@ impl Ship {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
-        if self.weapon_systems.find_weapon(weapon_type).is_some() {
-            self.credits += outfitter_item.price();
-            self.weapon_systems.primary.remove(weapon_type);
+        match self.weapon_systems.find_weapon_entry(weapon_type) {
+            std::collections::hash_map::Entry::Occupied(mut view) => {
+                self.credits += outfitter_item.price();
+                let val = view.get_mut();
+                if val.number > 0 {
+                    val.number -= 1;
+                } else {
+                    view.remove_entry();
+                }
+            }
+            _ => (),
+        }
+    }
+    pub fn buy_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            return;
+        };
+        match outfitter_item {
+            OutfitterItem::SecondaryWeapon {
+                ammo_price,
+                ammo_space,
+                ..
+            } => {
+                if *ammo_price > self.credits {
+                    return;
+                }
+                if *ammo_space as i32 > self.remaining_item_space() {
+                    return;
+                }
+                match self.weapon_systems.find_weapon_entry(weapon_type) {
+                    std::collections::hash_map::Entry::Occupied(view) => {
+                        let val = view.into_mut();
+                        val.ammo_quantity = val.ammo_quantity.map(|n| n + 1);
+                        self.credits -= ammo_price;
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+    }
+    pub fn sell_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            return;
+        };
+        match outfitter_item {
+            OutfitterItem::SecondaryWeapon { ammo_price, .. } => {
+                match self.weapon_systems.find_weapon_entry(weapon_type) {
+                    std::collections::hash_map::Entry::Occupied(mut view) => {
+                        // self.credits += outfitter_item.price();
+                        let val = view.get_mut();
+                        val.ammo_quantity = match val.ammo_quantity {
+                            Some(qty) => Some(if qty > 0 {
+                                self.credits += ammo_price;
+                                qty - 1
+                            } else {
+                                0
+                            }),
+                            _ => None,
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
         }
     }
 }

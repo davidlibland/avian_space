@@ -136,8 +136,7 @@ fn sync_player_state(
     if let Ok(ship) = player_query.single() {
         game_state.weapon_loadout = ship
             .weapon_systems
-            .primary
-            .iter()
+            .iter_all()
             .map(|(k, v)| (k.clone(), (v.number, v.ammo_quantity)))
             .collect();
         game_state.player_ship = ship.clone();

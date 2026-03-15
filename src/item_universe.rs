@@ -113,22 +113,31 @@ impl ItemUniverse {
 
 #[derive(Deserialize, Serialize)]
 pub enum OutfitterItem {
-    Weapon {
+    PrimaryWeapon {
         price: i128,
         space: u16,
         weapon_type: String,
+    },
+    SecondaryWeapon {
+        price: i128,
+        space: u16,
+        weapon_type: String,
+        ammo_price: i128,
+        ammo_space: u16,
     },
 }
 
 impl OutfitterItem {
     pub fn price(&self) -> i128 {
         match self {
-            OutfitterItem::Weapon { price, .. } => *price,
+            OutfitterItem::PrimaryWeapon { price, .. } => *price,
+            OutfitterItem::SecondaryWeapon { price, .. } => *price,
         }
     }
     pub fn space(&self) -> u16 {
         match self {
-            OutfitterItem::Weapon { space, .. } => *space,
+            OutfitterItem::PrimaryWeapon { space, .. } => *space,
+            OutfitterItem::SecondaryWeapon { space, .. } => *space,
         }
     }
 }

@@ -23,3 +23,6 @@ ir_missile:
     damage: 40
     guided: true
     turn_rate: 2.5
+    ammo: 
+        !Ammo: 
+            space: 1

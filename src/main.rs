@@ -1,3 +1,5 @@
+use std::hint::select_unpredictable;
+
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
@@ -263,13 +265,11 @@ fn keyboard_input(
             };
             let next = match current {
                 None => entities[0],
-                Some(cur) => {
-                    let idx = entities
-                        .iter()
-                        .position(|&e| e == cur)
-                        .unwrap_or(usize::MAX);
-                    entities[(idx + 1) % entities.len()]
-                }
+                Some(cur) => entities
+                    .iter()
+                    .position(|&e| e == cur)
+                    .map(|idx| entities[(idx + 1) % entities.len()])
+                    .unwrap_or(entities[0]),
             };
             player_ship.target = Some(Target::Ship(next));
         }
@@ -309,13 +309,29 @@ fn keyboard_input(
         });
     }
 
-    let fire = keyboard_input.any_pressed([KeyCode::Space]);
-    if fire {
+    let fire_primary = keyboard_input.any_pressed([KeyCode::Space]);
+    if fire_primary {
         for specific in player_ship.weapon_systems.primary.values() {
             weapons_writer.write(FireCommand {
                 ship: player_entity,
                 weapon_type: specific.weapon_type.clone(),
                 target: None, // guided missiles auto-acquire the nearest enemy
+            });
+        }
+    }
+
+    let select_secondary = keyboard_input.any_pressed([KeyCode::KeyW]);
+    if select_secondary {
+        player_ship.weapon_systems.increment_secondary();
+    }
+
+    let fire_secondary = keyboard_input.any_pressed([KeyCode::ShiftLeft]);
+    if fire_secondary {
+        if let Some(selected) = &player_ship.weapon_systems.selected_secondary {
+            weapons_writer.write(FireCommand {
+                ship: player_entity,
+                weapon_type: selected.clone(),
+                target: player_ship.target.clone().map(|t| t.get_entity()), // guided missiles auto-acquire the nearest enemy
             });
         }
     }

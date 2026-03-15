@@ -1,15 +1,17 @@
 laser:
-  !Weapon
+  !PrimaryWeapon
     price: 100
     space: 2
     weapon_type: laser
 proton_beam:
-  !Weapon
+  !PrimaryWeapon
     price: 250
     space: 3
     weapon_type: proton_beam
 ir_missile:
-  !Weapon
+  !SecondaryWeapon
     price: 800
     space: 3
     weapon_type: ir_missile
+    ammo_price: 50
+    ammo_space: 1

@@ -1,6 +1,5 @@
 use crate::{
-    CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse,
-    ship::BuyShip,
+    CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse, ship::BuyShip,
 };
 use avian2d::prelude::{LinearVelocity, Physics, PhysicsTime, Position};
 use bevy::prelude::*;
@@ -154,6 +153,9 @@ pub fn planet_ui(
                             ui.strong("Owned");
                             ui.label("");
                             ui.label("");
+                            ui.strong("Ammo");
+                            ui.label("");
+                            ui.label("");
                             ui.end_row();
                             let items: Vec<(String, i128, u16)> = planet
                                 .outfitter
@@ -166,11 +168,11 @@ pub fn planet_ui(
                                 })
                                 .collect();
                             for (item, price, space) in items {
-                                let owned = ship
-                                    .weapon_systems.primary
-                                    .get(&item)
-                                    .map(|ws| ws.number)
-                                    .unwrap_or(0);
+                                let (owned, ammo) = ship
+                                    .weapon_systems
+                                    .find_weapon(&item)
+                                    .map(|ws| (ws.number, ws.ammo_quantity))
+                                    .unwrap_or((0, None));
                                 ui.label(&item);
                                 ui.label(price.to_string());
                                 ui.label(space.to_string());
@@ -181,16 +183,23 @@ pub fn planet_ui(
                                 if ui.button("Sell").clicked() {
                                     ship.sell_weapon(&item, &item_universe);
                                 }
+                                ui.label(match ammo {
+                                    Some(qty) => qty.to_string(),
+                                    _ => "n/a".to_string(),
+                                });
+                                if ui.button("Buy").clicked() {
+                                    ship.buy_ammo(&item, &item_universe);
+                                }
+                                if ui.button("Sell").clicked() {
+                                    ship.sell_ammo(&item, &item_universe);
+                                }
                                 ui.end_row();
                             }
                         });
                 }
             }
             PlanetTab::Shipyard => {
-                let player_credits = player_query
-                    .single()
-                    .map(|s| s.credits)
-                    .unwrap_or(0);
+                let player_credits = player_query.single().map(|s| s.credits).unwrap_or(0);
                 let player_ship_type = player_query
                     .single()
                     .map(|s| s.ship_type.clone())

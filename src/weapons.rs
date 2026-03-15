@@ -80,6 +80,28 @@ impl WeaponSystems {
             selected_secondary: None,
         }
     }
+    pub fn increment_secondary(&mut self) {
+        let mut sorted_names: Vec<String> = self.secondary.keys().map(String::from).collect();
+        sorted_names.sort();
+        if let Some(current) = &self.selected_secondary {
+            // Get the next secondary weapon:
+            self.selected_secondary = sorted_names
+                .iter()
+                .position(|s| s == current)
+                .map(|x| (x + 1) % sorted_names.len())
+                .and_then(|i| sorted_names.get(i))
+                .map(String::from);
+        } else {
+            // Just get the first secondary weapon
+            self.selected_secondary = sorted_names.first().map(String::from);
+        }
+    }
+    pub fn iter_all(&self) -> impl Iterator<Item = (&String, &WeaponSystem)> {
+        self.primary.iter().chain(self.secondary.iter())
+    }
+    pub fn iter_all_mut(&mut self) -> impl Iterator<Item = (&String, &mut WeaponSystem)> {
+        self.primary.iter_mut().chain(self.secondary.iter_mut())
+    }
 }
 
 impl Default for WeaponSystems {
@@ -155,7 +177,9 @@ impl WeaponSystem {
         });
     }
     pub fn space_consumed(&self) -> i32 {
-        return self.space_per_system * self.number as i32;
+        let base_space = self.space_per_system * self.number as i32;
+        // To Do: Add ammo quantity.
+        return base_space;
     }
 }
 
@@ -233,7 +257,7 @@ pub(crate) fn weapon_lifetime(
 
 pub fn weapon_system_cooldown(time: Res<Time>, mut query: Query<&mut Ship>) {
     for mut ship in &mut query {
-        for specific in ship.weapon_systems.primary.values_mut() {
+        for (_, specific) in ship.weapon_systems.iter_all_mut() {
             specific
                 .cooldown
                 .tick(time.delta() * (specific.number as u32));

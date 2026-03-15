@@ -136,8 +136,7 @@ pub fn simple_ai_control(
     current_star_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
-    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, mut ai_ship) in
-        &mut ships
+    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, mut ai_ship) in &mut ships
     {
         // 1. Validate existing target: clear if entity gone or (for combat targets) out of range.
         if let Some(ref tgt) = ai_ship.target.clone() {
@@ -295,8 +294,8 @@ pub fn simple_ai_control(
                     reverse: 0.,
                 });
 
-                for specific in ship.weapon_systems.primary.values() {
-                    let Some(weapon) = item_universe.weapons.get(&specific.weapon_type) else {
+                for (weapon_type, _) in ship.weapon_systems.iter_all() {
+                    let Some(weapon) = item_universe.weapons.get(weapon_type) else {
                         continue;
                     };
                     if local_offset.length() < weapon.range() {
@@ -305,7 +304,7 @@ pub fn simple_ai_control(
                         if weapon.guided || angle_indicator(fire_angle) > 0.5 {
                             weapons_writer.write(FireCommand {
                                 ship: entity,
-                                weapon_type: specific.weapon_type.clone(),
+                                weapon_type: weapon_type.clone(),
                                 target: Some(*target_e),
                             });
                         }
@@ -320,8 +319,7 @@ pub fn simple_ai_control(
                     continue;
                 };
                 let local_offset = rotate_r(&(target_pos.0 - position.0));
-                let Some(bearing_angle) =
-                    angle_to_hit(max_speed.0, &local_offset, &Vec2::ZERO)
+                let Some(bearing_angle) = angle_to_hit(max_speed.0, &local_offset, &Vec2::ZERO)
                 else {
                     continue;
                 };
