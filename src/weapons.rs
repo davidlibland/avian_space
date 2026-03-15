@@ -38,75 +38,18 @@ pub struct Projectile {
     pub weapon_type: String,
 }
 
-#[derive(Component)]
+#[derive(Clone)]
 pub struct WeaponSystems {
     pub primary: HashMap<String, WeaponSystem>,
 }
 impl WeaponSystems {
-    fn find_weapon_entry(&mut self, weapon_type: &str) -> Entry<'_, String, WeaponSystem> {
+    pub fn find_weapon_entry(&mut self, weapon_type: &str) -> Entry<'_, String, WeaponSystem> {
         self.primary.entry(weapon_type.to_string())
     }
-    fn find_weapon(&mut self, weapon_type: &str) -> Option<&mut WeaponSystem> {
+    pub fn find_weapon(&mut self, weapon_type: &str) -> Option<&mut WeaponSystem> {
         match self.find_weapon_entry(weapon_type) {
             Entry::Vacant(_) => None,
             Entry::Occupied(view) => Some(view.into_mut()),
-        }
-    }
-    pub fn buy_weapon(
-        &mut self,
-        weapon_type: &str,
-        ship: &mut Ship,
-        item_universe: &Res<ItemUniverse>,
-    ) {
-        let Some(weapon) = item_universe.weapons.get(weapon_type) else {
-            return;
-        };
-        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
-            return;
-        };
-        if outfitter_item.price() > ship.credits {
-            return;
-        }
-        if outfitter_item.space() > ship.remaining_item_space() {
-            return;
-        }
-        match self.find_weapon_entry(weapon_type) {
-            Entry::Occupied(view) => {
-                view.into_mut().number += 1;
-                ship.credits -= outfitter_item.price();
-                ship.consumed_item_space += outfitter_item.space();
-            }
-            Entry::Vacant(vacant) => {
-                if let Some(new_weapon) =
-                    WeaponSystem::from_type(weapon_type, 1, &item_universe.weapons)
-                {
-                    vacant.insert(new_weapon);
-                    ship.credits -= outfitter_item.price();
-                    ship.consumed_item_space += outfitter_item.space();
-                }
-            }
-        }
-    }
-    pub fn sell_weapon(
-        &mut self,
-        weapon_type: &str,
-        ship: &mut Ship,
-        item_universe: &Res<ItemUniverse>,
-    ) {
-        let Some(weapon) = item_universe.weapons.get(weapon_type) else {
-            return;
-        };
-        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
-            return;
-        };
-        if let Some(weapon) = self.find_weapon(weapon_type) {
-            ship.credits += outfitter_item.price();
-            ship.consumed_item_space = ship
-                .consumed_item_space
-                .saturating_sub(outfitter_item.space());
-            weapon.number -= 1;
-            // If there are no more weapons, remove the weapon from the list
-            self.primary.remove(weapon_type);
         }
     }
 }
@@ -144,40 +87,46 @@ impl Weapon {
         self.speed * self.lifetime
     }
 }
+#[derive(Clone)]
 pub struct WeaponSystem {
     pub cooldown: Timer,
     pub weapon_type: String,
+    pub space_per_system: i32,
     pub number: u8,
 }
 
 impl WeaponSystem {
-    pub fn from_type(
-        weapon_type: &str,
-        number: u8,
-        weapons: &HashMap<String, Weapon>,
-    ) -> Option<Self> {
-        let Some(weapon) = weapons.get(weapon_type) else {
+    pub fn from_type(weapon_type: &str, number: u8, item_universe: &ItemUniverse) -> Option<Self> {
+        let Some(weapon) = item_universe.weapons.get(weapon_type) else {
+            return None;
+        };
+        // Lookup the space used:
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return None;
         };
         return Some(WeaponSystem {
             weapon_type: weapon_type.to_string(),
             cooldown: Timer::from_seconds(weapon.cooldown / number as f32, TimerMode::Once),
             number: number,
+            space_per_system: outfitter_item.space() as i32,
         });
+    }
+    pub fn space_consumed(&self) -> i32 {
+        return self.space_per_system * self.number as i32;
     }
 }
 
 pub fn weapon_fire(
     mut reader: MessageReader<FireCommand>,
     mut commands: Commands,
-    mut ships: Query<(&Transform, &Ship, &mut WeaponSystems)>,
+    mut ships: Query<(&Transform, &mut Ship)>,
     item_universe: Res<ItemUniverse>,
 ) {
     for cmd in reader.read() {
-        let Ok((ship_transform, ship, mut weapons_system)) = ships.get_mut(cmd.ship) else {
+        let Ok((ship_transform, mut ship)) = ships.get_mut(cmd.ship) else {
             continue;
         };
-        let Some(specific) = weapons_system.find_weapon(&cmd.weapon_type) else {
+        let Some(specific) = ship.weapon_systems.find_weapon(&cmd.weapon_type) else {
             continue;
         };
         // Check that the weapon is ready to fire:
@@ -233,9 +182,9 @@ pub(crate) fn weapon_lifetime(
     }
 }
 
-pub fn weapon_system_cooldown(time: Res<Time>, mut query: Query<&mut WeaponSystems>) {
-    for mut system in &mut query {
-        for specific in system.primary.values_mut() {
+pub fn weapon_system_cooldown(time: Res<Time>, mut query: Query<&mut Ship>) {
+    for mut ship in &mut query {
+        for specific in ship.weapon_systems.primary.values_mut() {
             specific
                 .cooldown
                 .tick(time.delta() * (specific.number as u32));

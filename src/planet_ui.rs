@@ -1,5 +1,5 @@
 use crate::{
-    CurrentStarSystem, PlayState, Player, Ship, WeaponSystems, item_universe::ItemUniverse,
+    CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse,
     ship::BuyShip,
 };
 use avian2d::prelude::{LinearVelocity, Physics, PhysicsTime, Position};
@@ -39,7 +39,7 @@ pub fn planet_ui(
     mut egui_contexts: EguiContexts,
     mut state: ResMut<NextState<PlayState>>,
     mut landed: ResMut<LandedContext>,
-    mut player_query: Query<(&mut Ship, &mut WeaponSystems), With<Player>>,
+    mut player_query: Query<&mut Ship, With<Player>>,
     mut buy_ship_writer: MessageWriter<BuyShip>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
@@ -69,7 +69,7 @@ pub fn planet_ui(
         ui.separator();
         ui.horizontal(|ui| {
             if ui.button("Repair").clicked() {
-                if let Ok((mut ship, _)) = player_query.single_mut() {
+                if let Ok(mut ship) = player_query.single_mut() {
                     ship.health = ship.data.max_health;
                 }
             }
@@ -79,7 +79,7 @@ pub fn planet_ui(
         });
         match landed.active_tab {
             PlanetTab::Trade => {
-                if let Ok((mut ship, _)) = player_query.single_mut() {
+                if let Ok(mut ship) = player_query.single_mut() {
                     ui.label(format!("Credits: {}", ship.credits));
                     ui.separator();
                     egui::Grid::new("trade_grid")
@@ -136,7 +136,7 @@ pub fn planet_ui(
                 }
             }
             PlanetTab::Outfitter => {
-                if let Ok((mut ship, mut weapon_systems)) = player_query.single_mut() {
+                if let Ok(mut ship) = player_query.single_mut() {
                     ui.label(format!("Credits: {}", ship.credits));
                     ui.label(format!(
                         "Free space: {}/{}",
@@ -166,8 +166,8 @@ pub fn planet_ui(
                                 })
                                 .collect();
                             for (item, price, space) in items {
-                                let owned = weapon_systems
-                                    .primary
+                                let owned = ship
+                                    .weapon_systems.primary
                                     .get(&item)
                                     .map(|ws| ws.number)
                                     .unwrap_or(0);
@@ -176,10 +176,10 @@ pub fn planet_ui(
                                 ui.label(space.to_string());
                                 ui.label(owned.to_string());
                                 if ui.button("Buy").clicked() {
-                                    weapon_systems.buy_weapon(&item, &mut ship, &item_universe);
+                                    ship.buy_weapon(&item, &item_universe);
                                 }
                                 if ui.button("Sell").clicked() {
-                                    weapon_systems.sell_weapon(&item, &mut ship, &item_universe);
+                                    ship.sell_weapon(&item, &item_universe);
                                 }
                                 ui.end_row();
                             }
@@ -189,11 +189,11 @@ pub fn planet_ui(
             PlanetTab::Shipyard => {
                 let player_credits = player_query
                     .single()
-                    .map(|(s, _)| s.credits)
+                    .map(|s| s.credits)
                     .unwrap_or(0);
                 let player_ship_type = player_query
                     .single()
-                    .map(|(s, _)| s.ship_type.clone())
+                    .map(|s| s.ship_type.clone())
                     .unwrap_or_default();
                 ui.label(format!("Credits: {}", player_credits));
                 ui.separator();

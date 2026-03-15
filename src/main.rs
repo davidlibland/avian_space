@@ -1,11 +1,13 @@
 use avian2d::{math::*, prelude::*};
-use bevy::{math::VectorSpace, prelude::*};
+use bevy::prelude::*;
 
 mod asteroids;
 mod explosions;
+mod game_save;
 mod hud;
 mod item_universe;
 mod jump_ui;
+mod main_menu;
 mod planet_ui;
 mod planets;
 use planets::planets_plugin;
@@ -18,18 +20,18 @@ mod weapons;
 use ai_ships::ai_ship_bundle;
 use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
 use explosions::explosions_plugin;
+use game_save::game_save_plugin;
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
+use main_menu::main_menu_plugin;
 use pickups::pickup_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
-use ship::{DamageShip, Ship, ShipCommand, Target, ship_bundle, ship_plugin};
+use ship::{DamageShip, Ship, ShipCommand, Target, ship_plugin};
 use starfield::StarfieldPlugin;
 use utils::safe_despawn;
 use weapons::{FireCommand, Projectile, weapon_lifetime, weapons_plugin};
-
-use crate::weapons::WeaponSystems;
 
 // Define your boundary
 const BOUNDS: f32 = 10000.0;
@@ -37,6 +39,7 @@ const BOUNDS: f32 = 10000.0;
 #[derive(States, Default, PartialEq, Eq, Hash, Clone, Debug)]
 pub enum PlayState {
     #[default]
+    MainMenu,
     Flying,
     Landed,
     Traveling,
@@ -101,8 +104,12 @@ fn main() {
             planets_plugin,
             asteroid_plugin,
             ai_ship_bundle,
+        ))
+        .add_plugins((
             explosions_plugin,
             pickup_plugin,
+            game_save_plugin,
+            main_menu_plugin,
         ))
         .init_state::<PlayState>()
         .init_resource::<TravelContext>()
@@ -132,15 +139,11 @@ fn main() {
 #[derive(Component)]
 pub struct Player;
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>, item_universe: Res<ItemUniverse>) {
-    // Player (persists across system travel — not StateScoped)
-    commands.spawn((
-        Player,
-        ship_bundle("shuttle", &asset_server, &item_universe, Vec2::ZERO),
-    ));
-
-    // Camera (persists across system travel)
+fn setup(mut commands: Commands) {
+    // Camera (persists across all states)
     commands.spawn(Camera2d);
+    // Player ship is spawned by game_save_plugin when Flying state is first entered,
+    // after the pilot has been selected or loaded from the main menu.
 }
 
 fn spawn_asteroids(
@@ -242,10 +245,10 @@ fn keyboard_input(
     mut writer: MessageWriter<ShipCommand>,
     mut weapons_writer: MessageWriter<FireCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut player_query: Query<(Entity, &Transform, &mut Ship, &mut WeaponSystems), With<Player>>,
+    mut player_query: Query<(Entity, &Transform, &mut Ship), With<Player>>,
     enemy_ships_query: Query<(Entity, &Transform), (With<Ship>, Without<Player>)>,
 ) {
-    let Ok((player_entity, player_tf, mut player_ship, weapons)) = player_query.single_mut() else {
+    let Ok((player_entity, player_tf, mut player_ship)) = player_query.single_mut() else {
         return; // Player not spawned yet
     };
 
@@ -308,7 +311,7 @@ fn keyboard_input(
 
     let fire = keyboard_input.any_pressed([KeyCode::Space]);
     if fire {
-        for specific in weapons.primary.values() {
+        for specific in player_ship.weapon_systems.primary.values() {
             weapons_writer.write(FireCommand {
                 ship: player_entity,
                 weapon_type: specific.weapon_type.clone(),

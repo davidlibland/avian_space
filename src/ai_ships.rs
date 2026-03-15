@@ -8,7 +8,6 @@ use crate::planets::Planet;
 use crate::ship::{Personality, Ship, ShipCommand, Target, ship_bundle};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::weapons::FireCommand;
-use crate::weapons::WeaponSystems;
 use crate::{CurrentStarSystem, GameLayer, PlayState};
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -124,7 +123,6 @@ pub fn simple_ai_control(
         &LinearVelocity,
         &MaxLinearSpeed,
         &Transform,
-        &WeaponSystems,
         &mut Ship,
         &mut AIShip,
     )>,
@@ -138,7 +136,7 @@ pub fn simple_ai_control(
     current_star_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
-    for (entity, position, ship_vel, max_speed, ship_transform, weapons, mut ship, mut ai_ship) in
+    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, mut ai_ship) in
         &mut ships
     {
         // 1. Validate existing target: clear if entity gone or (for combat targets) out of range.
@@ -297,7 +295,7 @@ pub fn simple_ai_control(
                     reverse: 0.,
                 });
 
-                for specific in weapons.primary.values() {
+                for specific in ship.weapon_systems.primary.values() {
                     let Some(weapon) = item_universe.weapons.get(&specific.weapon_type) else {
                         continue;
                     };

@@ -102,19 +102,21 @@ pub enum Target {
     Pickup(Entity),
 }
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Serialize, Deserialize)]
 pub struct Ship {
     pub ship_type: String, // The type of the ship
     pub data: ShipData, // The ship data, can be looked up in the item universe, but stored here for convenience
     pub health: i32,
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
     pub credits: i128,
-    pub consumed_item_space: u16, // Space in the ship filled with outfitter items
     // An optional target for the ship.
     // Traders will tend to target planets,
     // Miners will tend to target asteroids,
     // Fighters will tend to target ships
+    #[serde(skip)]
     pub target: Option<Target>,
+    #[serde(skip)]
+    pub weapon_systems: WeaponSystems,
 }
 
 impl Default for Ship {
@@ -126,13 +128,20 @@ impl Default for Ship {
             health: data.max_health,
             cargo: HashMap::new(),
             credits: 100000,
-            consumed_item_space: 0,
             target: None,
+            weapon_systems: WeaponSystems::default(),
         }
     }
 }
 
 impl Ship {
+    pub fn consumed_item_space(&self) -> i32 {
+        self.weapon_systems
+            .primary
+            .values()
+            .map(|s| s.space_consumed())
+            .sum()
+    }
     pub fn from_ship_data(data: &ShipData, ship_type: &str) -> Self {
         Self {
             ship_type: ship_type.to_string(),
@@ -140,15 +149,12 @@ impl Ship {
             health: data.max_health,
             cargo: HashMap::new(),
             credits: 100000,
-            consumed_item_space: 0,
             target: None,
+            weapon_systems: WeaponSystems::default(),
         }
     }
-    pub fn remaining_item_space(&self) -> u16 {
-        return self
-            .data
-            .item_space
-            .saturating_sub(self.consumed_item_space);
+    pub fn remaining_item_space(&self) -> i32 {
+        return self.data.item_space as i32 - self.consumed_item_space();
     }
     fn current_cargo(&self) -> u16 {
         self.cargo.values().sum()
@@ -178,6 +184,38 @@ impl Ship {
         let quantity_added = self.add_cargo(commodity, quantity_desired);
         self.credits -= (quantity_added as i128) * price;
     }
+    pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &Res<ItemUniverse>) {
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            return;
+        };
+        if outfitter_item.price() > self.credits {
+            return;
+        }
+        if outfitter_item.space() as i32 > self.remaining_item_space() {
+            return;
+        }
+        match self.weapon_systems.find_weapon_entry(weapon_type) {
+            std::collections::hash_map::Entry::Occupied(view) => {
+                view.into_mut().number += 1;
+                self.credits -= outfitter_item.price();
+            }
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                if let Some(new_weapon) = WeaponSystem::from_type(weapon_type, 1, &item_universe) {
+                    vacant.insert(new_weapon);
+                    self.credits -= outfitter_item.price();
+                }
+            }
+        }
+    }
+    pub fn sell_weapon(&mut self, weapon_type: &str, item_universe: &Res<ItemUniverse>) {
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            return;
+        };
+        if self.weapon_systems.find_weapon(weapon_type).is_some() {
+            self.credits += outfitter_item.price();
+            self.weapon_systems.primary.remove(weapon_type);
+        }
+    }
 }
 
 #[derive(Bundle)]
@@ -192,7 +230,6 @@ pub struct ShipBundle {
     colider_density: ColliderDensity,
     collision_events: CollisionEventsEnabled,
     layer: CollisionLayers,
-    weapons: WeaponSystems,
 }
 
 impl ShipBundle {
@@ -210,35 +247,26 @@ pub fn ship_bundle(
     let default_data = ShipData::default();
     let ship_data = item_universe.ships.get(ship_type).unwrap_or(&default_data);
     let mut ship = Ship::from_ship_data(ship_data, ship_type);
-    ship.consumed_item_space = ship_data
-        .base_weapons
-        .iter()
-        .filter_map(|(weapon_type, &count)| {
-            item_universe
-                .outfitter_items
-                .get(weapon_type)
-                .map(|item| item.space() * count as u16)
-        })
-        .sum();
     let mut primary_weapons: HashMap<String, WeaponSystem> = HashMap::new();
     for (weapon_type, count) in ship_data.base_weapons.iter() {
-        if let Some(weapon_system) =
-            WeaponSystem::from_type(&weapon_type, *count, &item_universe.weapons)
-        {
+        if let Some(weapon_system) = WeaponSystem::from_type(&weapon_type, *count, &item_universe) {
             primary_weapons
                 .entry(weapon_type.clone())
                 .insert_entry(weapon_system);
         }
     }
+    ship.weapon_systems = WeaponSystems {
+        primary: primary_weapons,
+    };
     ShipBundle {
-        ship: ship.clone(),
+        ship,
         // mesh: Mesh2d(meshes.add(build_ship_mesh())),
         // material: MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
         sprite: Sprite::from_image(asset_server.load(ship_data.sprite_path.to_string())),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
-        angular_damping: AngularDamping(ship.data.angular_drag), // equivalent to angular_drag = 3.0
-        max_speed: MaxLinearSpeed(ship.data.max_speed),          // Restitution::new(1.5),
+        angular_damping: AngularDamping(ship_data.angular_drag), // equivalent to angular_drag = 3.0
+        max_speed: MaxLinearSpeed(ship_data.max_speed),          // Restitution::new(1.5),
         collider: Collider::circle(ship_data.radius),
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,
@@ -252,9 +280,53 @@ pub fn ship_bundle(
                 GameLayer::Pickup,
             ],
         ),
-        weapons: WeaponSystems {
-            primary: primary_weapons,
-        },
+    }
+}
+
+/// Like `ship_bundle`, but uses a pre-built `Ship` (e.g. loaded from a save file)
+/// and an explicit weapon loadout instead of deriving both from item_universe defaults.
+pub fn ship_bundle_from_pilot(
+    mut ship: Ship,
+    weapon_loadout: &HashMap<String, u8>,
+    asset_server: &Res<AssetServer>,
+    item_universe: &Res<ItemUniverse>,
+    pos: Vec2,
+) -> ShipBundle {
+    let default_data = ShipData::default();
+    let ship_data = item_universe
+        .ships
+        .get(&ship.ship_type)
+        .unwrap_or(&default_data);
+    // Always use canonical item-universe data for physics/visuals.
+    ship.data = ship_data.clone();
+
+    let mut primary: HashMap<String, WeaponSystem> = HashMap::new();
+    for (weapon_type, &count) in weapon_loadout {
+        if let Some(ws) = WeaponSystem::from_type(weapon_type, count, &item_universe) {
+            primary.insert(weapon_type.clone(), ws);
+        }
+    }
+    ship.weapon_systems = WeaponSystems { primary };
+    ShipBundle {
+        angular_damping: AngularDamping(ship.data.angular_drag),
+        max_speed: MaxLinearSpeed(ship.data.max_speed),
+        sprite: Sprite::from_image(asset_server.load(ship_data.sprite_path.clone())),
+        transform: Transform::from_xyz(pos.x, pos.y, 0.0),
+        body: RigidBody::Dynamic,
+        collider: Collider::circle(ship_data.radius),
+        colider_density: ColliderDensity(2.0),
+        collision_events: CollisionEventsEnabled,
+        layer: CollisionLayers::new(
+            GameLayer::Ship,
+            [
+                GameLayer::Weapon,
+                GameLayer::Asteroid,
+                GameLayer::Planet,
+                GameLayer::Radar,
+                GameLayer::Pickup,
+            ],
+        ),
+        ship,
     }
 }
 
@@ -364,12 +436,12 @@ fn apply_damage(
 fn handle_buy_ship(
     mut commands: Commands,
     mut reader: MessageReader<BuyShip>,
-    mut player_query: Query<(Entity, &mut Ship, &mut WeaponSystems), With<crate::Player>>,
+    mut player_query: Query<(Entity, &mut Ship), With<crate::Player>>,
     item_universe: Res<ItemUniverse>,
     asset_server: Res<AssetServer>,
 ) {
     for event in reader.read() {
-        let Ok((entity, mut ship, mut weapons)) = player_query.single_mut() else {
+        let Ok((entity, mut ship)) = player_query.single_mut() else {
             continue;
         };
         let Some(new_data) = item_universe.ships.get(&event.ship_type) else {
@@ -383,16 +455,15 @@ fn handle_buy_ship(
         // Build new weapon systems from the ship's base loadout.
         let mut primary = HashMap::new();
         for (weapon_type, count) in &new_data.base_weapons {
-            if let Some(ws) = WeaponSystem::from_type(weapon_type, *count, &item_universe.weapons) {
+            if let Some(ws) = WeaponSystem::from_type(weapon_type, *count, &item_universe) {
                 primary.insert(weapon_type.clone(), ws);
             }
         }
-        *weapons = WeaponSystems { primary };
 
         // Replace the ship component, preserving credits and cargo (capped to new space).
         let mut new_ship = Ship::from_ship_data(new_data, &event.ship_type);
+        new_ship.weapon_systems = WeaponSystems { primary };
         new_ship.credits = ship.credits;
-        new_ship.consumed_item_space = 0;
         for (commodity, qty) in &ship.cargo {
             let space_left = new_ship
                 .data
