@@ -116,7 +116,7 @@ impl Default for WeaponSystems {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Ammo {
-    pub space: i32,
+    pub space: u32,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -147,8 +147,8 @@ impl Weapon {
 }
 #[derive(Clone)]
 pub struct WeaponSystem {
+    pub weapon: Weapon,
     pub cooldown: Timer,
-    pub weapon_type: String,
     pub space_per_system: i32,
     pub number: u8,
     pub ammo_quantity: Option<u32>,
@@ -169,7 +169,7 @@ impl WeaponSystem {
             return None;
         };
         return Some(WeaponSystem {
-            weapon_type: weapon_type.to_string(),
+            weapon: weapon.clone(),
             cooldown: Timer::from_seconds(weapon.cooldown / number as f32, TimerMode::Once),
             number: number,
             space_per_system: outfitter_item.space() as i32,
@@ -178,8 +178,10 @@ impl WeaponSystem {
     }
     pub fn space_consumed(&self) -> i32 {
         let base_space = self.space_per_system * self.number as i32;
-        // To Do: Add ammo quantity.
-        return base_space;
+        let ammo_space = self
+            .ammo_quantity
+            .and_then(|q| self.weapon.ammo.clone().map(|a| q * a.space));
+        return base_space + ammo_space.unwrap_or(0) as i32;
     }
 }
 
