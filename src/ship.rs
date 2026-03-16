@@ -2,11 +2,11 @@ use crate::item_universe::{ItemUniverse, OutfitterItem};
 use crate::utils::polygon_mesh;
 use crate::weapons::{WeaponSystem, WeaponSystems};
 use crate::{GameLayer, PlayState};
-use avian2d::parry::simba::scalar;
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::f32::consts::PI;
 
 pub fn ship_plugin(app: &mut App) {
     app.add_message::<ShipCommand>()
@@ -39,6 +39,12 @@ pub struct BuyShip {
     pub ship_type: String,
 }
 
+/// Stores the ship's hostility map as a standalone component so other systems
+/// can read it without conflicting with mutable `Ship` queries.
+/// Keys are faction names that are hostile toward this ship; values are weights.
+#[derive(Component, Clone, Default)]
+pub struct ShipHostility(pub HashMap<String, f32>);
+
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Personality {
     Trader,  // Likes to trade, traveling from planet to planet
@@ -60,6 +66,7 @@ pub struct ShipData {
     pub radius: f32,
     pub price: i128,
     pub personality: Personality,
+    pub faction: Option<String>,
 
     // Some serde defaults (typically not defined in the serialized data):
     pub angular_drag: Scalar, // s⁻¹ — exponential decay rate for angular velocity
@@ -85,6 +92,7 @@ impl Default for ShipData {
             radius: 10.0,
             price: 1000,
             personality: Personality::Trader,
+            faction: None,
             // Defaults
             angular_drag: 3.0,
             thrust_kp: 5.0,
@@ -121,6 +129,8 @@ pub struct Ship {
     pub health: i32,
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
     pub credits: i128,
+    // A map indicating inclusion in factions
+    pub enemies: Option<HashMap<String, f32>>,
     // An optional target for the ship.
     // Traders will tend to target planets,
     // Miners will tend to target asteroids,
@@ -134,15 +144,7 @@ pub struct Ship {
 impl Default for Ship {
     fn default() -> Self {
         let data = ShipData::default();
-        Self {
-            ship_type: "shuttle".to_string(),
-            data: data.clone(),
-            health: data.max_health,
-            cargo: HashMap::new(),
-            credits: 100000,
-            target: None,
-            weapon_systems: WeaponSystems::default(),
-        }
+        Ship::from_ship_data(&data, "shuttle")
     }
 }
 
@@ -162,6 +164,7 @@ impl Ship {
             credits: 100000,
             target: None,
             weapon_systems: WeaponSystems::default(),
+            enemies: None,
         }
     }
     pub fn remaining_item_space(&self) -> i32 {
@@ -291,16 +294,27 @@ impl Ship {
             _ => (),
         }
     }
+    /// Returns true when this ship should fight `other`.
+    /// Checks whether this ship's own faction appears in `other`'s hostility map,
+    /// i.e. other is flagged as hostile toward my faction.
+    pub fn should_engage(&self, other: &ShipHostility) -> bool {
+        let Some(my_faction) = self.data.faction.as_ref() else {
+            return false;
+        };
+        other.0.get(my_faction).map(|v| *v > 0.0).unwrap_or(false)
+    }
 }
 
 #[derive(Bundle)]
 pub struct ShipBundle {
     ship: Ship,
+    faction: ShipHostility,
     sprite: Sprite,
     transform: Transform,
     body: RigidBody,
     angular_damping: AngularDamping,
     max_speed: MaxLinearSpeed,
+    max_angular_speed: MaxAngularSpeed,
     collider: Collider,
     colider_density: ColliderDensity,
     collision_events: CollisionEventsEnabled,
@@ -319,12 +333,21 @@ pub fn ship_bundle(
     item_universe: &Res<ItemUniverse>,
     pos: Vec2,
 ) -> ShipBundle {
-    let default_data = ShipData::default();
-    let ship_data = item_universe.ships.get(ship_type).unwrap_or(&default_data);
+    let ship_data = item_universe
+        .ships
+        .get(ship_type)
+        .expect(&format!("Un recognized ship type {}", ship_type));
     let mut ship = Ship::from_ship_data(ship_data, ship_type);
     ship.weapon_systems = WeaponSystems::build(&ship_data.base_weapons, item_universe);
+    ship.enemies = ship_data.faction.clone().and_then(|faction| {
+        item_universe
+            .enemies
+            .get(&faction)
+            .map(|v| v.iter().map(|s| (s.clone(), 1.0)).collect())
+    });
 
     ShipBundle {
+        faction: ShipHostility(ship.enemies.clone().unwrap_or_default()),
         ship,
         // mesh: Mesh2d(meshes.add(build_ship_mesh())),
         // material: MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
@@ -333,6 +356,7 @@ pub fn ship_bundle(
         body: RigidBody::Dynamic,
         angular_damping: AngularDamping(ship_data.angular_drag), // equivalent to angular_drag = 3.0
         max_speed: MaxLinearSpeed(ship_data.max_speed),          // Restitution::new(1.5),
+        max_angular_speed: MaxAngularSpeed(4.0 * PI),
         collider: Collider::circle(ship_data.radius),
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,
@@ -358,21 +382,23 @@ pub fn ship_bundle_from_pilot(
     item_universe: &Res<ItemUniverse>,
     pos: Vec2,
 ) -> ShipBundle {
-    let default_data = ShipData::default();
-    let ship_data = item_universe
-        .ships
-        .get(&ship.ship_type)
-        .unwrap_or(&default_data);
+    // Check this!
+    // let ship_data = item_universe
+    //     .ships
+    //     .get(&ship.ship_type)
+    //     .expect(&format!("Un recognized ship type {}", ship.ship_type));
     // Always use canonical item-universe data for physics/visuals.
-    ship.data = ship_data.clone();
+    // ship.data = ship_data.clone();
     ship.weapon_systems = WeaponSystems::build(weapon_loadout, item_universe);
     ShipBundle {
+        faction: ShipHostility(ship.enemies.clone().unwrap_or_default()),
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
-        sprite: Sprite::from_image(asset_server.load(ship_data.sprite_path.clone())),
+        max_angular_speed: MaxAngularSpeed(4.0 * PI),
+        sprite: Sprite::from_image(asset_server.load(ship.data.sprite_path.clone())),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
-        collider: Collider::circle(ship_data.radius),
+        collider: Collider::circle(ship.data.radius),
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,
         layer: CollisionLayers::new(

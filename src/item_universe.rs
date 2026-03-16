@@ -23,6 +23,12 @@ pub struct ItemUniverse {
     pub ships: HashMap<String, ShipData>,
     pub star_systems: HashMap<String, StarSystem>,
     pub outfitter_items: HashMap<String, OutfitterItem>,
+    // A map from my faction, to which factions engage me
+    pub enemies: HashMap<String, Vec<String>>,
+    // The starting ship for the player:
+    pub starting_ship: String,
+    // The starting system for the player:
+    pub starting_system: String,
     #[serde(default)]
     pub commodities: HashMap<String, CommodityData>,
     /// Average price of each commodity across all planets in all star systems.

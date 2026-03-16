@@ -23,6 +23,9 @@ struct CargoText;
 struct TargetText;
 
 #[derive(Component)]
+struct SecondaryWeaponText;
+
+#[derive(Component)]
 struct RadarDisplay;
 
 #[derive(Component)]
@@ -54,7 +57,15 @@ impl Plugin for HudPlugin {
             range: self.radar_range,
         })
         .add_systems(Startup, spawn_hud)
-        .add_systems(Update, (update_health_bar, update_cargo_credits, update_target_display))
+        .add_systems(
+            Update,
+            (
+                update_health_bar,
+                update_cargo_credits,
+                update_target_display,
+                update_secondary_weapon,
+            ),
+        )
         .add_systems(
             Update,
             update_radar_dots.run_if(in_state(PlayState::Flying)),
@@ -125,26 +136,6 @@ fn spawn_hud(mut commands: Commands) {
                 ));
             });
 
-            // ── Primary weapon ───────────────────────────────────────────
-            root.spawn((
-                Node {
-                    padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
-                    border_radius: BorderRadius::all(Val::Px(3.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
-            ))
-            .with_children(|w| {
-                w.spawn((
-                    Text::new("Primary:  Laser"),
-                    TextFont {
-                        font_size: 13.0,
-                        ..default()
-                    },
-                    TextColor(Color::srgb(0.9, 0.85, 0.5)),
-                ));
-            });
-
             // ── Secondary weapon ─────────────────────────────────────────
             root.spawn((
                 Node {
@@ -156,6 +147,7 @@ fn spawn_hud(mut commands: Commands) {
             ))
             .with_children(|w| {
                 w.spawn((
+                    SecondaryWeaponText,
                     Text::new("Secondary: None"),
                     TextFont {
                         font_size: 13.0,
@@ -250,22 +242,32 @@ fn update_radar_dots(
     mut commands: Commands,
     radar: Res<RadarEntity>,
     config: Res<RadarConfig>,
-    player_query: Query<&Transform, With<Player>>,
-    ships_query: Query<&Transform, (With<Ship>, Without<Player>)>,
-    planets_query: Query<&Transform, With<Planet>>,
+    time: Res<Time>,
+    player_query: Query<(Entity, &Transform, &Ship), With<Player>>,
+    ships_query: Query<(Entity, &Transform, &Ship), (With<Ship>, Without<Player>)>,
+    planets_query: Query<(Entity, &Transform), With<Planet>>,
     dots_query: Query<Entity, With<RadarDot>>,
 ) {
-    let Ok(player_tf) = player_query.single() else {
+    let Ok((player_entity, player_tf, player_ship)) = player_query.single() else {
         return;
     };
     let player_pos = player_tf.translation.truncate();
     let half = RADAR_SIZE / 2.0;
 
-    // Collect planet world positions up front so we can check visibility
-    // and compute the mean outside the with_children closure.
-    let planet_positions: Vec<Vec2> = planets_query
+    // Targeted entity for blink effect
+    let targeted_entity: Option<Entity> = match &player_ship.target {
+        Some(Target::Ship(e)) => Some(*e),
+        Some(Target::Planet(e)) => Some(*e),
+        _ => None,
+    };
+
+    // Blink: visible for ~0.4s, hidden for ~0.4s
+    let blink_visible = (time.elapsed_secs() * 2.5).floor() as i32 % 2 == 0;
+
+    // Collect planet data before the with_children closure
+    let planet_data: Vec<(Entity, Vec2)> = planets_query
         .iter()
-        .map(|tf| tf.translation.truncate())
+        .map(|(e, tf)| (e, tf.translation.truncate()))
         .collect();
 
     for entity in dots_query.iter() {
@@ -273,25 +275,81 @@ fn update_radar_dots(
     }
 
     commands.entity(radar.0).with_children(|parent| {
-        // ── Ships (white dots) ───────────────────────────────────────────
-        for ship_tf in ships_query.iter() {
+        // ── Player indicator (^) at radar center ─────────────────────────
+        // Rotate ^ to match the player's heading. ^ points screen-up by
+        // default, so we compute the screen-space angle of the forward
+        // vector and adjust for the π/2 offset vs. the > chevron formula.
+        let forward = (player_tf.rotation * Vec3::Y).truncate();
+        let indicator_angle = -forward.y.atan2(forward.x) + std::f32::consts::FRAC_PI_2;
+        parent
+            .spawn((
+                RadarDot,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(half),
+                    top: Val::Px(half),
+                    ..default()
+                },
+                UiTransform::from_rotation(Rot2::radians(indicator_angle)),
+            ))
+            .with_children(|inner| {
+                inner.spawn((
+                    RadarDot,
+                    Text::new("^"),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.0, 1.0, 0.3)),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(-4.0),
+                        top: Val::Px(-6.0),
+                        ..default()
+                    },
+                ));
+            });
+
+        // ── Ships ────────────────────────────────────────────────────────
+        for (ship_entity, ship_tf, ship) in ships_query.iter() {
             let offset = ship_tf.translation.truncate() - player_pos;
             if offset.length() > config.range {
                 continue;
             }
+
+            let is_targeted = targeted_entity == Some(ship_entity);
+            if is_targeted && !blink_visible {
+                continue; // blink by skipping this frame
+            }
+
             let rx = half + (offset.x / config.range) * half - DOT_SIZE / 2.0;
             let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
-            parent.spawn((RadarDot, dot_bundle(rx, ry, Color::WHITE)));
+
+            let targets_player =
+                matches!(&ship.target, Some(Target::Ship(e)) if *e == player_entity);
+            let color = if targets_player {
+                Color::srgb(1.0, 0.15, 0.15) // red: hostile
+            } else {
+                Color::WHITE
+            };
+
+            parent.spawn((RadarDot, dot_bundle(rx, ry, color)));
         }
 
         // ── Planets (blue dots) ──────────────────────────────────────────
         let mut any_planet_visible = false;
-        for &pos in &planet_positions {
+        for &(planet_entity, pos) in &planet_data {
             let offset = pos - player_pos;
             if offset.length() > config.range {
                 continue;
             }
             any_planet_visible = true;
+
+            let is_targeted = targeted_entity == Some(planet_entity);
+            if is_targeted && !blink_visible {
+                continue; // blink by skipping this frame
+            }
+
             let rx = half + (offset.x / config.range) * half - DOT_SIZE / 2.0;
             let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
             parent.spawn((RadarDot, dot_bundle(rx, ry, Color::srgb(0.3, 0.5, 1.0))));
@@ -300,9 +358,9 @@ fn update_radar_dots(
         // ── Off-radar planet chevron ─────────────────────────────────────
         // When no planets appear on the radar, show a ">" at the edge that
         // is rotated to point toward the mean planet location.
-        if !any_planet_visible && !planet_positions.is_empty() {
+        if !any_planet_visible && !planet_data.is_empty() {
             let mean: Vec2 =
-                planet_positions.iter().copied().sum::<Vec2>() / planet_positions.len() as f32;
+                planet_data.iter().map(|(_, p)| *p).sum::<Vec2>() / planet_data.len() as f32;
             let offset = mean - player_pos;
             if offset.length() > f32::EPSILON {
                 let dir = offset.normalize();
@@ -368,12 +426,37 @@ fn update_cargo_credits(
     }
 }
 
-fn update_target_display(
+fn update_secondary_weapon(
     player_query: Query<&Ship, With<Player>>,
+    mut text_query: Query<&mut Text, With<SecondaryWeaponText>>,
+) {
+    let Ok(ship) = player_query.single() else {
+        return;
+    };
+    let Ok(mut text) = text_query.single_mut() else {
+        return;
+    };
+    **text = match &ship.weapon_systems.selected_secondary {
+        Some(name) => {
+            if let Some(ws) = ship.weapon_systems.secondary.get(name) {
+                match ws.ammo_quantity {
+                    Some(qty) => format!("Sec: {} ({})", name, qty),
+                    None => format!("Sec: {}", name),
+                }
+            } else {
+                "Secondary: None".to_string()
+            }
+        }
+        None => "Secondary: None".to_string(),
+    };
+}
+
+fn update_target_display(
+    player_query: Query<(Entity, &Ship), With<Player>>,
     ships_query: Query<&Ship, Without<Player>>,
     mut text_query: Query<&mut Text, With<TargetText>>,
 ) {
-    let Ok(player_ship) = player_query.single() else {
+    let Ok((player_entity, player_ship)) = player_query.single() else {
         return;
     };
     let Ok(mut text) = text_query.single_mut() else {
@@ -382,7 +465,13 @@ fn update_target_display(
     **text = match &player_ship.target {
         Some(Target::Ship(entity)) => {
             if let Ok(target_ship) = ships_query.get(*entity) {
-                format!("Target: {}", target_ship.ship_type)
+                let is_hostile =
+                    matches!(&target_ship.target, Some(Target::Ship(e)) if *e == player_entity);
+                if is_hostile {
+                    format!("Target: {} [HOSTILE]", target_ship.ship_type)
+                } else {
+                    format!("Target: {}", target_ship.ship_type)
+                }
             } else {
                 "Target: None".to_string()
             }

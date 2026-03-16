@@ -168,6 +168,9 @@ impl WeaponSystem {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return None;
         };
+        if number == 0 {
+            return None;
+        }
         return Some(WeaponSystem {
             weapon: weapon.clone(),
             cooldown: Timer::from_seconds(weapon.cooldown / number as f32, TimerMode::Once),
@@ -280,22 +283,7 @@ fn missile_guidance(
 ) {
     let dt = time.delta_secs();
     for (mut transform, mut vel, mut missile, projectile) in &mut missiles {
-        // Auto-assign nearest non-owner ship if no target yet.
-        if missile.target.is_none() {
-            let pos = transform.translation.xy();
-            missile.target = ships
-                .iter()
-                .filter(|&e| projectile.owner.map_or(true, |o| e != o))
-                .filter_map(|e| {
-                    all_positions
-                        .get(e)
-                        .ok()
-                        .map(|p| (e, (p.0 - pos).length_squared()))
-                })
-                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-                .map(|(e, _)| e);
-        }
-
+        // If we have no target, just fly straight.
         let Some(target) = missile.target else {
             continue;
         };

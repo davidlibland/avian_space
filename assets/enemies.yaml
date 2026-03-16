@@ -1,0 +1,4 @@
+Merchant: ["Pirate"]
+Federation: ["Rebel"]
+Rebel: ["Federation"]
+Pirate: ["Rebel", "Federation"]

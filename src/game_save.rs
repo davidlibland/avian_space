@@ -18,6 +18,7 @@ pub struct PilotSave {
     pub credits: i128,
     /// weapon_type → count owned
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
+    pub enemies: HashMap<String, f32>,
 }
 
 // ── In-memory resource ───────────────────────────────────────────────────────
@@ -33,11 +34,16 @@ pub struct PlayerGameState {
 }
 
 impl PlayerGameState {
-    pub fn new_pilot(name: &str) -> Self {
+    pub fn new_pilot(name: &str, item_universe: &ItemUniverse) -> Self {
+        let starting_ship = item_universe.starting_ship.clone();
+        let starting_ship_data = item_universe
+            .ships
+            .get(&starting_ship)
+            .expect("Can't find the starting ship.");
         Self {
             pilot_name: name.to_string(),
-            current_star_system: "sol".to_string(),
-            player_ship: Ship::default(),
+            current_star_system: item_universe.starting_system.clone(),
+            player_ship: Ship::from_ship_data(starting_ship_data, &starting_ship),
             weapon_loadout: HashMap::new(),
         }
     }
@@ -56,6 +62,7 @@ impl PlayerGameState {
             credits: save.credits,
             target: None,
             weapon_systems: Default::default(),
+            enemies: Some(save.enemies.clone()),
         };
         Self {
             pilot_name: save.pilot_name,
@@ -78,6 +85,12 @@ impl PlayerGameState {
             cargo: self.player_ship.cargo.clone(),
             credits: self.player_ship.credits,
             weapon_loadout: self.weapon_loadout.clone(),
+            enemies: self
+                .player_ship
+                .enemies
+                .clone()
+                .unwrap_or(HashMap::new())
+                .clone(),
         }
     }
 
@@ -199,6 +212,7 @@ mod tests {
                 .collect(),
             credits: 50_000,
             weapon_loadout: [("laser".to_string(), (2u8, None))].into_iter().collect(),
+            enemies: HashMap::from([("Trader".to_string(), 1.0)]),
         }
     }
 
@@ -212,6 +226,36 @@ mod tests {
             global_average_price: HashMap::new(),
             system_commodity_best_planet_to_sell: HashMap::new(),
             system_planet_best_commodity_to_buy: HashMap::new(),
+            starting_system: "sol".to_string(),
+            starting_ship: "shuttle".to_string(),
+            enemies: HashMap::new(),
+        }
+    }
+
+    fn basic_item_universe() -> ItemUniverse {
+        use crate::item_universe::StarSystem;
+        use crate::ship::ShipData;
+        ItemUniverse {
+            weapons: HashMap::new(),
+            ships: HashMap::from([("shuttle".to_string(), ShipData::default())]),
+            star_systems: HashMap::from([(
+                "sol".to_string(),
+                StarSystem {
+                    map_position: Vec2::ZERO,
+                    connections: vec![],
+                    planets: HashMap::new(),
+                    astroid_fields: vec![],
+                    ships: HashMap::new(),
+                },
+            )]),
+            outfitter_items: HashMap::new(),
+            commodities: HashMap::new(),
+            global_average_price: HashMap::new(),
+            system_commodity_best_planet_to_sell: HashMap::new(),
+            system_planet_best_commodity_to_buy: HashMap::new(),
+            starting_system: "sol".to_string(),
+            starting_ship: "shuttle".to_string(),
+            enemies: HashMap::new(),
         }
     }
 
@@ -245,7 +289,7 @@ mod tests {
 
     #[test]
     fn new_pilot_defaults() {
-        let state = PlayerGameState::new_pilot("Zara");
+        let state = PlayerGameState::new_pilot("Zara", &basic_item_universe());
         assert_eq!(state.pilot_name, "Zara");
         assert_eq!(state.current_star_system, "sol");
         assert_eq!(state.player_ship.credits, 100_000);
@@ -254,7 +298,7 @@ mod tests {
 
     #[test]
     fn to_save_captures_state() {
-        let mut state = PlayerGameState::new_pilot("Rex");
+        let mut state = PlayerGameState::new_pilot("Rex", &basic_item_universe());
         state.player_ship.health = 42;
         state.player_ship.credits = 7_777;
         state.player_ship.cargo.insert("ore".to_string(), 3);
@@ -298,7 +342,7 @@ mod tests {
 
     #[test]
     fn state_to_save_and_back() {
-        let mut original = PlayerGameState::new_pilot("Lyra");
+        let mut original = PlayerGameState::new_pilot("Lyra", &basic_item_universe());
         original.player_ship.health = 60;
         original.player_ship.credits = 12_345;
         original.player_ship.cargo.insert("fuel".to_string(), 4);

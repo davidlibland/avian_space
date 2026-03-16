@@ -1,8 +1,12 @@
 """
 Ship sprite generator for avian_space.
 
+Environment setup (one-time):
+  conda env create -f environment.yml
+  conda activate avian-sprites
+
 Run with:  python3 generate_sprites.py
-Requires:  Pillow  (pip install Pillow)
+Requires:  Pillow  (pinned in environment.yml)
 
 ─── Style guide ────────────────────────────────────────────────────────────────
 
@@ -464,6 +468,361 @@ def draw_bulk_carrier():
     img.save(os.path.join(OUT, "bulk_carrier.png"))
 
 
+# ─── FED PATROL (34×34) – Federation fast patrol interceptor ─────────────────
+# Design note: Narrow angular dart, distinctly military. Charcoal-black hull
+# with a grey nose section and red accent stripe across the mid-ship. Swept
+# wings tipped in red. Dual blue engine glow (military convention).
+
+
+def draw_fed_patrol():
+    S = 34
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Angular charcoal hull
+    hull = [(cx, 2), (cx + 6, 12), (cx + 5, 26), (cx - 5, 26), (cx - 6, 12)]
+    d.polygon(hull, fill=(42, 44, 48, 255))
+
+    # Grey nose section
+    nose = [(cx, 2), (cx + 4, 10), (cx - 4, 10)]
+    d.polygon(nose, fill=(115, 118, 126, 255))
+
+    # Centre panel (slightly lighter dark)
+    center = [(cx - 3, 10), (cx + 3, 10), (cx + 4, 24), (cx - 4, 24)]
+    d.polygon(center, fill=(62, 65, 70, 255))
+
+    # Red accent stripe
+    d.rectangle([int(cx) - 6, 13, int(cx) + 6, 15], fill=(210, 28, 28, 255))
+
+    # Swept wings
+    lwing = [(cx - 6, 12), (cx - 13, 24), (cx - 9, 26), (cx - 5, 16)]
+    rwing = [(cx + 6, 12), (cx + 13, 24), (cx + 9, 26), (cx + 5, 16)]
+    d.polygon(lwing, fill=(52, 54, 59, 255))
+    d.polygon(rwing, fill=(52, 54, 59, 255))
+
+    # Red wing tips
+    d.polygon([(cx - 13, 24), (cx - 11, 21), (cx - 9, 26)], fill=(210, 28, 28, 255))
+    d.polygon([(cx + 13, 24), (cx + 11, 21), (cx + 9, 26)], fill=(210, 28, 28, 255))
+
+    # Dual engine glow (blue – military)
+    d.rectangle([int(cx) - 4, 26, int(cx) - 1, 30], fill=(80, 160, 255, 195))
+    d.rectangle([int(cx) + 1, 26, int(cx) + 4, 30], fill=(80, 160, 255, 195))
+
+    img.save(os.path.join(OUT, "fed_patrol.png"))
+
+
+# ─── FED DESTROYER (92×92) – Federation heavy capital ship ───────────────────
+# Design note: Massive and imposing. Very dark hull with grey nose highlight
+# and horizontal red armour-seam lines. Wide flanking armour plates. Two
+# heavy weapon turrets with barrel stubs. Four-nozzle blue engine bank.
+
+
+def draw_fed_destroyer():
+    S = 92
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Side armour flanks (behind main hull so they go on first)
+    lflank = [(cx - 22, 28), (cx - 30, 38), (cx - 28, 68), (cx - 20, 68)]
+    rflank = [(cx + 22, 28), (cx + 30, 38), (cx + 28, 68), (cx + 20, 68)]
+    d.polygon(lflank, fill=(44, 46, 50, 255))
+    d.polygon(rflank, fill=(44, 46, 50, 255))
+
+    # Massive angular main hull
+    hull = [(cx, 4), (cx + 20, 24), (cx + 24, 68), (cx - 24, 68), (cx - 20, 24)]
+    d.polygon(hull, fill=(36, 38, 42, 255))
+
+    # Grey nose cap
+    nose = [(cx, 4), (cx + 12, 22), (cx - 12, 22)]
+    d.polygon(nose, fill=(82, 85, 92, 255))
+
+    # Red stripe below nose
+    d.rectangle([int(cx) - 12, 22, int(cx) + 12, 25], fill=(210, 25, 25, 255))
+
+    # Centre armour panel
+    center = [(cx - 9, 25), (cx + 9, 25), (cx + 11, 64), (cx - 11, 64)]
+    d.polygon(center, fill=(50, 52, 58, 255))
+
+    # Horizontal armour seam lines (red)
+    for y in [34, 46, 57]:
+        d.line([(int(cx) - 20, y), (int(cx) + 20, y)], fill=(200, 22, 22, 200), width=1)
+
+    # Heavy weapon turrets
+    d.rectangle([int(cx) - 26, 30, int(cx) - 14, 40], fill=(28, 29, 33, 255))
+    d.rectangle([int(cx) - 30, 33, int(cx) - 26, 37], fill=(18, 18, 22, 255))
+    d.rectangle([int(cx) + 14, 30, int(cx) + 26, 40], fill=(28, 29, 33, 255))
+    d.rectangle([int(cx) + 26, 33, int(cx) + 30, 37], fill=(18, 18, 22, 255))
+
+    # Engine block
+    d.rectangle([int(cx) - 16, 68, int(cx) + 16, 78], fill=(28, 29, 34, 255))
+
+    # Four engine nozzles with blue glow
+    for ex in [int(cx) - 12, int(cx) - 4, int(cx) + 4, int(cx) + 12]:
+        d.rectangle([ex - 3, 74, ex + 3, 82], fill=(22, 22, 28, 255))
+        d.ellipse([ex - 3, 78, ex + 3, 88], fill=(80, 155, 255, 188))
+
+    img.save(os.path.join(OUT, "fed_destroyer.png"))
+
+
+# ─── FED MISSILE CRUISER (78×78) – Federation long-range missile platform ─────
+# Design note: Long narrow spine flanked by two large missile pod wings.
+# Three rows of tube openings on each pod, trimmed in red. Dark hull.
+# The silhouette reads as "all ordnance, no hull".
+
+
+def draw_fed_missile_cruiser():
+    S = 78
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Missile pod wings (behind spine)
+    lpod = [(cx - 10, 22), (cx - 28, 28), (cx - 28, 55), (cx - 10, 52)]
+    rpod = [(cx + 10, 22), (cx + 28, 28), (cx + 28, 55), (cx + 10, 52)]
+    d.polygon(lpod, fill=(45, 47, 52, 255))
+    d.polygon(rpod, fill=(45, 47, 52, 255))
+
+    # Missile tube rows on each pod (three rows, red opening trim)
+    for y in [30, 38, 46]:
+        d.rectangle([int(cx) - 27, y, int(cx) - 11, y + 6], fill=(28, 28, 33, 255))
+        d.rectangle([int(cx) - 27, y, int(cx) - 25, y + 6], fill=(185, 20, 20, 255))
+        d.rectangle([int(cx) + 11, y, int(cx) + 27, y + 6], fill=(28, 28, 33, 255))
+        d.rectangle([int(cx) + 25, y, int(cx) + 27, y + 6], fill=(185, 20, 20, 255))
+
+    # Long narrow spine hull
+    spine = [(cx, 4), (cx + 8, 18), (cx + 8, 62), (cx - 8, 62), (cx - 8, 18)]
+    d.polygon(spine, fill=(40, 42, 46, 255))
+
+    # Grey nose
+    nose = [(cx, 4), (cx + 6, 17), (cx - 6, 17)]
+    d.polygon(nose, fill=(92, 95, 102, 255))
+
+    # Red nose stripe
+    d.rectangle([int(cx) - 6, 17, int(cx) + 6, 20], fill=(210, 25, 25, 255))
+
+    # Engine section
+    d.rectangle([int(cx) - 10, 62, int(cx) + 10, 68], fill=(28, 28, 34, 255))
+
+    # Three nozzles with blue glow
+    for ex in [int(cx) - 7, int(cx), int(cx) + 7]:
+        d.rectangle([ex - 3, 66, ex + 3, 72], fill=(20, 20, 26, 255))
+        d.ellipse([ex - 3, 69, ex + 3, 76], fill=(80, 155, 255, 188))
+
+    img.save(os.path.join(OUT, "fed_missile_cruiser.png"))
+
+
+# ─── REBEL FIGHTER (28×28) – fast Rebel interceptor ──────────────────────────
+# Design note: Deep blue hull with bright green nose and wing tips — the
+# Rebel colour pair. Slightly broader than the Federation fighter, conveying
+# a more organic build. Single bright blue-green engine glow.
+
+
+def draw_rebel_fighter():
+    S = 28
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Blue hull
+    hull = [(cx, 2), (cx + 4, 10), (cx + 4, 20), (cx - 4, 20), (cx - 4, 10)]
+    d.polygon(hull, fill=(30, 82, 145, 255))
+
+    # Green nose highlight
+    nose = [(cx, 2), (cx + 3, 9), (cx - 3, 9)]
+    d.polygon(nose, fill=(55, 190, 105, 255))
+
+    # Cockpit window (teal)
+    d.ellipse([int(cx) - 2, 5, int(cx) + 2, 10], fill=(100, 215, 185, 200))
+
+    # Swept delta wings
+    lwing = [(cx - 4, 9), (cx - 12, 20), (cx - 7, 21), (cx - 4, 14)]
+    rwing = [(cx + 4, 9), (cx + 12, 20), (cx + 7, 21), (cx + 4, 14)]
+    d.polygon(lwing, fill=(22, 62, 115, 255))
+    d.polygon(rwing, fill=(22, 62, 115, 255))
+
+    # Green wing tips
+    d.polygon([(cx - 12, 20), (cx - 10, 17), (cx - 7, 21)], fill=(50, 175, 80, 255))
+    d.polygon([(cx + 12, 20), (cx + 10, 17), (cx + 7, 21)], fill=(50, 175, 80, 255))
+
+    # Engine glow (blue-green)
+    d.rectangle([int(cx) - 3, 20, int(cx) + 3, 24], fill=(60, 205, 185, 200))
+    d.rectangle([int(cx) - 1, 21, int(cx) + 1, 26], fill=(155, 240, 220, 230))
+
+    img.save(os.path.join(OUT, "rebel_fighter.png"))
+
+
+# ─── REBEL GUNBOAT (48×48) – Rebel medium attack vessel ──────────────────────
+# Design note: Wider and stockier than the rebel fighter. Twin forward gun
+# barrels read as a weapon-forward design. Blue hull with a single green
+# accent stripe across the shoulder. Three-nozzle engine cluster.
+
+
+def draw_rebel_gunboat():
+    S = 48
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Side wing plates (behind hull)
+    lplate = [(cx - 12, 18), (cx - 20, 26), (cx - 18, 38), (cx - 10, 38)]
+    rplate = [(cx + 12, 18), (cx + 20, 26), (cx + 18, 38), (cx + 10, 38)]
+    d.polygon(lplate, fill=(24, 68, 102, 255))
+    d.polygon(rplate, fill=(24, 68, 102, 255))
+
+    # Main hull
+    hull = [(cx, 3), (cx + 10, 18), (cx + 12, 38), (cx - 12, 38), (cx - 10, 18)]
+    d.polygon(hull, fill=(35, 92, 135, 255))
+
+    # Nose / cockpit section
+    nose = [(cx, 3), (cx + 7, 16), (cx - 7, 16)]
+    d.polygon(nose, fill=(65, 162, 152, 255))
+
+    # Cockpit window
+    d.ellipse([int(cx) - 4, 6, int(cx) + 4, 13], fill=(120, 222, 202, 200))
+
+    # Center panel
+    d.rectangle([int(cx) - 5, 17, int(cx) + 5, 36], fill=(44, 112, 158, 255))
+
+    # Green accent stripe
+    d.rectangle([int(cx) - 12, 20, int(cx) + 12, 22], fill=(55, 192, 95, 255))
+
+    # Forward gun barrels (twin)
+    d.rectangle([int(cx) - 9, 3, int(cx) - 6, 13], fill=(18, 52, 78, 255))
+    d.rectangle([int(cx) + 6, 3, int(cx) + 9, 13], fill=(18, 52, 78, 255))
+
+    # Three engine nozzles (blue-green)
+    for ex in [int(cx) - 7, int(cx), int(cx) + 7]:
+        d.rectangle([ex - 2, 38, ex + 2, 42], fill=(60, 182, 202, 192))
+    d.rectangle([int(cx) - 1, 39, int(cx) + 1, 45], fill=(140, 230, 210, 215))
+
+    img.save(os.path.join(OUT, "rebel_gunboat.png"))
+
+
+# ─── REBEL FRIGATE (62×62) – Rebel medium warship ────────────────────────────
+# Design note: Angular wedge hull with forward-swept side nacelles that hold
+# extra gun hardpoints. Faster than the Federation frigate — the lines are
+# sharper and there's less bulk. Blue hull, green accent stripe, blue-green
+# engine cluster.
+
+
+def draw_rebel_frigate():
+    S = 62
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Side nacelles (behind main hull)
+    lnac = [(cx - 16, 28), (cx - 22, 36), (cx - 20, 50), (cx - 14, 50)]
+    rnac = [(cx + 16, 28), (cx + 22, 36), (cx + 20, 50), (cx + 14, 50)]
+    d.polygon(lnac, fill=(22, 66, 102, 255))
+    d.polygon(rnac, fill=(22, 66, 102, 255))
+
+    # Main hull – wedge
+    hull = [(cx, 3), (cx + 14, 22), (cx + 16, 50), (cx - 16, 50), (cx - 14, 22)]
+    d.polygon(hull, fill=(30, 86, 128, 255))
+
+    # Nose highlight
+    nose = [(cx, 3), (cx + 9, 20), (cx - 9, 20)]
+    d.polygon(nose, fill=(58, 158, 182, 255))
+
+    # Centre panel
+    center = [(cx - 7, 22), (cx + 7, 22), (cx + 8, 46), (cx - 8, 46)]
+    d.polygon(center, fill=(42, 110, 150, 255))
+
+    # Green accent stripe
+    d.rectangle([int(cx) - 14, 26, int(cx) + 14, 28], fill=(52, 192, 88, 255))
+
+    # Gun barrel stubs on nacelles
+    d.rectangle([int(cx) - 24, 38, int(cx) - 20, 42], fill=(15, 48, 75, 255))
+    d.rectangle([int(cx) + 20, 38, int(cx) + 24, 42], fill=(15, 48, 75, 255))
+
+    # Engine exhausts (blue-green)
+    d.rectangle([int(cx) - 10, 50, int(cx) - 5, 54], fill=(58, 188, 202, 196))
+    d.rectangle([int(cx) + 5, 50, int(cx) + 10, 54], fill=(58, 188, 202, 196))
+    d.rectangle([int(cx) - 3, 50, int(cx) + 3, 56], fill=(100, 222, 202, 212))
+    d.rectangle([int(cx) - 18, 50, int(cx) - 14, 52], fill=(48, 158, 172, 180))
+    d.rectangle([int(cx) + 14, 50, int(cx) + 18, 52], fill=(48, 158, 172, 180))
+
+    img.save(os.path.join(OUT, "rebel_frigate.png"))
+
+
+# ─── PIRATE CORVETTE (24×24) – scrappy fast Pirate attacker ──────────────────
+# Design note: Brown/tan narrow blade, slightly asymmetric wings to suggest
+# field repairs and mismatched salvage. A rust patch on one wing reinforces
+# the cobbled-together aesthetic. Warm orange engine glow (not military).
+
+
+def draw_pirate_corvette():
+    S = 24
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Narrow blade hull
+    hull = [(cx, 1), (cx + 3, 8), (cx + 3, 18), (cx - 3, 18), (cx - 3, 8)]
+    d.polygon(hull, fill=(128, 96, 62, 255))
+
+    # Tan nose tip
+    nose = [(cx, 1), (cx + 2, 7), (cx - 2, 7)]
+    d.polygon(nose, fill=(188, 158, 112, 255))
+
+    # Slightly mismatched wings (pirate patchwork)
+    lwing = [(cx - 3, 8), (cx - 10, 17), (cx - 7, 18), (cx - 3, 12)]
+    rwing = [(cx + 3, 8), (cx + 9, 18), (cx + 6, 18), (cx + 3, 11)]
+    d.polygon(lwing, fill=(102, 76, 48, 255))
+    d.polygon(rwing, fill=(94, 70, 44, 255))
+
+    # Rust/wear patch on the larger wing
+    d.rectangle([int(cx) - 9, 13, int(cx) - 7, 17], fill=(85, 56, 32, 255))
+
+    # Engine glow (warm orange – not military)
+    d.rectangle([int(cx) - 2, 18, int(cx) + 2, 22], fill=(255, 152, 58, 178))
+
+    img.save(os.path.join(OUT, "pirate_corvette.png"))
+
+
+# ─── PIRATE MISSILE BOAT (40×40) – improvised Pirate missile platform ─────────
+# Design note: A converted hauler with crude missile racks bolted to the
+# sides — rectangular boxes with no streamlining. Boxy brown hull, tan nose,
+# visible tube openings. Warm orange engine glow. The whole ship reads as
+# "dangerous but cheap".
+
+
+def draw_pirate_missile_boat():
+    S = 40
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Side missile racks (behind hull so hull overlaps them slightly)
+    d.rectangle([int(cx) - 16, 12, int(cx) - 9, 30], fill=(98, 74, 46, 255))
+    d.rectangle([int(cx) + 9, 12, int(cx) + 16, 30], fill=(98, 74, 46, 255))
+
+    # Missile tube openings (three per side)
+    for y in [14, 19, 24]:
+        d.rectangle([int(cx) - 15, y, int(cx) - 10, y + 3], fill=(68, 50, 30, 255))
+        d.rectangle([int(cx) + 10, y, int(cx) + 15, y + 3], fill=(68, 50, 30, 255))
+
+    # Boxy main hull
+    hull = [(cx, 3), (cx + 8, 14), (cx + 8, 30), (cx - 8, 30), (cx - 8, 14)]
+    d.polygon(hull, fill=(125, 96, 60, 255))
+
+    # Tan nose
+    nose = [(cx, 3), (cx + 6, 13), (cx - 6, 13)]
+    d.polygon(nose, fill=(178, 148, 102, 255))
+
+    # Cockpit window
+    d.ellipse([int(cx) - 3, 5, int(cx) + 3, 11], fill=(80, 140, 172, 180))
+
+    # Engine
+    d.rectangle([int(cx) - 5, 30, int(cx) + 5, 34], fill=(88, 64, 38, 255))
+    d.ellipse([int(cx) - 5, 32, int(cx) + 5, 38], fill=(255, 155, 62, 182))
+
+    img.save(os.path.join(OUT, "pirate_missile_boat.png"))
+
+
 if __name__ == "__main__":
     draw_shuttle()
     draw_fighter()
@@ -474,4 +833,12 @@ if __name__ == "__main__":
     draw_courier()
     draw_freighter()
     draw_bulk_carrier()
+    draw_fed_patrol()
+    draw_fed_destroyer()
+    draw_fed_missile_cruiser()
+    draw_rebel_fighter()
+    draw_rebel_gunboat()
+    draw_rebel_frigate()
+    draw_pirate_corvette()
+    draw_pirate_missile_boat()
     print("Sprites written to", OUT)

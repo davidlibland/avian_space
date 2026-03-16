@@ -1,6 +1,10 @@
+# ── Federation systems (sol + left side) ───────────────────────────────────────
+# Sol is the Federation capital. Left systems are Federation-controlled.
+# Border systems (sol, barnard) have the occasional Rebel probe.
+
 sol:
   map_position: [0.0, 0.0]
-  connections: [alpha_centauri, tau_ceti, vega]
+  connections: [tau_ceti, vega, barnard, alpha_centauri]
   planets:
     mercury:
       location: [120.0, 60.0]
@@ -26,7 +30,7 @@ sol:
       outfitter: []
     earth:
       location: [500.0, 300.0]
-      description: "Home sweet home. It's always nice to come down to earth."
+      description: "The Federation capital and home to its largest naval fleet. A major hub for trade and military contracts."
       radius: 60.0
       color: [0.2, 0.6, 0.3]
       commodities:
@@ -36,7 +40,7 @@ sol:
         chemicals: 35
         gold: 100
       outfitter: [laser, proton_beam, ir_missile]
-      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier]
+      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser]
     moon:
       location: [650.0, 380.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."
@@ -66,170 +70,61 @@ sol:
       number: 10
       radius: 300.
   ships:
+    fed_patrol: 3
+    fed_destroyer: 2
+    fed_missile_cruiser: 1
     shuttle: 2
-    fighter: 2
-    corvette: 2
     hauler: 2
     freighter: 1
     courier: 2
     asteroid_miner: 3
+    rebel_fighter: 1        # occasional Rebel scout near the border
 
-alpha_centauri:
-  map_position: [220.0, -90.0]
-  connections: [sol, sirius, procyon]
+kepler_22:
+  map_position: [-520.0, 60.0]
+  connections: [epsilon_eridani, tau_ceti]
   planets:
-    proxima:
-      location: [400.0, 200.0]
-      description: "A dim red world orbiting the nearest star. Carries the cheapest water in the system."
-      radius: 45.0
-      color: [0.7, 0.3, 0.2]
-      commodities:
-        exotic_matter: 600
-        water: 8
-        iron: 15
-      outfitter: []
-      shipyard: [shuttle, corvette, fighter, courier]
-    proxima_station:
-      location: [520.0, 290.0]
-      description: "An orbital waystation where exotic-matter traders stock up before the long haul."
-      radius: 18.0
-      color: [0.5, 0.5, 0.6]
-      commodities:
-        exotic_matter: 350
-        water: 25
-        iron: 30
-      outfitter: []
-  astroid_fields:
-    -
-      location: [0., 0.]
-      number: 5
-      radius: 500.
-  ships:
-    fighter: 1
-    corvette: 2
-    hauler: 2
-    freighter: 1
-    asteroid_miner: 3
-
-sirius:
-  map_position: [420.0, 60.0]
-  connections: [alpha_centauri, procyon, rigel]
-  planets:
-    sirius_b:
-      location: [300.0, -200.0]
-      description: "A scorched metal world baking under Sirius's intense light. Cooling gel flows out cheap."
+    kepler_22b:
+      location: [350.0, 200.0]
+      description: "A temperate Federation colony world deep in Federation space. Weapons parts flow from orbital foundries."
       radius: 50.0
-      color: [0.8, 0.7, 0.3]
+      color: [0.35, 0.35, 0.45]
       commodities:
-        titanium: 200
-        cooling_gel: 80
-        iron: 15
-      outfitter: [laser]
-      shipyard: [corvette, fighter, courier, freighter]
-    sirius_c:
-      location: [100.0, 350.0]
-      description: "A cooler companion world where titanium ore sits cheap in long-abandoned mines."
-      radius: 32.0
-      color: [0.6, 0.6, 0.4]
+        weapons_parts: 200
+        electronics: 120
+        food: 30
+        water: 20
+      outfitter: [proton_beam, ir_missile]
+      shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, courier, hauler]
+    kepler_22_station:
+      location: [480.0, 310.0]
+      description: "A Federation naval station. Weapons parts are stockpiled here; water comes at a premium."
+      radius: 22.0
+      color: [0.3, 0.3, 0.4]
       commodities:
-        titanium: 120
-        cooling_gel: 150
-        iron: 30
+        weapons_parts: 280
+        electronics: 180
+        water: 45
       outfitter: []
   astroid_fields:
     -
-      location: [0., 200.]
+      location: [-100., 200.]
       number: 8
       radius: 400.
-      commodities:
-        titanium: 1.0
   ships:
-    fighter: 1
-    corvette: 1
+    fed_patrol: 3
+    fed_destroyer: 1
     hauler: 2
-    freighter: 2
-    asteroid_miner: 3
-
-procyon:
-  map_position: [270.0, 160.0]
-  connections: [alpha_centauri, sirius, barnard]
-  planets:
-    procyon_prime:
-      location: [200.0, 300.0]
-      description: "A bustling trade hub. Water and food are cheap; electronics command a premium."
-      radius: 55.0
-      color: [0.4, 0.5, 0.7]
-      commodities:
-        electronics: 150
-        food: 20
-        water: 10
-        gold: 80
-      outfitter: [laser, proton_beam, ir_missile]
-      shipyard: [shuttle, corvette, fighter, frigate, courier, hauler, freighter, bulk_carrier, asteroid_miner]
-    procyon_ii:
-      location: [-200.0, -100.0]
-      description: "An industrial moon where electronics are assembled cheaply from imported parts."
-      radius: 28.0
-      color: [0.3, 0.4, 0.55]
-      commodities:
-        electronics: 60
-        food: 50
-        water: 35
-        gold: 120
-      outfitter: []
-  astroid_fields: []
-  ships:
-    hauler: 2
-    freighter: 2
-    bulk_carrier: 1
-    courier: 2
-    frigate: 1
-
-barnard:
-  map_position: [-130.0, 180.0]
-  connections: [procyon, tau_ceti]
-  planets:
-    barnard_rock:
-      location: [-100.0, 200.0]
-      description: "A desolate rock at the frontier. Uranium ore is dug up cheap and sold to anyone."
-      radius: 35.0
-      color: [0.45, 0.4, 0.35]
-      commodities:
-        uranium: 300
-        water: 40
-        iron: 8
-      outfitter: []
-      shipyard: [shuttle, courier, asteroid_miner]
-    barnard_station:
-      location: [100.0, 350.0]
-      description: "A refinery station that pays top credit for raw uranium and sells cheap purified water."
-      radius: 20.0
-      color: [0.5, 0.45, 0.5]
-      commodities:
-        uranium: 450
-        water: 12
-        iron: 20
-      outfitter: []
-      shipyard: [courier, freighter, bulk_carrier]
-  astroid_fields:
-    -
-      location: [0., 0.]
-      number: 15
-      radius: 600.
-  ships:
-    hauler: 2
-    freighter: 1
-    bulk_carrier: 1
     courier: 1
-    asteroid_miner: 4
+    asteroid_miner: 2
 
 tau_ceti:
   map_position: [-280.0, 60.0]
-  connections: [sol, barnard, epsilon_eridani]
+  connections: [sol, kepler_22, barnard, epsilon_eridani]
   planets:
     tau_ceti_4:
       location: [400.0, -100.0]
-      description: "Ancient ruins dot this world. Scholars pay a fortune for artifacts from the deep dig sites."
+      description: "Ancient ruins dot this Federation world. Scholars pay a fortune for artifacts from the deep dig sites."
       radius: 52.0
       color: [0.5, 0.4, 0.6]
       commodities:
@@ -240,7 +135,7 @@ tau_ceti:
       shipyard: [shuttle, courier, hauler, freighter]
     tau_ceti_2:
       location: [-200.0, 200.0]
-      description: "A younger colony that excavates artifacts cheaply but needs water badly."
+      description: "A younger Federation colony that excavates artifacts cheaply but needs water badly."
       radius: 38.0
       color: [0.45, 0.35, 0.55]
       commodities:
@@ -254,8 +149,7 @@ tau_ceti:
       number: 6
       radius: 350.
   ships:
-    fighter: 1
-    corvette: 1
+    fed_patrol: 2
     hauler: 2
     freighter: 1
     courier: 1
@@ -263,11 +157,11 @@ tau_ceti:
 
 epsilon_eridani:
   map_position: [-350.0, -100.0]
-  connections: [tau_ceti, vega]
+  connections: [tau_ceti, kepler_22, vega]
   planets:
     eridani_station:
       location: [0.0, 400.0]
-      description: "A young, turbulent system. The station here has fuel cells cheap but pays well for exotic matter."
+      description: "A Federation trade hub in a young, turbulent system. Fuel cells are cheap; exotic matter commands a premium."
       radius: 40.0
       color: [0.3, 0.6, 0.5]
       commodities:
@@ -292,6 +186,7 @@ epsilon_eridani:
       number: 12
       radius: 450.
   ships:
+    fed_patrol: 2
     hauler: 2
     freighter: 2
     bulk_carrier: 1
@@ -303,7 +198,7 @@ vega:
   planets:
     vega_1:
       location: [300.0, 300.0]
-      description: "A glittering mining colony. Gold is abundant and cheap; titanium gets a premium."
+      description: "A glittering Federation mining colony. Gold is abundant and cheap; titanium gets a premium."
       radius: 48.0
       color: [0.8, 0.8, 0.4]
       commodities:
@@ -314,7 +209,7 @@ vega:
       shipyard: [corvette, courier, hauler, asteroid_miner, freighter]
     vega_2:
       location: [-100.0, -200.0]
-      description: "A quieter world where titanium ore is mined cheaply. Gold buyers pay top credit here."
+      description: "A quieter Federation world where titanium ore is mined cheaply. Gold buyers pay top credit here."
       radius: 30.0
       color: [0.65, 0.65, 0.35]
       commodities:
@@ -330,32 +225,195 @@ vega:
       commodities:
         gold: 1.0
   ships:
-    fighter: 1
-    corvette: 2
+    fed_patrol: 1
     hauler: 2
     freighter: 1
     asteroid_miner: 4
 
+barnard:
+  map_position: [-130.0, 180.0]
+  connections: [sol, tau_ceti, drift]
+  planets:
+    barnard_rock:
+      location: [-100.0, 200.0]
+      description: "A Federation frontier world at the edge of the border zone. Uranium ore is dug up cheap and sold fast."
+      radius: 35.0
+      color: [0.45, 0.4, 0.35]
+      commodities:
+        uranium: 300
+        water: 40
+        iron: 8
+      outfitter: []
+      shipyard: [shuttle, courier, asteroid_miner]
+    barnard_station:
+      location: [100.0, 350.0]
+      description: "A Federation refinery station and patrol staging point. Watch for Rebel scouts on the outbound lanes."
+      radius: 20.0
+      color: [0.5, 0.45, 0.5]
+      commodities:
+        uranium: 450
+        water: 12
+        iron: 20
+      outfitter: []
+      shipyard: [courier, freighter, bulk_carrier]
+  astroid_fields:
+    -
+      location: [0., 0.]
+      number: 15
+      radius: 600.
+  ships:
+    fed_patrol: 2
+    fed_destroyer: 1
+    hauler: 2
+    freighter: 1
+    asteroid_miner: 4
+    rebel_fighter: 1        # occasional Rebel border probe
+
+# ── Uninhabited border systems ──────────────────────────────────────────────────
+# No planets. Dense asteroid fields. Pirates and miners. Both factions send
+# the occasional patrol through here, making it genuinely dangerous.
+
+alpha_centauri:
+  map_position: [220.0, -90.0]
+  connections: [sol, drift, sirius]
+  planets: {}
+  astroid_fields:
+    -
+      location: [200., 0.]
+      number: 20
+      radius: 700.
+    -
+      location: [-100., 300.]
+      number: 15
+      radius: 500.
+  ships:
+    pirate_corvette: 3
+    pirate_missile_boat: 2
+    asteroid_miner: 3
+    fed_patrol: 1           # Federation border sweep
+    rebel_fighter: 1        # Rebel forward scout
+
+drift:
+  map_position: [100.0, 150.0]
+  connections: [barnard, alpha_centauri, procyon]
+  planets: {}
+  astroid_fields:
+    -
+      location: [0., 0.]
+      number: 25
+      radius: 800.
+      commodities:
+        iron: 1.0
+  ships:
+    pirate_corvette: 2
+    pirate_missile_boat: 2
+    asteroid_miner: 4
+    fed_patrol: 1           # Federation sweep from barnard
+    rebel_gunboat: 1        # Rebel probe from procyon
+
+# ── Rebel systems (right side) ─────────────────────────────────────────────────
+# Rebels are faster and more aggressive. Border systems (procyon, sirius)
+# have an occasional Federation patrol pushing through.
+
+procyon:
+  map_position: [270.0, 160.0]
+  connections: [drift, sirius, altair]
+  planets:
+    procyon_prime:
+      location: [200.0, 300.0]
+      description: "A Rebel-held trade hub. Water and food are cheap; weapons pay well. Federation patrols still probe the outskirts."
+      radius: 55.0
+      color: [0.2, 0.45, 0.55]
+      commodities:
+        electronics: 150
+        food: 20
+        water: 10
+        gold: 80
+      outfitter: [laser, ir_missile]
+      shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, freighter, bulk_carrier, asteroid_miner]
+    procyon_ii:
+      location: [-200.0, -100.0]
+      description: "An industrial Rebel moon where electronics are assembled cheaply from imported parts."
+      radius: 28.0
+      color: [0.15, 0.35, 0.45]
+      commodities:
+        electronics: 60
+        food: 50
+        water: 35
+        gold: 120
+      outfitter: []
+  astroid_fields: []
+  ships:
+    rebel_fighter: 2
+    rebel_gunboat: 1
+    hauler: 2
+    freighter: 2
+    bulk_carrier: 1
+    courier: 2
+    frigate: 1
+    fed_patrol: 1           # occasional Federation border probe
+
+sirius:
+  map_position: [420.0, 60.0]
+  connections: [alpha_centauri, procyon, rigel, deneb]
+  planets:
+    sirius_b:
+      location: [300.0, -200.0]
+      description: "A scorched Rebel industrial world baking under Sirius's intense light. Cooling gel flows out cheap; titanium is in demand."
+      radius: 50.0
+      color: [0.2, 0.5, 0.4]
+      commodities:
+        titanium: 200
+        cooling_gel: 80
+        iron: 15
+      outfitter: [laser]
+      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, freighter]
+    sirius_c:
+      location: [100.0, 350.0]
+      description: "A Rebel companion world where titanium ore sits cheap in long-abandoned mines."
+      radius: 32.0
+      color: [0.15, 0.4, 0.3]
+      commodities:
+        titanium: 120
+        cooling_gel: 150
+        iron: 30
+      outfitter: []
+  astroid_fields:
+    -
+      location: [0., 200.]
+      number: 8
+      radius: 400.
+      commodities:
+        titanium: 1.0
+  ships:
+    rebel_fighter: 1
+    rebel_gunboat: 2
+    rebel_frigate: 1
+    hauler: 2
+    freighter: 2
+    asteroid_miner: 3
+    fed_patrol: 1           # Federation border probe from alpha_centauri
+
 rigel:
   map_position: [580.0, -120.0]
-  connections: [sirius]
+  connections: [sirius, deneb]
   planets:
     rigel_outpost:
       location: [-200.0, 200.0]
-      description: "The edge of known space. Weapons parts come cheap; exotic matter commands a fortune."
+      description: "A hardened Rebel stronghold at the edge of known space. Weapons parts are cheap; exotic matter commands a fortune."
       radius: 42.0
-      color: [0.6, 0.35, 0.5]
+      color: [0.15, 0.3, 0.5]
       commodities:
         weapons_parts: 350
         exotic_matter: 450
         water: 35
       outfitter: [laser, proton_beam, ir_missile]
-      shipyard: [corvette, fighter, frigate]
+      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
       location: [-80.0, 350.0]
-      description: "A refuelling depot near Rigel. Exotic matter is surplus here; weapons parts sell high."
+      description: "A Rebel resupply depot near Rigel. Exotic matter is surplus; weapons parts sell high."
       radius: 22.0
-      color: [0.5, 0.3, 0.45]
+      color: [0.1, 0.25, 0.45]
       commodities:
         weapons_parts: 500
         exotic_matter: 300
@@ -367,8 +425,84 @@ rigel:
       number: 10
       radius: 500.
   ships:
-    corvette: 2
-    fighter: 1
-    frigate: 1
+    rebel_gunboat: 2
+    rebel_frigate: 2
+    rebel_fighter: 2
     hauler: 1
     asteroid_miner: 2
+
+altair:
+  map_position: [500.0, 220.0]
+  connections: [procyon, deneb]
+  planets:
+    altair_haven:
+      location: [200.0, -200.0]
+      description: "A hidden Rebel resupply world tucked in a dense asteroid field. Fuel cells are stockpiled; food and water are always needed."
+      radius: 38.0
+      color: [0.2, 0.45, 0.4]
+      commodities:
+        fuel_cells: 90
+        exotic_matter: 320
+        food: 35
+        water: 30
+      outfitter: [laser]
+      shipyard: [rebel_fighter, rebel_gunboat, courier, asteroid_miner]
+    altair_rock:
+      location: [-150.0, 300.0]
+      description: "A Rebel mining outpost. Silicates are plentiful; everything else is scarce."
+      radius: 20.0
+      color: [0.25, 0.4, 0.35]
+      commodities:
+        silicates: 12
+        exotic_matter: 250
+        water: 50
+      outfitter: []
+  astroid_fields:
+    -
+      location: [100., 100.]
+      number: 12
+      radius: 500.
+  ships:
+    rebel_fighter: 2
+    rebel_gunboat: 1
+    hauler: 2
+    courier: 2
+    asteroid_miner: 2
+
+deneb:
+  map_position: [680.0, 80.0]
+  connections: [sirius, rigel, altair]
+  planets:
+    deneb_prime:
+      location: [300.0, 100.0]
+      description: "The beating heart of the Rebel Alliance. Weapons, ships, and fighters pour out of its shipyards."
+      radius: 55.0
+      color: [0.15, 0.35, 0.55]
+      commodities:
+        weapons_parts: 180
+        electronics: 100
+        food: 20
+        water: 15
+      outfitter: [laser, proton_beam, ir_missile]
+      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, freighter]
+    deneb_station:
+      location: [420.0, 200.0]
+      description: "A Rebel orbital shipyard. Advanced weapons and hulls are assembled here for the war effort."
+      radius: 25.0
+      color: [0.1, 0.3, 0.5]
+      commodities:
+        weapons_parts: 320
+        electronics: 200
+        water: 40
+      outfitter: []
+  astroid_fields:
+    -
+      location: [-200., -100.]
+      number: 6
+      radius: 350.
+  ships:
+    rebel_frigate: 2
+    rebel_gunboat: 2
+    rebel_fighter: 2
+    hauler: 2
+    freighter: 1

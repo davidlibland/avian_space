@@ -5,7 +5,7 @@ use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
 use crate::pickups::Pickup;
 use crate::planets::Planet;
-use crate::ship::{Personality, Ship, ShipCommand, Target, ship_bundle};
+use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target, ship_bundle};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::weapons::FireCommand;
 use crate::{CurrentStarSystem, GameLayer, PlayState};
@@ -53,7 +53,6 @@ fn pd_soft_distance(v: f32, pd_slope: f32, pd_base: f32) -> f32 {
 #[derive(Component)]
 pub struct AIShip {
     pub personality: Personality,
-    pub target: Option<Target>,
 }
 
 pub fn ai_ship_bundle(app: &mut App) {
@@ -82,7 +81,6 @@ pub fn spawn_ai_ships(
                         DespawnOnExit(PlayState::Flying),
                         AIShip {
                             personality: ship_bundle.get_personality(),
-                            target: None,
                         },
                         ship_bundle,
                     ))
@@ -124,7 +122,7 @@ pub fn simple_ai_control(
         &MaxLinearSpeed,
         &Transform,
         &mut Ship,
-        &mut AIShip,
+        &AIShip,
     )>,
     all_positions: Query<&Position>,
     velocities: Query<&LinearVelocity>,
@@ -133,13 +131,13 @@ pub fn simple_ai_control(
     ship_marker: Query<(), With<Ship>>,
     pickup_marker: Query<(), With<Pickup>>,
     planet_names: Query<(Entity, &Planet)>,
+    ship_factions: Query<&ShipHostility>,
     current_star_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
-    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, mut ai_ship) in &mut ships
-    {
+    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, ai_ship) in &mut ships {
         // 1. Validate existing target: clear if entity gone or (for combat targets) out of range.
-        if let Some(ref tgt) = ai_ship.target.clone() {
+        if let Some(ref tgt) = ship.target.clone() {
             let target_entity = match tgt {
                 Target::Ship(e) | Target::Asteroid(e) | Target::Planet(e) | Target::Pickup(e) => *e,
             };
@@ -151,12 +149,12 @@ pub fn simple_ai_control(
                     .unwrap_or(false),
             };
             if !valid {
-                ai_ship.target = None;
+                ship.target = None;
             }
         }
 
         // 2. If no target, pick one.
-        if ai_ship.target.is_none() {
+        if ship.target.is_none() {
             // Ships with cargo override personality and head to the best sell planet.
             // Traders sell immediately; Miners/Fighters wait until holds are ≥75% full.
             let cargo_used: u16 = ship.cargo.values().sum();
@@ -190,13 +188,13 @@ pub fn simple_ai_control(
                         })
                         .max_by_key(|(_, value)| *value);
                     if let Some((planet_entity, _)) = best {
-                        ai_ship.target = Some(Target::Planet(planet_entity));
+                        ship.target = Some(Target::Planet(planet_entity));
                     }
                 }
             }
 
             // If still no target, use personality-based selection.
-            if ai_ship.target.is_none() {
+            if ship.target.is_none() {
                 let filter = SpatialQueryFilter::from_mask([
                     GameLayer::Planet,
                     GameLayer::Asteroid,
@@ -237,11 +235,17 @@ pub fn simple_ai_control(
                     .map(|(e, _)| *e);
                 let nearest_ship = hits
                     .iter()
-                    .find(|(e, _)| ship_marker.get(*e).is_ok())
+                    .find(|(e, _)| {
+                        ship_marker.get(*e).is_ok()
+                            && ship_factions
+                                .get(*e)
+                                .map(|f| ship.should_engage(f))
+                                .unwrap_or(false)
+                    })
                     .map(|(e, _)| *e);
 
                 // All personalities grab nearby pickups first.
-                ai_ship.target = if let Some(pickup) = nearest_pickup {
+                ship.target = if let Some(pickup) = nearest_pickup {
                     Some(Target::Pickup(pickup))
                 } else {
                     match ai_ship.personality {
@@ -258,7 +262,7 @@ pub fn simple_ai_control(
         }
 
         // 3. Act on the current target.
-        let Some(ref target) = ai_ship.target.clone() else {
+        let Some(ref target) = ship.target.clone() else {
             continue;
         };
 
@@ -272,7 +276,7 @@ pub fn simple_ai_control(
             // ── Pursue and destroy ──────────────────────────────────────────
             Target::Asteroid(target_e) | Target::Ship(target_e) => {
                 let Ok(target_pos) = all_positions.get(*target_e) else {
-                    ai_ship.target = None;
+                    ship.target = None;
                     continue;
                 };
                 let target_vel = velocities.get(*target_e).map(|v| v.0).unwrap_or(Vec2::ZERO);
@@ -315,7 +319,7 @@ pub fn simple_ai_control(
             // ── Collect pickup ──────────────────────────────────────────────
             Target::Pickup(target_e) => {
                 let Ok(target_pos) = all_positions.get(*target_e) else {
-                    ai_ship.target = None;
+                    ship.target = None;
                     continue;
                 };
                 let local_offset = rotate_r(&(target_pos.0 - position.0));
@@ -335,7 +339,7 @@ pub fn simple_ai_control(
             // ── Fly to planet, land, trade ───────────────────────────────────
             Target::Planet(target_e) => {
                 let Ok(target_pos) = all_positions.get(*target_e) else {
-                    ai_ship.target = None;
+                    ship.target = None;
                     continue;
                 };
                 let offset = target_pos.0 - position.0;
@@ -373,7 +377,7 @@ pub fn simple_ai_control(
                             }
                         }
                     }
-                    ai_ship.target = None;
+                    ship.target = None;
                     continue;
                 }
 

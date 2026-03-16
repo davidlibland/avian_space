@@ -11,6 +11,7 @@ shuttle:
   price: 5000
   sprite_path: ship_sprites/shuttle.png
   personality: Trader
+  faction: Merchant
 
 fighter:
   thrust: 120.0
@@ -52,6 +53,7 @@ hauler:
   price: 50000
   sprite_path: ship_sprites/hauler.png
   personality: Trader
+  faction: Merchant
 
 # ── Fighter variants ──────────────────────────────────────────────────────────
 
@@ -99,6 +101,7 @@ courier:
   price: 15000
   sprite_path: ship_sprites/courier.png
   personality: Trader
+  faction: Merchant
 
 freighter:
   thrust: 55.0
@@ -112,6 +115,7 @@ freighter:
   price: 45000
   sprite_path: ship_sprites/freighter.png
   personality: Trader
+  faction: Merchant
 
 bulk_carrier:
   thrust: 22.0
@@ -125,3 +129,139 @@ bulk_carrier:
   price: 85000
   sprite_path: ship_sprites/bulk_carrier.png
   personality: Trader
+  faction: Merchant
+
+# ── Federation faction ─────────────────────────────────────────────────────────
+# Black/grey/red. Slower than Rebels, heavier armour, heavier weapons.
+
+fed_patrol:
+  thrust: 100.0
+  max_speed: 170.0
+  torque: 30.0
+  max_health: 70
+  cargo_space: 4
+  item_space: 5
+  base_weapons:
+    proton_beam: [2, null]
+  radius: 15.0
+  price: 30000
+  sprite_path: ship_sprites/fed_patrol.png
+  personality: Fighter
+  faction: Federation
+
+fed_destroyer:
+  thrust: 65.0
+  max_speed: 90.0
+  torque: 10.0
+  max_health: 350
+  cargo_space: 8
+  item_space: 12
+  base_weapons:
+    proton_beam: [4, null]
+    ir_missile: [2, 8]
+  radius: 42.0
+  price: 180000
+  sprite_path: ship_sprites/fed_destroyer.png
+  personality: Fighter
+  faction: Federation
+
+fed_missile_cruiser:
+  thrust: 55.0
+  max_speed: 95.0
+  torque: 8.0
+  max_health: 280
+  cargo_space: 6
+  item_space: 10
+  base_weapons:
+    proton_beam: [1, null]
+    ir_missile: [3, 12]
+  radius: 35.0
+  price: 150000
+  sprite_path: ship_sprites/fed_missile_cruiser.png
+  personality: Fighter
+  faction: Federation
+
+# ── Rebel faction ──────────────────────────────────────────────────────────────
+# Blue/green. Faster than Federation, lighter armour, less heavy weapons.
+
+rebel_fighter:
+  thrust: 145.0
+  max_speed: 235.0
+  torque: 42.0
+  max_health: 40
+  cargo_space: 2
+  item_space: 4
+  base_weapons:
+    laser: [3, null]
+  radius: 12.0
+  price: 22000
+  sprite_path: ship_sprites/rebel_fighter.png
+  personality: Fighter
+  faction: Rebel
+
+rebel_gunboat:
+  thrust: 95.0
+  max_speed: 158.0
+  torque: 22.0
+  max_health: 110
+  cargo_space: 8
+  item_space: 7
+  base_weapons:
+    laser: [2, null]
+    proton_beam: [1, null]
+  radius: 22.0
+  price: 55000
+  sprite_path: ship_sprites/rebel_gunboat.png
+  personality: Fighter
+  faction: Rebel
+
+rebel_frigate:
+  thrust: 80.0
+  max_speed: 140.0
+  torque: 18.0
+  max_health: 160
+  cargo_space: 10
+  item_space: 8
+  base_weapons:
+    laser: [2, null]
+    proton_beam: [2, null]
+    ir_missile: [1, 6]
+  radius: 28.0
+  price: 100000
+  sprite_path: ship_sprites/rebel_frigate.png
+  personality: Fighter
+  faction: Rebel
+
+# ── Pirate faction ─────────────────────────────────────────────────────────────
+# Brown/tan. Fast but outgunned by Rebel or Federation ships individually.
+
+pirate_corvette:
+  thrust: 132.0
+  max_speed: 198.0
+  torque: 36.0
+  max_health: 45
+  cargo_space: 4
+  item_space: 3
+  base_weapons:
+    laser: [2, null]
+  radius: 11.0
+  price: 16000
+  sprite_path: ship_sprites/pirate_corvette.png
+  personality: Fighter
+  faction: Pirate
+
+pirate_missile_boat:
+  thrust: 88.0
+  max_speed: 148.0
+  torque: 18.0
+  max_health: 80
+  cargo_space: 6
+  item_space: 6
+  base_weapons:
+    laser: [1, null]
+    ir_missile: [2, 8]
+  radius: 18.0
+  price: 40000
+  sprite_path: ship_sprites/pirate_missile_boat.png
+  personality: Fighter
+  faction: Pirate

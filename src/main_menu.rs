@@ -49,12 +49,9 @@ fn main_menu_ui(
                             .desired_width(200.0),
                     );
                     let ready = !menu_state.new_pilot_name.trim().is_empty();
-                    if ui
-                        .add_enabled(ready, egui::Button::new("Create"))
-                        .clicked()
-                    {
+                    if ui.add_enabled(ready, egui::Button::new("Create")).clicked() {
                         let name = menu_state.new_pilot_name.trim().to_string();
-                        *game_state = PlayerGameState::new_pilot(&name);
+                        *game_state = PlayerGameState::new_pilot(&name, &item_universe);
                         current_system.0 = game_state.current_star_system.clone();
                         next_state.set(PlayState::Flying);
                     }
@@ -76,8 +73,7 @@ fn main_menu_ui(
                         {
                             if let Some(save) = load_save(save_name) {
                                 current_system.0 = save.current_star_system.clone();
-                                *game_state =
-                                    PlayerGameState::from_save(save, &item_universe);
+                                *game_state = PlayerGameState::from_save(save, &item_universe);
                                 next_state.set(PlayState::Flying);
                             }
                         }

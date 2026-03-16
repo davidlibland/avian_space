@@ -7,9 +7,12 @@ use bevy::prelude::*;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::f32::consts::PI;
 
 /// Max units dropped per unit of asteroid size when shattered.
 const ASTEROID_DROP_SCALE: f32 = 0.2;
+const ASTEROID_VELOCITY: f32 = 50.0;
+const ASTEROID_MAX_VELOCITY: f32 = ASTEROID_VELOCITY * 10.;
 
 pub fn asteroid_plugin(app: &mut App) {
     app.add_message::<ShatterAsteroid>()
@@ -19,8 +22,6 @@ pub fn asteroid_plugin(app: &mut App) {
 
 #[derive(Event, Message)]
 pub struct ShatterAsteroid(pub Entity);
-
-const ASTEROID_VELOCITY: f32 = 50.0;
 
 #[derive(Component)]
 pub struct Asteroid {
@@ -102,6 +103,8 @@ pub fn spawn_asteroid(
             ColliderDensity(0.5),
             CollisionEventsEnabled,
             Restitution::new(1.0),
+            MaxLinearSpeed(ASTEROID_MAX_VELOCITY),
+            MaxAngularSpeed(3.0 * PI),
         ))
         .id()
 }
