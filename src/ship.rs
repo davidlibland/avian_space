@@ -208,18 +208,24 @@ impl Ship {
         if outfitter_item.space() as i32 > self.remaining_item_space() {
             return;
         }
-        match self.weapon_systems.find_weapon_entry(weapon_type) {
-            std::collections::hash_map::Entry::Occupied(view) => {
-                view.into_mut().number += 1;
-                self.credits -= outfitter_item.price();
-            }
-            std::collections::hash_map::Entry::Vacant(vacant) => {
-                if let Some(new_weapon) =
-                    WeaponSystem::from_type(weapon_type, 1, None, &item_universe)
-                {
-                    vacant.insert(new_weapon);
-                    self.credits -= outfitter_item.price();
-                }
+        // Increment count if the weapon is already present in either map.
+        if let Some(ws) = self.weapon_systems.primary.get_mut(weapon_type) {
+            ws.number += 1;
+            self.credits -= outfitter_item.price();
+            return;
+        }
+        if let Some(ws) = self.weapon_systems.secondary.get_mut(weapon_type) {
+            ws.number += 1;
+            self.credits -= outfitter_item.price();
+            return;
+        }
+        // New weapon: insert into the correct map based on whether it uses ammo.
+        if let Some(new_weapon) = WeaponSystem::from_type(weapon_type, 1, None, item_universe) {
+            self.credits -= outfitter_item.price();
+            if new_weapon.ammo_quantity.is_some() {
+                self.weapon_systems.secondary.insert(weapon_type.to_string(), new_weapon);
+            } else {
+                self.weapon_systems.primary.insert(weapon_type.to_string(), new_weapon);
             }
         }
     }
