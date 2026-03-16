@@ -13,11 +13,14 @@ mod planets;
 use planets::planets_plugin;
 mod ai_ships;
 mod pickups;
+mod rl_collection;
+mod rl_obs;
 mod ship;
 mod starfield;
 mod utils;
 mod weapons;
 use ai_ships::ai_ship_bundle;
+use rl_collection::RLCollectionPlugin;
 use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
 use explosions::explosions_plugin;
 use game_save::game_save_plugin;
@@ -104,6 +107,7 @@ fn main() {
             planets_plugin,
             asteroid_plugin,
             ai_ship_bundle,
+        RLCollectionPlugin,
         ))
         .add_plugins((
             explosions_plugin,

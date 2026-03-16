@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::item_universe::ItemUniverse;
+use crate::rl_collection::{RLAgent, RLReward};
 use crate::ship::Ship;
 use crate::utils::{random_velocity, safe_despawn};
 use crate::{GameLayer, PlayState};
@@ -70,7 +71,9 @@ fn collect_pickups(
     mut collisions: MessageReader<CollisionStart>,
     pickups: Query<&Pickup>,
     mut ships: Query<&mut Ship>,
+    rl_agents: Query<&RLAgent>,
     mut commands: Commands,
+    mut rl_reward_writer: MessageWriter<RLReward>,
 ) {
     let mut collected: HashSet<Entity> = HashSet::new();
 
@@ -99,6 +102,19 @@ fn collect_pickups(
         let qty = pickup.quantity.min(space);
         if qty > 0 {
             *ship.cargo.entry(pickup.commodity.clone()).or_insert(0) += qty;
+            // Flat pickup reward for RLAgent ships, personality-weighted.
+            if let Ok(agent) = rl_agents.get(ship_entity) {
+                use crate::ship::Personality;
+                let weight = match agent.personality {
+                    Personality::Fighter => 0.1,
+                    Personality::Miner => 0.8,
+                    Personality::Trader => 0.1,
+                };
+                rl_reward_writer.write(RLReward {
+                    entity: ship_entity,
+                    reward: weight,
+                });
+            }
         }
 
         safe_despawn(&mut commands, pickup_entity);

@@ -1,4 +1,5 @@
 use crate::item_universe::{ItemUniverse, OutfitterItem};
+use crate::rl_collection::{RLAgent, RLReward, RLShipDied, build_rl_ship_died};
 use crate::weapons::{WeaponSystem, WeaponSystems};
 use crate::{GameLayer, PlayState, Player};
 use avian2d::{math::*, prelude::*};
@@ -63,16 +64,26 @@ pub struct ShipHostility(pub HashMap<String, f32>);
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub enum Personality {
     #[default]
-    Trader,  // Likes to trade, traveling from planet to planet
+    Trader, // Likes to trade, traveling from planet to planet
     Fighter, // Will attack other ships
     Miner,   // Will mine asteroids
 }
 
-fn default_angular_drag() -> Scalar { 3.0 }
-fn default_thrust_kp()    -> Scalar { 5.0 }
-fn default_thrust_kd()    -> Scalar { 1.0 }
-fn default_reverse_kp()   -> Scalar { 20.0 }
-fn default_reverse_kd()   -> Scalar { 1.5 }
+fn default_angular_drag() -> Scalar {
+    3.0
+}
+fn default_thrust_kp() -> Scalar {
+    5.0
+}
+fn default_thrust_kd() -> Scalar {
+    1.0
+}
+fn default_reverse_kp() -> Scalar {
+    20.0
+}
+fn default_reverse_kd() -> Scalar {
+    1.5
+}
 
 /// All-zero derived default — used only as a sentinel (e.g. uninitialised resource).
 /// Real ship data always comes from the YAML item universe.
@@ -502,9 +513,11 @@ fn apply_damage(
     mut reader: MessageReader<DamageShip>,
     mut ships: Query<(&mut Ship, &Transform)>,
     ai_ships: Query<(), With<crate::ai_ships::AIShip>>,
+    rl_agents: Query<&RLAgent>,
     player_ships: Query<(), With<Player>>,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
     mut pickup_writer: MessageWriter<crate::pickups::PickupDrop>,
+    mut rl_died_writer: MessageWriter<RLShipDied>,
 ) {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -522,11 +535,13 @@ fn apply_damage(
                     size: 50.0,
                 });
                 crate::utils::safe_despawn(&mut commands, event.entity);
-                commands.insert_resource(PlayerDeathTimer(Timer::from_seconds(
-                    1.5,
-                    TimerMode::Once,
-                )));
+                commands
+                    .insert_resource(PlayerDeathTimer(Timer::from_seconds(1.5, TimerMode::Once)));
             } else if ai_ships.contains(event.entity) {
+                // Flush RL segment with terminal flag before despawning.
+                if let Ok(agent) = rl_agents.get(event.entity) {
+                    rl_died_writer.write(build_rl_ship_died(event.entity, agent));
+                }
                 explosion_writer.write(crate::explosions::TriggerExplosion {
                     location,
                     size: 20.0,
@@ -609,10 +624,13 @@ fn score_hits(
     mut reader: MessageReader<ScoreHit>,
     mut ship_hostilities: Query<&mut ShipHostility>,
     ships: Query<&Ship>,
+    rl_agents: Query<&RLAgent>,
+    mut rl_reward_writer: MessageWriter<RLReward>,
 ) {
     for event in reader.read() {
         match event {
             ScoreHit::OnShip { source, target } => {
+                // Faction hostility tracking (unchanged).
                 if let Ok(mut source_hostility) = ship_hostilities.get_mut(*source) {
                     if let Ok(target_ship) = ships.get(*target) {
                         if let Some(target_faction) = target_ship.data.faction.clone() {
@@ -620,14 +638,30 @@ fn score_hits(
                                 .0
                                 .entry(target_faction.to_owned())
                                 .or_default()) += 1.0;
-                            // *(source_ship
-                            //     .enemies
-                            //     .entry(target_faction.to_owned())
-                            //     .or_default()) += 1.0;
                         }
                     }
                 }
+                // RL reward: flat hit bonus if shooting at the current target.
+                if let Ok(agent) = rl_agents.get(*source) {
+                    let on_target = ships
+                        .get(*source)
+                        .ok()
+                        .and_then(|s| s.target.as_ref())
+                        .map(|t| t.get_entity() == *target)
+                        .unwrap_or(false);
+                    if on_target {
+                        let weight = match agent.personality {
+                            Personality::Fighter => 1.0,
+                            Personality::Miner | Personality::Trader => 0.1,
+                        };
+                        rl_reward_writer.write(RLReward {
+                            entity: *source,
+                            reward: weight,
+                        });
+                    }
+                }
             }
+            // To Do: Also reward asteroid hits.
             _ => (),
         }
     }
