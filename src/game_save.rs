@@ -53,7 +53,7 @@ impl PlayerGameState {
             .ships
             .get(&save.ship_type)
             .cloned()
-            .unwrap_or_default();
+            .expect("Ship type not found in item universe — save file may be corrupt or from an incompatible version");
 
         // Sanity check: saved cargo must fit in the ship's cargo hold.
         let cargo_used: u16 = save.cargo.values().sum();
@@ -265,10 +265,29 @@ mod tests {
 
     fn basic_item_universe() -> ItemUniverse {
         use crate::item_universe::StarSystem;
-        use crate::ship::ShipData;
+        use crate::ship::{Personality, ShipData};
+        let shuttle = ShipData {
+            thrust: 200.0,
+            max_speed: 300.0,
+            torque: 20.0,
+            max_health: 100,
+            cargo_space: 10,
+            item_space: 5,
+            base_weapons: HashMap::new(),
+            sprite_path: "shuttle.png".to_string(),
+            radius: 10.0,
+            price: 1000,
+            personality: Personality::Trader,
+            faction: None,
+            angular_drag: 3.0,
+            thrust_kp: 5.0,
+            thrust_kd: 1.0,
+            reverse_kp: 20.0,
+            reverse_kd: 1.5,
+        };
         ItemUniverse {
             weapons: HashMap::new(),
-            ships: HashMap::from([("shuttle".to_string(), ShipData::default())]),
+            ships: HashMap::from([("shuttle".to_string(), shuttle)]),
             star_systems: HashMap::from([(
                 "sol".to_string(),
                 StarSystem {
@@ -350,7 +369,7 @@ mod tests {
     #[test]
     fn from_save_restores_all_fields() {
         let save = sample_save();
-        let iu = empty_item_universe();
+        let iu = basic_item_universe();
         let state = PlayerGameState::from_save(save.clone(), &iu);
 
         assert_eq!(state.pilot_name, save.pilot_name);
@@ -365,7 +384,7 @@ mod tests {
     #[test]
     fn from_save_target_is_none() {
         // Entity handles must never be persisted.
-        let state = PlayerGameState::from_save(sample_save(), &empty_item_universe());
+        let state = PlayerGameState::from_save(sample_save(), &basic_item_universe());
         assert!(state.player_ship.target.is_none());
     }
 
@@ -383,7 +402,7 @@ mod tests {
         original.current_star_system = "tau_ceti".to_string();
 
         let save = original.to_save();
-        let iu = empty_item_universe();
+        let iu = basic_item_universe();
         let restored = PlayerGameState::from_save(save, &iu);
 
         assert_eq!(restored.pilot_name, original.pilot_name);

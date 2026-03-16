@@ -60,15 +60,23 @@ pub enum ScoreHit {
 #[derive(Component, Clone, Default)]
 pub struct ShipHostility(pub HashMap<String, f32>);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub enum Personality {
+    #[default]
     Trader,  // Likes to trade, traveling from planet to planet
     Fighter, // Will attack other ships
     Miner,   // Will mine asteroids
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(default)]
+fn default_angular_drag() -> Scalar { 3.0 }
+fn default_thrust_kp()    -> Scalar { 5.0 }
+fn default_thrust_kd()    -> Scalar { 1.0 }
+fn default_reverse_kp()   -> Scalar { 20.0 }
+fn default_reverse_kd()   -> Scalar { 1.5 }
+
+/// All-zero derived default — used only as a sentinel (e.g. uninitialised resource).
+/// Real ship data always comes from the YAML item universe.
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ShipData {
     pub thrust: Scalar,    // N — forward force
     pub max_speed: Scalar, // m/s — speed cap
@@ -83,39 +91,19 @@ pub struct ShipData {
     pub personality: Personality,
     pub faction: Option<String>,
 
-    // Some serde defaults (typically not defined in the serialized data):
+    // Tuning fields — rarely set in YAML, sensible defaults are fine:
+    #[serde(default = "default_angular_drag")]
     pub angular_drag: Scalar, // s⁻¹ — exponential decay rate for angular velocity
     // PD gains for thrust: F = kp*(v_target - v) - kd*dv
+    #[serde(default = "default_thrust_kp")]
     pub thrust_kp: Scalar,
+    #[serde(default = "default_thrust_kd")]
     pub thrust_kd: Scalar,
     // PD gains for reverse heading correction
+    #[serde(default = "default_reverse_kp")]
     pub reverse_kp: Scalar,
+    #[serde(default = "default_reverse_kd")]
     pub reverse_kd: Scalar,
-}
-
-impl Default for ShipData {
-    fn default() -> Self {
-        Self {
-            thrust: 200.0,
-            max_speed: 300.0,
-            torque: 20.0,
-            max_health: 100,
-            cargo_space: 10,
-            item_space: 5,
-            base_weapons: HashMap::new(),
-            sprite_path: "shuttle.png".to_string(),
-            radius: 10.0,
-            price: 1000,
-            personality: Personality::Trader,
-            faction: None,
-            // Defaults
-            angular_drag: 3.0,
-            thrust_kp: 5.0,
-            thrust_kd: 1.0,
-            reverse_kp: 20.0,
-            reverse_kd: 1.5,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -137,7 +125,9 @@ impl Target {
     }
 }
 
-#[derive(Component, Clone, Serialize, Deserialize)]
+/// All-zero derived default — used only as a sentinel (e.g. uninitialised resource).
+/// Real ships are always built from item-universe data via `ship_bundle` / `ship_bundle_from_pilot`.
+#[derive(Component, Clone, Default, Serialize, Deserialize)]
 pub struct Ship {
     pub ship_type: String, // The type of the ship
     pub data: ShipData, // The ship data, can be looked up in the item universe, but stored here for convenience
@@ -154,13 +144,6 @@ pub struct Ship {
     pub target: Option<Target>,
     #[serde(skip)]
     pub weapon_systems: WeaponSystems,
-}
-
-impl Default for Ship {
-    fn default() -> Self {
-        let data = ShipData::default();
-        Ship::from_ship_data(&data, "shuttle")
-    }
 }
 
 impl Ship {
