@@ -77,7 +77,7 @@ frigate:
   torque: 18.0
   max_health: 220
   cargo_space: 12
-  item_space: 10
+  item_space: 13
   base_weapons:
     proton_beam: [2, null]
     ir_missile: [1, 4]
@@ -140,7 +140,7 @@ fed_patrol:
   torque: 30.0
   max_health: 70
   cargo_space: 4
-  item_space: 5
+  item_space: 6
   base_weapons:
     proton_beam: [2, null]
   radius: 15.0
@@ -155,7 +155,7 @@ fed_destroyer:
   torque: 10.0
   max_health: 350
   cargo_space: 8
-  item_space: 12
+  item_space: 26
   base_weapons:
     proton_beam: [4, null]
     ir_missile: [2, 8]
@@ -171,7 +171,7 @@ fed_missile_cruiser:
   torque: 8.0
   max_health: 280
   cargo_space: 6
-  item_space: 10
+  item_space: 24
   base_weapons:
     proton_beam: [1, null]
     ir_missile: [3, 12]
@@ -190,7 +190,7 @@ rebel_fighter:
   torque: 42.0
   max_health: 40
   cargo_space: 2
-  item_space: 4
+  item_space: 6
   base_weapons:
     laser: [3, null]
   radius: 12.0
@@ -221,7 +221,7 @@ rebel_frigate:
   torque: 18.0
   max_health: 160
   cargo_space: 10
-  item_space: 8
+  item_space: 19
   base_weapons:
     laser: [2, null]
     proton_beam: [2, null]
@@ -241,7 +241,7 @@ pirate_corvette:
   torque: 36.0
   max_health: 45
   cargo_space: 4
-  item_space: 3
+  item_space: 4
   base_weapons:
     laser: [2, null]
   radius: 11.0
@@ -256,7 +256,7 @@ pirate_missile_boat:
   torque: 18.0
   max_health: 80
   cargo_space: 6
-  item_space: 6
+  item_space: 16
   base_weapons:
     laser: [1, null]
     ir_missile: [2, 8]

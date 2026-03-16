@@ -1,5 +1,3 @@
-use std::hint::select_unpredictable;
-
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
@@ -30,7 +28,7 @@ use main_menu::main_menu_plugin;
 use pickups::pickup_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
-use ship::{DamageShip, Ship, ShipCommand, Target, ship_plugin};
+use ship::{DamageShip, ScoreHit, Ship, ShipCommand, Target, ship_plugin};
 use starfield::StarfieldPlugin;
 use utils::safe_despawn;
 use weapons::{FireCommand, Projectile, weapon_lifetime, weapons_plugin};
@@ -341,6 +339,7 @@ fn collision_system(
     mut collisions: MessageReader<CollisionStart>,
     mut damage_writer: MessageWriter<DamageShip>,
     mut shatter_writer: MessageWriter<ShatterAsteroid>,
+    mut score_hit_writer: MessageWriter<ScoreHit>,
     mut commands: Commands,
     asteroids: Query<(), With<Asteroid>>,
     ships: Query<&Ship>,
@@ -387,6 +386,12 @@ fn collision_system(
             if despawned_weapons.insert(weapon_entity) {
                 safe_despawn(&mut commands, weapon_entity);
             }
+            if let Ok(projectile) = weapons.get(weapon_entity) {
+                score_hit_writer.write(ScoreHit::OnAsteroid {
+                    source: projectile.owner,
+                    target: asteroid_entity,
+                });
+            }
         }
 
         let weapon_ship_entity = if weapons.contains(a) && ships.contains(b) {
@@ -399,7 +404,7 @@ fn collision_system(
 
         if let Some((weapon_entity, ship_entity)) = weapon_ship_entity {
             if let Ok(projectile) = weapons.get(weapon_entity) {
-                if projectile.owner == Some(ship_entity) {
+                if projectile.owner == ship_entity {
                     continue;
                 }
                 if despawned_weapons.insert(weapon_entity) {
@@ -411,6 +416,10 @@ fn collision_system(
                     damage_writer.write(DamageShip {
                         entity: ship_entity,
                         damage,
+                    });
+                    score_hit_writer.write(ScoreHit::OnShip {
+                        source: projectile.owner,
+                        target: ship_entity,
                     });
                 }
             }

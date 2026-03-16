@@ -1,22 +1,31 @@
 use crate::item_universe::{ItemUniverse, OutfitterItem};
-use crate::utils::polygon_mesh;
 use crate::weapons::{WeaponSystem, WeaponSystems};
-use crate::{GameLayer, PlayState};
+use crate::{GameLayer, PlayState, Player};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::PI;
 
+/// Timer inserted as a resource when the player ship is destroyed.
+/// Once it finishes the game transitions back to the main menu.
+#[derive(Resource)]
+struct PlayerDeathTimer(Timer);
+
 pub fn ship_plugin(app: &mut App) {
     app.add_message::<ShipCommand>()
         .add_message::<DamageShip>()
+        .add_message::<ScoreHit>()
         .add_message::<BuyShip>()
         .add_systems(
             FixedUpdate,
             ship_movement.run_if(in_state(PlayState::Flying)),
         )
-        .add_systems(Update, apply_damage.run_if(in_state(PlayState::Flying)))
+        .add_systems(
+            Update,
+            (apply_damage, sync_hostilites, score_hits).run_if(in_state(PlayState::Flying)),
+        )
+        .add_systems(Update, tick_player_death_timer)
         .add_systems(Update, handle_buy_ship);
 }
 
@@ -37,6 +46,12 @@ pub struct DamageShip {
 #[derive(Event, Message)]
 pub struct BuyShip {
     pub ship_type: String,
+}
+
+#[derive(Event, Message)]
+pub enum ScoreHit {
+    OnShip { source: Entity, target: Entity },
+    OnAsteroid { source: Entity, target: Entity },
 }
 
 /// Stores the ship's hostility map as a standalone component so other systems
@@ -130,7 +145,7 @@ pub struct Ship {
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
     pub credits: i128,
     // A map indicating inclusion in factions
-    pub enemies: Option<HashMap<String, f32>>,
+    pub enemies: HashMap<String, f32>,
     // An optional target for the ship.
     // Traders will tend to target planets,
     // Miners will tend to target asteroids,
@@ -164,11 +179,11 @@ impl Ship {
             credits: 100000,
             target: None,
             weapon_systems: WeaponSystems::default(),
-            enemies: None,
+            enemies: HashMap::new(),
         }
     }
     pub fn remaining_item_space(&self) -> i32 {
-        return self.data.item_space as i32 - self.consumed_item_space();
+        return (self.data.item_space as i32 - self.consumed_item_space()).max(0);
     }
     fn current_cargo(&self) -> u16 {
         self.cargo.values().sum()
@@ -223,9 +238,13 @@ impl Ship {
         if let Some(new_weapon) = WeaponSystem::from_type(weapon_type, 1, None, item_universe) {
             self.credits -= outfitter_item.price();
             if new_weapon.ammo_quantity.is_some() {
-                self.weapon_systems.secondary.insert(weapon_type.to_string(), new_weapon);
+                self.weapon_systems
+                    .secondary
+                    .insert(weapon_type.to_string(), new_weapon);
             } else {
-                self.weapon_systems.primary.insert(weapon_type.to_string(), new_weapon);
+                self.weapon_systems
+                    .primary
+                    .insert(weapon_type.to_string(), new_weapon);
             }
         }
     }
@@ -241,6 +260,39 @@ impl Ship {
                     val.number -= 1;
                 } else {
                     view.remove_entry();
+                }
+            }
+            _ => (),
+        }
+    }
+    pub fn buy_max_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
+        let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            return;
+        };
+        match outfitter_item {
+            OutfitterItem::SecondaryWeapon {
+                ammo_price,
+                ammo_space,
+                ..
+            } => {
+                let max_price_qty = if *ammo_price > 0 {
+                    self.credits / *ammo_price
+                } else {
+                    100
+                };
+                let max_space_qty = if *ammo_space > 0 {
+                    self.remaining_item_space() / *ammo_space as i32
+                } else {
+                    100
+                };
+                let qty = std::cmp::min(max_price_qty, max_space_qty as i128).max(0);
+                match self.weapon_systems.find_weapon_entry(weapon_type) {
+                    std::collections::hash_map::Entry::Occupied(view) => {
+                        let val = view.into_mut();
+                        val.ammo_quantity = val.ammo_quantity.map(|n| n + qty as u32);
+                        self.credits -= ammo_price * qty;
+                    }
+                    _ => (),
                 }
             }
             _ => (),
@@ -345,15 +397,19 @@ pub fn ship_bundle(
         .expect(&format!("Un recognized ship type {}", ship_type));
     let mut ship = Ship::from_ship_data(ship_data, ship_type);
     ship.weapon_systems = WeaponSystems::build(&ship_data.base_weapons, item_universe);
-    ship.enemies = ship_data.faction.clone().and_then(|faction| {
-        item_universe
-            .enemies
-            .get(&faction)
-            .map(|v| v.iter().map(|s| (s.clone(), 1.0)).collect())
-    });
+    ship.enemies = ship_data
+        .faction
+        .clone()
+        .and_then(|faction| {
+            item_universe
+                .enemies
+                .get(&faction)
+                .map(|v| v.iter().map(|s| (s.clone(), 1.0)).collect())
+        })
+        .unwrap_or_default();
 
     ShipBundle {
-        faction: ShipHostility(ship.enemies.clone().unwrap_or_default()),
+        faction: ShipHostility(ship.enemies.clone()),
         ship,
         // mesh: Mesh2d(meshes.add(build_ship_mesh())),
         // material: MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
@@ -388,16 +444,9 @@ pub fn ship_bundle_from_pilot(
     item_universe: &Res<ItemUniverse>,
     pos: Vec2,
 ) -> ShipBundle {
-    // Check this!
-    // let ship_data = item_universe
-    //     .ships
-    //     .get(&ship.ship_type)
-    //     .expect(&format!("Un recognized ship type {}", ship.ship_type));
-    // Always use canonical item-universe data for physics/visuals.
-    // ship.data = ship_data.clone();
     ship.weapon_systems = WeaponSystems::build(weapon_loadout, item_universe);
     ShipBundle {
-        faction: ShipHostility(ship.enemies.clone().unwrap_or_default()),
+        faction: ShipHostility(ship.enemies.clone()),
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
         max_angular_speed: MaxAngularSpeed(4.0 * PI),
@@ -421,17 +470,6 @@ pub fn ship_bundle_from_pilot(
     }
 }
 
-pub fn build_ship_mesh() -> Mesh {
-    // Nose up, two wings back
-    let verts: Vec<Vec2> = vec![
-        Vec2::new(0.0, 18.0),    // tip
-        Vec2::new(-12.0, -12.0), // left wing
-        Vec2::new(0.0, -6.0),    // tail indent
-        Vec2::new(12.0, -12.0),  // right wing
-    ];
-    polygon_mesh(&verts)
-}
-
 // Physics system reads ShipCommand messages - runs in FixedUpdate before physics
 fn ship_movement(
     mut reader: MessageReader<ShipCommand>,
@@ -448,8 +486,6 @@ fn ship_movement(
         let dt = time.delta_secs();
 
         let forward = (transform.rotation * Vec3::Y).xy();
-        // let velocity = forces.linear_velocity();
-        // let ang_vel = forces.angular_velocity();
         let speed = velocity.length();
 
         if cmd.thrust.abs() > f32::EPSILON {
@@ -459,23 +495,14 @@ fn ship_movement(
                 - ship.data.thrust_kd * forward_speed)
                 .clamp(0.0, ship.data.thrust);
             (*velocity).0 += forward * pd_force * cmd.thrust * dt;
-            // forces.apply_linear_impulse(forward * pd_force * cmd.thrust * dt);
         }
-
-        // if speed > ship.max_speed {
-        //     let excess = speed - ship.max_speed;
-        //     (*velocity).0 += -velocity.0.normalize() * excess * 50.0 * dt
-        //     // forces.apply_linear_impulse(-velocity.normalize() * excess * 50.0 * dt);
-        // }
 
         if cmd.turn.abs() > f32::EPSILON {
             (*ang_vel).0 += -ship.data.torque * cmd.turn * dt;
-            // forces.apply_angular_impulse(-ship.torque * cmd.turn * dt);
         }
 
         let new_ang_vel = ang_vel.0 * (-ship.data.angular_drag * dt).exp();
         (*ang_vel).0 = new_ang_vel;
-        // *forces.angular_velocity_mut() = new_ang_vel;
 
         if cmd.reverse.abs() > f32::EPSILON && speed > f32::EPSILON {
             let retrograde = -velocity.normalize();
@@ -483,7 +510,6 @@ fn ship_movement(
             let pd_torque = (ship.data.reverse_kp * angle_err - ship.data.reverse_kd * new_ang_vel)
                 .clamp(-ship.data.torque, ship.data.torque);
             (*ang_vel).0 += pd_torque * cmd.reverse * dt;
-            // forces.apply_angular_impulse(pd_torque * cmd.reverse * dt);
         }
     }
 }
@@ -493,6 +519,7 @@ fn apply_damage(
     mut reader: MessageReader<DamageShip>,
     mut ships: Query<(&mut Ship, &Transform)>,
     ai_ships: Query<(), With<crate::ai_ships::AIShip>>,
+    player_ships: Query<(), With<Player>>,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
     mut pickup_writer: MessageWriter<crate::pickups::PickupDrop>,
 ) {
@@ -503,24 +530,50 @@ fn apply_damage(
             continue;
         };
         ship.health = (ship.health - event.damage as i32).max(0);
-        if ship.health == 0 && ai_ships.contains(event.entity) {
+        if ship.health == 0 {
             let location = transform.translation.xy();
-            explosion_writer.write(crate::explosions::TriggerExplosion {
-                location,
-                size: 20.0,
-            });
-            for (commodity, &qty) in &ship.cargo {
-                if qty > 0 {
-                    let drop_qty = rng.gen_range(1..=qty);
-                    pickup_writer.write(crate::pickups::PickupDrop {
-                        location,
-                        commodity: commodity.clone(),
-                        quantity: drop_qty,
-                    });
+            if player_ships.contains(event.entity) {
+                // Bigger explosion for the player, then return to main menu.
+                explosion_writer.write(crate::explosions::TriggerExplosion {
+                    location,
+                    size: 50.0,
+                });
+                crate::utils::safe_despawn(&mut commands, event.entity);
+                commands.insert_resource(PlayerDeathTimer(Timer::from_seconds(
+                    1.5,
+                    TimerMode::Once,
+                )));
+            } else if ai_ships.contains(event.entity) {
+                explosion_writer.write(crate::explosions::TriggerExplosion {
+                    location,
+                    size: 20.0,
+                });
+                for (commodity, &qty) in &ship.cargo {
+                    if qty > 0 {
+                        let drop_qty = rng.gen_range(1..=qty);
+                        pickup_writer.write(crate::pickups::PickupDrop {
+                            location,
+                            commodity: commodity.clone(),
+                            quantity: drop_qty,
+                        });
+                    }
                 }
+                crate::utils::safe_despawn(&mut commands, event.entity);
             }
-            crate::utils::safe_despawn(&mut commands, event.entity);
         }
+    }
+}
+
+fn tick_player_death_timer(
+    mut commands: Commands,
+    time: Res<Time>,
+    timer: Option<ResMut<PlayerDeathTimer>>,
+    mut next_state: ResMut<NextState<PlayState>>,
+) {
+    let Some(mut timer) = timer else { return };
+    if timer.0.tick(time.delta()).just_finished() {
+        commands.remove_resource::<PlayerDeathTimer>();
+        next_state.set(PlayState::MainMenu);
     }
 }
 
@@ -566,5 +619,44 @@ fn handle_buy_ship(
             MaxLinearSpeed(new_data.max_speed),
             AngularDamping(new_data.angular_drag),
         ));
+    }
+}
+
+fn score_hits(
+    mut reader: MessageReader<ScoreHit>,
+    mut ship_hostilities: Query<&mut ShipHostility>,
+    ships: Query<&Ship>,
+) {
+    for event in reader.read() {
+        match event {
+            ScoreHit::OnShip { source, target } => {
+                if let Ok(mut source_hostility) = ship_hostilities.get_mut(*source) {
+                    if let Ok(target_ship) = ships.get(*target) {
+                        if let Some(target_faction) = target_ship.data.faction.clone() {
+                            *(source_hostility
+                                .0
+                                .entry(target_faction.to_owned())
+                                .or_default()) += 1.0;
+                            // *(source_ship
+                            //     .enemies
+                            //     .entry(target_faction.to_owned())
+                            //     .or_default()) += 1.0;
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+    }
+}
+
+fn sync_hostilites(mut ships: Query<(&mut Ship, &mut ShipHostility)>) {
+    for (mut ship, mut hostility) in ships.iter_mut() {
+        // Clear hostility against ship's own faction
+        if let Some(faction) = ship.data.clone().faction {
+            hostility.0.remove(&faction);
+        }
+        // Copy the hostility onto the ship
+        ship.enemies = hostility.0.clone();
     }
 }

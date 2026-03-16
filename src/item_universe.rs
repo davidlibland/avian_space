@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::planets::PlanetData;
-use crate::weapons::Weapon;
+use crate::weapons::{Weapon, WeaponSystems};
 use crate::{asteroids::AsteroidFieldData, ship::ShipData};
 
 use serde::de::DeserializeOwned;
@@ -43,6 +43,22 @@ pub struct ItemUniverse {
 }
 
 impl ItemUniverse {
+    pub fn validate(&self) {
+        for (ship_name, ship_data) in &self.ships {
+            let consumed: i32 = WeaponSystems::build(&ship_data.base_weapons, self)
+                .iter_all()
+                .map(|(_, s)| s.space_consumed())
+                .sum();
+            if consumed > ship_data.item_space as i32 {
+                warn!(
+                    "Ship \"{ship_name}\" base weapons consume {consumed} item space \
+                     but ship only has {} — check assets/ships.yaml",
+                    ship_data.item_space
+                );
+            }
+        }
+    }
+
     fn compute_global_averages(&mut self) {
         let mut sums: HashMap<String, (f64, u32)> = HashMap::new();
         for system in self.star_systems.values() {
@@ -166,6 +182,7 @@ pub fn item_universe_plugin(app: &mut App) {
 
     item_universe.compute_global_averages();
     item_universe.compute_trade_maps();
+    item_universe.validate();
     app.insert_resource::<ItemUniverse>(item_universe);
 }
 

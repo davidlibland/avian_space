@@ -33,7 +33,7 @@ pub struct FireCommand {
 #[derive(Component)]
 pub struct Projectile {
     pub lifetime: f32,
-    pub owner: Option<Entity>,
+    pub owner: Entity,
     pub weapon_type: String,
 }
 
@@ -115,7 +115,7 @@ impl Default for WeaponSystems {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-struct Ammo {
+pub struct Ammo {
     pub space: u32,
 }
 
@@ -221,7 +221,7 @@ pub fn weapon_fire(
             DespawnOnExit(PlayState::Flying),
             Projectile {
                 lifetime: weapon.lifetime,
-                owner: Some(cmd.ship),
+                owner: cmd.ship,
                 weapon_type: cmd.weapon_type.clone(),
             },
             Collider::circle(10.),
@@ -272,17 +272,14 @@ pub fn weapon_system_cooldown(time: Res<Time>, mut query: Query<&mut Ship>) {
 
 fn missile_guidance(
     time: Res<Time>,
-    mut missiles: Query<(
-        &mut Transform,
-        &mut LinearVelocity,
-        &mut GuidedMissile,
-        &Projectile,
-    )>,
+    mut missiles: Query<
+        (&mut Transform, &mut LinearVelocity, &mut GuidedMissile),
+        With<Projectile>,
+    >,
     all_positions: Query<&Position>,
-    ships: Query<Entity, With<Ship>>,
 ) {
     let dt = time.delta_secs();
-    for (mut transform, mut vel, mut missile, projectile) in &mut missiles {
+    for (mut transform, mut vel, mut missile) in &mut missiles {
         // If we have no target, just fly straight.
         let Some(target) = missile.target else {
             continue;

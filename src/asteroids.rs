@@ -258,7 +258,7 @@ pub fn asteroid_field_gravity(
             continue;
         };
         let gmass = field.gmass();
-        let offset = (field_transform.translation.xy() - asteroid_transform.translation.xy());
+        let offset = field_transform.translation.xy() - asteroid_transform.translation.xy();
         let force_strength = mass.value() * gmass / offset.length().squared();
 
         force.apply_force(offset.normalize() * force_strength);

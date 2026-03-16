@@ -1,4 +1,3 @@
-use avian2d::prelude::*;
 use bevy::prelude::*;
 use rand::Rng;
 
@@ -6,7 +5,10 @@ use crate::PlayState;
 
 pub fn explosions_plugin(app: &mut App) {
     app.add_message::<TriggerExplosion>()
-        .add_systems(Update, trigger_explosions.run_if(in_state(PlayState::Flying)))
+        .add_systems(
+            Update,
+            trigger_explosions.run_if(in_state(PlayState::Flying)),
+        )
         .add_systems(Update, tick_particles.run_if(in_state(PlayState::Flying)));
 }
 
@@ -72,7 +74,12 @@ fn trigger_explosions(
 fn tick_particles(
     mut commands: Commands,
     time: Res<Time>,
-    mut particles: Query<(Entity, &mut Particle, &mut Transform, &MeshMaterial2d<ColorMaterial>)>,
+    mut particles: Query<(
+        Entity,
+        &mut Particle,
+        &mut Transform,
+        &MeshMaterial2d<ColorMaterial>,
+    )>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let dt = time.delta_secs();

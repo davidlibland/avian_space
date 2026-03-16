@@ -72,7 +72,7 @@ sol:
   ships:
     fed_patrol: 3
     fed_destroyer: 2
-    fed_missile_cruiser: 1
+    fed_missile_cruiser: 10
     shuttle: 2
     hauler: 2
     freighter: 1

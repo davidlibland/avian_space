@@ -54,6 +54,42 @@ impl PlayerGameState {
             .get(&save.ship_type)
             .cloned()
             .unwrap_or_default();
+
+        // Sanity check: saved cargo must fit in the ship's cargo hold.
+        let cargo_used: u16 = save.cargo.values().sum();
+        if cargo_used > ship_data.cargo_space {
+            warn!(
+                "Pilot \"{}\": saved cargo ({cargo_used}) exceeds ship cargo space ({}) \
+                 — save may be corrupt",
+                save.pilot_name, ship_data.cargo_space
+            );
+        }
+
+        // Sanity check: saved weapon loadout must fit in the ship's item space.
+        let loadout_space: i32 = save
+            .weapon_loadout
+            .iter()
+            .filter_map(|(weapon_type, &(count, ammo_qty))| {
+                item_universe.outfitter_items.get(weapon_type).map(|item| {
+                    let base = item.space() as i32 * count as i32;
+                    let ammo = match item {
+                        crate::item_universe::OutfitterItem::SecondaryWeapon {
+                            ammo_space, ..
+                        } => ammo_qty.unwrap_or(0) as i32 * *ammo_space as i32,
+                        _ => 0,
+                    };
+                    base + ammo
+                })
+            })
+            .sum();
+        if loadout_space > ship_data.item_space as i32 {
+            warn!(
+                "Pilot \"{}\": saved weapon loadout consumes {loadout_space} item space \
+                 but ship only has {} — save may be corrupt",
+                save.pilot_name, ship_data.item_space
+            );
+        }
+
         let ship = Ship {
             ship_type: save.ship_type.clone(),
             data: ship_data,
@@ -62,7 +98,7 @@ impl PlayerGameState {
             credits: save.credits,
             target: None,
             weapon_systems: Default::default(),
-            enemies: Some(save.enemies.clone()),
+            enemies: save.enemies.clone(),
         };
         Self {
             pilot_name: save.pilot_name,
@@ -85,12 +121,7 @@ impl PlayerGameState {
             cargo: self.player_ship.cargo.clone(),
             credits: self.player_ship.credits,
             weapon_loadout: self.weapon_loadout.clone(),
-            enemies: self
-                .player_ship
-                .enemies
-                .clone()
-                .unwrap_or(HashMap::new())
-                .clone(),
+            enemies: self.player_ship.enemies.clone(),
         }
     }
 

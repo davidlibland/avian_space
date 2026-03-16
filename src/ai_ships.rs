@@ -57,13 +57,11 @@ pub struct AIShip {
 
 pub fn ai_ship_bundle(app: &mut App) {
     app.add_systems(OnEnter(crate::PlayState::Flying), spawn_ai_ships)
-        .add_systems(Update, simple_ai_control);
+        .add_systems(Update, (simple_ai_control, land_ship));
 }
 
 pub fn spawn_ai_ships(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
     item_universe: Res<ItemUniverse>,
     star_system: Res<CurrentStarSystem>,
@@ -346,41 +344,6 @@ pub fn simple_ai_control(
                 let dist = offset.length();
                 let speed = ship_vel.0.length();
 
-                // ── Landed ───────────────────────────────────────────────────
-                if dist < LANDING_RADIUS && speed < LANDING_SPEED {
-                    // Sell all cargo at the planet's listed prices.
-                    if let Ok((_, planet)) = planet_names.get(*target_e) {
-                        let planet_name = planet.0.clone();
-                        let system_name = current_star_system.0.clone();
-                        if let Some(planet_data) = item_universe
-                            .star_systems
-                            .get(&system_name)
-                            .and_then(|s| s.planets.get(&planet_name))
-                        {
-                            for (commodity, qty) in ship.clone().cargo.iter() {
-                                if let Some(&price) = planet_data.commodities.get(commodity) {
-                                    ship.sell_cargo(commodity, *qty, price);
-                                }
-                            }
-
-                            // Traders buy the commodity with the best discount here.
-                            if matches!(ai_ship.personality, Personality::Trader) {
-                                if let Some(commodity) = item_universe
-                                    .system_planet_best_commodity_to_buy
-                                    .get(&system_name)
-                                    .and_then(|m| m.get(&planet_name))
-                                {
-                                    if let Some(&price) = planet_data.commodities.get(commodity) {
-                                        ship.buy_cargo(commodity, u16::MAX, price);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    ship.target = None;
-                    continue;
-                }
-
                 // ── Approach / brake ─────────────────────────────────────────
                 let d = &ship.data;
                 let stop_dist =
@@ -423,6 +386,74 @@ pub fn simple_ai_control(
                     });
                 }
             }
+        }
+    }
+}
+
+fn land_ship(
+    // mut collisions: MessageReader<CollisionStart>,
+    planets: Query<(&Planet, &Position)>,
+    ships: Query<(&mut Ship, &Position, &LinearVelocity, &AIShip)>,
+    item_universe: Res<ItemUniverse>,
+    current_star_system: Res<CurrentStarSystem>,
+) {
+    for (mut ship, ship_pos, vel, ai_ship) in ships {
+        match ship.target {
+            Some(Target::Planet(planet_entity)) => {
+                // ── Landed ───────────────────────────────────────────────────
+                if vel.length() < LANDING_SPEED {
+                    let Ok((planet, planet_pos)) = planets.get(planet_entity) else {
+                        continue;
+                    };
+                    if (planet_pos.0 - ship_pos.0).length() > LANDING_RADIUS {
+                        continue;
+                    }
+                    // Landed successfully, so clear the target
+                    if matches!(ship.target, Some(Target::Planet(e)) if e == planet_entity) {
+                        // Get a new target
+                        ship.target = None;
+                    }
+
+                    // Repair the ship:
+                    ship.health = ship.data.max_health;
+
+                    // Sell all cargo at the planet's listed prices.
+                    let planet_name = planet.0.clone();
+                    let system_name = current_star_system.0.clone();
+                    if let Some(planet_data) = item_universe
+                        .star_systems
+                        .get(&system_name)
+                        .and_then(|s| s.planets.get(&planet_name))
+                    {
+                        for (commodity, qty) in ship.clone().cargo.iter() {
+                            if let Some(&price) = planet_data.commodities.get(commodity) {
+                                ship.sell_cargo(commodity, *qty, price);
+                            }
+                        }
+
+                        // Traders buy the commodity with the best discount here.
+                        if matches!(ai_ship.personality, Personality::Trader) {
+                            if let Some(commodity) = item_universe
+                                .system_planet_best_commodity_to_buy
+                                .get(&system_name)
+                                .and_then(|m| m.get(&planet_name))
+                            {
+                                if let Some(&price) = planet_data.commodities.get(commodity) {
+                                    ship.buy_cargo(commodity, u16::MAX, price);
+                                }
+                            }
+                        }
+
+                        // Buy Ammo:
+                        for weapon_type in ship.clone().weapon_systems.secondary.keys() {
+                            if planet_data.outfitter.contains(weapon_type) {
+                                ship.buy_max_ammo(weapon_type, &item_universe);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => (),
         }
     }
 }
