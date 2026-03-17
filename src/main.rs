@@ -13,6 +13,7 @@ mod planets;
 use planets::planets_plugin;
 mod ai_ships;
 mod pickups;
+mod model;
 mod rl_collection;
 mod rl_obs;
 mod ship;

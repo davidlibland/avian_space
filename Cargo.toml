@@ -11,3 +11,4 @@ egui = "0.33.3"
 rand = "0.8.0"
 serde = {version="1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
+burn = { version = "0.20", default-features = false, features = ["ndarray", "std", "autodiff"] }

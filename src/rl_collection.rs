@@ -30,11 +30,12 @@ use bevy::prelude::*;
 use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
+use crate::model::{self, RLResource};
 use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_obs::{
-    self, DiscreteAction, EntitySlotData, ObsInput, TargetSlotData, DETECTION_RADIUS,
-    K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS,
+    self, DETECTION_RADIUS, DiscreteAction, EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS,
+    K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, ObsInput, TargetSlotData,
 };
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target};
 use crate::weapons::FireCommand;
@@ -108,9 +109,9 @@ pub struct BCReceiver(pub mpsc::Receiver<BCTransition>);
 pub enum AIPlayMode {
     /// Rule-based `simple_ai_control` runs for RLAgent ships; observations and
     /// rule-based actions are recorded for behavioural-cloning training.
-    #[default]
     BehavioralCloning,
     /// RLAgent ships are controlled by the RL policy (currently rule-based stub).
+    #[default]
     RLControl,
 }
 
@@ -197,6 +198,7 @@ impl Plugin for RLCollectionPlugin {
             .insert_non_send_resource(RLReceiver(rl_rx))
             .insert_resource(BCSender(bc_tx))
             .insert_non_send_resource(BCReceiver(bc_rx))
+            .insert_resource(RLResource::new())
             .init_resource::<AIPlayMode>()
             .insert_resource(RLStepTimer(Timer::from_seconds(
                 RL_STEP_PERIOD,
@@ -224,10 +226,7 @@ impl Plugin for RLCollectionPlugin {
 
 /// Read all `RLReward` events and add them to the corresponding agent's
 /// accumulated reward.
-fn accumulate_rewards(
-    mut reward_events: MessageReader<RLReward>,
-    mut agents: Query<&mut RLAgent>,
-) {
+fn accumulate_rewards(mut reward_events: MessageReader<RLReward>, mut agents: Query<&mut RLAgent>) {
     for ev in reward_events.read() {
         if let Ok(mut agent) = agents.get_mut(ev.entity) {
             agent.accumulated_reward += ev.reward;
@@ -269,6 +268,7 @@ fn rl_step(
     mode: Res<AIPlayMode>,
     rl_sender: Res<RLSender>,
     bc_sender: Res<BCSender>,
+    rl_resource: Res<RLResource>,
 ) {
     if !timer.0.tick(time.delta()).just_finished() {
         return;
@@ -287,13 +287,32 @@ fn rl_step(
         &item_universe,
     );
 
-    // ── Sub-function 2 (future): run batched model inference here ───────────
-    // (When a burn model is integrated, replace the identity pass-through
-    // below with a real forward pass over obs_data.)
+    // ── Sub-function 2: run batched model inference (RLControl mode only) ──
+    // In BehavioralCloning mode the rule-based action from compute_ai_action
+    // is used instead, so we skip the model entirely.
+    let model_actions: Option<Vec<DiscreteAction>> =
+        if *mode == AIPlayMode::RLControl && !obs_data.is_empty() {
+            let batch_size = obs_data.len();
+            let mut batch_flat =
+                Vec::with_capacity(batch_size * model::N_OBJECTS * model::NET_INPUT_DIM);
+            for (_, obs) in &obs_data {
+                batch_flat.extend(model::obs_to_model_input(obs));
+            }
+            let inference = rl_resource.inference_net.lock().unwrap();
+            let logits = inference.run_inference(batch_flat, batch_size);
+            let actions = logits
+                .chunks(model::POLICY_OUTPUT_DIM)
+                .map(model::logits_to_discrete_action)
+                .collect();
+            Some(actions)
+        } else {
+            None
+        };
 
     // ── Sub-function 3: store transitions and update agent state ───────────
     store_obs_actions(
         &obs_data,
+        model_actions.as_deref(),
         &mut agents,
         &all_positions,
         &all_velocities,
@@ -357,10 +376,7 @@ fn repeat_actions(
 /// The event is emitted in `apply_damage` (ship.rs) before the entity is
 /// despawned. Because `Commands` are deferred, the entity is still alive when
 /// this system runs.
-fn handle_rl_ship_died(
-    mut events: MessageReader<RLShipDied>,
-    rl_sender: Res<RLSender>,
-) {
+fn handle_rl_ship_died(mut events: MessageReader<RLShipDied>, rl_sender: Res<RLSender>) {
     for ev in events.read() {
         let mut transitions = ev.transitions.clone();
         // Mark the last transition as terminal.
@@ -427,12 +443,7 @@ fn build_all_observations(
         .with_excluded_entities([entity]);
 
         let nearby_hits: Vec<(Entity, f32)> = spatial_query
-            .shape_intersections(
-                &Collider::circle(DETECTION_RADIUS),
-                pos.0,
-                0.0,
-                &filter,
-            )
+            .shape_intersections(&Collider::circle(DETECTION_RADIUS), pos.0, 0.0, &filter)
             .into_iter()
             .filter_map(|hit| {
                 all_positions
@@ -452,21 +463,10 @@ fn build_all_observations(
                 .get(e)
                 .map(|v| v.0 - vel.0)
                 .unwrap_or(Vec2::ZERO);
-            let rel_pos = rl_obs::rotate_to_ego(
-                [world_offset.x, world_offset.y],
-                sin_a,
-                cos_a,
-            );
-            let rel_vel = rl_obs::rotate_to_ego(
-                [world_rel_vel.x, world_rel_vel.y],
-                sin_a,
-                cos_a,
-            );
+            let rel_pos = rl_obs::rotate_to_ego([world_offset.x, world_offset.y], sin_a, cos_a);
+            let rel_vel = rl_obs::rotate_to_ego([world_rel_vel.x, world_rel_vel.y], sin_a, cos_a);
             EntitySlotData {
-                rel_pos: [
-                    rel_pos[0] / DETECTION_RADIUS,
-                    rel_pos[1] / DETECTION_RADIUS,
-                ],
+                rel_pos: [rel_pos[0] / DETECTION_RADIUS, rel_pos[1] / DETECTION_RADIUS],
                 rel_vel: [rel_vel[0] / 300.0, rel_vel[1] / 300.0],
                 extra,
             }
@@ -492,7 +492,9 @@ fn build_all_observations(
             .filter(|(e, _)| {
                 ship_query
                     .get(*e)
-                    .map(|(_, other_ship, _)| ship.should_engage(&ShipHostility(other_ship.enemies.clone())))
+                    .map(|(_, other_ship, _)| {
+                        ship.should_engage(&ShipHostility(other_ship.enemies.clone()))
+                    })
                     .unwrap_or(false)
             })
             .cloned()
@@ -504,7 +506,9 @@ fn build_all_observations(
             .filter(|(e, _)| {
                 ship_query
                     .get(*e)
-                    .map(|(_, other_ship, _)| !ship.should_engage(&ShipHostility(other_ship.enemies.clone())))
+                    .map(|(_, other_ship, _)| {
+                        !ship.should_engage(&ShipHostility(other_ship.enemies.clone()))
+                    })
                     .unwrap_or(false)
             })
             .cloned()
@@ -557,7 +561,16 @@ fn build_all_observations(
             .collect();
 
         // Target slot.
-        let target_slot = build_target_slot(&ship, pos, vel, all_positions, all_velocities, sin_a, cos_a, &ship_query);
+        let target_slot = build_target_slot(
+            &ship,
+            pos,
+            vel,
+            all_positions,
+            all_velocities,
+            sin_a,
+            cos_a,
+            &ship_query,
+        );
 
         let obs_input = ObsInput {
             personality: &agent.personality,
@@ -602,16 +615,8 @@ fn build_target_slot(
     let world_offset = target_pos.0 - pos.0;
     let world_rel_vel = target_vel - vel.0;
 
-    let rel_pos_ego = rl_obs::rotate_to_ego(
-        [world_offset.x, world_offset.y],
-        sin_a,
-        cos_a,
-    );
-    let rel_vel_ego = rl_obs::rotate_to_ego(
-        [world_rel_vel.x, world_rel_vel.y],
-        sin_a,
-        cos_a,
-    );
+    let rel_pos_ego = rl_obs::rotate_to_ego([world_offset.x, world_offset.y], sin_a, cos_a);
+    let rel_vel_ego = rl_obs::rotate_to_ego([world_rel_vel.x, world_rel_vel.y], sin_a, cos_a);
 
     let (entity_type, hostility, value_hint) = match target {
         Target::Ship(e) => {
@@ -640,8 +645,14 @@ fn build_target_slot(
 
 /// Store the previous (obs, action, reward) transition for each agent, update
 /// agent state with the new observation and action, and flush full segments.
+///
+/// `model_actions` — when `Some`, contains one `DiscreteAction` per entry in
+/// `decisions` (same order). Used as the executed action in `RLControl` mode.
+/// In `BehavioralCloning` mode (or when `None`) the rule-based action from
+/// `compute_ai_action` is used for both execution and BC labels.
 fn store_obs_actions(
     decisions: &[(Entity, Vec<f32>)],
+    model_actions: Option<&[DiscreteAction]>,
     agents: &mut Query<(
         Entity,
         &mut RLAgent,
@@ -660,15 +671,16 @@ fn store_obs_actions(
     bc_sender: &BCSender,
     mode: &AIPlayMode,
 ) {
-    for (entity, obs) in decisions {
+    for (idx, (entity, obs)) in decisions.iter().enumerate() {
         let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _)) =
             agents.get_mut(*entity)
         else {
             continue;
         };
 
-        // Compute the rule-based action using the same logic as simple_ai_control.
-        let accurate_action = if let Some(raw) = compute_ai_action(
+        // Always compute the rule-based action — used as BC label and as the
+        // fallback when no model action is available.
+        let rule_based_action = if let Some(raw) = compute_ai_action(
             &*ship,
             pos.0,
             vel.0,
@@ -702,11 +714,21 @@ fn store_obs_actions(
             (1, 1, 0, 0) // no target → coast straight
         };
 
+        // In RLControl mode use the model's action; otherwise use rule-based.
+        let executed_action: DiscreteAction = if *mode == AIPlayMode::RLControl {
+            model_actions
+                .and_then(|ma| ma.get(idx))
+                .copied()
+                .unwrap_or(rule_based_action)
+        } else {
+            rule_based_action
+        };
+        // BC label is always the rule-based action (what simple_ai_control would do).
+        let accurate_action = rule_based_action;
+
         // Store the PREVIOUS step's transition (obs recorded at t-1, action taken
         // at t-1, rewards accumulated between t-1 and t).
-        if let (Some(last_obs), Some(last_action)) =
-            (agent.last_obs.clone(), agent.last_action)
-        {
+        if let (Some(last_obs), Some(last_action)) = (agent.last_obs.clone(), agent.last_action) {
             let reward = agent.accumulated_reward;
             // Add health-fraction as a per-step reward signal.
             let health_reward = ship.health as f32 / ship.data.max_health.max(1) as f32;
@@ -752,7 +774,7 @@ fn store_obs_actions(
 
         // Update agent with new observation and action.
         agent.last_obs = Some(obs.clone());
-        agent.last_action = Some(accurate_action);
+        agent.last_action = Some(executed_action);
     }
 }
 
