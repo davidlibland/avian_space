@@ -257,6 +257,11 @@ impl InferenceNet {
             .expect("inference logit extraction failed")
     }
 
+    /// Serialize the current weights to bytes (compatible with [`Self::load_bytes`]).
+    pub fn to_bytes(&self) -> Vec<u8> {
+        net_to_bytes(self.net.clone())
+    }
+
     /// Replace weights from a byte buffer produced by [`net_to_bytes`].
     ///
     /// Called by the training thread to push updated weights.
@@ -434,6 +439,56 @@ pub fn load_inference_net(path: &str) -> Option<InferenceNet> {
             None
         }
     }
+}
+
+/// Save a `TrainBackend` net to disk as an inference-compatible checkpoint.
+///
+/// Strips the autodiff wrapper via `.valid()` so the file can be loaded by
+/// [`load_inference_net`] on any backend.
+pub fn save_training_net(net: &RLNet<TrainBackend>, path: &str) {
+    // Serialise through bytes (backend-agnostic) then write to disk so the
+    // file is loadable by `load_inference_net` with any backend.
+    let bytes = net_to_bytes(net.clone());
+    let file = format!("{path}.bin");
+    if let Err(e) = std::fs::write(&file, bytes) {
+        eprintln!("[model] Failed to save checkpoint to {file}: {e}");
+    } else {
+        println!("[model] Checkpoint saved to {file}");
+    }
+}
+
+/// Load a checkpoint from `path` into a `TrainBackend` net, returning `None`
+/// on failure.  Uses [`load_inference_net`] as an intermediary so the on-disk
+/// format is always `InferBackend` (written by [`save_training_net`]).
+pub fn load_training_net(
+    path: &str,
+    device: &<TrainBackend as Backend>::Device,
+) -> Option<RLNet<TrainBackend>> {
+    use burn::record::{BinBytesRecorder, FullPrecisionSettings, Recorder};
+    // Load via inference path first, then transfer bytes to the training backend.
+    let infer = load_inference_net(path)?;
+    let bytes = infer.to_bytes();
+    let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
+    match Recorder::<TrainBackend>::load(&rec, bytes, device) {
+        Ok(record) => {
+            let net =
+                RLNet::<TrainBackend>::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM).load_record(record);
+            println!("[model] Loaded training net from {path}");
+            Some(net)
+        }
+        Err(e) => {
+            eprintln!("[model] Failed to deserialise training net from {path}: {e}");
+            None
+        }
+    }
+}
+
+/// Serialize a `TrainBackend` net to bytes via `.valid()` + `net_to_bytes`.
+///
+/// Convenience wrapper so callers in other modules don't need burn's
+/// `AutodiffModule` trait in scope.
+pub fn training_net_to_bytes(net: &RLNet<TrainBackend>) -> Vec<u8> {
+    net_to_bytes(net.clone())
 }
 
 /// Serialize a training-backend net to bytes for cross-thread weight transfer.

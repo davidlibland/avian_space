@@ -22,15 +22,24 @@
 /// # Decision rate
 /// `rl_step` is gated by a 4 Hz timer. Between ticks, `repeat_actions` re-emits the last
 /// chosen action every Update frame so the ship keeps moving.
+use std::collections::VecDeque;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
+use burn::nn::loss::CrossEntropyLossConfig;
+use burn::optim::{GradientsParams, Optimizer};
+use burn::tensor::{Int, TensorData};
+use rand::Rng;
 
 use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
-use crate::model::{self, RLResource};
+use crate::model::{
+    self, HIDDEN_DIM, InferenceNet, N_OBJECTS, NET_INPUT_DIM, POLICY_OUTPUT_DIM, RLInner,
+    RLResource, TrainBackend, obs_to_model_input, training_net_to_bytes,
+};
 use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_obs::{
@@ -50,6 +59,20 @@ pub const RL_SEGMENT_LEN: usize = 128;
 
 /// Decision rate in seconds.
 const RL_STEP_PERIOD: f32 = 0.25; // 4 Hz
+
+// BC training hyperparameters
+/// Maximum number of `BCTransition`s kept in the replay buffer.
+const BC_BUFFER_SIZE: usize = 32_768;
+/// Mini-batch size for each BC gradient step.
+const BC_BATCH_SIZE: usize = 256;
+/// Adam learning rate for BC pre-training.
+const BC_LR: f64 = 3e-4;
+/// Push weights to the inference net every N gradient steps.
+const BC_WEIGHT_SYNC_INTERVAL: usize = 50;
+/// Save a checkpoint to disk every N gradient steps.
+const BC_SAVE_INTERVAL: usize = 1_000;
+/// Checkpoint file path (burn appends `.bin`).
+const BC_SAVE_PATH: &str = "bc_policy";
 
 // ---------------------------------------------------------------------------
 // Types sent to the trainer thread
@@ -99,19 +122,15 @@ pub struct RLReceiver(pub mpsc::Receiver<Segment>);
 #[derive(Resource)]
 pub struct BCSender(pub mpsc::SyncSender<BCTransition>);
 
-/// Receiver side of the BC data channel.
-/// Stored as a `NonSend` resource because `Receiver` is not `Sync`.
-pub struct BCReceiver(pub mpsc::Receiver<BCTransition>);
-
 /// Controls whether AI ships are driven by the rule-based system (for BC collection)
 /// or by the RL policy.
 #[derive(Resource, Default, PartialEq, Eq, Clone, Copy, Debug)]
 pub enum AIPlayMode {
     /// Rule-based `simple_ai_control` runs for RLAgent ships; observations and
     /// rule-based actions are recorded for behavioural-cloning training.
+    #[default]
     BehavioralCloning,
     /// RLAgent ships are controlled by the RL policy (currently rule-based stub).
-    #[default]
     RLControl,
 }
 
@@ -187,19 +206,46 @@ impl RLAgent {
 // Plugin
 // ---------------------------------------------------------------------------
 
-pub struct RLCollectionPlugin;
+pub struct RLCollectionPlugin {
+    pub mode: crate::AppMode,
+}
 
 impl Plugin for RLCollectionPlugin {
     fn build(&self, app: &mut App) {
         let (rl_tx, rl_rx) = mpsc::sync_channel::<Segment>(1024);
         let (bc_tx, bc_rx) = mpsc::sync_channel::<BCTransition>(65536);
 
+        // Create RLResource first so we can clone the Arc before inserting it.
+        let rl_resource = RLResource::new();
+        let inference_net_arc = Arc::clone(&rl_resource.inference_net);
+
+        // Spawn training threads only for the modes that need them.
+        match self.mode {
+            crate::AppMode::BCTraining => {
+                spawn_bc_training_thread(bc_rx, inference_net_arc);
+            }
+            crate::AppMode::RLTraining => {
+                // TODO: spawn PPO training thread here.
+                // For now the channel has no consumer; data is silently dropped.
+                drop(bc_rx);
+            }
+            crate::AppMode::Classic | crate::AppMode::Inference => {
+                // No training — channels have no consumer; data is silently dropped.
+                drop(bc_rx);
+            }
+        }
+
+        // Map the app mode to the in-game AI control mode.
+        let ai_play_mode = match self.mode {
+            crate::AppMode::Classic | crate::AppMode::BCTraining => AIPlayMode::BehavioralCloning,
+            crate::AppMode::Inference | crate::AppMode::RLTraining => AIPlayMode::RLControl,
+        };
+
         app.insert_resource(RLSender(rl_tx))
             .insert_non_send_resource(RLReceiver(rl_rx))
             .insert_resource(BCSender(bc_tx))
-            .insert_non_send_resource(BCReceiver(bc_rx))
-            .insert_resource(RLResource::new())
-            .init_resource::<AIPlayMode>()
+            .insert_resource(rl_resource)
+            .insert_resource(ai_play_mode)
             .insert_resource(RLStepTimer(Timer::from_seconds(
                 RL_STEP_PERIOD,
                 TimerMode::Repeating,
@@ -776,6 +822,148 @@ fn store_obs_actions(
         agent.last_obs = Some(obs.clone());
         agent.last_action = Some(executed_action);
     }
+}
+
+// ---------------------------------------------------------------------------
+// BC training thread
+// ---------------------------------------------------------------------------
+
+/// Spawn the behavioural-cloning pre-training thread.
+///
+/// The thread owns `bc_rx` and continuously:
+/// 1. Drains `BCTransition`s into a circular replay buffer.
+/// 2. Samples random mini-batches and runs Adam gradient steps, minimising
+///    cross-entropy loss on all four action heads simultaneously.
+/// 3. Every [`BC_WEIGHT_SYNC_INTERVAL`] steps pushes serialised weights to
+///    `inference_net` so the game thread always uses the latest policy.
+/// 4. Every [`BC_SAVE_INTERVAL`] steps saves a checkpoint to [`BC_SAVE_PATH`]`.bin`.
+///
+/// On startup the thread looks for an existing checkpoint and, if found, loads
+/// it into both the training net and the inference net before the first
+/// gradient step.
+fn spawn_bc_training_thread(
+    bc_rx: mpsc::Receiver<BCTransition>,
+    inference_net: Arc<Mutex<InferenceNet>>,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let device = Default::default(); // <TrainBackend as Backend>::Device
+        let mut inner = RLInner::<TrainBackend>::new(&device);
+
+        // Try to load an existing BC checkpoint into the training net.
+        if let Some(net) = model::load_training_net(BC_SAVE_PATH, &device) {
+            inner.policy_net = Some(net);
+            // Sync the loaded weights to the inference net immediately.
+            let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
+            if let Ok(mut lock) = inference_net.lock() {
+                lock.load_bytes(bytes);
+            }
+            println!("[bc] Resumed from checkpoint {BC_SAVE_PATH}");
+        } else {
+            println!("[bc] No checkpoint found — starting from scratch.");
+        }
+
+        let mut buffer: VecDeque<BCTransition> = VecDeque::with_capacity(BC_BUFFER_SIZE);
+        let mut step = 0usize;
+        let mut rng = rand::thread_rng();
+
+        loop {
+            // Drain incoming BC data.
+            match bc_rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                Ok(t) => {
+                    if buffer.len() >= BC_BUFFER_SIZE {
+                        buffer.pop_front();
+                    }
+                    buffer.push_back(t);
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    println!("[bc] Channel disconnected — saving final checkpoint.");
+                    save_bc_checkpoint(inner.policy_net.as_ref().unwrap());
+                    break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            }
+            while let Ok(t) = bc_rx.try_recv() {
+                if buffer.len() >= BC_BUFFER_SIZE {
+                    buffer.pop_front();
+                }
+                buffer.push_back(t);
+            }
+
+            if buffer.len() < BC_BATCH_SIZE {
+                continue;
+            }
+
+            // ── Build mini-batch ─────────────────────────────────────────────
+            let n = buffer.len();
+            let batch: Vec<&BCTransition> = (0..BC_BATCH_SIZE)
+                .map(|_| &buffer[rng.gen_range(0..n)])
+                .collect();
+
+            let flat: Vec<f32> = batch
+                .iter()
+                .flat_map(|t| obs_to_model_input(&t.obs))
+                .collect();
+            let input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
+                TensorData::new(flat, [BC_BATCH_SIZE, N_OBJECTS, NET_INPUT_DIM]),
+                &device,
+            );
+
+            // Integer label tensors for each factored head.
+            // DiscreteAction = (turn_idx, thrust_idx, fire_primary, fire_secondary)
+            let mk_labels =
+                |f: fn(&BCTransition) -> i64| -> burn::tensor::Tensor<TrainBackend, 1, Int> {
+                    let v: Vec<i64> = batch.iter().map(|t| f(t)).collect();
+                    burn::tensor::Tensor::from_data(TensorData::new(v, [BC_BATCH_SIZE]), &device)
+                };
+            let turn_t = mk_labels(|t| t.action.0 as i64);
+            let thrust_t = mk_labels(|t| t.action.1 as i64);
+            let fp_t = mk_labels(|t| t.action.2 as i64);
+            let fs_t = mk_labels(|t| t.action.3 as i64);
+
+            // ── Forward + loss ───────────────────────────────────────────────
+            let grads = {
+                let net = inner.policy_net.as_ref().unwrap();
+                let logits = net.forward(input); // [B, 9]
+
+                let loss_fn = CrossEntropyLossConfig::new().init::<TrainBackend>(&device);
+                // Each head's loss is already mean-reduced over the batch.
+                let turn_loss = loss_fn.forward(logits.clone().narrow(1, 0, 3), turn_t);
+                let thrust_loss = loss_fn.forward(logits.clone().narrow(1, 3, 2), thrust_t);
+                let fp_loss = loss_fn.forward(logits.clone().narrow(1, 5, 2), fp_t);
+                let fs_loss = loss_fn.forward(logits.narrow(1, 7, 2), fs_t);
+                let total_loss = turn_loss + thrust_loss + fp_loss + fs_loss;
+
+                if step % 100 == 0 {
+                    let v = total_loss.clone().into_scalar();
+                    println!("[bc] step={step:>6}  loss={v:.4}  buffer={}", buffer.len());
+                }
+
+                let raw = total_loss.backward();
+                GradientsParams::from_grads(raw, net)
+            };
+
+            let net = inner.policy_net.take().unwrap();
+            inner.policy_net = Some(inner.policy_optim.step(BC_LR, net, grads));
+            step += 1;
+
+            // ── Sync weights to inference net ────────────────────────────────
+            if step % BC_WEIGHT_SYNC_INTERVAL == 0 {
+                let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
+                if let Ok(mut lock) = inference_net.lock() {
+                    lock.load_bytes(bytes);
+                }
+            }
+
+            // ── Periodic checkpoint ──────────────────────────────────────────
+            if step % BC_SAVE_INTERVAL == 0 {
+                save_bc_checkpoint(inner.policy_net.as_ref().unwrap());
+            }
+        }
+    })
+}
+
+fn save_bc_checkpoint(net: &model::RLNet<TrainBackend>) {
+    model::save_training_net(net, BC_SAVE_PATH);
 }
 
 // ---------------------------------------------------------------------------

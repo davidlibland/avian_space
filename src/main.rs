@@ -91,7 +91,36 @@ pub struct TravelContext {
     pub saved_max_speed: f32,
 }
 
+/// Top-level AI control / training mode selected via command-line flags.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AppMode {
+    /// AI ships use rule-based control only; no training thread.
+    Classic,
+    /// AI ships use the RL neural net for control; no training thread.
+    Inference,
+    /// AI ships use rule-based control; BC training thread is started.
+    BCTraining,
+    /// AI ships use the RL neural net for control; RL training thread is started.
+    RLTraining,
+}
+
+fn parse_app_mode() -> AppMode {
+    let args: Vec<String> = std::env::args().collect();
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--classic"                     => return AppMode::Classic,
+            "--inference"                   => return AppMode::Inference,
+            "--bc-training" | "--bc"        => return AppMode::BCTraining,
+            "--rl-training" | "--rl"        => return AppMode::RLTraining,
+            _ => {}
+        }
+    }
+    // Default: BC training (preserves previous behaviour).
+    AppMode::BCTraining
+}
+
 fn main() {
+    let app_mode = parse_app_mode();
     App::new()
         .add_plugins((
             DefaultPlugins,
@@ -108,7 +137,7 @@ fn main() {
             planets_plugin,
             asteroid_plugin,
             ai_ship_bundle,
-        RLCollectionPlugin,
+            RLCollectionPlugin { mode: app_mode },
         ))
         .add_plugins((
             explosions_plugin,
