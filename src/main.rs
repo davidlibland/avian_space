@@ -2,6 +2,7 @@ use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
 mod asteroids;
+mod experiments;
 mod explosions;
 mod game_save;
 mod hud;
@@ -104,23 +105,32 @@ pub enum AppMode {
     RLTraining,
 }
 
-fn parse_app_mode() -> AppMode {
+/// Parsed command-line arguments.
+pub struct AppArgs {
+    pub mode: AppMode,
+    /// When true, ignore any existing checkpoint and start a fresh run.
+    pub fresh: bool,
+}
+
+fn parse_args() -> AppArgs {
     let args: Vec<String> = std::env::args().collect();
+    let mut mode = AppMode::BCTraining; // default: preserves previous behaviour
+    let mut fresh = false;
     for arg in &args[1..] {
         match arg.as_str() {
-            "--classic"                     => return AppMode::Classic,
-            "--inference"                   => return AppMode::Inference,
-            "--bc-training" | "--bc"        => return AppMode::BCTraining,
-            "--rl-training" | "--rl"        => return AppMode::RLTraining,
+            "--classic"              => mode = AppMode::Classic,
+            "--inference"            => mode = AppMode::Inference,
+            "--bc-training" | "--bc" => mode = AppMode::BCTraining,
+            "--rl-training" | "--rl" => mode = AppMode::RLTraining,
+            "--fresh"                => fresh = true,
             _ => {}
         }
     }
-    // Default: BC training (preserves previous behaviour).
-    AppMode::BCTraining
+    AppArgs { mode, fresh }
 }
 
 fn main() {
-    let app_mode = parse_app_mode();
+    let AppArgs { mode: app_mode, fresh } = parse_args();
     App::new()
         .add_plugins((
             DefaultPlugins,
@@ -137,7 +147,7 @@ fn main() {
             planets_plugin,
             asteroid_plugin,
             ai_ship_bundle,
-            RLCollectionPlugin { mode: app_mode },
+            RLCollectionPlugin { mode: app_mode, fresh },
         ))
         .add_plugins((
             explosions_plugin,

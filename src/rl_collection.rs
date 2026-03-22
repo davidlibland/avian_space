@@ -71,8 +71,6 @@ const BC_LR: f64 = 3e-4;
 const BC_WEIGHT_SYNC_INTERVAL: usize = 50;
 /// Save a checkpoint to disk every N gradient steps.
 const BC_SAVE_INTERVAL: usize = 1_000;
-/// Checkpoint file path (burn appends `.bin`).
-const BC_SAVE_PATH: &str = "bc_policy";
 
 // ---------------------------------------------------------------------------
 // Types sent to the trainer thread
@@ -208,6 +206,7 @@ impl RLAgent {
 
 pub struct RLCollectionPlugin {
     pub mode: crate::AppMode,
+    pub fresh: bool,
 }
 
 impl Plugin for RLCollectionPlugin {
@@ -219,10 +218,13 @@ impl Plugin for RLCollectionPlugin {
         let rl_resource = RLResource::new();
         let inference_net_arc = Arc::clone(&rl_resource.inference_net);
 
+        // Resolve the run directory once; training threads own it from here.
+        let experiment = crate::experiments::setup_experiment(self.fresh);
+
         // Spawn training threads only for the modes that need them.
         match self.mode {
             crate::AppMode::BCTraining => {
-                spawn_bc_training_thread(bc_rx, inference_net_arc);
+                spawn_bc_training_thread(bc_rx, inference_net_arc, experiment);
             }
             crate::AppMode::RLTraining => {
                 // TODO: spawn PPO training thread here.
@@ -844,22 +846,29 @@ fn store_obs_actions(
 fn spawn_bc_training_thread(
     bc_rx: mpsc::Receiver<BCTransition>,
     inference_net: Arc<Mutex<InferenceNet>>,
+    experiment: crate::experiments::ExperimentSetup,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let device = Default::default(); // <TrainBackend as Backend>::Device
         let mut inner = RLInner::<TrainBackend>::new(&device);
 
+        let checkpoint_path = experiment.policy_checkpoint_path();
+
         // Try to load an existing BC checkpoint into the training net.
-        if let Some(net) = model::load_training_net(BC_SAVE_PATH, &device) {
-            inner.policy_net = Some(net);
-            // Sync the loaded weights to the inference net immediately.
-            let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
-            if let Ok(mut lock) = inference_net.lock() {
-                lock.load_bytes(bytes);
+        if !experiment.is_fresh {
+            if let Some(net) = model::load_training_net(&checkpoint_path, &device) {
+                inner.policy_net = Some(net);
+                // Sync the loaded weights to the inference net immediately.
+                let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
+                if let Ok(mut lock) = inference_net.lock() {
+                    lock.load_bytes(bytes);
+                }
+                println!("[bc] Resumed from checkpoint {checkpoint_path}");
+            } else {
+                println!("[bc] No checkpoint found at {checkpoint_path} — starting from scratch.");
             }
-            println!("[bc] Resumed from checkpoint {BC_SAVE_PATH}");
         } else {
-            println!("[bc] No checkpoint found — starting from scratch.");
+            println!("[bc] Fresh run — skipping checkpoint load.");
         }
 
         let mut buffer: VecDeque<BCTransition> = VecDeque::with_capacity(BC_BUFFER_SIZE);
@@ -877,7 +886,7 @@ fn spawn_bc_training_thread(
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                     println!("[bc] Channel disconnected — saving final checkpoint.");
-                    save_bc_checkpoint(inner.policy_net.as_ref().unwrap());
+                    save_bc_checkpoint(inner.policy_net.as_ref().unwrap(), &checkpoint_path);
                     break;
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
@@ -956,14 +965,14 @@ fn spawn_bc_training_thread(
 
             // ── Periodic checkpoint ──────────────────────────────────────────
             if step % BC_SAVE_INTERVAL == 0 {
-                save_bc_checkpoint(inner.policy_net.as_ref().unwrap());
+                save_bc_checkpoint(inner.policy_net.as_ref().unwrap(), &checkpoint_path);
             }
         }
     })
 }
 
-fn save_bc_checkpoint(net: &model::RLNet<TrainBackend>) {
-    model::save_training_net(net, BC_SAVE_PATH);
+fn save_bc_checkpoint(net: &model::RLNet<TrainBackend>, path: &str) {
+    model::save_training_net(net, path);
 }
 
 // ---------------------------------------------------------------------------
