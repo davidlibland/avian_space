@@ -291,6 +291,13 @@ pub fn spawn_growing_asteroid(
     let rot = rng.gen_range(-(0.1 * std::f32::consts::PI)..(0.1 * std::f32::consts::PI));
     let mesh = polygon_mesh(&verts);
 
+    // Sensor colliders don't contribute to mass, so we provide it explicitly.
+    // Values match what Avian2D would compute from ColliderDensity(0.5) + Collider::circle(size):
+    //   mass            = density × π × r²
+    //   angular_inertia = ½ × mass × r²   (solid disk)
+    let mass_value = 0.5 * PI * size * size;
+    let inertia_value = 0.5 * mass_value * size * size;
+
     // Split across two inserts because Bevy's tuple Bundle limit is 15 items.
     commands
         .spawn((
@@ -318,6 +325,9 @@ pub fn spawn_growing_asteroid(
             RigidBody::Dynamic,
         ))
         .insert((
+            // Explicit mass so Avian2D doesn't warn about a massless dynamic body.
+            Mass(mass_value),
+            AngularInertia(inertia_value),
             ColliderDensity(0.5),
             CollisionEventsEnabled,
             Restitution::new(1.0),

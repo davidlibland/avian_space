@@ -13,8 +13,8 @@ mod planet_ui;
 mod planets;
 use planets::planets_plugin;
 mod ai_ships;
-mod pickups;
 mod model;
+mod pickups;
 mod rl_collection;
 mod rl_obs;
 mod ship;
@@ -22,7 +22,6 @@ mod starfield;
 mod utils;
 mod weapons;
 use ai_ships::ai_ship_bundle;
-use rl_collection::RLCollectionPlugin;
 use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
 use explosions::explosions_plugin;
 use game_save::game_save_plugin;
@@ -33,6 +32,7 @@ use main_menu::main_menu_plugin;
 use pickups::pickup_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
+use rl_collection::RLCollectionPlugin;
 use ship::{DamageShip, ScoreHit, Ship, ShipCommand, Target, ship_plugin};
 use starfield::StarfieldPlugin;
 use utils::safe_despawn;
@@ -118,19 +118,28 @@ fn parse_args() -> AppArgs {
     let mut fresh = false;
     for arg in &args[1..] {
         match arg.as_str() {
-            "--classic"              => mode = AppMode::Classic,
-            "--inference"            => mode = AppMode::Inference,
+            "--classic" => mode = AppMode::Classic,
+            "--inference" => mode = AppMode::Inference,
             "--bc-training" | "--bc" => mode = AppMode::BCTraining,
             "--rl-training" | "--rl" => mode = AppMode::RLTraining,
-            "--fresh"                => fresh = true,
+            "--fresh" => fresh = true,
             _ => {}
         }
     }
     AppArgs { mode, fresh }
 }
 
+#[derive(Resource)]
+enum ModelMode {
+    Training,
+    Eval,
+}
+
 fn main() {
-    let AppArgs { mode: app_mode, fresh } = parse_args();
+    let AppArgs {
+        mode: app_mode,
+        fresh,
+    } = parse_args();
     App::new()
         .add_plugins((
             DefaultPlugins,
@@ -147,7 +156,10 @@ fn main() {
             planets_plugin,
             asteroid_plugin,
             ai_ship_bundle,
-            RLCollectionPlugin { mode: app_mode, fresh },
+            RLCollectionPlugin {
+                mode: app_mode,
+                fresh,
+            },
         ))
         .add_plugins((
             explosions_plugin,
@@ -159,6 +171,12 @@ fn main() {
         .init_resource::<TravelContext>()
         .insert_resource(CurrentStarSystem("sol".to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
+        .insert_resource(match app_mode {
+            AppMode::BCTraining => ModelMode::Training,
+            AppMode::RLTraining => ModelMode::Training,
+            AppMode::Classic => ModelMode::Eval,
+            AppMode::Inference => ModelMode::Eval,
+        })
         .add_systems(Startup, setup)
         .add_systems(
             OnEnter(PlayState::Flying),

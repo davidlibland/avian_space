@@ -34,6 +34,11 @@ impl ExperimentSetup {
         format!("{}/policy", self.run_dir)
     }
 
+    /// Path for the serialised BC replay buffer.
+    pub fn buffer_checkpoint_path(&self) -> String {
+        format!("{}/bc_buffer.bin", self.run_dir)
+    }
+
     /// Returns true if a checkpoint file is present on disk.
     pub fn checkpoint_exists(&self) -> bool {
         Path::new(&format!("{}.bin", self.policy_checkpoint_path())).exists()

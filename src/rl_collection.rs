@@ -71,6 +71,9 @@ const BC_LR: f64 = 3e-4;
 const BC_WEIGHT_SYNC_INTERVAL: usize = 50;
 /// Save a checkpoint to disk every N gradient steps.
 const BC_SAVE_INTERVAL: usize = 1_000;
+/// Number of gradient steps to run per drain cycle when the buffer is full.
+/// Higher values keep the compute busy between data-drain pauses.
+const BC_STEPS_PER_DRAIN: usize = 10;
 
 // ---------------------------------------------------------------------------
 // Types sent to the trainer thread
@@ -98,9 +101,14 @@ pub struct Segment {
     pub bootstrap_value: Option<f32>,
 }
 
-/// A (obs, action) pair for behavioural-cloning pre-training.
+/// A (model_input, action) pair for behavioural-cloning pre-training.
+///
+/// `model_input` already holds the output of `obs_to_model_input` —
+/// i.e. the `[N_OBJECTS × NET_INPUT_DIM]` flat tensor row.  The transform
+/// is done once at collection time so the training thread pays no per-sample
+/// CPU cost per gradient step.
 pub struct BCTransition {
-    pub obs: Vec<f32>,
+    pub model_input: Vec<f32>,
     pub action: DiscreteAction,
 }
 
@@ -460,10 +468,7 @@ fn handle_rl_ship_died(mut events: MessageReader<RLShipDied>, rl_sender: Res<RLS
 /// Unlike death, the last transition is NOT marked as terminal (`done = false`).
 /// `bootstrap_value` is left as `None` — the jump ends the trajectory without
 /// a future-value estimate.
-fn handle_rl_ship_jumped(
-    mut events: MessageReader<RLShipJumped>,
-    rl_sender: Res<RLSender>,
-) {
+fn handle_rl_ship_jumped(mut events: MessageReader<RLShipJumped>, rl_sender: Res<RLSender>) {
     for ev in events.read() {
         if ev.transitions.is_empty() {
             continue;
@@ -833,10 +838,11 @@ fn store_obs_actions(
             agent.accumulated_reward = 0.0;
             agent.steps_since_flush += 1;
 
-            // Also send BC data.
+            // Also send BC data.  Pre-process obs → model_input here so the
+            // training thread pays zero per-sample transform cost per step.
             if *mode == AIPlayMode::BehavioralCloning {
                 let bc = BCTransition {
-                    obs: transition.obs.clone(),
+                    model_input: obs_to_model_input(&transition.obs),
                     action: accurate_action,
                 };
                 let _ = bc_sender.0.try_send(bc);
@@ -908,26 +914,51 @@ fn spawn_bc_training_thread(
             println!("[bc] Fresh run — skipping checkpoint load.");
         }
 
-        let mut buffer: VecDeque<BCTransition> = VecDeque::with_capacity(BC_BUFFER_SIZE);
+        let buffer_path = experiment.buffer_checkpoint_path();
+
+        // Try to restore a previously saved replay buffer so training starts hot.
+        let mut buffer: VecDeque<BCTransition> = if !experiment.is_fresh {
+            load_bc_buffer(&buffer_path)
+                .map(|b| {
+                    println!("[bc] Restored buffer with {} transitions from {buffer_path}", b.len());
+                    b
+                })
+                .unwrap_or_else(|| {
+                    println!("[bc] No buffer checkpoint found at {buffer_path} — starting empty.");
+                    VecDeque::with_capacity(BC_BUFFER_SIZE)
+                })
+        } else {
+            println!("[bc] Fresh run — starting with empty buffer.");
+            VecDeque::with_capacity(BC_BUFFER_SIZE)
+        };
         let mut step = 0usize;
         let mut rng = rand::thread_rng();
 
         loop {
-            // Drain incoming BC data.
-            match bc_rx.recv_timeout(std::time::Duration::from_millis(50)) {
-                Ok(t) => {
-                    if buffer.len() >= BC_BUFFER_SIZE {
-                        buffer.pop_front();
+            // ── Drain incoming data ──────────────────────────────────────────
+            // Only block waiting for new transitions when the buffer is too
+            // small to train.  Once we have enough data, drain non-blocking
+            // and go straight to gradient steps.
+            if buffer.len() < BC_BATCH_SIZE {
+                match bc_rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                    Ok(t) => {
+                        if buffer.len() >= BC_BUFFER_SIZE {
+                            buffer.pop_front();
+                        }
+                        buffer.push_back(t);
                     }
-                    buffer.push_back(t);
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                        println!("[bc] Channel disconnected — saving final checkpoint.");
+                        if let Some(net) = inner.policy_net.as_ref() {
+                            save_bc_checkpoint(net, &checkpoint_path);
+                        }
+                        save_bc_buffer(&buffer, &buffer_path);
+                        break;
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    println!("[bc] Channel disconnected — saving final checkpoint.");
-                    save_bc_checkpoint(inner.policy_net.as_ref().unwrap(), &checkpoint_path);
-                    break;
-                }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             }
+            // Always drain the rest of the channel non-blocking.
             while let Ok(t) = bc_rx.try_recv() {
                 if buffer.len() >= BC_BUFFER_SIZE {
                     buffer.pop_front();
@@ -939,70 +970,90 @@ fn spawn_bc_training_thread(
                 continue;
             }
 
-            // ── Build mini-batch ─────────────────────────────────────────────
-            let n = buffer.len();
-            let batch: Vec<&BCTransition> = (0..BC_BATCH_SIZE)
-                .map(|_| &buffer[rng.gen_range(0..n)])
-                .collect();
+            // ── One-time setup hoisted above the inner loop ──────────────────
+            let loss_fn = CrossEntropyLossConfig::new().init::<TrainBackend>(&device);
 
-            let flat: Vec<f32> = batch
-                .iter()
-                .flat_map(|t| obs_to_model_input(&t.obs))
-                .collect();
-            let input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
-                TensorData::new(flat, [BC_BATCH_SIZE, N_OBJECTS, NET_INPUT_DIM]),
-                &device,
-            );
+            // ── Multiple gradient steps per drain cycle ──────────────────────
+            // Amortises the drain overhead: run BC_STEPS_PER_DRAIN steps
+            // before going back to check for new data.
+            for _ in 0..BC_STEPS_PER_DRAIN {
+                let n = buffer.len();
 
-            // Integer label tensors for each factored head.
-            // DiscreteAction = (turn_idx, thrust_idx, fire_primary, fire_secondary)
-            let mk_labels =
-                |f: fn(&BCTransition) -> i64| -> burn::tensor::Tensor<TrainBackend, 1, Int> {
-                    let v: Vec<i64> = batch.iter().map(|t| f(t)).collect();
-                    burn::tensor::Tensor::from_data(TensorData::new(v, [BC_BATCH_SIZE]), &device)
+                // ── Build mini-batch ─────────────────────────────────────────
+                // model_input is already the processed [N_OBJECTS × NET_INPUT_DIM]
+                // flat row — no per-sample transform needed here.
+                let batch: Vec<&BCTransition> = (0..BC_BATCH_SIZE)
+                    .map(|_| &buffer[rng.gen_range(0..n)])
+                    .collect();
+
+                let flat: Vec<f32> = batch
+                    .iter()
+                    .flat_map(|t| t.model_input.iter().copied())
+                    .collect();
+                let input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
+                    TensorData::new(flat, [BC_BATCH_SIZE, N_OBJECTS, NET_INPUT_DIM]),
+                    &device,
+                );
+
+                // Build one [B, 4] label tensor and slice per head — four
+                // Vec builds collapsed into one.
+                let labels_flat: Vec<i64> = batch
+                    .iter()
+                    .flat_map(|t| {
+                        [
+                            t.action.0 as i64,
+                            t.action.1 as i64,
+                            t.action.2 as i64,
+                            t.action.3 as i64,
+                        ]
+                    })
+                    .collect();
+                let labels = burn::tensor::Tensor::<TrainBackend, 2, Int>::from_data(
+                    TensorData::new(labels_flat, [BC_BATCH_SIZE, 4]),
+                    &device,
+                );
+                let turn_t   = labels.clone().narrow(1, 0, 1).reshape([BC_BATCH_SIZE]);
+                let thrust_t = labels.clone().narrow(1, 1, 1).reshape([BC_BATCH_SIZE]);
+                let fp_t     = labels.clone().narrow(1, 2, 1).reshape([BC_BATCH_SIZE]);
+                let fs_t     = labels.narrow(1, 3, 1).reshape([BC_BATCH_SIZE]);
+
+                // ── Forward + loss ───────────────────────────────────────────
+                let grads = {
+                    let net = inner.policy_net.as_ref().unwrap();
+                    let logits = net.forward(input); // [B, 9]
+
+                    let turn_loss = loss_fn.forward(logits.clone().narrow(1, 0, 3), turn_t);
+                    let thrust_loss = loss_fn.forward(logits.clone().narrow(1, 3, 2), thrust_t);
+                    let fp_loss = loss_fn.forward(logits.clone().narrow(1, 5, 2), fp_t);
+                    let fs_loss = loss_fn.forward(logits.narrow(1, 7, 2), fs_t);
+                    let total_loss = turn_loss + thrust_loss + fp_loss + fs_loss;
+
+                    if step % 100 == 0 {
+                        let v = total_loss.clone().into_scalar();
+                        println!("[bc] step={step:>6}  loss={v:.4}  buffer={}", buffer.len());
+                    }
+
+                    let raw = total_loss.backward();
+                    GradientsParams::from_grads(raw, net)
                 };
-            let turn_t = mk_labels(|t| t.action.0 as i64);
-            let thrust_t = mk_labels(|t| t.action.1 as i64);
-            let fp_t = mk_labels(|t| t.action.2 as i64);
-            let fs_t = mk_labels(|t| t.action.3 as i64);
 
-            // ── Forward + loss ───────────────────────────────────────────────
-            let grads = {
-                let net = inner.policy_net.as_ref().unwrap();
-                let logits = net.forward(input); // [B, 9]
+                let net = inner.policy_net.take().unwrap();
+                inner.policy_net = Some(inner.policy_optim.step(BC_LR, net, grads));
+                step += 1;
 
-                let loss_fn = CrossEntropyLossConfig::new().init::<TrainBackend>(&device);
-                // Each head's loss is already mean-reduced over the batch.
-                let turn_loss = loss_fn.forward(logits.clone().narrow(1, 0, 3), turn_t);
-                let thrust_loss = loss_fn.forward(logits.clone().narrow(1, 3, 2), thrust_t);
-                let fp_loss = loss_fn.forward(logits.clone().narrow(1, 5, 2), fp_t);
-                let fs_loss = loss_fn.forward(logits.narrow(1, 7, 2), fs_t);
-                let total_loss = turn_loss + thrust_loss + fp_loss + fs_loss;
-
-                if step % 100 == 0 {
-                    let v = total_loss.clone().into_scalar();
-                    println!("[bc] step={step:>6}  loss={v:.4}  buffer={}", buffer.len());
+                // ── Sync weights to inference net ────────────────────────────
+                if step % BC_WEIGHT_SYNC_INTERVAL == 0 {
+                    let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
+                    if let Ok(mut lock) = inference_net.lock() {
+                        lock.load_bytes(bytes);
+                    }
                 }
 
-                let raw = total_loss.backward();
-                GradientsParams::from_grads(raw, net)
-            };
-
-            let net = inner.policy_net.take().unwrap();
-            inner.policy_net = Some(inner.policy_optim.step(BC_LR, net, grads));
-            step += 1;
-
-            // ── Sync weights to inference net ────────────────────────────────
-            if step % BC_WEIGHT_SYNC_INTERVAL == 0 {
-                let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
-                if let Ok(mut lock) = inference_net.lock() {
-                    lock.load_bytes(bytes);
+                // ── Periodic checkpoint ──────────────────────────────────────
+                if step % BC_SAVE_INTERVAL == 0 {
+                    save_bc_checkpoint(inner.policy_net.as_ref().unwrap(), &checkpoint_path);
+                    save_bc_buffer(&buffer, &buffer_path);
                 }
-            }
-
-            // ── Periodic checkpoint ──────────────────────────────────────────
-            if step % BC_SAVE_INTERVAL == 0 {
-                save_bc_checkpoint(inner.policy_net.as_ref().unwrap(), &checkpoint_path);
             }
         }
     })
@@ -1010,6 +1061,83 @@ fn spawn_bc_training_thread(
 
 fn save_bc_checkpoint(net: &model::RLNet<TrainBackend>, path: &str) {
     model::save_training_net(net, path);
+}
+
+// ---------------------------------------------------------------------------
+// BC buffer persistence
+// ---------------------------------------------------------------------------
+//
+// Binary format (little-endian):
+//   [u32] obs_dim   — number of f32s per observation
+//   [u32] count     — number of transitions
+//   for each transition:
+//     [u8; 4]       — action (turn, thrust, fire_primary, fire_secondary)
+//     [f32; obs_dim] — flat observation
+
+/// Serialise the replay buffer to `path`.  Silent on error (training continues).
+fn save_bc_buffer(buffer: &VecDeque<BCTransition>, path: &str) {
+    use std::io::Write;
+    let Some(first) = buffer.front() else { return };
+    let input_dim = first.model_input.len() as u32;
+
+    let result = (|| -> std::io::Result<()> {
+        let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
+        f.write_all(&input_dim.to_le_bytes())?;
+        f.write_all(&(buffer.len() as u32).to_le_bytes())?;
+        for t in buffer {
+            f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3])?;
+            for &v in &t.model_input {
+                f.write_all(&v.to_le_bytes())?;
+            }
+        }
+        Ok(())
+    })();
+
+    if let Err(e) = result {
+        eprintln!("[bc] Failed to save buffer to {path}: {e}");
+    } else {
+        println!("[bc] Buffer saved ({} transitions) → {path}", buffer.len());
+    }
+}
+
+/// Deserialise a previously saved replay buffer from `path`.
+/// Returns `None` if the file is missing, corrupt, or has a mismatched
+/// `model_input` dimension (e.g. saved before the obs→model_input change).
+fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
+    use std::io::Read;
+    let expected_dim = N_OBJECTS * NET_INPUT_DIM;
+    let mut f = std::io::BufReader::new(std::fs::File::open(path).ok()?);
+
+    let mut u32_buf = [0u8; 4];
+    f.read_exact(&mut u32_buf).ok()?;
+    let stored_dim = u32::from_le_bytes(u32_buf) as usize;
+    if stored_dim != expected_dim {
+        eprintln!(
+            "[bc] Buffer at {path} has dim={stored_dim}, expected {expected_dim} — discarding."
+        );
+        return None;
+    }
+
+    f.read_exact(&mut u32_buf).ok()?;
+    let count = u32::from_le_bytes(u32_buf) as usize;
+
+    let mut buffer = VecDeque::with_capacity(count.min(BC_BUFFER_SIZE));
+    let mut action_buf = [0u8; 4];
+    let mut input_bytes = vec![0u8; expected_dim * 4];
+
+    for _ in 0..count {
+        f.read_exact(&mut action_buf).ok()?;
+        f.read_exact(&mut input_bytes).ok()?;
+        let model_input: Vec<f32> = input_bytes
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
+        buffer.push_back(BCTransition {
+            model_input,
+            action: (action_buf[0], action_buf[1], action_buf[2], action_buf[3]),
+        });
+    }
+    Some(buffer)
 }
 
 // ---------------------------------------------------------------------------

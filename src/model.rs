@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::Resource;
 use burn::{
-    backend::{ndarray::NdArray, Autodiff},
+    backend::{ndarray::NdArray, wgpu::Wgpu, Autodiff},
     module::Initializer,
     nn::{LayerNorm, LayerNormConfig, Linear, LinearConfig},
     optim::{Adam, AdamConfig, adaptor::OptimizerAdaptor},
@@ -62,11 +62,13 @@ pub const HIDDEN_DIM: usize = 64;
 // Backend aliases
 // ---------------------------------------------------------------------------
 
-/// CPU backend used for game-thread inference.
+/// CPU backend used for game-thread inference (stays on CPU — inference runs
+/// at 4 Hz per ship and shares the process with Bevy's renderer).
 pub type InferBackend = NdArray;
 
-/// CPU backend with autodiff, used by the background training thread.
-pub type TrainBackend = Autodiff<NdArray>;
+/// GPU backend with autodiff, used by the background training thread.
+/// `Wgpu` selects Metal on macOS automatically via `WgpuDevice::BestAvailable`.
+pub type TrainBackend = Autodiff<Wgpu>;
 
 // ---------------------------------------------------------------------------
 // NetBlock — pre-norm feedforward block

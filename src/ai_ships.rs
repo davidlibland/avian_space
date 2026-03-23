@@ -89,7 +89,13 @@ pub fn ai_ship_bundle(app: &mut App) {
         )))
         .add_systems(
             Update,
-            (simple_ai_control, land_ship, jump_in_system, jump_out_system, manage_ship_population)
+            (
+                simple_ai_control,
+                land_ship,
+                jump_in_system,
+                jump_out_system,
+                manage_ship_population,
+            )
                 .run_if(in_state(PlayState::Flying)),
         );
 }
@@ -111,7 +117,9 @@ fn spawn_ai_ship_at(
     commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
-            AIShip { personality: personality.clone() },
+            AIShip {
+                personality: personality.clone(),
+            },
             RLAgent::new(personality),
             bundle,
         ))
@@ -161,7 +169,9 @@ fn spawn_ai_ship_jumping_in(
     commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
-            AIShip { personality: personality.clone() },
+            AIShip {
+                personality: personality.clone(),
+            },
             RLAgent::new(personality),
             JumpingIn,
             bundle,
@@ -194,7 +204,13 @@ pub fn spawn_ai_ships(
         for ship_type in ship_types {
             let x = rng.gen_range(-1000.0..1000.0);
             let y = rng.gen_range(-1000.0..1000.0);
-            spawn_ai_ship_at(&mut commands, &asset_server, &item_universe, &ship_type, Vec2::new(x, y));
+            spawn_ai_ship_at(
+                &mut commands,
+                &asset_server,
+                &item_universe,
+                &ship_type,
+                Vec2::new(x, y),
+            );
         }
     }
 }
@@ -235,7 +251,13 @@ fn jump_out_system(
     mut commands: Commands,
     time: Res<Time>,
     mut ships: Query<
-        (Entity, &Transform, &mut LinearVelocity, &mut MaxLinearSpeed, Option<&RLAgent>),
+        (
+            Entity,
+            &Transform,
+            &mut LinearVelocity,
+            &mut MaxLinearSpeed,
+            Option<&RLAgent>,
+        ),
         With<JumpingOut>,
     >,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
@@ -394,15 +416,19 @@ pub fn compute_ai_action(
                     continue;
                 };
                 if local_offset.length() < weapon.range() {
-                    let fire_angle =
-                        angle_to_hit(weapon.speed, &local_offset, &local_target_vel);
+                    let fire_angle = angle_to_hit(weapon.speed, &local_offset, &local_target_vel);
                     if weapon.guided || angle_indicator(fire_angle) > 0.5 {
                         weapons_to_fire.push((weapon_type.clone(), Some(*target_e)));
                     }
                 }
             }
 
-            Some(RawAIAction { thrust, turn, reverse: 0.0, weapons_to_fire })
+            Some(RawAIAction {
+                thrust,
+                turn,
+                reverse: 0.0,
+                weapons_to_fire,
+            })
         }
 
         Target::Pickup(target_e) => {
@@ -414,7 +440,12 @@ pub fn compute_ai_action(
                 } else {
                     (0.0, 0.0)
                 };
-            Some(RawAIAction { thrust, turn, reverse: 0.0, weapons_to_fire: vec![] })
+            Some(RawAIAction {
+                thrust,
+                turn,
+                reverse: 0.0,
+                weapons_to_fire: vec![],
+            })
         }
 
         Target::Planet(target_e) => {
@@ -433,11 +464,20 @@ pub fn compute_ai_action(
                 let ship_forward = ship_dir;
                 let thrust = if speed > f32::EPSILON {
                     let retrograde = -vel / speed;
-                    if ship_forward.dot(retrograde) > 0.7 { 1.0 } else { 0.0 }
+                    if ship_forward.dot(retrograde) > 0.7 {
+                        1.0
+                    } else {
+                        0.0
+                    }
                 } else {
                     0.0
                 };
-                Some(RawAIAction { thrust, turn: 0.0, reverse: 1.0, weapons_to_fire: vec![] })
+                Some(RawAIAction {
+                    thrust,
+                    turn: 0.0,
+                    reverse: 1.0,
+                    weapons_to_fire: vec![],
+                })
             } else {
                 let local_offset = rotate_r(offset);
                 let (turn, thrust) =
@@ -446,7 +486,12 @@ pub fn compute_ai_action(
                     } else {
                         (0.0, 0.0)
                     };
-                Some(RawAIAction { thrust, turn, reverse: 0.0, weapons_to_fire: vec![] })
+                Some(RawAIAction {
+                    thrust,
+                    turn,
+                    reverse: 0.0,
+                    weapons_to_fire: vec![],
+                })
             }
         }
     }
@@ -457,16 +502,19 @@ pub fn simple_ai_control(
     mut weapons_writer: MessageWriter<FireCommand>,
     spatial_query: SpatialQuery,
     mode: Res<AIPlayMode>,
-    mut ships: Query<(
-        Entity,
-        &Position,
-        &LinearVelocity,
-        &MaxLinearSpeed,
-        &Transform,
-        &mut Ship,
-        &AIShip,
-        Option<&RLAgent>,
-    ), Without<JumpingOut>>,
+    mut ships: Query<
+        (
+            Entity,
+            &Position,
+            &LinearVelocity,
+            &MaxLinearSpeed,
+            &Transform,
+            &mut Ship,
+            &AIShip,
+            Option<&RLAgent>,
+        ),
+        Without<JumpingOut>,
+    >,
     all_positions: Query<&Position>,
     velocities: Query<&LinearVelocity>,
     planet_marker: Query<(), With<Planet>>,
@@ -478,7 +526,9 @@ pub fn simple_ai_control(
     current_star_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
-    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, ai_ship, rl_agent) in &mut ships {
+    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, ai_ship, rl_agent) in
+        &mut ships
+    {
         // In RLControl mode, RLAgent ships are driven by rl_step instead.
         if *mode == AIPlayMode::RLControl && rl_agent.is_some() {
             continue;
@@ -508,7 +558,7 @@ pub fn simple_ai_control(
             let cargo_used: u16 = ship.cargo.values().sum();
             let should_sell = match ai_ship.personality {
                 Personality::Trader => cargo_used > 0,
-                _ => cargo_used * 4 >= ship.data.cargo_space * 3,
+                _ => false, //cargo_used * 4 >= ship.data.cargo_space * 3,
             };
             if should_sell {
                 let system_name = &current_star_system.0;
@@ -647,7 +697,14 @@ pub fn simple_ai_control(
 
 fn land_ship(
     planets: Query<(&Planet, &Position)>,
-    mut ships: Query<(Entity, &mut Ship, &Position, &LinearVelocity, &AIShip, Option<&RLAgent>)>,
+    mut ships: Query<(
+        Entity,
+        &mut Ship,
+        &Position,
+        &LinearVelocity,
+        &AIShip,
+        Option<&RLAgent>,
+    )>,
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
     mut rl_reward_writer: MessageWriter<RLReward>,
@@ -742,11 +799,12 @@ fn land_ship(
 
                     // Fighters: if no hostile ships are visible, jump out.
                     if matches!(ai_ship.personality, Personality::Fighter) {
-                        let has_hostile = ship_factions.iter().any(|(other_e, other_h, other_pos)| {
-                            other_e != ship_entity
-                                && ship.should_engage(other_h)
-                                && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
-                        });
+                        let has_hostile =
+                            ship_factions.iter().any(|(other_e, other_h, other_pos)| {
+                                other_e != ship_entity
+                                    && ship.should_engage(other_h)
+                                    && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
+                            });
                         if !has_hostile {
                             commands.entity(ship_entity).insert(JumpingOut);
                         }
@@ -856,7 +914,11 @@ mod tests {
             } else {
                 0.0
             };
-            assert_eq!(rt, expected_thrust, "thrust mismatch for input ({}, {})", thrust, turn);
+            assert_eq!(
+                rt, expected_thrust,
+                "thrust mismatch for input ({}, {})",
+                thrust, turn
+            );
             assert!(
                 (rr - expected_turn).abs() < 0.01,
                 "turn mismatch for input ({}, {}): got {}, expected {}",
@@ -914,7 +976,10 @@ mod tests {
             &vel_q,
             &empty_item_universe(),
         );
-        assert!(result.is_none(), "missing target position → should return None");
+        assert!(
+            result.is_none(),
+            "missing target position → should return None"
+        );
     }
 
     #[test]
@@ -1041,7 +1106,9 @@ mod tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             // Force a known 100 ms delta so jump_in_system always has non-zero dt.
-            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(100)))
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+                100,
+            )))
             .add_systems(Update, jump_in_system);
 
         // Spawn a JumpingIn ship moving at JUMP_SPEED.
@@ -1068,7 +1135,8 @@ mod tests {
     #[test]
     fn test_jump_in_completes_when_slow_enough() {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins).add_systems(Update, jump_in_system);
+        app.add_plugins(MinimalPlugins)
+            .add_systems(Update, jump_in_system);
 
         // Spawn at exactly max_speed — should remove JumpingIn on the next tick.
         let ship = Ship::default();
@@ -1096,7 +1164,11 @@ mod tests {
         let mut types = HashMap::new();
         types.insert("fighter".to_string(), 1.0);
         types.insert("hauler".to_string(), 2.0);
-        let dist = ShipDistribution { min: 3, max: 8, types };
+        let dist = ShipDistribution {
+            min: 3,
+            max: 8,
+            types,
+        };
         let mut rng = rand::thread_rng();
         let result = dist.sample(5, &mut rng);
         assert_eq!(result.len(), 5, "should return exactly 5 ship types");
@@ -1116,6 +1188,9 @@ mod tests {
         let dist = ShipDistribution::default();
         let mut rng = rand::thread_rng();
         let result = dist.sample(5, &mut rng);
-        assert!(result.is_empty(), "empty distribution should return no ships");
+        assert!(
+            result.is_empty(),
+            "empty distribution should return no ships"
+        );
     }
 }
