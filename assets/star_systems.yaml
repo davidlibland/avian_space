@@ -70,15 +70,18 @@ sol:
       number: 10
       radius: 300.
   ships:
-    fed_patrol: 3
-    fed_destroyer: 2
-    fed_missile_cruiser: 10
-    shuttle: 2
-    hauler: 2
-    freighter: 1
-    courier: 2
-    asteroid_miner: 3
-    rebel_fighter: 1        # occasional Rebel scout near the border
+    min: 3
+    max: 12
+    types:
+      fed_patrol: 3.0
+      fed_destroyer: 2.0
+      fed_missile_cruiser: 10.0
+      shuttle: 2.0
+      hauler: 2.0
+      freighter: 1.0
+      courier: 2.0
+      asteroid_miner: 3.0
+      rebel_fighter: 1.0        # occasional Rebel scout near the border
 
 kepler_22:
   map_position: [-520.0, 60.0]
@@ -112,11 +115,14 @@ kepler_22:
       number: 8
       radius: 400.
   ships:
-    fed_patrol: 3
-    fed_destroyer: 1
-    hauler: 2
-    courier: 1
-    asteroid_miner: 2
+    min: 3
+    max: 6
+    types:
+      fed_patrol: 3.0
+      fed_destroyer: 1.0
+      hauler: 2.0
+      courier: 1.0
+      asteroid_miner: 2.0
 
 tau_ceti:
   map_position: [-280.0, 60.0]
@@ -149,11 +155,14 @@ tau_ceti:
       number: 6
       radius: 350.
   ships:
-    fed_patrol: 2
-    hauler: 2
-    freighter: 1
-    courier: 1
-    asteroid_miner: 3
+    min: 3
+    max: 6
+    types:
+      fed_patrol: 2.0
+      hauler: 2.0
+      freighter: 1.0
+      courier: 1.0
+      asteroid_miner: 3.0
 
 epsilon_eridani:
   map_position: [-350.0, -100.0]
@@ -186,11 +195,14 @@ epsilon_eridani:
       number: 12
       radius: 450.
   ships:
-    fed_patrol: 2
-    hauler: 2
-    freighter: 2
-    bulk_carrier: 1
-    asteroid_miner: 4
+    min: 2
+    max: 4
+    types:
+      fed_patrol: 2.0
+      hauler: 2.0
+      freighter: 2.0
+      bulk_carrier: 1.0
+      asteroid_miner: 4.0
 
 vega:
   map_position: [-160.0, -220.0]
@@ -225,10 +237,13 @@ vega:
       commodities:
         gold: 1.0
   ships:
-    fed_patrol: 1
-    hauler: 2
-    freighter: 1
-    asteroid_miner: 4
+    min: 2
+    max: 6
+    types:
+      fed_patrol: 1.0
+      hauler: 2.0
+      freighter: 1.0
+      asteroid_miner: 4.0
 
 barnard:
   map_position: [-130.0, 180.0]
@@ -262,12 +277,15 @@ barnard:
       number: 15
       radius: 600.
   ships:
-    fed_patrol: 2
-    fed_destroyer: 1
-    hauler: 2
-    freighter: 1
-    asteroid_miner: 4
-    rebel_fighter: 1        # occasional Rebel border probe
+    min: 4
+    max: 7
+    types:
+      fed_patrol: 2.0
+      fed_destroyer: 1.0
+      hauler: 2.0
+      freighter: 1.0
+      asteroid_miner: 4.0
+      rebel_fighter: 1.0        # occasional Rebel border probe
 
 # ── Uninhabited border systems ──────────────────────────────────────────────────
 # No planets. Dense asteroid fields. Pirates and miners. Both factions send
@@ -287,11 +305,14 @@ alpha_centauri:
       number: 15
       radius: 500.
   ships:
-    pirate_corvette: 3
-    pirate_missile_boat: 2
-    asteroid_miner: 3
-    fed_patrol: 1           # Federation border sweep
-    rebel_fighter: 1        # Rebel forward scout
+    min: 3
+    max: 6
+    types:
+      pirate_corvette: 3.0
+      pirate_missile_boat: 2.0
+      asteroid_miner: 3.0
+      fed_patrol: 1.0           # Federation border sweep
+      rebel_fighter: 1.0        # Rebel forward scout
 
 drift:
   map_position: [100.0, 150.0]
@@ -305,11 +326,14 @@ drift:
       commodities:
         iron: 1.0
   ships:
-    pirate_corvette: 2
-    pirate_missile_boat: 2
-    asteroid_miner: 4
-    fed_patrol: 1           # Federation sweep from barnard
-    rebel_gunboat: 1        # Rebel probe from procyon
+    min: 3
+    max: 7
+    types:
+      pirate_corvette: 2.0
+      pirate_missile_boat: 2.0
+      asteroid_miner: 4.0
+      fed_patrol: 1.0           # Federation sweep from barnard
+      rebel_gunboat: 1.0        # Rebel probe from procyon
 
 # ── Rebel systems (right side) ─────────────────────────────────────────────────
 # Rebels are faster and more aggressive. Border systems (procyon, sirius)
@@ -344,14 +368,17 @@ procyon:
       outfitter: []
   astroid_fields: []
   ships:
-    rebel_fighter: 2
-    rebel_gunboat: 1
-    hauler: 2
-    freighter: 2
-    bulk_carrier: 1
-    courier: 2
-    frigate: 1
-    fed_patrol: 1           # occasional Federation border probe
+    min: 4
+    max: 8
+    types:
+      rebel_fighter: 2.0
+      rebel_gunboat: 1.0
+      hauler: 2.0
+      freighter: 2.0
+      bulk_carrier: 1.0
+      courier: 2.0
+      frigate: 1.0
+      fed_patrol: 1.0           # occasional Federation border probe
 
 sirius:
   map_position: [420.0, 60.0]
@@ -386,13 +413,16 @@ sirius:
       commodities:
         titanium: 1.0
   ships:
-    rebel_fighter: 1
-    rebel_gunboat: 2
-    rebel_frigate: 1
-    hauler: 2
-    freighter: 2
-    asteroid_miner: 3
-    fed_patrol: 1           # Federation border probe from alpha_centauri
+    min: 4
+    max: 8
+    types:
+      rebel_fighter: 1.0
+      rebel_gunboat: 2.0
+      rebel_frigate: 1.0
+      hauler: 2.0
+      freighter: 2.0
+      asteroid_miner: 3.0
+      fed_patrol: 1.0           # Federation border probe from alpha_centauri
 
 rigel:
   map_position: [580.0, -120.0]
@@ -425,11 +455,14 @@ rigel:
       number: 10
       radius: 500.
   ships:
-    rebel_gunboat: 2
-    rebel_frigate: 2
-    rebel_fighter: 2
-    hauler: 1
-    asteroid_miner: 2
+    min: 3
+    max: 6
+    types:
+      rebel_gunboat: 2.0
+      rebel_frigate: 2.0
+      rebel_fighter: 2.0
+      hauler: 1.0
+      asteroid_miner: 2.0
 
 altair:
   map_position: [500.0, 220.0]
@@ -463,11 +496,14 @@ altair:
       number: 12
       radius: 500.
   ships:
-    rebel_fighter: 2
-    rebel_gunboat: 1
-    hauler: 2
-    courier: 2
-    asteroid_miner: 2
+    min: 3
+    max: 6
+    types:
+      rebel_fighter: 2.0
+      rebel_gunboat: 1.0
+      hauler: 2.0
+      courier: 2.0
+      asteroid_miner: 2.0
 
 deneb:
   map_position: [680.0, 80.0]
@@ -501,8 +537,11 @@ deneb:
       number: 6
       radius: 350.
   ships:
-    rebel_frigate: 2
-    rebel_gunboat: 2
-    rebel_fighter: 2
-    hauler: 2
-    freighter: 1
+    min: 3
+    max: 6
+    types:
+      rebel_frigate: 2.0
+      rebel_gunboat: 2.0
+      rebel_fighter: 2.0
+      hauler: 2.0
+      freighter: 1.0

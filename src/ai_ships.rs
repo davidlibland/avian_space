@@ -5,7 +5,7 @@ use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
 use crate::pickups::Pickup;
 use crate::planets::Planet;
-use crate::rl_collection::{AIPlayMode, RLAgent, RLReward};
+use crate::rl_collection::{AIPlayMode, RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target, ship_bundle};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::weapons::FireCommand;
@@ -17,6 +17,17 @@ use rand::Rng;
 const DETECTION_RADIUS: f32 = 2000.;
 const LANDING_RADIUS: f32 = 150.;
 const LANDING_SPEED: f32 = 30.;
+
+/// Speed at which a jumping-in ship enters the system (matches player jump speed).
+const JUMP_SPEED: f32 = 1600.0;
+/// Jump-in deceleration rate — ship slows from JUMP_SPEED to normal max speed.
+const JUMP_IN_DECEL: f32 = 800.0;
+/// Jump-out acceleration rate — ship accelerates to JUMP_SPEED then disappears.
+const JUMP_OUT_ACCEL: f32 = 2500.0;
+/// Radius (units) at which a jumping-in ship is placed at the system edge.
+const JUMP_IN_RADIUS: f32 = 6000.0;
+/// How often (seconds) to check whether ship population needs adjusting.
+const POPULATION_CHECK_INTERVAL: f32 = 5.0;
 
 /// Distance needed to stop from `speed` using the ship's thrust PD controller,
 /// assuming the ship is already retrograde-aligned.
@@ -56,9 +67,114 @@ pub struct AIShip {
     pub personality: Personality,
 }
 
+/// Marks a ship that has just jumped into the system and is decelerating
+/// from `JUMP_SPEED` down to its normal `max_speed`.
+#[derive(Component)]
+pub struct JumpingIn;
+
+/// Marks a ship that is accelerating out of the system.
+/// Once it reaches `JUMP_SPEED` it is despawned (with a flash and RL flush).
+#[derive(Component)]
+pub struct JumpingOut;
+
+/// Periodic timer that checks whether the AI ship population needs adjusting.
+#[derive(Resource)]
+pub struct ShipPopulationTimer(pub Timer);
+
 pub fn ai_ship_bundle(app: &mut App) {
     app.add_systems(OnEnter(crate::PlayState::Flying), spawn_ai_ships)
-        .add_systems(Update, (simple_ai_control, land_ship));
+        .insert_resource(ShipPopulationTimer(Timer::from_seconds(
+            POPULATION_CHECK_INTERVAL,
+            TimerMode::Repeating,
+        )))
+        .add_systems(
+            Update,
+            (simple_ai_control, land_ship, jump_in_system, jump_out_system, manage_ship_population)
+                .run_if(in_state(PlayState::Flying)),
+        );
+}
+
+// ---------------------------------------------------------------------------
+// Spawn helpers
+// ---------------------------------------------------------------------------
+
+/// Spawn an AI ship at a given position (used for initial system load).
+fn spawn_ai_ship_at(
+    commands: &mut Commands,
+    asset_server: &Res<AssetServer>,
+    item_universe: &Res<ItemUniverse>,
+    ship_type: &str,
+    pos: Vec2,
+) {
+    let bundle = ship_bundle(ship_type, asset_server, item_universe, pos);
+    let personality = bundle.get_personality();
+    commands
+        .spawn((
+            DespawnOnExit(PlayState::Flying),
+            AIShip { personality: personality.clone() },
+            RLAgent::new(personality),
+            bundle,
+        ))
+        .with_child((
+            Collider::circle(DETECTION_RADIUS),
+            Sensor,
+            CollisionLayers::new(
+                GameLayer::Radar,
+                [GameLayer::Planet, GameLayer::Asteroid, GameLayer::Ship],
+            ),
+        ));
+}
+
+/// Spawn an AI ship that jumps in from the system edge.
+///
+/// The ship appears at a random point on a circle of radius `JUMP_IN_RADIUS`,
+/// moving at `JUMP_SPEED` toward the origin, and carries `JumpingIn` until it
+/// decelerates to its normal maximum speed.
+fn spawn_ai_ship_jumping_in(
+    commands: &mut Commands,
+    asset_server: &Res<AssetServer>,
+    item_universe: &Res<ItemUniverse>,
+    explosion_writer: &mut MessageWriter<crate::explosions::TriggerExplosion>,
+    ship_type: &str,
+) {
+    let mut rng = rand::thread_rng();
+    let theta = rng.gen_range(0.0_f32..(2.0 * PI));
+    let edge_pos = Vec2::new(theta.cos(), theta.sin()) * JUMP_IN_RADIUS;
+    // Velocity points roughly toward the system center with a small random spread.
+    let inbound_dir = -edge_pos.normalize();
+    let spread_angle = rng.gen_range(-0.2_f32..0.2_f32);
+    let (sa, ca) = spread_angle.sin_cos();
+    let dir = Vec2::new(
+        inbound_dir.x * ca - inbound_dir.y * sa,
+        inbound_dir.x * sa + inbound_dir.y * ca,
+    );
+    let vel = dir * JUMP_SPEED;
+
+    // Small flash at entry point.
+    explosion_writer.write(crate::explosions::TriggerExplosion {
+        location: edge_pos,
+        size: 8.0,
+    });
+
+    let bundle = ship_bundle(ship_type, asset_server, item_universe, edge_pos);
+    let personality = bundle.get_personality();
+    commands
+        .spawn((
+            DespawnOnExit(PlayState::Flying),
+            AIShip { personality: personality.clone() },
+            RLAgent::new(personality),
+            JumpingIn,
+            bundle,
+        ))
+        .insert(LinearVelocity(vel))
+        .with_child((
+            Collider::circle(DETECTION_RADIUS),
+            Sensor,
+            CollisionLayers::new(
+                GameLayer::Radar,
+                [GameLayer::Planet, GameLayer::Asteroid, GameLayer::Ship],
+            ),
+        ));
 }
 
 pub fn spawn_ai_ships(
@@ -68,35 +184,144 @@ pub fn spawn_ai_ships(
     star_system: Res<CurrentStarSystem>,
 ) {
     if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {
+        let dist = &system_data.ships;
+        if dist.types.is_empty() {
+            return;
+        }
         let mut rng = rand::thread_rng();
-        for (ship_type, count) in system_data.ships.iter() {
-            for _ in 0..*count {
-                let x = rng.gen_range(-1000.0..1000.0);
-                let y = rng.gen_range(-1000.0..1000.0);
-                let ship_bundle =
-                    ship_bundle(ship_type, &asset_server, &item_universe, Vec2::new(x, y));
-                let personality = ship_bundle.get_personality();
-                commands
-                    .spawn((
-                        DespawnOnExit(PlayState::Flying),
-                        AIShip {
-                            personality: personality.clone(),
-                        },
-                        RLAgent::new(personality),
-                        ship_bundle,
-                    ))
-                    .with_child((
-                        Collider::circle(DETECTION_RADIUS),
-                        Sensor,
-                        CollisionLayers::new(
-                            GameLayer::Radar,
-                            [GameLayer::Planet, GameLayer::Asteroid, GameLayer::Ship],
-                        ),
-                    ));
+        let count = rng.gen_range(dist.min..=dist.max.max(dist.min));
+        let ship_types = dist.sample(count, &mut rng);
+        for ship_type in ship_types {
+            let x = rng.gen_range(-1000.0..1000.0);
+            let y = rng.gen_range(-1000.0..1000.0);
+            spawn_ai_ship_at(&mut commands, &asset_server, &item_universe, &ship_type, Vec2::new(x, y));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Jump-in / jump-out systems
+// ---------------------------------------------------------------------------
+
+/// Decelerate ships that just jumped in until they reach their normal max speed.
+fn jump_in_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut ships: Query<(Entity, &mut LinearVelocity, &Ship), With<JumpingIn>>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut vel, ship) in ships.iter_mut() {
+        let speed = vel.0.length();
+        let target = ship.data.max_speed;
+        if speed <= target {
+            commands.entity(entity).remove::<JumpingIn>();
+            // Clamp to max_speed so MaxLinearSpeed constraint isn't violated.
+            if speed > f32::EPSILON {
+                vel.0 = vel.0.normalize() * target;
+            }
+        } else {
+            let new_speed = (speed - JUMP_IN_DECEL * dt).max(target);
+            if speed > f32::EPSILON {
+                vel.0 = vel.0.normalize() * new_speed;
             }
         }
     }
 }
+
+/// Accelerate ships that are jumping out.  When they reach `JUMP_SPEED` they
+/// are despawned with a small flash (and their RL segment is flushed as
+/// non-terminal).
+fn jump_out_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut ships: Query<
+        (Entity, &Transform, &mut LinearVelocity, &mut MaxLinearSpeed, Option<&RLAgent>),
+        With<JumpingOut>,
+    >,
+    mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+    mut rl_jumped_writer: MessageWriter<RLShipJumped>,
+) {
+    let dt = time.delta_secs();
+    for (entity, transform, mut vel, mut max_speed, rl_agent) in ships.iter_mut() {
+        let forward = (transform.rotation * Vec3::Y).xy();
+        let new_speed = (vel.0.length() + JUMP_OUT_ACCEL * dt).min(JUMP_SPEED);
+        vel.0 = forward * new_speed;
+        // Keep the physics cap above the current speed.
+        max_speed.0 = new_speed;
+
+        if new_speed >= JUMP_SPEED {
+            // Flush RL segment as non-terminal before despawning.
+            if let Some(agent) = rl_agent {
+                let ev = build_rl_ship_jumped(entity, agent);
+                rl_jumped_writer.write(ev);
+            }
+            explosion_writer.write(crate::explosions::TriggerExplosion {
+                location: transform.translation.xy(),
+                size: 8.0,
+            });
+            crate::utils::safe_despawn(&mut commands, entity);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Population management
+// ---------------------------------------------------------------------------
+
+/// Periodically enforce the min/max ship-count bounds for the current system.
+///
+/// - Below `min`: pick a random ship type from the distribution and jump one in.
+/// - Above `max`: pick a random non-jumping ship and trigger a jump-out.
+fn manage_ship_population(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    item_universe: Res<ItemUniverse>,
+    star_system: Res<CurrentStarSystem>,
+    time: Res<Time>,
+    mut timer: ResMut<ShipPopulationTimer>,
+    ai_ships: Query<Entity, (With<AIShip>, Without<JumpingOut>)>,
+    all_ai_ships: Query<Entity, With<AIShip>>,
+    mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+) {
+    if !timer.0.tick(time.delta()).just_finished() {
+        return;
+    }
+    let Some(system_data) = item_universe.star_systems.get(&star_system.0) else {
+        return;
+    };
+    let dist = &system_data.ships;
+    if dist.types.is_empty() {
+        return;
+    }
+
+    let total = all_ai_ships.iter().count();
+    let mut rng = rand::thread_rng();
+
+    if total < dist.min {
+        // Spawn one ship jumping in.
+        let types = dist.sample(1, &mut rng);
+        if let Some(ship_type) = types.into_iter().next() {
+            spawn_ai_ship_jumping_in(
+                &mut commands,
+                &asset_server,
+                &item_universe,
+                &mut explosion_writer,
+                &ship_type,
+            );
+        }
+    } else if total > dist.max {
+        // Pick a random ship (not already jumping out) and trigger jump-out.
+        let candidates: Vec<Entity> = ai_ships.iter().collect();
+        if !candidates.is_empty() {
+            let idx = rng.gen_range(0..candidates.len());
+            commands.entity(candidates[idx]).insert(JumpingOut);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AI control helpers (unchanged)
+// ---------------------------------------------------------------------------
 
 /// Maps a local-frame bearing angle (from `angle_to_hit`) to (turn, thrust) commands.
 /// Positive angle = target is to the left; negative = to the right.
@@ -241,7 +466,7 @@ pub fn simple_ai_control(
         &mut Ship,
         &AIShip,
         Option<&RLAgent>,
-    )>,
+    ), Without<JumpingOut>>,
     all_positions: Query<&Position>,
     velocities: Query<&LinearVelocity>,
     planet_marker: Query<(), With<Planet>>,
@@ -421,14 +646,15 @@ pub fn simple_ai_control(
 }
 
 fn land_ship(
-    // mut collisions: MessageReader<CollisionStart>,
     planets: Query<(&Planet, &Position)>,
-    ships: Query<(Entity, &mut Ship, &Position, &LinearVelocity, &AIShip, Option<&RLAgent>)>,
+    mut ships: Query<(Entity, &mut Ship, &Position, &LinearVelocity, &AIShip, Option<&RLAgent>)>,
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
     mut rl_reward_writer: MessageWriter<RLReward>,
+    mut commands: Commands,
+    ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
 ) {
-    for (ship_entity, mut ship, ship_pos, vel, ai_ship, rl_agent) in ships {
+    for (ship_entity, mut ship, ship_pos, vel, ai_ship, rl_agent) in ships.iter_mut() {
         match ship.target {
             Some(Target::Planet(planet_entity)) => {
                 // ── Landed ───────────────────────────────────────────────────
@@ -470,13 +696,6 @@ fn land_ship(
                         .and_then(|s| s.planets.get(&planet_name))
                     {
                         // Compute cargo value before selling (for reward normalisation).
-                        let cargo_value_before: i128 = ship
-                            .cargo
-                            .iter()
-                            .filter_map(|(c, &qty)| {
-                                planet_data.commodities.get(c).map(|&p| qty as i128 * p)
-                            })
-                            .sum();
                         let total_cargo_before: u16 = ship.cargo.values().sum();
 
                         for (commodity, qty) in ship.clone().cargo.iter() {
@@ -518,6 +737,18 @@ fn land_ship(
                             if planet_data.outfitter.contains(weapon_type) {
                                 ship.buy_max_ammo(weapon_type, &item_universe);
                             }
+                        }
+                    }
+
+                    // Fighters: if no hostile ships are visible, jump out.
+                    if matches!(ai_ship.personality, Personality::Fighter) {
+                        let has_hostile = ship_factions.iter().any(|(other_e, other_h, other_pos)| {
+                            other_e != ship_entity
+                                && ship.should_engage(other_h)
+                                && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
+                        });
+                        if !has_hostile {
+                            commands.entity(ship_entity).insert(JumpingOut);
                         }
                     }
                 }
@@ -796,5 +1027,95 @@ mod tests {
         let action = result.expect("far planet should produce approach action");
         assert_eq!(action.reverse, 0.0, "should not brake when far away");
         assert!(action.thrust > 0.5, "should thrust toward far planet");
+    }
+
+    // ── Jump mechanic tests ──────────────────────────────────────────────────
+
+    /// `JumpingIn` ships start at `JUMP_SPEED` and should decelerate each tick.
+    /// Test drives `jump_in_system` directly without state guards.
+    #[test]
+    fn test_jump_in_decelerates() {
+        use bevy::time::TimeUpdateStrategy;
+        use std::time::Duration;
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            // Force a known 100 ms delta so jump_in_system always has non-zero dt.
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(100)))
+            .add_systems(Update, jump_in_system);
+
+        // Spawn a JumpingIn ship moving at JUMP_SPEED.
+        let entity = app
+            .world_mut()
+            .spawn((
+                JumpingIn,
+                LinearVelocity(Vec2::new(0.0, JUMP_SPEED)),
+                Ship::default(),
+            ))
+            .id();
+
+        app.update(); // warm up — establishes time baseline
+        app.update(); // actual tick with ManualDuration delta
+        let vel = app.world().get::<LinearVelocity>(entity).unwrap().0;
+        assert!(
+            vel.length() < JUMP_SPEED,
+            "ship should have decelerated, got speed {}",
+            vel.length()
+        );
+    }
+
+    /// Once a `JumpingIn` ship reaches its normal max speed, `JumpingIn` is removed.
+    #[test]
+    fn test_jump_in_completes_when_slow_enough() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).add_systems(Update, jump_in_system);
+
+        // Spawn at exactly max_speed — should remove JumpingIn on the next tick.
+        let ship = Ship::default();
+        let normal_speed = ship.data.max_speed;
+        let entity = app
+            .world_mut()
+            .spawn((
+                JumpingIn,
+                LinearVelocity(Vec2::new(0.0, normal_speed)),
+                ship,
+            ))
+            .id();
+
+        app.update();
+        assert!(
+            app.world().get::<JumpingIn>(entity).is_none(),
+            "JumpingIn should be removed once ship reaches normal speed"
+        );
+    }
+
+    /// `ShipDistribution::sample` should return the requested number of ships.
+    #[test]
+    fn test_ship_distribution_sample_count() {
+        use crate::item_universe::ShipDistribution;
+        let mut types = HashMap::new();
+        types.insert("fighter".to_string(), 1.0);
+        types.insert("hauler".to_string(), 2.0);
+        let dist = ShipDistribution { min: 3, max: 8, types };
+        let mut rng = rand::thread_rng();
+        let result = dist.sample(5, &mut rng);
+        assert_eq!(result.len(), 5, "should return exactly 5 ship types");
+        for t in &result {
+            assert!(
+                t == "fighter" || t == "hauler",
+                "unexpected ship type: {}",
+                t
+            );
+        }
+    }
+
+    /// `ShipDistribution::sample` returns empty for an empty distribution.
+    #[test]
+    fn test_ship_distribution_sample_empty() {
+        use crate::item_universe::ShipDistribution;
+        let dist = ShipDistribution::default();
+        let mut rng = rand::thread_rng();
+        let result = dist.sample(5, &mut rng);
+        assert!(result.is_empty(), "empty distribution should return no ships");
     }
 }

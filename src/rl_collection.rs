@@ -161,6 +161,17 @@ pub struct RLShipDied {
     pub transitions: Vec<Transition>,
 }
 
+/// Emitted just before an `RLAgent` ship jumps out of the system.
+/// The segment is flushed as a truncated (non-terminal) trajectory.
+#[derive(Event, Message)]
+pub struct RLShipJumped {
+    pub entity: Entity,
+    pub entity_id: u64,
+    pub personality: Personality,
+    pub initial_hidden: Vec<f32>,
+    pub transitions: Vec<Transition>,
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -254,6 +265,7 @@ impl Plugin for RLCollectionPlugin {
             )))
             .add_message::<RLReward>()
             .add_message::<RLShipDied>()
+            .add_message::<RLShipJumped>()
             .add_systems(
                 Update,
                 (
@@ -261,6 +273,7 @@ impl Plugin for RLCollectionPlugin {
                     rl_step,
                     repeat_actions,
                     handle_rl_ship_died,
+                    handle_rl_ship_jumped,
                 )
                     .chain()
                     .run_if(in_state(PlayState::Flying)),
@@ -437,6 +450,30 @@ fn handle_rl_ship_died(mut events: MessageReader<RLShipDied>, rl_sender: Res<RLS
             initial_hidden: ev.initial_hidden.clone(),
             transitions,
             bootstrap_value: None, // terminal — no bootstrapping needed
+        };
+        let _ = rl_sender.0.try_send(segment);
+    }
+}
+
+/// Flush a truncated segment when an `RLShipJumped` event is received.
+///
+/// Unlike death, the last transition is NOT marked as terminal (`done = false`).
+/// `bootstrap_value` is left as `None` — the jump ends the trajectory without
+/// a future-value estimate.
+fn handle_rl_ship_jumped(
+    mut events: MessageReader<RLShipJumped>,
+    rl_sender: Res<RLSender>,
+) {
+    for ev in events.read() {
+        if ev.transitions.is_empty() {
+            continue;
+        }
+        let segment = Segment {
+            entity_id: ev.entity_id,
+            personality: ev.personality.clone(),
+            initial_hidden: ev.initial_hidden.clone(),
+            transitions: ev.transitions.clone(),
+            bootstrap_value: None,
         };
         let _ = rl_sender.0.try_send(segment);
     }
@@ -982,6 +1019,18 @@ fn save_bc_checkpoint(net: &model::RLNet<TrainBackend>, path: &str) {
 /// Build the `RLShipDied` event data from an `RLAgent` component before despawn.
 pub fn build_rl_ship_died(entity: Entity, agent: &RLAgent) -> RLShipDied {
     RLShipDied {
+        entity,
+        entity_id: entity.to_bits(),
+        personality: agent.personality.clone(),
+        initial_hidden: agent.segment_initial_hidden.clone(),
+        transitions: agent.segment_buffer.clone(),
+    }
+}
+
+/// Build the `RLShipJumped` event data from an `RLAgent` component before a
+/// voluntary jump-out.  The trajectory is flushed as truncated (non-terminal).
+pub fn build_rl_ship_jumped(entity: Entity, agent: &RLAgent) -> RLShipJumped {
+    RLShipJumped {
         entity,
         entity_id: entity.to_bits(),
         personality: agent.personality.clone(),

@@ -295,7 +295,7 @@ mod tests {
                     connections: vec![],
                     planets: HashMap::new(),
                     astroid_fields: vec![],
-                    ships: HashMap::new(),
+                    ships: Default::default(),
                 },
             )]),
             outfitter_items: HashMap::new(),

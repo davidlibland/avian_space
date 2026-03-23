@@ -164,6 +164,46 @@ impl OutfitterItem {
     }
 }
 
+/// Probability distribution + population limits for ships in a star system.
+#[derive(Deserialize, Serialize)]
+pub struct ShipDistribution {
+    /// Minimum number of AI ships to maintain in the system.
+    pub min: usize,
+    /// Maximum number of AI ships allowed in the system.
+    pub max: usize,
+    /// Relative spawn weights per ship type.  Higher values = more likely.
+    pub types: HashMap<String, f32>,
+}
+
+impl Default for ShipDistribution {
+    fn default() -> Self {
+        ShipDistribution { min: 0, max: 0, types: HashMap::new() }
+    }
+}
+
+impl ShipDistribution {
+    /// Sample `count` ship types from the distribution.
+    /// Returns an empty vec if the distribution has no types or all weights ≤ 0.
+    pub fn sample(&self, count: usize, rng: &mut impl rand::Rng) -> Vec<String> {
+        let total: f32 = self.types.values().sum();
+        if total <= 0.0 || self.types.is_empty() {
+            return vec![];
+        }
+        (0..count)
+            .filter_map(|_| {
+                let mut roll = rng.gen_range(0.0..total);
+                for (ship_type, &weight) in &self.types {
+                    roll -= weight;
+                    if roll <= 0.0 {
+                        return Some(ship_type.clone());
+                    }
+                }
+                self.types.keys().next().cloned()
+            })
+            .collect()
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct StarSystem {
     #[serde(default)]
@@ -172,7 +212,8 @@ pub struct StarSystem {
     pub connections: Vec<String>,
     pub planets: HashMap<String, PlanetData>,
     pub astroid_fields: Vec<AsteroidFieldData>,
-    pub ships: HashMap<String, u16>,
+    #[serde(default)]
+    pub ships: ShipDistribution,
 }
 
 pub fn item_universe_plugin(app: &mut App) {
