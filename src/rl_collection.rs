@@ -12,9 +12,9 @@
 ///   (obs, action, reward, done) transitions via the `RLSender` channel.
 ///
 /// # Action space
-/// Factored discrete: (thrust_idx, turn_idx, fire_primary, fire_secondary)
-///   - thrust_idx:    0=no-thrust, 1=thrust
+/// Factored discrete: (turn_idx, thrust_idx, fire_primary, fire_secondary)
 ///   - turn_idx:      0=left, 1=straight, 2=right
+///   - thrust_idx:    0=no-thrust, 1=thrust
 ///   - fire_primary:  0=no, 1=yes
 ///   - fire_secondary: 0=no, 1=yes  (which weapon fires is chosen deterministically)
 /// Total: 2×3×2×2 = 24 factored actions.
@@ -27,6 +27,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use avian2d::prelude::*;
+use bevy::ecs::change_detection::MAX_CHANGE_AGE;
 use bevy::prelude::*;
 use burn::nn::loss::CrossEntropyLossConfig;
 use burn::optim::{GradientsParams, Optimizer};
@@ -250,7 +251,24 @@ impl Plugin for RLCollectionPlugin {
                 // For now the channel has no consumer; data is silently dropped.
                 drop(bc_rx);
             }
-            crate::AppMode::Classic | crate::AppMode::Inference => {
+            crate::AppMode::Inference => {
+                // Load the checkpoint into the inference net so the game thread
+                // uses trained weights rather than a random initialisation.
+                if !experiment.is_fresh {
+                    let checkpoint_path = experiment.policy_checkpoint_path();
+                    if let Some(loaded) = model::load_inference_net(&checkpoint_path) {
+                        *inference_net_arc.lock().unwrap() = loaded;
+                        println!("[inference] Loaded policy from {checkpoint_path}");
+                    } else {
+                        eprintln!(
+                            "[inference] WARNING: no checkpoint found at {checkpoint_path} \
+                             — running with random weights!"
+                        );
+                    }
+                }
+                drop(bc_rx);
+            }
+            crate::AppMode::Classic => {
                 // No training — channels have no consumer; data is silently dropped.
                 drop(bc_rx);
             }
@@ -555,10 +573,47 @@ fn build_all_observations(
                 .unwrap_or(Vec2::ZERO);
             let rel_pos = rl_obs::rotate_to_ego([world_offset.x, world_offset.y], sin_a, cos_a);
             let rel_vel = rl_obs::rotate_to_ego([world_rel_vel.x, world_rel_vel.y], sin_a, cos_a);
+            let (is_hostile, should_engage, health, max_health, max_speed, torque) = ship_query
+                .get(e)
+                .map(|(_, other_ship, _)| {
+                    let is_hostile =
+                        if other_ship.should_engage(&ShipHostility(ship.enemies.clone())) {
+                            1.0
+                        } else {
+                            -1.0
+                        };
+                    let should_engage =
+                        if ship.should_engage(&ShipHostility(other_ship.enemies.clone())) {
+                            1.0
+                        } else {
+                            -1.0
+                        };
+                    let health = other_ship.health as f32;
+                    let (max_health, max_speed, torque) = item_universe
+                        .ships
+                        .get(&other_ship.ship_type)
+                        .map(|data| (data.max_health as f32, data.max_speed, data.torque))
+                        .unwrap_or((0.0, 0.0, 0.0));
+                    return (
+                        is_hostile,
+                        should_engage,
+                        health,
+                        max_health,
+                        max_speed,
+                        torque,
+                    );
+                })
+                .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
             EntitySlotData {
-                rel_pos: [rel_pos[0] / DETECTION_RADIUS, rel_pos[1] / DETECTION_RADIUS],
-                rel_vel: [rel_vel[0] / 300.0, rel_vel[1] / 300.0],
+                rel_pos,
+                rel_vel,
                 extra,
+                is_hostile,
+                should_engage,
+                max_health,
+                max_speed,
+                health,
+                torque,
             }
         };
 
@@ -662,6 +717,15 @@ fn build_all_observations(
             &ship_query,
         );
 
+        // Primary weapon speed / range for fire-lead angle in the observation.
+        let (primary_weapon_speed, primary_weapon_range) = ship
+            .weapon_systems
+            .primary
+            .values()
+            .next()
+            .map(|ws| (ws.weapon.speed, ws.weapon.range()))
+            .unwrap_or((0.0, 0.0));
+
         let obs_input = ObsInput {
             personality: &agent.personality,
             ship: &ship,
@@ -674,6 +738,8 @@ fn build_all_observations(
             nearby_hostile_ships,
             nearby_friendly_ships,
             nearby_pickups,
+            primary_weapon_speed,
+            primary_weapon_range,
         };
         let obs = rl_obs::encode_observation(&obs_input);
 
@@ -708,28 +774,36 @@ fn build_target_slot(
     let rel_pos_ego = rl_obs::rotate_to_ego([world_offset.x, world_offset.y], sin_a, cos_a);
     let rel_vel_ego = rl_obs::rotate_to_ego([world_rel_vel.x, world_rel_vel.y], sin_a, cos_a);
 
-    let (entity_type, hostility, value_hint) = match target {
+    let (entity_type, should_engage, is_hostile, value_hint) = match target {
         Target::Ship(e) => {
-            let hostile = ship_query
+            let (should_engage, is_hostile) = ship_query
                 .get(*e)
-                .map(|(_, other, _)| ship.should_engage(&ShipHostility(other.enemies.clone())))
-                .unwrap_or(false);
-            (0u8, if hostile { 1.0 } else { -1.0 }, 1.0)
+                .map(|(_, other, _)| {
+                    (
+                        ship.should_engage(&ShipHostility(other.enemies.clone())),
+                        other.should_engage(&ShipHostility(ship.enemies.clone())),
+                    )
+                })
+                .unwrap_or((false, false));
+            (
+                0u8,
+                if should_engage { 1.0 } else { -1.0 },
+                if is_hostile { 1.0 } else { -1.0 },
+                1.0,
+            )
         }
-        Target::Asteroid(_) => (1, 0.0, 1.0),
-        Target::Planet(_) => (2, 0.0, 1.0),
-        Target::Pickup(_) => (3, 0.0, 1.0),
+        Target::Asteroid(_) => (1, 0.0, 0.0, 1.0),
+        Target::Planet(_) => (2, 0.0, 0.0, 1.0),
+        Target::Pickup(_) => (3, 0.0, 0.0, 1.0),
     };
 
     Some(TargetSlotData {
         entity_type,
-        rel_pos: [
-            rel_pos_ego[0] / DETECTION_RADIUS,
-            rel_pos_ego[1] / DETECTION_RADIUS,
-        ],
-        rel_vel: [rel_vel_ego[0] / 300.0, rel_vel_ego[1] / 300.0],
-        hostility,
+        rel_pos: [rel_pos_ego[0], rel_pos_ego[1]],
+        rel_vel: [rel_vel_ego[0], rel_vel_ego[1]],
+        should_engage,
         value_hint,
+        is_hostile,
     })
 }
 
@@ -840,10 +914,14 @@ fn store_obs_actions(
 
             // Also send BC data.  Pre-process obs → model_input here so the
             // training thread pays zero per-sample transform cost per step.
+            // NOTE: use `transition.action` (= last_action, the rule-based action
+            // computed at step t-1 for obs[t-1]), NOT `accurate_action` (which is
+            // the rule-based action for the CURRENT step t).  Pairing obs[t-1]
+            // with action[t] would create a systematic off-by-one mismatch.
             if *mode == AIPlayMode::BehavioralCloning {
                 let bc = BCTransition {
                     model_input: obs_to_model_input(&transition.obs),
-                    action: accurate_action,
+                    action: transition.action,
                 };
                 let _ = bc_sender.0.try_send(bc);
             }
@@ -920,7 +998,10 @@ fn spawn_bc_training_thread(
         let mut buffer: VecDeque<BCTransition> = if !experiment.is_fresh {
             load_bc_buffer(&buffer_path)
                 .map(|b| {
-                    println!("[bc] Restored buffer with {} transitions from {buffer_path}", b.len());
+                    println!(
+                        "[bc] Restored buffer with {} transitions from {buffer_path}",
+                        b.len()
+                    );
                     b
                 })
                 .unwrap_or_else(|| {
@@ -1012,10 +1093,10 @@ fn spawn_bc_training_thread(
                     TensorData::new(labels_flat, [BC_BATCH_SIZE, 4]),
                     &device,
                 );
-                let turn_t   = labels.clone().narrow(1, 0, 1).reshape([BC_BATCH_SIZE]);
+                let turn_t = labels.clone().narrow(1, 0, 1).reshape([BC_BATCH_SIZE]);
                 let thrust_t = labels.clone().narrow(1, 1, 1).reshape([BC_BATCH_SIZE]);
-                let fp_t     = labels.clone().narrow(1, 2, 1).reshape([BC_BATCH_SIZE]);
-                let fs_t     = labels.narrow(1, 3, 1).reshape([BC_BATCH_SIZE]);
+                let fp_t = labels.clone().narrow(1, 2, 1).reshape([BC_BATCH_SIZE]);
+                let fs_t = labels.narrow(1, 3, 1).reshape([BC_BATCH_SIZE]);
 
                 // ── Forward + loss ───────────────────────────────────────────
                 let grads = {

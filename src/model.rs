@@ -35,12 +35,13 @@ use crate::rl_obs::{
 // Constants
 // ---------------------------------------------------------------------------
 
-/// Self-state feature count (matches `SELF_SIZE` in `rl_obs.rs`).
-pub const SELF_INPUT_DIM: usize = 10;
+/// Self-state feature count — must equal `SELF_SIZE` in `rl_obs.rs`.
+pub const SELF_INPUT_DIM: usize = SELF_SIZE;
 
-/// Per-object feature count:
-/// `is_present(1) + type_onehot(4) + rel_pos(2) + rel_vel(2) + hostility(1) + extra(1)`
-pub const OBJECT_INPUT_DIM: usize = 11;
+/// Per-object feature count — must equal `TARGET_SLOT_SIZE` in `rl_obs.rs`.
+/// Layout: `is_present(1) + type_onehot(4) + rel_pos(2) + rel_vel(2) + hostility(1) + extra(1)
+///          + pursuit_angle(1) + pursuit_indicator(1) + fire_angle(1) + fire_indicator(1) + in_range(1)`
+pub const OBJECT_INPUT_DIM: usize = TARGET_SLOT_SIZE;
 
 /// Total floats per row fed into the network (`SELF_INPUT_DIM + OBJECT_INPUT_DIM`).
 pub const NET_INPUT_DIM: usize = SELF_INPUT_DIM + OBJECT_INPUT_DIM;
@@ -371,12 +372,19 @@ pub fn obs_to_model_input(obs: &[f32]) -> Vec<f32> {
             let slot = &obs[slot_offset..slot_offset + ENTITY_SLOT_SIZE];
             let is_present = if slot.iter().any(|&x| x != 0.0) { 1.0_f32 } else { 0.0 };
 
-            rows.extend_from_slice(self_feat);      // [10] — self features
+            rows.extend_from_slice(self_feat);      // [SELF_INPUT_DIM] — self features
             rows.push(is_present);                  // [1]
             rows.extend_from_slice(type_onehot);    // [4]
             rows.extend_from_slice(&slot[0..4]);    // [4] rel_pos(2) + rel_vel(2)
             rows.push(*hostility);                  // [1]
             rows.push(slot[4]);                     // [1] extra (health frac / value)
+            rows.push(slot[5]);                     // [1] pursuit_angle
+            rows.push(slot[6]);                     // [1] pursuit_indicator
+            // Fire angle / fire indicator / in_range are only meaningful on the target
+            // slot (row 0); pad zeros here so all rows have identical width.
+            rows.push(0.0_f32);                     // [1] fire_angle  (n/a)
+            rows.push(0.0_f32);                     // [1] fire_indicator (n/a)
+            rows.push(0.0_f32);                     // [1] in_range (n/a)
 
             slot_offset += ENTITY_SLOT_SIZE;
         }

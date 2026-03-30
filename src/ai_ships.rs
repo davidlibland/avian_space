@@ -90,12 +90,14 @@ pub fn ai_ship_bundle(app: &mut App) {
         .add_systems(
             Update,
             (
+                ai_target_selection,
                 simple_ai_control,
                 land_ship,
                 jump_in_system,
                 jump_out_system,
                 manage_ship_population,
             )
+                .chain()
                 .run_if(in_state(PlayState::Flying)),
         );
 }
@@ -458,27 +460,41 @@ pub fn compute_ai_action(
             let stop_dist =
                 braking_distance(speed, d.thrust, d.thrust_kp, d.thrust_kd, d.max_speed);
             let turn_margin = speed * PI * d.angular_drag / d.torque;
-            let trigger_dist = stop_dist + turn_margin;
+            // Core braking zone: must be decelerating.
+            let brake_dist = stop_dist + turn_margin;
+            // Outer prepare zone: start the retrograde turn early so the ship
+            // is already aligned by the time it reaches the braking zone.
+            let prepare_dist = brake_dist + turn_margin;
 
-            if dist < trigger_dist {
-                let ship_forward = ship_dir;
-                let thrust = if speed > f32::EPSILON {
-                    let retrograde = -vel / speed;
-                    if ship_forward.dot(retrograde) > 0.7 {
-                        1.0
-                    } else {
-                        0.0
-                    }
+            if dist < prepare_dist && speed > f32::EPSILON {
+                // Retrograde bearing in ego frame — reuses the same angle
+                // convention as navigation so angle_to_controls works directly.
+                let retro_ego = rotate_r(-vel);
+                let retro_angle = retro_ego.y.atan2(retro_ego.x);
+
+                if dist < brake_dist {
+                    // Braking zone: turn toward retrograde AND thrust when
+                    // reasonably aligned (angle_to_controls gives thrust=1
+                    // when within ±60° of the target bearing).
+                    let (turn, thrust) = angle_to_controls(retro_angle);
+                    Some(RawAIAction {
+                        thrust,
+                        turn,
+                        reverse: 0.0,
+                        weapons_to_fire: vec![],
+                    })
                 } else {
-                    0.0
-                };
-                Some(RawAIAction {
-                    thrust,
-                    turn: 0.0,
-                    reverse: 1.0,
-                    weapons_to_fire: vec![],
-                })
+                    // Prepare zone: turn toward retrograde, no thrust yet.
+                    let (turn, _) = angle_to_controls(retro_angle);
+                    Some(RawAIAction {
+                        thrust: 0.0,
+                        turn,
+                        reverse: 0.0,
+                        weapons_to_fire: vec![],
+                    })
+                }
             } else {
+                // Far from planet (or nearly stopped): approach normally.
                 let local_offset = rotate_r(offset);
                 let (turn, thrust) =
                     if let Some(angle) = angle_to_hit(max_speed, &local_offset, &Vec2::ZERO) {
@@ -497,26 +513,16 @@ pub fn compute_ai_action(
     }
 }
 
-pub fn simple_ai_control(
-    mut ship_writer: MessageWriter<ShipCommand>,
-    mut weapons_writer: MessageWriter<FireCommand>,
+/// Validate and assign targets for all AI ships.
+///
+/// This runs for **every** AI ship regardless of `AIPlayMode` so that
+/// RLAgent ships have meaningful `ship.target` values during inference.
+/// Target selection is separated from action execution so the RL policy
+/// can observe what the ship *should* be pursuing.
+pub fn ai_target_selection(
     spatial_query: SpatialQuery,
-    mode: Res<AIPlayMode>,
-    mut ships: Query<
-        (
-            Entity,
-            &Position,
-            &LinearVelocity,
-            &MaxLinearSpeed,
-            &Transform,
-            &mut Ship,
-            &AIShip,
-            Option<&RLAgent>,
-        ),
-        Without<JumpingOut>,
-    >,
+    mut ships: Query<(Entity, &Position, &mut Ship, &AIShip), Without<JumpingOut>>,
     all_positions: Query<&Position>,
-    velocities: Query<&LinearVelocity>,
     planet_marker: Query<(), With<Planet>>,
     asteroid_marker: Query<(), With<Asteroid>>,
     ship_marker: Query<(), With<Ship>>,
@@ -526,14 +532,7 @@ pub fn simple_ai_control(
     current_star_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
-    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, ai_ship, rl_agent) in
-        &mut ships
-    {
-        // In RLControl mode, RLAgent ships are driven by rl_step instead.
-        if *mode == AIPlayMode::RLControl && rl_agent.is_some() {
-            continue;
-        }
-
+    for (entity, position, mut ship, ai_ship) in &mut ships {
         // 1. Validate existing target: clear if entity gone or (for combat targets) out of range.
         if let Some(ref tgt) = ship.target.clone() {
             let target_entity = match tgt {
@@ -658,8 +657,44 @@ pub fn simple_ai_control(
                 };
             }
         }
+    }
+}
 
-        // 3. Act on the current target.
+/// Compute and apply rule-based actions for AI ships.
+///
+/// In `RLControl` mode, `RLAgent` ships are skipped here — they are driven by
+/// `rl_step` and `repeat_actions` instead. Target selection has already been
+/// performed by [`ai_target_selection`].
+pub fn simple_ai_control(
+    mut ship_writer: MessageWriter<ShipCommand>,
+    mut weapons_writer: MessageWriter<FireCommand>,
+    mode: Res<AIPlayMode>,
+    mut ships: Query<
+        (
+            Entity,
+            &Position,
+            &LinearVelocity,
+            &MaxLinearSpeed,
+            &Transform,
+            &mut Ship,
+            &AIShip,
+            Option<&RLAgent>,
+        ),
+        Without<JumpingOut>,
+    >,
+    all_positions: Query<&Position>,
+    velocities: Query<&LinearVelocity>,
+    item_universe: Res<ItemUniverse>,
+) {
+    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, _ai_ship, rl_agent) in
+        &mut ships
+    {
+        // In RLControl mode, RLAgent ships are driven by rl_step instead.
+        if *mode == AIPlayMode::RLControl && rl_agent.is_some() {
+            continue;
+        }
+
+        // Act on the current target (assigned by ai_target_selection).
         if ship.target.is_none() {
             continue;
         }
@@ -711,6 +746,7 @@ fn land_ship(
     mut commands: Commands,
     ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
 ) {
+    let mut rng = rand::thread_rng();
     for (ship_entity, mut ship, ship_pos, vel, ai_ship, rl_agent) in ships.iter_mut() {
         match ship.target {
             Some(Target::Planet(planet_entity)) => {
@@ -806,6 +842,11 @@ fn land_ship(
                                     && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
                             });
                         if !has_hostile {
+                            commands.entity(ship_entity).insert(JumpingOut);
+                        }
+                    } else {
+                        let choose_to_jump = rng.gen_bool(0.1);
+                        if choose_to_jump {
                             commands.entity(ship_entity).insert(JumpingOut);
                         }
                     }
@@ -1041,7 +1082,9 @@ mod tests {
         ship.data.angular_drag = 1.0;
         ship.target = Some(Target::Planet(planet));
 
-        // Moving at 500 m/s toward the planet — braking distance >> 50 units
+        // Moving at 500 m/s toward the planet — braking distance >> 50 units.
+        // Ship faces +Y (default) and vel is +Y, so the ship is flying prograde.
+        // In braking zone the AI should turn toward retrograde (-Y) and thrust.
         let vel = Vec2::new(0.0, 500.0);
 
         let result = compute_ai_action(
@@ -1055,7 +1098,13 @@ mod tests {
             &empty_item_universe(),
         );
         let action = result.expect("close planet should produce braking action");
-        assert_eq!(action.reverse, 1.0, "should be in braking (reverse) mode");
+        assert_eq!(action.reverse, 0.0, "should use turn+thrust, not reverse");
+        // Ship faces +Y, velocity is +Y, retrograde is -Y → bearing = ±PI → turn hard
+        assert!(
+            action.turn.abs() > 0.5,
+            "should be turning toward retrograde, got turn={}",
+            action.turn
+        );
     }
 
     #[test]
@@ -1092,6 +1141,56 @@ mod tests {
         let action = result.expect("far planet should produce approach action");
         assert_eq!(action.reverse, 0.0, "should not brake when far away");
         assert!(action.thrust > 0.5, "should thrust toward far planet");
+    }
+
+    #[test]
+    fn test_compute_ai_action_planet_prepare_zone() {
+        let mut world = World::new();
+        let mut ship = Ship::default();
+        ship.data.thrust = 100.0;
+        ship.data.thrust_kp = 5.0;
+        ship.data.thrust_kd = 1.0;
+        ship.data.max_speed = 200.0;
+        ship.data.torque = 10.0;
+        ship.data.angular_drag = 3.0;
+
+        // Ship moving at 200 m/s toward a planet.
+        // braking_distance(200, 100, 5, 1, 200) ≈ 200
+        // turn_margin = 200 * PI * 3 / 10 ≈ 188
+        // brake_dist ≈ 388, prepare_dist ≈ 576
+        // Place planet at 500 units — inside prepare zone but outside brake zone.
+        let planet = world
+            .spawn((Position(Vec2::new(0.0, 500.0)), LinearVelocity(Vec2::ZERO)))
+            .id();
+        ship.target = Some(Target::Planet(planet));
+
+        let mut state: SystemState<(Query<&Position>, Query<&LinearVelocity>)> =
+            SystemState::new(&mut world);
+        let (pos_q, vel_q) = state.get(&world);
+
+        let vel = Vec2::new(0.0, 200.0);
+        let result = compute_ai_action(
+            &ship,
+            Vec2::ZERO,
+            vel,
+            200.0,
+            &Transform::default(), // faces +y = same as velocity
+            &pos_q,
+            &vel_q,
+            &empty_item_universe(),
+        );
+        let action = result.expect("prepare zone should produce action");
+        assert_eq!(action.reverse, 0.0, "should use turn+thrust, not reverse");
+        assert_eq!(
+            action.thrust, 0.0,
+            "should NOT thrust while in prepare zone (turning, not braking)"
+        );
+        // Ship faces +Y, velocity is +Y, retrograde is -Y → should be turning
+        assert!(
+            action.turn.abs() > 0.5,
+            "should be turning toward retrograde in prepare zone, got turn={}",
+            action.turn
+        );
     }
 
     // ── Jump mechanic tests ──────────────────────────────────────────────────
