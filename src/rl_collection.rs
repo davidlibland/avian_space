@@ -4,20 +4,20 @@
 /// transitions. Completed segments are sent via an mpsc channel to a trainer thread.
 ///
 /// # Modes
-/// - `AIPlayMode::BehavioralCloning`: `simple_ai_control` runs normally for non-RLAgent ships;
-///   for `RLAgent` ships `rl_step` uses the same rule-based logic and records (obs, action) pairs
-///   via the `BCSender` channel.
-/// - `AIPlayMode::RLControl`: `simple_ai_control` is excluded for `RLAgent` ships; `rl_step`
-///   performs inference (stub: rule-based until a model is integrated) and records full
-///   (obs, action, reward, done) transitions via the `RLSender` channel.
+/// - `AIPlayMode::BehavioralCloning`: `rl_step` computes rule-based actions for `RLAgent` ships
+///   and records (obs, action) pairs via `BCSender`. `repeat_actions` drives the ships every frame.
+/// - `AIPlayMode::RLControl`: `rl_step` performs model inference and records full
+///   (obs, action, reward, done) transitions via `RLSender`. `repeat_actions` drives the ships.
+///
+/// In both modes, `classic_ai_control` only runs for non-RLAgent ships.
 ///
 /// # Action space
-/// Factored discrete: (turn_idx, thrust_idx, fire_primary, fire_secondary)
+/// Factored discrete: (turn_idx, thrust_idx, fire_primary, fire_secondary, target_idx)
 ///   - turn_idx:      0=left, 1=straight, 2=right
 ///   - thrust_idx:    0=no-thrust, 1=thrust
 ///   - fire_primary:  0=no, 1=yes
 ///   - fire_secondary: 0=no, 1=yes  (which weapon fires is chosen deterministically)
-/// Total: 2×3×2×2 = 24 factored actions.
+///   - target_idx:    0..N_OBJECTS-1 = entity slot, N_OBJECTS = "no target"
 ///
 /// # Decision rate
 /// `rl_step` is gated by a 4 Hz timer. Between ticks, `repeat_actions` re-emits the last
@@ -27,25 +27,26 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use avian2d::prelude::*;
-use bevy::ecs::change_detection::MAX_CHANGE_AGE;
 use bevy::prelude::*;
 use burn::nn::loss::CrossEntropyLossConfig;
 use burn::optim::{GradientsParams, Optimizer};
 use burn::tensor::{Int, TensorData};
 use rand::Rng;
 
+use crate::CurrentStarSystem;
 use crate::ai_ships::{AIShip, compute_ai_action};
-use crate::asteroids::Asteroid;
+use crate::asteroids::{Asteroid, AsteroidField};
 use crate::item_universe::ItemUniverse;
 use crate::model::{
-    self, HIDDEN_DIM, InferenceNet, N_OBJECTS, NET_INPUT_DIM, POLICY_OUTPUT_DIM, RLInner,
-    RLResource, TrainBackend, obs_to_model_input, training_net_to_bytes,
+    self, HIDDEN_DIM, InferenceNet, N_OBJECTS, OBJECT_INPUT_DIM, POLICY_OUTPUT_DIM, RLInner,
+    RLResource, SELF_INPUT_DIM, TrainBackend, split_obs, training_net_to_bytes,
 };
 use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_obs::{
-    self, DETECTION_RADIUS, DiscreteAction, EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS,
-    K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, ObsInput, TargetSlotData,
+    self, AsteroidSlotData, CoreSlotData, DETECTION_RADIUS, DiscreteAction, EntityKind,
+    EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, ObsInput,
+    PickupSlotData, PlanetSlotData, SELF_SIZE, SLOT_SIZE, ShipSlotData,
 };
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target};
 use crate::weapons::FireCommand;
@@ -102,14 +103,12 @@ pub struct Segment {
     pub bootstrap_value: Option<f32>,
 }
 
-/// A (model_input, action) pair for behavioural-cloning pre-training.
+/// A (observation, action) pair for behavioural-cloning pre-training.
 ///
-/// `model_input` already holds the output of `obs_to_model_input` —
-/// i.e. the `[N_OBJECTS × NET_INPUT_DIM]` flat tensor row.  The transform
-/// is done once at collection time so the training thread pays no per-sample
-/// CPU cost per gradient step.
+/// `obs` holds the flat `OBS_DIM` observation vector. The training thread
+/// splits it into self-features and entity-features via [`model::split_obs`].
 pub struct BCTransition {
-    pub model_input: Vec<f32>,
+    pub obs: Vec<f32>,
     pub action: DiscreteAction,
 }
 
@@ -133,8 +132,8 @@ pub struct BCSender(pub mpsc::SyncSender<BCTransition>);
 /// or by the RL policy.
 #[derive(Resource, Default, PartialEq, Eq, Clone, Copy, Debug)]
 pub enum AIPlayMode {
-    /// Rule-based `simple_ai_control` runs for RLAgent ships; observations and
-    /// rule-based actions are recorded for behavioural-cloning training.
+    /// `rl_step` computes rule-based actions for RLAgent ships; `repeat_actions`
+    /// drives them. Observations and actions are recorded for BC training.
     #[default]
     BehavioralCloning,
     /// RLAgent ships are controlled by the RL policy (currently rule-based stub).
@@ -203,6 +202,10 @@ pub struct RLAgent {
     pub segment_initial_hidden: Vec<f32>,
     /// Number of decision steps since the last segment flush.
     pub steps_since_flush: usize,
+    /// Maps each observation entity slot to the `Target` it represents.
+    /// Length = `N_OBJECTS`: slot 0 = current target, slots 1.. = nearby buckets.
+    /// `None` for empty/unused slots.
+    pub slot_targets: Vec<Option<Target>>,
 }
 
 impl RLAgent {
@@ -216,6 +219,7 @@ impl RLAgent {
             segment_buffer: Vec::with_capacity(RL_SEGMENT_LEN),
             segment_initial_hidden: vec![0.0; 64],
             steps_since_flush: 0,
+            slot_targets: vec![None; model::N_OBJECTS],
         }
     }
 }
@@ -296,12 +300,10 @@ impl Plugin for RLCollectionPlugin {
                 Update,
                 (
                     accumulate_rewards,
-                    rl_step,
-                    repeat_actions,
+                    (rl_step, repeat_actions).chain(),
                     handle_rl_ship_died,
                     handle_rl_ship_jumped,
                 )
-                    .chain()
                     .run_if(in_state(PlayState::Flying)),
             );
     }
@@ -346,50 +348,70 @@ fn rl_step(
     // Queries for nearby entities (non-overlapping with the agent query).
     all_positions: Query<&Position>,
     all_velocities: Query<&LinearVelocity>,
-    planet_query: Query<(Entity, &Planet)>,
-    asteroid_query: Query<Entity, With<Asteroid>>,
-    pickup_query: Query<Entity, With<Pickup>>,
-    ship_query: Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
+    entity_queries: (
+        Query<(Entity, &Planet)>,
+        Query<(Entity, &Asteroid)>,
+        Query<&AsteroidField>,
+        Query<(Entity, &Pickup)>,
+        // Ship data for non-RLAgent ships (disjoint with the mutable `agents` query).
+        Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
+    ),
+    // ShipHostility for ALL ships — used to bucket nearby ships as hostile/friendly.
+    // Only reads ShipHostility (not Ship), so disjoint with the `agents` query.
+    all_ship_factions: Query<&ShipHostility, With<Ship>>,
     spatial_query: SpatialQuery,
-    item_universe: Res<ItemUniverse>,
-    mode: Res<AIPlayMode>,
-    rl_sender: Res<RLSender>,
-    bc_sender: Res<BCSender>,
-    rl_resource: Res<RLResource>,
+    resources: (
+        Res<ItemUniverse>,
+        Res<CurrentStarSystem>,
+        Res<AIPlayMode>,
+        Res<RLSender>,
+        Res<BCSender>,
+        Res<RLResource>,
+    ),
 ) {
+    let (planet_query, asteroid_query, asteroid_field_query, pickup_query, ship_query) =
+        &entity_queries;
+    let (item_universe, current_system, mode, rl_sender, bc_sender, rl_resource) = &resources;
     if !timer.0.tick(time.delta()).just_finished() {
         return;
     }
 
     // ── Sub-function 1: build observations for all agents ──────────────────
-    let obs_data: Vec<(Entity, Vec<f32>)> = build_all_observations(
+    let obs_data: Vec<(Entity, Vec<f32>, Vec<Option<Target>>)> = build_all_observations(
         &agents,
         &all_positions,
         &all_velocities,
-        &planet_query,
-        &asteroid_query,
-        &pickup_query,
-        &ship_query,
+        planet_query,
+        asteroid_query,
+        asteroid_field_query,
+        pickup_query,
+        ship_query,
+        &all_ship_factions,
         &spatial_query,
-        &item_universe,
+        item_universe,
+        current_system,
     );
 
     // ── Sub-function 2: run batched model inference (RLControl mode only) ──
     // In BehavioralCloning mode the rule-based action from compute_ai_action
     // is used instead, so we skip the model entirely.
     let model_actions: Option<Vec<DiscreteAction>> =
-        if *mode == AIPlayMode::RLControl && !obs_data.is_empty() {
+        if **mode == AIPlayMode::RLControl && !obs_data.is_empty() {
             let batch_size = obs_data.len();
-            let mut batch_flat =
-                Vec::with_capacity(batch_size * model::N_OBJECTS * model::NET_INPUT_DIM);
-            for (_, obs) in &obs_data {
-                batch_flat.extend(model::obs_to_model_input(obs));
+            let mut self_flat = Vec::with_capacity(batch_size * model::SELF_INPUT_DIM);
+            let mut obj_flat = Vec::with_capacity(batch_size * model::ENTITIES_FLAT_DIM);
+            for (_, obs, _) in &obs_data {
+                let (s, o) = model::split_obs(obs);
+                self_flat.extend_from_slice(s);
+                obj_flat.extend_from_slice(o);
             }
             let inference = rl_resource.inference_net.lock().unwrap();
-            let logits = inference.run_inference(batch_flat, batch_size);
-            let actions = logits
+            let (action_logits, target_logits) =
+                inference.run_inference(self_flat, obj_flat, batch_size);
+            let actions = action_logits
                 .chunks(model::POLICY_OUTPUT_DIM)
-                .map(model::logits_to_discrete_action)
+                .zip(target_logits.chunks(model::TARGET_OUTPUT_DIM))
+                .map(|(al, tl)| model::logits_to_discrete_action(al, tl))
                 .collect();
             Some(actions)
         } else {
@@ -403,31 +425,27 @@ fn rl_step(
         &mut agents,
         &all_positions,
         &all_velocities,
-        &item_universe,
-        &rl_sender,
-        &bc_sender,
-        &mode,
+        item_universe,
+        rl_sender,
+        bc_sender,
+        mode,
     );
 }
 
 /// Re-emit the last chosen action every `Update` frame so the ship continues
 /// moving between 4 Hz decision steps.
-/// Only active in `RLControl` mode — in `BehavioralCloning` mode `simple_ai_control`
-/// drives the ship directly.
+/// Active in both `RLControl` and `BehavioralCloning` modes — `classic_ai_control`
+/// only drives non-RLAgent ships.
 fn repeat_actions(
-    mode: Res<AIPlayMode>,
     agents: Query<(Entity, &RLAgent, &Ship)>,
     mut ship_writer: MessageWriter<ShipCommand>,
     mut fire_writer: MessageWriter<FireCommand>,
 ) {
-    if *mode != AIPlayMode::RLControl {
-        return;
-    }
     for (entity, agent, ship) in &agents {
         let Some(action) = agent.last_action else {
             continue;
         };
-        let (turn_idx, thrust_idx, fire_primary, fire_secondary) = action;
+        let (turn_idx, thrust_idx, fire_primary, fire_secondary, _target_idx) = action;
         let (thrust, turn) = rl_obs::discrete_to_controls(thrust_idx, turn_idx);
         ship_writer.write(ShipCommand {
             entity,
@@ -508,8 +526,9 @@ fn handle_rl_ship_jumped(mut events: MessageReader<RLShipJumped>, rl_sender: Res
 
 /// Build ego-centric observations for every `RLAgent` ship.
 ///
-/// Returns a vec of `(entity, observation_vec, rule_based_action)` tuples.
-/// The rule-based action is used directly in BC mode and as a stub in RL mode.
+/// Returns a vec of `(entity, observation_vec, slot_targets)` tuples.
+/// `slot_targets` maps each entity slot index to the `Target` it represents
+/// (or `None` for empty slots), enabling the policy's target selection action.
 fn build_all_observations(
     agents: &Query<(
         Entity,
@@ -525,12 +544,15 @@ fn build_all_observations(
     all_positions: &Query<&Position>,
     all_velocities: &Query<&LinearVelocity>,
     planet_query: &Query<(Entity, &Planet)>,
-    asteroid_query: &Query<Entity, With<Asteroid>>,
-    pickup_query: &Query<Entity, With<Pickup>>,
+    asteroid_query: &Query<(Entity, &Asteroid)>,
+    asteroid_field_query: &Query<&AsteroidField>,
+    pickup_query: &Query<(Entity, &Pickup)>,
     ship_query: &Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
+    all_ship_factions: &Query<&ShipHostility, With<Ship>>,
     spatial_query: &SpatialQuery,
     item_universe: &ItemUniverse,
-) -> Vec<(Entity, Vec<f32>)> {
+    current_system: &CurrentStarSystem,
+) -> Vec<(Entity, Vec<f32>, Vec<Option<Target>>)> {
     let mut results = Vec::new();
 
     for (entity, agent, ship, pos, vel, ang_vel, max_speed, transform, self_hostility) in
@@ -540,7 +562,6 @@ fn build_all_observations(
         let ship_dir = (transform.rotation * Vec3::Y).xy();
         let heading = [ship_dir.x, ship_dir.y];
         let (sin_a, cos_a) = rl_obs::ego_frame_sincos(heading);
-
         // Spatial query: all entities within DETECTION_RADIUS.
         let filter = SpatialQueryFilter::from_mask([
             GameLayer::Planet,
@@ -561,8 +582,8 @@ fn build_all_observations(
             })
             .collect();
 
-        // Helper: build EntitySlotData for a single entity.
-        let make_slot = |e: Entity, extra: f32| -> EntitySlotData {
+        // Helper: compute ego-frame core data for any entity.
+        let make_core = |e: Entity, entity_type: u8| -> CoreSlotData {
             let world_offset = all_positions
                 .get(e)
                 .map(|p| p.0 - pos.0)
@@ -571,63 +592,46 @@ fn build_all_observations(
                 .get(e)
                 .map(|v| v.0 - vel.0)
                 .unwrap_or(Vec2::ZERO);
-            let rel_pos = rl_obs::rotate_to_ego([world_offset.x, world_offset.y], sin_a, cos_a);
-            let rel_vel = rl_obs::rotate_to_ego([world_rel_vel.x, world_rel_vel.y], sin_a, cos_a);
-            let (is_hostile, should_engage, health, max_health, max_speed, torque) = ship_query
-                .get(e)
-                .map(|(_, other_ship, _)| {
-                    let is_hostile =
-                        if other_ship.should_engage(&ShipHostility(ship.enemies.clone())) {
-                            1.0
-                        } else {
-                            -1.0
-                        };
-                    let should_engage =
-                        if ship.should_engage(&ShipHostility(other_ship.enemies.clone())) {
-                            1.0
-                        } else {
-                            -1.0
-                        };
-                    let health = other_ship.health as f32;
-                    let (max_health, max_speed, torque) = item_universe
-                        .ships
-                        .get(&other_ship.ship_type)
-                        .map(|data| (data.max_health as f32, data.max_speed, data.torque))
-                        .unwrap_or((0.0, 0.0, 0.0));
-                    return (
-                        is_hostile,
-                        should_engage,
-                        health,
-                        max_health,
-                        max_speed,
-                        torque,
-                    );
-                })
-                .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
-            EntitySlotData {
-                rel_pos,
-                rel_vel,
-                extra,
-                is_hostile,
-                should_engage,
-                max_health,
-                max_speed,
-                health,
-                torque,
+            CoreSlotData {
+                rel_pos: rl_obs::rotate_to_ego([world_offset.x, world_offset.y], sin_a, cos_a),
+                rel_vel: rl_obs::rotate_to_ego([world_rel_vel.x, world_rel_vel.y], sin_a, cos_a),
+                entity_type,
             }
         };
 
-        // Buckets.
+        // Precompute planet trade data for this system.
+        let system_name = &current_system.0;
+        let planet_margins = item_universe.planet_best_margin.get(system_name);
+
+        // Compute asteroid field expected values for this system.
+        let field_values = item_universe.asteroid_field_expected_value.get(system_name);
+
+        // Cargo sale value helper: total value of selling ship's cargo at a planet.
+        let cargo_sale_value = |planet_name: &str| -> f32 {
+            let planet_data = item_universe
+                .star_systems
+                .get(system_name)
+                .and_then(|sys| sys.planets.get(planet_name));
+            let Some(pd) = planet_data else { return 0.0 };
+            ship.cargo
+                .iter()
+                .map(|(commodity, &qty)| {
+                    pd.commodities.get(commodity).copied().unwrap_or(0) as f32 * qty as f32
+                })
+                .sum()
+        };
+
+        // Buckets — sort by distance within each type.
         let mut planets: Vec<(Entity, f32)> = nearby_hits
             .iter()
-            .filter(|(e, _)| planet_query.contains(*e))
+            .filter(|(e, _)| planet_query.get(*e).is_ok())
             .cloned()
             .collect();
         planets.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         let mut asteroids: Vec<(Entity, f32)> = nearby_hits
             .iter()
-            .filter(|(e, _)| asteroid_query.contains(*e))
+            .filter(|(e, _)| asteroid_query.get(*e).is_ok())
             .cloned()
             .collect();
         asteroids.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
@@ -635,11 +639,9 @@ fn build_all_observations(
         let mut hostile_ships: Vec<(Entity, f32)> = nearby_hits
             .iter()
             .filter(|(e, _)| {
-                ship_query
+                all_ship_factions
                     .get(*e)
-                    .map(|(_, other_ship, _)| {
-                        ship.should_engage(&ShipHostility(other_ship.enemies.clone()))
-                    })
+                    .map(|hostility| ship.should_engage(hostility))
                     .unwrap_or(false)
             })
             .cloned()
@@ -649,11 +651,9 @@ fn build_all_observations(
         let mut friendly_ships: Vec<(Entity, f32)> = nearby_hits
             .iter()
             .filter(|(e, _)| {
-                ship_query
+                all_ship_factions
                     .get(*e)
-                    .map(|(_, other_ship, _)| {
-                        !ship.should_engage(&ShipHostility(other_ship.enemies.clone()))
-                    })
+                    .map(|hostility| !ship.should_engage(hostility))
                     .unwrap_or(false)
             })
             .cloned()
@@ -662,60 +662,273 @@ fn build_all_observations(
 
         let mut pickups: Vec<(Entity, f32)> = nearby_hits
             .iter()
-            .filter(|(e, _)| pickup_query.contains(*e))
+            .filter(|(e, _)| pickup_query.get(*e).is_ok())
             .cloned()
             .collect();
         pickups.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
+        // Build EntitySlotData for each bucket.
         let nearby_planets: Vec<EntitySlotData> = planets
             .iter()
             .take(K_PLANETS)
-            .map(|(e, _)| make_slot(*e, 1.0))
+            .map(|(e, _)| {
+                let core = make_core(*e, 2); // Planet
+                let planet_name = planet_query
+                    .get(*e)
+                    .map(|(_, p)| p.0.as_str())
+                    .unwrap_or("");
+                let csv = cargo_sale_value(planet_name);
+                let has_ammo = item_universe
+                    .planet_has_ammo_for
+                    .get(planet_name)
+                    .map(|set| set.contains(&ship.ship_type))
+                    .unwrap_or(false);
+                let margin = planet_margins
+                    .and_then(|m| m.get(planet_name))
+                    .copied()
+                    .unwrap_or(0.0) as f32;
+                EntitySlotData {
+                    core,
+                    kind: EntityKind::Planet(PlanetSlotData {
+                        cargo_sale_value: csv,
+                        has_ammo: if has_ammo { 1.0 } else { 0.0 },
+                        commodity_margin: margin,
+                    }),
+                    value: csv,
+                    is_current_target: false,
+                }
+            })
             .collect();
+
         let nearby_asteroids: Vec<EntitySlotData> = asteroids
             .iter()
             .take(K_ASTEROIDS)
-            .map(|(e, _)| make_slot(*e, 1.0))
+            .map(|(e, _)| {
+                let core = make_core(*e, 1); // Asteroid
+                let (size, ev) = asteroid_query
+                    .get(*e)
+                    .map(|(_, ast)| {
+                        // Expected value: field EV * expected qty from this asteroid.
+                        let field_ev = asteroid_field_query
+                            .get(ast.field)
+                            .ok()
+                            .and_then(|_| {
+                                // Find field index in system config to look up precomputed EV.
+                                // Fallback: use global average if not found.
+                                field_values.and_then(|fv| fv.first().copied())
+                            })
+                            .unwrap_or(0.0);
+                        let expected_qty = (ast.size * 0.2 * 0.5).max(0.5); // rough E[qty]
+                        (ast.size, (field_ev * expected_qty as f64) as f32)
+                    })
+                    .unwrap_or((0.0, 0.0));
+                EntitySlotData {
+                    core,
+                    kind: EntityKind::Asteroid(AsteroidSlotData { size, value: ev }),
+                    value: ev,
+                    is_current_target: false,
+                }
+            })
             .collect();
+
+        // Build ship slot data — tries ship_query (non-RLAgent) first, then
+        // falls back to the agents query (RLAgent ships appearing as nearby entities).
+        let make_ship_slot = |e: Entity| -> EntitySlotData {
+            let core = make_core(e, 0); // Ship
+            // Get the other ship's data from either query.
+            let other_ship_ref: Option<(&Ship, &ShipHostility)> = ship_query
+                .get(e)
+                .map(|(_, s, h)| (s, h))
+                .ok()
+                .or_else(|| {
+                    agents
+                        .get(e)
+                        .map(|(_, _, s, _, _, _, _, _, h)| (s as &Ship, h as &ShipHostility))
+                        .ok()
+                });
+            let (ship_data, value) = other_ship_ref
+                .map(|(other_ship, other_hostility)| {
+                    let is_hostile =
+                        if other_ship.should_engage(&ShipHostility(ship.enemies.clone())) {
+                            1.0
+                        } else {
+                            -1.0
+                        };
+                    let should_engage =
+                        if ship.should_engage(other_hostility) {
+                            1.0
+                        } else {
+                            -1.0
+                        };
+                    let data = item_universe.ships.get(&other_ship.ship_type);
+                    let sd = ShipSlotData {
+                        max_health: data.map(|d| d.max_health as f32).unwrap_or(0.0),
+                        health: other_ship.health as f32,
+                        max_speed: data.map(|d| d.max_speed as f32).unwrap_or(0.0),
+                        torque: data.map(|d| d.torque as f32).unwrap_or(0.0),
+                        is_hostile,
+                        should_engage,
+                        personality: data.map(|d| d.personality.clone()).unwrap_or_default(),
+                    };
+                    (sd, 0.0_f32)
+                })
+                .unwrap_or_default();
+            EntitySlotData {
+                core,
+                kind: EntityKind::Ship(ship_data),
+                value,
+                is_current_target: false,
+            }
+        };
+
         let nearby_hostile_ships: Vec<EntitySlotData> = hostile_ships
             .iter()
             .take(K_HOSTILE_SHIPS)
-            .map(|(e, _)| {
-                let health_frac = ship_query
-                    .get(*e)
-                    .map(|(_, s, _)| s.health as f32 / s.data.max_health.max(1) as f32)
-                    .unwrap_or(1.0);
-                make_slot(*e, health_frac)
-            })
+            .map(|(e, _)| make_ship_slot(*e))
             .collect();
         let nearby_friendly_ships: Vec<EntitySlotData> = friendly_ships
             .iter()
             .take(K_FRIENDLY_SHIPS)
-            .map(|(e, _)| {
-                let health_frac = ship_query
-                    .get(*e)
-                    .map(|(_, s, _)| s.health as f32 / s.data.max_health.max(1) as f32)
-                    .unwrap_or(1.0);
-                make_slot(*e, health_frac)
-            })
+            .map(|(e, _)| make_ship_slot(*e))
             .collect();
+
         let nearby_pickups: Vec<EntitySlotData> = pickups
             .iter()
             .take(K_PICKUPS)
-            .map(|(e, _)| make_slot(*e, 1.0))
+            .map(|(e, _)| {
+                let core = make_core(*e, 3); // Pickup
+                let pv = pickup_query
+                    .get(*e)
+                    .map(|(_, p)| {
+                        let avg = item_universe
+                            .global_average_price
+                            .get(&p.commodity)
+                            .copied()
+                            .unwrap_or(0.0);
+                        (avg * p.quantity as f64) as f32
+                    })
+                    .unwrap_or(0.0);
+                EntitySlotData {
+                    core,
+                    kind: EntityKind::Pickup(PickupSlotData { value: pv }),
+                    value: pv,
+                    is_current_target: false,
+                }
+            })
             .collect();
 
-        // Target slot.
-        let target_slot = build_target_slot(
-            &ship,
-            pos,
-            vel,
-            all_positions,
-            all_velocities,
-            sin_a,
-            cos_a,
-            &ship_query,
-        );
+        // Target slot — build from ship.target using the same EntitySlotData format.
+        let target_slot: Option<EntitySlotData> = ship.target.as_ref().and_then(|tgt| {
+            let tgt_entity = tgt.get_entity();
+            // Verify entity still exists.
+            all_positions.get(tgt_entity).ok()?;
+            let mut slot = match tgt {
+                Target::Ship(_) => make_ship_slot(tgt_entity),
+                Target::Planet(e) => {
+                    let core = make_core(*e, 2);
+                    let planet_name = planet_query
+                        .get(*e)
+                        .map(|(_, p)| p.0.as_str())
+                        .unwrap_or("");
+                    let csv = cargo_sale_value(planet_name);
+                    let has_ammo = item_universe
+                        .planet_has_ammo_for
+                        .get(planet_name)
+                        .map(|set| set.contains(&ship.ship_type))
+                        .unwrap_or(false);
+                    let margin = planet_margins
+                        .and_then(|m| m.get(planet_name))
+                        .copied()
+                        .unwrap_or(0.0) as f32;
+                    EntitySlotData {
+                        core,
+                        kind: EntityKind::Planet(PlanetSlotData {
+                            cargo_sale_value: csv,
+                            has_ammo: if has_ammo { 1.0 } else { 0.0 },
+                            commodity_margin: margin,
+                        }),
+                        value: csv,
+                        is_current_target: false,
+                    }
+                }
+                Target::Asteroid(e) => {
+                    let core = make_core(*e, 1);
+                    let (size, ev) = asteroid_query
+                        .get(*e)
+                        .map(|(_, ast)| {
+                            let field_ev = field_values
+                                .and_then(|fv| fv.first().copied())
+                                .unwrap_or(0.0);
+                            let expected_qty = (ast.size * 0.2 * 0.5).max(0.5);
+                            (ast.size, (field_ev * expected_qty as f64) as f32)
+                        })
+                        .unwrap_or((0.0, 0.0));
+                    EntitySlotData {
+                        core,
+                        kind: EntityKind::Asteroid(AsteroidSlotData { size, value: ev }),
+                        value: ev,
+                        is_current_target: false,
+                    }
+                }
+                Target::Pickup(e) => {
+                    let core = make_core(*e, 3);
+                    let pv = pickup_query
+                        .get(*e)
+                        .map(|(_, p)| {
+                            let avg = item_universe
+                                .global_average_price
+                                .get(&p.commodity)
+                                .copied()
+                                .unwrap_or(0.0);
+                            (avg * p.quantity as f64) as f32
+                        })
+                        .unwrap_or(0.0);
+                    EntitySlotData {
+                        core,
+                        kind: EntityKind::Pickup(PickupSlotData { value: pv }),
+                        value: pv,
+                        is_current_target: false,
+                    }
+                }
+            };
+            slot.is_current_target = true;
+            Some(slot)
+        });
+
+        // Build slot→target mapping (N_OBJECTS entries).
+        let mut slot_targets: Vec<Option<Target>> = Vec::with_capacity(model::N_OBJECTS);
+        slot_targets.push(ship.target.clone());
+        for (e, _) in planets.iter().take(K_PLANETS) {
+            slot_targets.push(Some(Target::Planet(*e)));
+        }
+        for _ in planets.len().min(K_PLANETS)..K_PLANETS {
+            slot_targets.push(None);
+        }
+        for (e, _) in asteroids.iter().take(K_ASTEROIDS) {
+            slot_targets.push(Some(Target::Asteroid(*e)));
+        }
+        for _ in asteroids.len().min(K_ASTEROIDS)..K_ASTEROIDS {
+            slot_targets.push(None);
+        }
+        for (e, _) in hostile_ships.iter().take(K_HOSTILE_SHIPS) {
+            slot_targets.push(Some(Target::Ship(*e)));
+        }
+        for _ in hostile_ships.len().min(K_HOSTILE_SHIPS)..K_HOSTILE_SHIPS {
+            slot_targets.push(None);
+        }
+        for (e, _) in friendly_ships.iter().take(K_FRIENDLY_SHIPS) {
+            slot_targets.push(Some(Target::Ship(*e)));
+        }
+        for _ in friendly_ships.len().min(K_FRIENDLY_SHIPS)..K_FRIENDLY_SHIPS {
+            slot_targets.push(None);
+        }
+        for (e, _) in pickups.iter().take(K_PICKUPS) {
+            slot_targets.push(Some(Target::Pickup(*e)));
+        }
+        for _ in pickups.len().min(K_PICKUPS)..K_PICKUPS {
+            slot_targets.push(None);
+        }
+        debug_assert_eq!(slot_targets.len(), model::N_OBJECTS);
 
         // Primary weapon speed / range for fire-lead angle in the observation.
         let (primary_weapon_speed, primary_weapon_range) = ship
@@ -743,69 +956,86 @@ fn build_all_observations(
         };
         let obs = rl_obs::encode_observation(&obs_input);
 
-        results.push((entity, obs));
+        results.push((entity, obs, slot_targets));
     }
 
     results
 }
 
-/// Build the target slot data for a ship's current target.
-fn build_target_slot(
-    ship: &Ship,
-    pos: &Position,
-    vel: &LinearVelocity,
-    all_positions: &Query<&Position>,
-    all_velocities: &Query<&LinearVelocity>,
-    sin_a: f32,
-    cos_a: f32,
-    ship_query: &Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
-) -> Option<TargetSlotData> {
-    let target = ship.target.as_ref()?;
-    let target_entity = target.get_entity();
-    let target_pos = all_positions.get(target_entity).ok()?;
-    let target_vel = all_velocities
-        .get(target_entity)
-        .map(|v| v.0)
-        .unwrap_or(Vec2::ZERO);
+/// Choose the best target slot index for a ship, mirroring the priority logic
+/// in `classic_ai_target_selection`.
+///
+/// Operates on `slot_targets` which already contains nearby entities sorted by
+/// distance within each bucket. The slot layout is:
+///   0 = current target, 1-2 = planets, 3-5 = asteroids,
+///   6-8 = hostile ships, 9-10 = friendly ships, 11-12 = pickups.
+///
+/// Priority:
+/// 1. Traders with cargo → planet with highest cargo_sale_value (from obs)
+/// 2. All personalities → nearest pickup
+/// 3. Miner → nearest asteroid → nearest planet
+///    Fighter → nearest hostile ship → nearest planet
+///    Trader → nearest planet
+///
+/// Returns the slot index, or `N_OBJECTS` for "no target".
+fn choose_target_slot(
+    personality: &Personality,
+    has_cargo: bool,
+    slot_targets: &[Option<Target>],
+    obs: &[f32],
+) -> u8 {
+    let no_target = model::N_OBJECTS as u8;
 
-    let world_offset = target_pos.0 - pos.0;
-    let world_rel_vel = target_vel - vel.0;
-
-    let rel_pos_ego = rl_obs::rotate_to_ego([world_offset.x, world_offset.y], sin_a, cos_a);
-    let rel_vel_ego = rl_obs::rotate_to_ego([world_rel_vel.x, world_rel_vel.y], sin_a, cos_a);
-
-    let (entity_type, should_engage, is_hostile, value_hint) = match target {
-        Target::Ship(e) => {
-            let (should_engage, is_hostile) = ship_query
-                .get(*e)
-                .map(|(_, other, _)| {
-                    (
-                        ship.should_engage(&ShipHostility(other.enemies.clone())),
-                        other.should_engage(&ShipHostility(ship.enemies.clone())),
-                    )
-                })
-                .unwrap_or((false, false));
-            (
-                0u8,
-                if should_engage { 1.0 } else { -1.0 },
-                if is_hostile { 1.0 } else { -1.0 },
-                1.0,
-            )
-        }
-        Target::Asteroid(_) => (1, 0.0, 0.0, 1.0),
-        Target::Planet(_) => (2, 0.0, 0.0, 1.0),
-        Target::Pickup(_) => (3, 0.0, 0.0, 1.0),
+    // Helper: find first occupied slot in a range.
+    let first_in = |range: std::ops::Range<usize>| -> Option<u8> {
+        range
+            .into_iter()
+            .find(|&i| slot_targets.get(i).map(|s| s.is_some()).unwrap_or(false))
+            .map(|i| i as u8)
     };
 
-    Some(TargetSlotData {
-        entity_type,
-        rel_pos: [rel_pos_ego[0], rel_pos_ego[1]],
-        rel_vel: [rel_vel_ego[0], rel_vel_ego[1]],
-        should_engage,
-        value_hint,
-        is_hostile,
-    })
+    // 1. Traders with cargo → planet with highest value (= cargo_sale_value).
+    if has_cargo && matches!(personality, Personality::Trader) {
+        let best_planet = (K_PLANETS_START..K_PLANETS_END)
+            .filter(|&i| slot_targets.get(i).map(|s| s.is_some()).unwrap_or(false))
+            .max_by(|&a, &b| {
+                let va = obs[SELF_SIZE + a * SLOT_SIZE + rl_obs::SLOT_VALUE];
+                let vb = obs[SELF_SIZE + b * SLOT_SIZE + rl_obs::SLOT_VALUE];
+                va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal)
+            });
+        if let Some(idx) = best_planet {
+            return idx as u8;
+        }
+    }
+
+    // 2. All personalities: nearest pickup first.
+    if let Some(idx) = first_in(K_PICKUPS_START..K_PICKUPS_END) {
+        return idx;
+    }
+
+    // 3. Personality-based fallback.
+    match personality {
+        Personality::Miner => first_in(K_ASTEROIDS_START..K_ASTEROIDS_END)
+            .or_else(|| first_in(K_PLANETS_START..K_PLANETS_END))
+            .unwrap_or(no_target),
+        Personality::Fighter => first_in(K_HOSTILE_START..K_HOSTILE_END)
+            .or_else(|| first_in(K_PLANETS_START..K_PLANETS_END))
+            .unwrap_or(no_target),
+        Personality::Trader => first_in(K_PLANETS_START..K_PLANETS_END).unwrap_or(no_target),
+    }
 }
+
+// Slot index ranges for each bucket (excluding the target slot at index 0).
+const K_PLANETS_START: usize = 1;
+const K_PLANETS_END: usize = K_PLANETS_START + K_PLANETS;
+const K_ASTEROIDS_START: usize = K_PLANETS_END;
+const K_ASTEROIDS_END: usize = K_ASTEROIDS_START + K_ASTEROIDS;
+const K_HOSTILE_START: usize = K_ASTEROIDS_END;
+const K_HOSTILE_END: usize = K_HOSTILE_START + K_HOSTILE_SHIPS;
+const K_FRIENDLY_START: usize = K_HOSTILE_END;
+const K_FRIENDLY_END: usize = K_FRIENDLY_START + K_FRIENDLY_SHIPS;
+const K_PICKUPS_START: usize = K_FRIENDLY_END;
+const K_PICKUPS_END: usize = K_PICKUPS_START + K_PICKUPS;
 
 /// Store the previous (obs, action, reward) transition for each agent, update
 /// agent state with the new observation and action, and flush full segments.
@@ -815,7 +1045,7 @@ fn build_target_slot(
 /// In `BehavioralCloning` mode (or when `None`) the rule-based action from
 /// `compute_ai_action` is used for both execution and BC labels.
 fn store_obs_actions(
-    decisions: &[(Entity, Vec<f32>)],
+    decisions: &[(Entity, Vec<f32>, Vec<Option<Target>>)],
     model_actions: Option<&[DiscreteAction]>,
     agents: &mut Query<(
         Entity,
@@ -835,14 +1065,23 @@ fn store_obs_actions(
     bc_sender: &BCSender,
     mode: &AIPlayMode,
 ) {
-    for (idx, (entity, obs)) in decisions.iter().enumerate() {
+    for (idx, (entity, obs, slot_targets)) in decisions.iter().enumerate() {
         let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _)) =
             agents.get_mut(*entity)
         else {
             continue;
         };
 
-        // Always compute the rule-based action — used as BC label and as the
+        // Choose target first so compute_ai_action can act on it.
+        let has_cargo = ship.cargo.values().sum::<u16>() > 0;
+        let target_idx = choose_target_slot(&agent.personality, has_cargo, slot_targets, obs);
+        if (target_idx as usize) < model::N_OBJECTS {
+            ship.target = slot_targets[target_idx as usize].clone();
+        } else {
+            ship.target = None;
+        }
+
+        // Compute the rule-based action — used as BC label and as the
         // fallback when no model action is available.
         let rule_based_action = if let Some(raw) = compute_ai_action(
             &*ship,
@@ -873,9 +1112,15 @@ fn store_obs_actions(
             } else {
                 0
             };
-            (turn_idx, thrust_idx, fire_primary, fire_secondary)
+            (
+                turn_idx,
+                thrust_idx,
+                fire_primary,
+                fire_secondary,
+                target_idx,
+            )
         } else {
-            (1, 1, 0, 0) // no target → coast straight
+            (1, 1, 0, 0, target_idx) // no action from compute_ai_action → coast straight
         };
 
         // In RLControl mode use the model's action; otherwise use rule-based.
@@ -887,8 +1132,19 @@ fn store_obs_actions(
         } else {
             rule_based_action
         };
-        // BC label is always the rule-based action (what simple_ai_control would do).
-        let accurate_action = rule_based_action;
+        // In RLControl mode, the model may have chosen a different target.
+        // Apply it so the next observation reflects the model's choice.
+        if *mode == AIPlayMode::RLControl {
+            let model_target_idx = executed_action.4 as usize;
+            if model_target_idx < model::N_OBJECTS {
+                ship.target = slot_targets[model_target_idx].clone();
+            } else {
+                ship.target = None;
+            }
+        }
+
+        // Store slot mapping on the agent for use by repeat_actions.
+        agent.slot_targets = slot_targets.clone();
 
         // Store the PREVIOUS step's transition (obs recorded at t-1, action taken
         // at t-1, rewards accumulated between t-1 and t).
@@ -920,7 +1176,7 @@ fn store_obs_actions(
             // with action[t] would create a systematic off-by-one mismatch.
             if *mode == AIPlayMode::BehavioralCloning {
                 let bc = BCTransition {
-                    model_input: obs_to_model_input(&transition.obs),
+                    obs: transition.obs.clone(),
                     action: transition.action,
                 };
                 let _ = bc_sender.0.try_send(bc);
@@ -1061,24 +1317,30 @@ fn spawn_bc_training_thread(
                 let n = buffer.len();
 
                 // ── Build mini-batch ─────────────────────────────────────────
-                // model_input is already the processed [N_OBJECTS × NET_INPUT_DIM]
-                // flat row — no per-sample transform needed here.
                 let batch: Vec<&BCTransition> = (0..BC_BATCH_SIZE)
                     .map(|_| &buffer[rng.gen_range(0..n)])
                     .collect();
 
-                let flat: Vec<f32> = batch
-                    .iter()
-                    .flat_map(|t| t.model_input.iter().copied())
-                    .collect();
-                let input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
-                    TensorData::new(flat, [BC_BATCH_SIZE, N_OBJECTS, NET_INPUT_DIM]),
+                let mut self_flat = Vec::with_capacity(BC_BATCH_SIZE * SELF_INPUT_DIM);
+                let mut obj_flat = Vec::with_capacity(BC_BATCH_SIZE * N_OBJECTS * OBJECT_INPUT_DIM);
+                for t in &batch {
+                    let (s, o) = split_obs(&t.obs);
+                    self_flat.extend_from_slice(s);
+                    obj_flat.extend_from_slice(o);
+                }
+                let self_input = burn::tensor::Tensor::<TrainBackend, 2>::from_data(
+                    TensorData::new(self_flat, [BC_BATCH_SIZE, SELF_INPUT_DIM]),
+                    &device,
+                );
+                let obj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
+                    TensorData::new(obj_flat, [BC_BATCH_SIZE, N_OBJECTS, OBJECT_INPUT_DIM]),
                     &device,
                 );
 
                 // Build one [B, 4] label tensor and slice per head — four
                 // Vec builds collapsed into one.
-                let labels_flat: Vec<i64> = batch
+                // Action labels: [B, 4] for turn/thrust/fire_primary/fire_secondary.
+                let action_labels_flat: Vec<i64> = batch
                     .iter()
                     .flat_map(|t| {
                         [
@@ -1089,25 +1351,43 @@ fn spawn_bc_training_thread(
                         ]
                     })
                     .collect();
-                let labels = burn::tensor::Tensor::<TrainBackend, 2, Int>::from_data(
-                    TensorData::new(labels_flat, [BC_BATCH_SIZE, 4]),
+                let action_labels = burn::tensor::Tensor::<TrainBackend, 2, Int>::from_data(
+                    TensorData::new(action_labels_flat, [BC_BATCH_SIZE, 4]),
                     &device,
                 );
-                let turn_t = labels.clone().narrow(1, 0, 1).reshape([BC_BATCH_SIZE]);
-                let thrust_t = labels.clone().narrow(1, 1, 1).reshape([BC_BATCH_SIZE]);
-                let fp_t = labels.clone().narrow(1, 2, 1).reshape([BC_BATCH_SIZE]);
-                let fs_t = labels.narrow(1, 3, 1).reshape([BC_BATCH_SIZE]);
+                let turn_t = action_labels
+                    .clone()
+                    .narrow(1, 0, 1)
+                    .reshape([BC_BATCH_SIZE]);
+                let thrust_t = action_labels
+                    .clone()
+                    .narrow(1, 1, 1)
+                    .reshape([BC_BATCH_SIZE]);
+                let fp_t = action_labels
+                    .clone()
+                    .narrow(1, 2, 1)
+                    .reshape([BC_BATCH_SIZE]);
+                let fs_t = action_labels.narrow(1, 3, 1).reshape([BC_BATCH_SIZE]);
+
+                // Target labels: [B] — the target_idx from DiscreteAction.
+                let target_labels: Vec<i64> = batch.iter().map(|t| t.action.4 as i64).collect();
+                let target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
+                    TensorData::new(target_labels, [BC_BATCH_SIZE]),
+                    &device,
+                );
 
                 // ── Forward + loss ───────────────────────────────────────────
                 let grads = {
                     let net = inner.policy_net.as_ref().unwrap();
-                    let logits = net.forward(input); // [B, 9]
+                    let (action_logits, target_logits) = net.forward(self_input, obj_input);
 
-                    let turn_loss = loss_fn.forward(logits.clone().narrow(1, 0, 3), turn_t);
-                    let thrust_loss = loss_fn.forward(logits.clone().narrow(1, 3, 2), thrust_t);
-                    let fp_loss = loss_fn.forward(logits.clone().narrow(1, 5, 2), fp_t);
-                    let fs_loss = loss_fn.forward(logits.narrow(1, 7, 2), fs_t);
-                    let total_loss = turn_loss + thrust_loss + fp_loss + fs_loss;
+                    let turn_loss = loss_fn.forward(action_logits.clone().narrow(1, 0, 3), turn_t);
+                    let thrust_loss =
+                        loss_fn.forward(action_logits.clone().narrow(1, 3, 2), thrust_t);
+                    let fp_loss = loss_fn.forward(action_logits.clone().narrow(1, 5, 2), fp_t);
+                    let fs_loss = loss_fn.forward(action_logits.narrow(1, 7, 2), fs_t);
+                    let target_loss = loss_fn.forward(target_logits, target_t);
+                    let total_loss = turn_loss + thrust_loss + fp_loss + fs_loss + target_loss;
 
                     if step % 100 == 0 {
                         let v = total_loss.clone().into_scalar();
@@ -1152,22 +1432,22 @@ fn save_bc_checkpoint(net: &model::RLNet<TrainBackend>, path: &str) {
 //   [u32] obs_dim   — number of f32s per observation
 //   [u32] count     — number of transitions
 //   for each transition:
-//     [u8; 4]       — action (turn, thrust, fire_primary, fire_secondary)
+//     [u8; 5]       — action (turn, thrust, fire_primary, fire_secondary, target_idx)
 //     [f32; obs_dim] — flat observation
 
 /// Serialise the replay buffer to `path`.  Silent on error (training continues).
 fn save_bc_buffer(buffer: &VecDeque<BCTransition>, path: &str) {
     use std::io::Write;
     let Some(first) = buffer.front() else { return };
-    let input_dim = first.model_input.len() as u32;
+    let input_dim = first.obs.len() as u32;
 
     let result = (|| -> std::io::Result<()> {
         let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
         f.write_all(&input_dim.to_le_bytes())?;
         f.write_all(&(buffer.len() as u32).to_le_bytes())?;
         for t in buffer {
-            f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3])?;
-            for &v in &t.model_input {
+            f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3, t.action.4])?;
+            for &v in &t.obs {
                 f.write_all(&v.to_le_bytes())?;
             }
         }
@@ -1183,10 +1463,11 @@ fn save_bc_buffer(buffer: &VecDeque<BCTransition>, path: &str) {
 
 /// Deserialise a previously saved replay buffer from `path`.
 /// Returns `None` if the file is missing, corrupt, or has a mismatched
-/// `model_input` dimension (e.g. saved before the obs→model_input change).
-fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
+/// observation dimension.
+pub(crate) fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
+    use crate::rl_obs::OBS_DIM;
     use std::io::Read;
-    let expected_dim = N_OBJECTS * NET_INPUT_DIM;
+    let expected_dim = OBS_DIM;
     let mut f = std::io::BufReader::new(std::fs::File::open(path).ok()?);
 
     let mut u32_buf = [0u8; 4];
@@ -1203,19 +1484,25 @@ fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
     let count = u32::from_le_bytes(u32_buf) as usize;
 
     let mut buffer = VecDeque::with_capacity(count.min(BC_BUFFER_SIZE));
-    let mut action_buf = [0u8; 4];
+    let mut action_buf = [0u8; 5];
     let mut input_bytes = vec![0u8; expected_dim * 4];
 
     for _ in 0..count {
         f.read_exact(&mut action_buf).ok()?;
         f.read_exact(&mut input_bytes).ok()?;
-        let model_input: Vec<f32> = input_bytes
+        let obs: Vec<f32> = input_bytes
             .chunks_exact(4)
             .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
             .collect();
         buffer.push_back(BCTransition {
-            model_input,
-            action: (action_buf[0], action_buf[1], action_buf[2], action_buf[3]),
+            obs,
+            action: (
+                action_buf[0],
+                action_buf[1],
+                action_buf[2],
+                action_buf[3],
+                action_buf[4],
+            ),
         });
     }
     Some(buffer)

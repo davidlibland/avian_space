@@ -1,11 +1,10 @@
 //! Neural-network architecture for the RL agent.
 //!
-//! Input shape: `[B, N_OBJECTS, NET_INPUT_DIM]` where every row contains
-//! `[self_features(SELF_INPUT_DIM) | object_features(OBJECT_INPUT_DIM)]`.
-//! The self features are **identical in every row**; the forward pass takes
-//! row 0 for the self-encoder and ignores the rest for self-state.
+//! Two inputs:
+//! - Self features: `[B, SELF_INPUT_DIM]`
+//! - Object features: `[B, N_OBJECTS, OBJECT_INPUT_DIM]`
 //!
-//! Observation → tensor conversion is handled by [`obs_to_model_input`].
+//! Observations are split into these two tensors via [`split_obs`].
 //! Policy logits → [`DiscreteAction`] conversion is handled by
 //! [`logits_to_discrete_action`] (greedy argmax; stochastic sampling is
 //! added at training time).
@@ -27,8 +26,8 @@ use burn::{
 };
 
 use crate::rl_obs::{
-    DiscreteAction, ENTITY_SLOT_SIZE, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_PICKUPS,
-    K_PLANETS, OBS_DIM, SELF_SIZE, TARGET_SLOT_SIZE,
+    DiscreteAction, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_PICKUPS,
+    K_PLANETS, N_ENTITY_SLOTS, OBS_DIM, SELF_SIZE, SLOT_SIZE,
 };
 
 // ---------------------------------------------------------------------------
@@ -38,20 +37,24 @@ use crate::rl_obs::{
 /// Self-state feature count — must equal `SELF_SIZE` in `rl_obs.rs`.
 pub const SELF_INPUT_DIM: usize = SELF_SIZE;
 
-/// Per-object feature count — must equal `TARGET_SLOT_SIZE` in `rl_obs.rs`.
-/// Layout: `is_present(1) + type_onehot(4) + rel_pos(2) + rel_vel(2) + hostility(1) + extra(1)
-///          + pursuit_angle(1) + pursuit_indicator(1) + fire_angle(1) + fire_indicator(1) + in_range(1)`
-pub const OBJECT_INPUT_DIM: usize = TARGET_SLOT_SIZE;
+/// Per-object feature count — must equal `SLOT_SIZE` in `rl_obs.rs`.
+/// Layout: `is_present(1) + type_onehot(4) + rel_pos(2) + rel_vel(2)
+///          + pursuit_angle(1) + pursuit_indicator(1)
+///          + fire_angle(1) + fire_indicator(1) + in_range(1) + value(1)
+///          + type_specific(9)`
+pub const OBJECT_INPUT_DIM: usize = SLOT_SIZE;
 
-/// Total floats per row fed into the network (`SELF_INPUT_DIM + OBJECT_INPUT_DIM`).
-pub const NET_INPUT_DIM: usize = SELF_INPUT_DIM + OBJECT_INPUT_DIM;
+/// Total entity floats per observation (`N_OBJECTS × OBJECT_INPUT_DIM`).
+pub const ENTITIES_FLAT_DIM: usize = N_OBJECTS * OBJECT_INPUT_DIM;
 
 /// Number of object slots per observation: target + all buckets.
-pub const N_OBJECTS: usize =
-    1 + K_PLANETS + K_ASTEROIDS + K_HOSTILE_SHIPS + K_FRIENDLY_SHIPS + K_PICKUPS;
+pub const N_OBJECTS: usize = N_ENTITY_SLOTS;
 
 /// Policy output: factored logits `turn(3) | thrust(2) | fire_primary(2) | fire_secondary(2)`.
 pub const POLICY_OUTPUT_DIM: usize = 9;
+
+/// Target-selection output: one logit per object slot plus one "no target" logit.
+pub const TARGET_OUTPUT_DIM: usize = N_OBJECTS + 1;
 
 /// Value output: scalar state estimate.
 pub const VALUE_OUTPUT_DIM: usize = 1;
@@ -116,6 +119,8 @@ type Block<B> = NetBlock<B>;
 /// 3. **Attention**: self as query, object-enc as keys/values → `[B,H]`.
 /// 4. **Merge**: `concat(attn, self_enc) [B,2H] → Linear → [B,H]`.
 /// 5. **Decoder**: `2×NetBlock + LayerNorm + SiLU → output [B,output_dim]`.
+/// 6. **Target head** (pointer network): separate Q/K projections from
+///    merged rep and obj_enc → one logit per entity slot + "no target".
 ///
 /// The output projection is zero-initialised so the network starts near a
 /// uniform policy / zero value.
@@ -148,6 +153,12 @@ pub struct RLNet<B: Backend> {
     dblock2: Block<B>,
     norm: LayerNorm<B>,
     output: Linear<B>,
+
+    // Target-selection pointer head
+    target_q_proj: Linear<B>,
+    target_k_proj: Linear<B>,
+    /// Bias logit for the "no target" option (learned scalar).
+    target_no_tgt: Linear<B>,
 }
 
 impl<B: Backend> RLNet<B> {
@@ -169,23 +180,33 @@ impl<B: Backend> RLNet<B> {
             output: LinearConfig::new(hidden_dim, output_dim)
                 .with_initializer(Initializer::Zeros)
                 .init(device),
+            target_q_proj: LinearConfig::new(hidden_dim, hidden_dim)
+                .with_initializer(Initializer::Zeros)
+                .init(device),
+            target_k_proj: LinearConfig::new(hidden_dim, hidden_dim)
+                .with_initializer(Initializer::Zeros)
+                .init(device),
+            target_no_tgt: LinearConfig::new(hidden_dim, 1)
+                .with_initializer(Initializer::Zeros)
+                .init(device),
         }
     }
 
     /// Forward pass.
     ///
-    /// `xs`: `[B, N_OBJECTS, NET_INPUT_DIM]` — every row contains
-    /// `[self_features | object_features]`; self features are identical in every row.
+    /// * `self_feat`: `[B, SELF_INPUT_DIM]` — ship self-state features.
+    /// * `obj_feat`: `[B, N_OBJECTS, OBJECT_INPUT_DIM]` — per-entity features.
     ///
-    /// Returns `[B, output_dim]` logits.
-    pub fn forward(&self, xs: Tensor<B, 3>) -> Tensor<B, 2> {
-        // Split: self state from row 0, object features from all rows.
-        let self_feat = xs
-            .clone()
-            .narrow(2, 0, SELF_INPUT_DIM)   // [B, N, SELF_INPUT_DIM]
-            .narrow(1, 0, 1)                // [B, 1, SELF_INPUT_DIM]
-            .squeeze_dim(1);                // [B, SELF_INPUT_DIM]
-        let obj_feat = xs.narrow(2, SELF_INPUT_DIM, OBJECT_INPUT_DIM); // [B, N, OBJECT_INPUT_DIM]
+    /// Returns `(action_logits [B, output_dim], target_logits [B, N_OBJECTS+1])`.
+    /// The last target logit (index N_OBJECTS) is the "no target" option.
+    /// Empty entity slots (is_present=0) are masked to `-inf`.
+    pub fn forward(
+        &self,
+        self_feat: Tensor<B, 2>,
+        obj_feat: Tensor<B, 3>,
+    ) -> (Tensor<B, 2>, Tensor<B, 2>) {
+        // is_present flag: first float of object features in each row.
+        let is_present = obj_feat.clone().narrow(2, 0, 1).squeeze_dim(2); // [B, N]
 
         // Object encoder: [B, N, OBJECT_INPUT_DIM] → [B, N, H]
         let obj_enc = self.obj_embed.forward(obj_feat);
@@ -200,21 +221,42 @@ impl<B: Backend> RLNet<B> {
         let scale = (self.hidden_dim as f64).sqrt() as f32;
         let q = self.q_proj.forward(self_enc.clone()).unsqueeze_dim::<3>(1); // [B, 1, H]
         let k = self.k_proj.forward(obj_enc.clone()).swap_dims(1, 2);        // [B, H, N]
-        let v = self.v_proj.forward(obj_enc);                                // [B, N, H]
+        let v = self.v_proj.forward(obj_enc.clone());                        // [B, N, H]
         let scores = q.matmul(k).div_scalar(scale);                          // [B, 1, N]
         let weights = softmax(scores, 2);                                    // [B, 1, N]
         let attn_out = weights.matmul(v).squeeze_dim(1);                     // [B, H]
 
         // Merge: concat(attn_out, self_enc) → H
         let merged = Tensor::cat(vec![attn_out, self_enc], 1); // [B, 2H]
-        let x = silu(self.merge_proj.forward(merged));         // [B, H]
+        let x = silu(self.merge_proj.forward(merged.clone()));  // [B, H]
 
-        // Decoder
+        // Decoder → action logits
         let x = self.dblock1.forward(x);
         let x = self.dblock2.forward(x);
         let x = self.norm.forward(x);
         let x = silu(x);
-        self.output.forward(x) // [B, output_dim]
+        let action_logits = self.output.forward(x.clone()); // [B, output_dim]
+
+        // Target-selection pointer head
+        let tq = self.target_q_proj.forward(x.clone()).unsqueeze_dim::<3>(1);  // [B, 1, H]
+        let tk = self.target_k_proj.forward(obj_enc).swap_dims(1, 2);   // [B, H, N]
+        let entity_logits = tq.matmul(tk).div_scalar(scale).squeeze_dim(1); // [B, N]
+
+        // "No target" logit: learned bias from the merged representation.
+        let no_tgt_logit = self.target_no_tgt.forward(x); // [B, 1]
+        let target_logits = Tensor::cat(vec![entity_logits, no_tgt_logit], 1); // [B, N+1]
+
+        // Mask empty slots to -inf so they can't be selected.
+        // is_present [B, N] → append a 1.0 column for "no target" (always available).
+        let batch_size = is_present.dims()[0];
+        let device = is_present.device();
+        let ones = Tensor::<B, 2>::ones([batch_size, 1], &device);
+        let mask = Tensor::cat(vec![is_present, ones], 1); // [B, N+1]
+        // Where mask == 0, set logits to -1e9 (large negative, acts as -inf).
+        let neg_inf = Tensor::<B, 2>::full([batch_size, N_OBJECTS + 1], -1e9, &device);
+        let target_logits = target_logits.clone() * mask.clone() + neg_inf * (mask.ones_like() - mask);
+
+        (action_logits, target_logits)
     }
 }
 
@@ -243,21 +285,36 @@ impl InferenceNet {
 
     /// Run a batched forward pass.
     ///
-    /// `batch_flat`: flattened `[batch_size × N_OBJECTS × NET_INPUT_DIM]` buffer
-    /// produced by calling [`obs_to_model_input`] for each observation and
-    /// concatenating the results.
+    /// * `self_flat`: flattened `[batch_size × SELF_INPUT_DIM]`
+    /// * `obj_flat`: flattened `[batch_size × N_OBJECTS × OBJECT_INPUT_DIM]`
     ///
-    /// Returns flattened `[batch_size × POLICY_OUTPUT_DIM]` logits.
-    pub fn run_inference(&self, batch_flat: Vec<f32>, batch_size: usize) -> Vec<f32> {
-        let input = Tensor::<InferBackend, 3>::from_data(
-            TensorData::new(batch_flat, [batch_size, N_OBJECTS, NET_INPUT_DIM]),
+    /// Returns `(action_logits, target_logits)` where:
+    /// - `action_logits`: flattened `[batch_size × POLICY_OUTPUT_DIM]`
+    /// - `target_logits`: flattened `[batch_size × TARGET_OUTPUT_DIM]`
+    pub fn run_inference(
+        &self,
+        self_flat: Vec<f32>,
+        obj_flat: Vec<f32>,
+        batch_size: usize,
+    ) -> (Vec<f32>, Vec<f32>) {
+        let self_input = Tensor::<InferBackend, 2>::from_data(
+            TensorData::new(self_flat, [batch_size, SELF_INPUT_DIM]),
             &self.device,
         );
-        self.net
-            .forward(input)
+        let obj_input = Tensor::<InferBackend, 3>::from_data(
+            TensorData::new(obj_flat, [batch_size, N_OBJECTS, OBJECT_INPUT_DIM]),
+            &self.device,
+        );
+        let (action, target) = self.net.forward(self_input, obj_input);
+        let action_logits = action
             .into_data()
             .into_vec::<f32>()
-            .expect("inference logit extraction failed")
+            .expect("action logit extraction failed");
+        let target_logits = target
+            .into_data()
+            .into_vec::<f32>()
+            .expect("target logit extraction failed");
+        (action_logits, target_logits)
     }
 
     /// Serialize the current weights to bytes (compatible with [`Self::load_bytes`]).
@@ -333,82 +390,35 @@ impl RLResource {
 // Observation → model-input conversion
 // ---------------------------------------------------------------------------
 
-/// Convert a flat `OBS_DIM`=81 observation into the
-/// `[N_OBJECTS × NET_INPUT_DIM]` buffer consumed by `RLNet::forward`.
+/// Split a flat `OBS_DIM` observation into self-features and entity-features.
 ///
-/// Each of the `N_OBJECTS` rows contains:
-/// `[self_features(10) | object_features(11)]`
-///
-/// where `self_features` are the same in every row, and `object_features`
-/// follow the layout:
-/// `is_present(1) | type_onehot(4) | rel_pos(2) | rel_vel(2) | hostility(1) | extra(1)`
-pub fn obs_to_model_input(obs: &[f32]) -> Vec<f32> {
+/// Returns `(self_feat [SELF_INPUT_DIM], obj_feat [N_OBJECTS × OBJECT_INPUT_DIM])`.
+pub fn split_obs(obs: &[f32]) -> (&[f32], &[f32]) {
     debug_assert_eq!(obs.len(), OBS_DIM, "obs length mismatch");
-
-    let self_feat = &obs[0..SELF_SIZE];
-    let target_feat = &obs[SELF_SIZE..SELF_SIZE + TARGET_SLOT_SIZE];
-
-    let mut rows = Vec::with_capacity(N_OBJECTS * NET_INPUT_DIM);
-
-    // Row 0: target slot — already 11 floats in the correct object-feature layout.
-    rows.extend_from_slice(self_feat);
-    rows.extend_from_slice(target_feat);
-
-    // Rows 1..: entity bucket slots.  Each 5-float slot is expanded to 11 floats.
-    // Bucket order and types must match `encode_observation` in rl_obs.rs.
-    let mut slot_offset = SELF_SIZE + TARGET_SLOT_SIZE;
-
-    // (type_onehot [Ship,Asteroid,Planet,Pickup],  hostility,  slot_count)
-    let bucket_specs: [([f32; 4], f32, usize); 5] = [
-        ([0.0, 0.0, 1.0, 0.0],  0.0,  K_PLANETS),
-        ([0.0, 1.0, 0.0, 0.0],  0.0,  K_ASTEROIDS),
-        ([1.0, 0.0, 0.0, 0.0],  1.0,  K_HOSTILE_SHIPS),
-        ([1.0, 0.0, 0.0, 0.0], -1.0,  K_FRIENDLY_SHIPS),
-        ([0.0, 0.0, 0.0, 1.0],  0.0,  K_PICKUPS),
-    ];
-
-    for (type_onehot, hostility, count) in &bucket_specs {
-        for _ in 0..*count {
-            let slot = &obs[slot_offset..slot_offset + ENTITY_SLOT_SIZE];
-            let is_present = if slot.iter().any(|&x| x != 0.0) { 1.0_f32 } else { 0.0 };
-
-            rows.extend_from_slice(self_feat);      // [SELF_INPUT_DIM] — self features
-            rows.push(is_present);                  // [1]
-            rows.extend_from_slice(type_onehot);    // [4]
-            rows.extend_from_slice(&slot[0..4]);    // [4] rel_pos(2) + rel_vel(2)
-            rows.push(*hostility);                  // [1]
-            rows.push(slot[4]);                     // [1] extra (health frac / value)
-            rows.push(slot[5]);                     // [1] pursuit_angle
-            rows.push(slot[6]);                     // [1] pursuit_indicator
-            // Fire angle / fire indicator / in_range are only meaningful on the target
-            // slot (row 0); pad zeros here so all rows have identical width.
-            rows.push(0.0_f32);                     // [1] fire_angle  (n/a)
-            rows.push(0.0_f32);                     // [1] fire_indicator (n/a)
-            rows.push(0.0_f32);                     // [1] in_range (n/a)
-
-            slot_offset += ENTITY_SLOT_SIZE;
-        }
-    }
-
-    debug_assert_eq!(rows.len(), N_OBJECTS * NET_INPUT_DIM);
-    rows
+    (&obs[0..SELF_SIZE], &obs[SELF_SIZE..])
 }
 
 // ---------------------------------------------------------------------------
 // Action conversion
 // ---------------------------------------------------------------------------
 
-/// Convert policy logits `[POLICY_OUTPUT_DIM=9]` to a `DiscreteAction` via
-/// greedy argmax over each factored head.
+/// Convert policy logits and target logits to a `DiscreteAction` via greedy
+/// argmax over each factored head.
 ///
-/// Logit layout: `turn(3) | thrust(2) | fire_primary(2) | fire_secondary(2)`
-pub fn logits_to_discrete_action(logits: &[f32]) -> DiscreteAction {
-    debug_assert_eq!(logits.len(), POLICY_OUTPUT_DIM);
-    let turn_idx = argmax(&logits[0..3]) as u8;
-    let thrust_idx = argmax(&logits[3..5]) as u8;
-    let fire_primary = argmax(&logits[5..7]) as u8;
-    let fire_secondary = argmax(&logits[7..9]) as u8;
-    (turn_idx, thrust_idx, fire_primary, fire_secondary)
+/// Action logit layout: `turn(3) | thrust(2) | fire_primary(2) | fire_secondary(2)`
+/// Target logits: `[N_OBJECTS + 1]` (one per entity slot + "no target")
+pub fn logits_to_discrete_action(
+    action_logits: &[f32],
+    target_logits: &[f32],
+) -> DiscreteAction {
+    debug_assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM);
+    debug_assert_eq!(target_logits.len(), TARGET_OUTPUT_DIM);
+    let turn_idx = argmax(&action_logits[0..3]) as u8;
+    let thrust_idx = argmax(&action_logits[3..5]) as u8;
+    let fire_primary = argmax(&action_logits[5..7]) as u8;
+    let fire_secondary = argmax(&action_logits[7..9]) as u8;
+    let target_idx = argmax(target_logits) as u8;
+    (turn_idx, thrust_idx, fire_primary, fire_secondary, target_idx)
 }
 
 fn argmax(vals: &[f32]) -> usize {
@@ -515,174 +525,5 @@ pub fn net_to_bytes<B: Backend>(net: RLNet<B>) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::rl_obs::OBS_DIM;
-
-    // ── obs_to_model_input ───────────────────────────────────────────────────
-
-    #[test]
-    fn test_obs_to_model_input_shape() {
-        let obs = vec![0.0_f32; OBS_DIM];
-        let out = obs_to_model_input(&obs);
-        assert_eq!(
-            out.len(),
-            N_OBJECTS * NET_INPUT_DIM,
-            "expected {N_OBJECTS}×{NET_INPUT_DIM}={}, got {}",
-            N_OBJECTS * NET_INPUT_DIM,
-            out.len()
-        );
-    }
-
-    #[test]
-    fn test_obs_to_model_input_self_features_replicated() {
-        // Give self features a distinctive pattern, everything else zero.
-        let mut obs = vec![0.0_f32; OBS_DIM];
-        for (i, v) in obs[0..SELF_SIZE].iter_mut().enumerate() {
-            *v = (i + 1) as f32 * 0.1;
-        }
-        let out = obs_to_model_input(&obs);
-
-        // Every row should start with the same SELF_INPUT_DIM values.
-        let expected_self = &obs[0..SELF_INPUT_DIM];
-        for row in 0..N_OBJECTS {
-            let row_self = &out[row * NET_INPUT_DIM..row * NET_INPUT_DIM + SELF_INPUT_DIM];
-            assert_eq!(
-                row_self, expected_self,
-                "self features differ in row {row}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_obs_to_model_input_target_passthrough() {
-        let mut obs = vec![0.0_f32; OBS_DIM];
-        // Write a distinctive pattern into the target slot.
-        for (i, v) in obs[SELF_SIZE..SELF_SIZE + TARGET_SLOT_SIZE].iter_mut().enumerate() {
-            *v = (i + 1) as f32 * 0.5;
-        }
-        let out = obs_to_model_input(&obs);
-
-        // Row 0 object features (offset SELF_INPUT_DIM) should equal the target slot.
-        let row0_obj = &out[SELF_INPUT_DIM..SELF_INPUT_DIM + OBJECT_INPUT_DIM];
-        let expected = &obs[SELF_SIZE..SELF_SIZE + TARGET_SLOT_SIZE];
-        assert_eq!(row0_obj, expected, "target slot not passed through to row 0");
-    }
-
-    #[test]
-    fn test_obs_to_model_input_empty_slot_is_not_present() {
-        // All-zero entity slot → is_present should be 0.
-        let obs = vec![0.0_f32; OBS_DIM];
-        let out = obs_to_model_input(&obs);
-
-        // Every bucket row (rows 1..) starts with [self_feat | is_present=0 | ...]
-        for row in 1..N_OBJECTS {
-            let is_present = out[row * NET_INPUT_DIM + SELF_INPUT_DIM];
-            assert_eq!(
-                is_present, 0.0,
-                "empty slot row {row} should have is_present=0"
-            );
-        }
-    }
-
-    // ── logits_to_discrete_action ────────────────────────────────────────────
-
-    #[test]
-    fn test_logits_to_discrete_action_argmax() {
-        // Craft logits so each head has an obvious winner.
-        // turn: [1.0, 5.0, 0.0]  → idx 1 (straight)
-        // thrust: [0.0, 3.0]     → idx 1 (thrust)
-        // fire_primary: [2.0, 0.0] → idx 0 (no fire)
-        // fire_secondary: [0.0, 4.0] → idx 1 (fire)
-        let logits = [1.0_f32, 5.0, 0.0,   0.0, 3.0,   2.0, 0.0,   0.0, 4.0];
-        let (turn, thrust, fp, fs) = logits_to_discrete_action(&logits);
-        assert_eq!(turn, 1, "turn should be straight");
-        assert_eq!(thrust, 1, "thrust should be on");
-        assert_eq!(fp, 0, "fire_primary should be off");
-        assert_eq!(fs, 1, "fire_secondary should be on");
-    }
-
-    #[test]
-    fn test_logits_to_discrete_action_all_valid() {
-        // Zero logits → argmax picks index 0 everywhere → valid indices.
-        let logits = [0.0_f32; POLICY_OUTPUT_DIM];
-        let (turn, thrust, fp, fs) = logits_to_discrete_action(&logits);
-        assert!(turn <= 2);
-        assert!(thrust <= 1);
-        assert!(fp <= 1);
-        assert!(fs <= 1);
-    }
-
-    // ── RLNet forward-pass shapes ────────────────────────────────────────────
-
-    #[test]
-    fn test_rlnet_policy_output_shape() {
-        let device = Default::default();
-        let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
-        let batch = 4usize;
-        let input = Tensor::<InferBackend, 3>::zeros([batch, N_OBJECTS, NET_INPUT_DIM], &device);
-        let out = net.forward(input);
-        let shape = out.shape();
-        assert_eq!(shape.dims[0], batch);
-        assert_eq!(shape.dims[1], POLICY_OUTPUT_DIM);
-    }
-
-    #[test]
-    fn test_rlnet_value_output_shape() {
-        let device = Default::default();
-        let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, VALUE_OUTPUT_DIM);
-        let batch = 3usize;
-        let input = Tensor::<InferBackend, 3>::zeros([batch, N_OBJECTS, NET_INPUT_DIM], &device);
-        let out = net.forward(input);
-        let shape = out.shape();
-        assert_eq!(shape.dims[0], batch);
-        assert_eq!(shape.dims[1], VALUE_OUTPUT_DIM);
-    }
-
-    #[test]
-    fn test_rlnet_output_zero_init() {
-        // The output projection is zero-initialised, so a fresh net on a zero
-        // input should produce all-zero logits.
-        let device = Default::default();
-        let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
-        let input = Tensor::<InferBackend, 3>::zeros([1, N_OBJECTS, NET_INPUT_DIM], &device);
-        let logits: Vec<f32> = net
-            .forward(input)
-            .into_data()
-            .into_vec::<f32>()
-            .expect("extraction failed");
-        for (i, &v) in logits.iter().enumerate() {
-            assert!(
-                v.abs() < 1e-6,
-                "logit[{i}] should be ~0 on zero input, got {v}"
-            );
-        }
-    }
-
-    // ── InferenceNet end-to-end ──────────────────────────────────────────────
-
-    #[test]
-    fn test_inference_net_produces_valid_action() {
-        let inference = InferenceNet::new();
-        let dummy_obs = vec![0.0_f32; OBS_DIM];
-        let model_input = obs_to_model_input(&dummy_obs);
-        let logits = inference.run_inference(model_input, 1);
-
-        assert_eq!(logits.len(), POLICY_OUTPUT_DIM, "wrong logit count");
-        let (turn, thrust, fp, fs) = logits_to_discrete_action(&logits);
-        assert!(turn <= 2, "turn_idx out of range: {turn}");
-        assert!(thrust <= 1, "thrust_idx out of range: {thrust}");
-        assert!(fp <= 1, "fire_primary out of range: {fp}");
-        assert!(fs <= 1, "fire_secondary out of range: {fs}");
-    }
-
-    #[test]
-    fn test_inference_net_batched() {
-        let inference = InferenceNet::new();
-        let batch_size = 5;
-        let single = obs_to_model_input(&vec![0.0_f32; OBS_DIM]);
-        let batch_flat: Vec<f32> = single.iter().cloned().cycle().take(batch_size * single.len()).collect();
-        let logits = inference.run_inference(batch_flat, batch_size);
-        assert_eq!(logits.len(), batch_size * POLICY_OUTPUT_DIM);
-    }
-}
+#[path = "tests/model_tests.rs"]
+mod tests;

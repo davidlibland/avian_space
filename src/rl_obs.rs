@@ -13,8 +13,11 @@ use crate::ship::{Personality, Ship};
 
 /// Total length of the observation vector (computed from slot sizes below).
 pub const OBS_DIM: usize = SELF_SIZE
-    + TARGET_SLOT_SIZE
-    + (K_PLANETS + K_ASTEROIDS + K_HOSTILE_SHIPS + K_FRIENDLY_SHIPS + K_PICKUPS) * ENTITY_SLOT_SIZE;
+    + (N_ENTITY_SLOTS) * SLOT_SIZE;
+
+/// Number of entity slots: 1 target + nearby buckets.
+pub const N_ENTITY_SLOTS: usize =
+    1 + K_PLANETS + K_ASTEROIDS + K_HOSTILE_SHIPS + K_FRIENDLY_SHIPS + K_PICKUPS;
 
 /// Detection radius (must match ai_ships.rs DETECTION_RADIUS).
 pub const DETECTION_RADIUS: f32 = 2000.0;
@@ -32,13 +35,42 @@ pub const K_HOSTILE_SHIPS: usize = 3;
 pub const K_FRIENDLY_SHIPS: usize = 2;
 pub const K_PICKUPS: usize = 2;
 
-/// Floats per entity slot in a nearby-entity bucket.
-pub const ENTITY_SLOT_SIZE: usize = 7; // rel_pos(2) + rel_vel(2) + extra(1) + pursuit_angle(1) + pursuit_indicator(1)
+// ── Entity slot layout (offsets within each SLOT_SIZE block) ─────────────
+//
+// These constants are the single source of truth for the slot encoding.
+// Both `encode_slot` (which writes) and any code that reads back from the
+// flat observation (e.g. `choose_target_slot`) must use these offsets.
 
-/// Floats for the target slot.
-/// present(1) + type_onehot(4) + rel_pos(2) + rel_vel(2) + should_engage(1) + value(1)
-/// + pursuit_angle(1) + pursuit_indicator(1) + fire_angle(1) + fire_indicator(1) + in_range(1)
-pub const TARGET_SLOT_SIZE: usize = 16;
+/// Offset of `is_present` (1 float).
+pub const SLOT_IS_PRESENT: usize = 0;
+/// Offset of `type_onehot` (4 floats).
+pub const SLOT_TYPE_ONEHOT: usize = 1;
+/// Offset of `rel_pos` (2 floats).
+pub const SLOT_REL_POS: usize = 5;
+/// Offset of `rel_vel` (2 floats).
+pub const SLOT_REL_VEL: usize = 7;
+/// Offset of `is_current_target` (1 float).
+pub const SLOT_IS_CURRENT_TARGET: usize = 9;
+/// Offset of `pursuit_angle` (1 float).
+pub const SLOT_PURSUIT_ANGLE: usize = 10;
+/// Offset of `pursuit_indicator` (1 float).
+pub const SLOT_PURSUIT_INDICATOR: usize = 11;
+/// Offset of `fire_angle` (1 float).
+pub const SLOT_FIRE_ANGLE: usize = 12;
+/// Offset of `fire_indicator` (1 float).
+pub const SLOT_FIRE_INDICATOR: usize = 13;
+/// Offset of `in_range` (1 float).
+pub const SLOT_IN_RANGE: usize = 14;
+/// Offset of `value` (1 float).
+pub const SLOT_VALUE: usize = 15;
+/// Offset of type-specific features (TYPE_SPECIFIC_SIZE floats).
+pub const SLOT_TYPE_SPECIFIC: usize = 16;
+
+/// Number of type-specific floats (padded to the max across all types).
+pub const TYPE_SPECIFIC_SIZE: usize = 9;
+
+/// Floats per entity slot (derived from layout offsets above).
+pub const SLOT_SIZE: usize = SLOT_TYPE_SPECIFIC + TYPE_SPECIFIC_SIZE; // = 25
 
 /// Floats for the self-state block.
 pub const SELF_SIZE: usize = 10; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, personality(3)
@@ -47,22 +79,20 @@ pub const SELF_SIZE: usize = 10; // health, speed, vel_cos, vel_sin, ang_vel, ca
 // Data structures passed from the Bevy system to the encoder
 // ---------------------------------------------------------------------------
 
-/// Pre-processed data for a single nearby entity slot.
-///
-/// All vectors are already in the ship's ego frame (raw, un-normalised).
+/// Core spatial data shared by all entity types.
 #[derive(Clone, Default)]
-pub struct EntitySlotData {
+pub struct CoreSlotData {
     /// Relative position in ego frame (raw world units).
     pub rel_pos: [f32; 2],
     /// Relative velocity in ego frame (raw world units/s).
     pub rel_vel: [f32; 2],
-    /// Entity-specific feature:
-    /// - Ships: health fraction (health / max_health)
-    /// - Planets: 1.0
-    /// - Asteroids: 1.0
-    /// - Pickups: 1.0
-    pub extra: f32,
-    /// Ship related data (zero for )
+    /// Entity type: 0=Ship, 1=Asteroid, 2=Planet, 3=Pickup.
+    pub entity_type: u8,
+}
+
+/// Ship-specific features.
+#[derive(Clone, Default)]
+pub struct ShipSlotData {
     pub max_health: f32,
     pub health: f32,
     pub max_speed: f32,
@@ -71,25 +101,62 @@ pub struct EntitySlotData {
     pub is_hostile: f32,
     /// 1.0 = should_engage, 0.0 = unknown / neutral, -1.0 = friendly.
     pub should_engage: f32,
+    pub personality: Personality,
 }
 
-/// Pre-processed data for the dedicated target slot.
+/// Planet-specific features.
+#[derive(Clone, Default)]
+pub struct PlanetSlotData {
+    /// Total value of selling the ship's current cargo at this planet.
+    pub cargo_sale_value: f32,
+    /// Whether the ship can replenish ammo here.
+    pub has_ammo: f32,
+    /// Best commodity margin (most negative = best trade opportunity).
+    pub commodity_margin: f32,
+}
+
+/// Asteroid-specific features.
+#[derive(Clone, Default)]
+pub struct AsteroidSlotData {
+    /// Size of the asteroid (proxy for durability).
+    pub size: f32,
+    /// Expected value of shattering (avg_price * expected_quantity).
+    pub value: f32,
+}
+
+/// Pickup-specific features.
+#[derive(Clone, Default)]
+pub struct PickupSlotData {
+    /// Value of the pickup (avg_price * quantity).
+    pub value: f32,
+}
+
+/// Type-specific features for an entity slot.
+#[derive(Clone)]
+pub enum EntityKind {
+    Ship(ShipSlotData),
+    Asteroid(AsteroidSlotData),
+    Planet(PlanetSlotData),
+    Pickup(PickupSlotData),
+}
+
+impl Default for EntityKind {
+    fn default() -> Self {
+        EntityKind::Ship(ShipSlotData::default())
+    }
+}
+
+/// Unified entity slot data, used for both nearby entities and the target.
 ///
 /// All vectors are already in the ship's ego frame (raw, un-normalised).
-#[derive(Clone)]
-pub struct TargetSlotData {
-    /// Entity type: 0=Ship, 1=Asteroid, 2=Planet, 3=Pickup.
-    pub entity_type: u8,
-    /// Relative position in ego frame (raw world units).
-    pub rel_pos: [f32; 2],
-    /// Relative velocity in ego frame (raw world units/s).
-    pub rel_vel: [f32; 2],
-    /// 1.0 = hostile, 0.0 = unknown / neutral, -1.0 = friendly.
-    pub is_hostile: f32,
-    /// 1.0 = should_engage, 0.0 = unknown / neutral, -1.0 = friendly.
-    pub should_engage: f32,
-    /// Normalised value hint (e.g. 1.0 for planets, 1.0 for asteroids).
-    pub value_hint: f32,
+#[derive(Clone, Default)]
+pub struct EntitySlotData {
+    pub core: CoreSlotData,
+    pub kind: EntityKind,
+    /// Value of this entity (e.g. cargo sale value for planets, pickup value, etc.)
+    pub value: f32,
+    /// Whether this entity is the ship's current target.
+    pub is_current_target: bool,
 }
 
 /// All pre-processed inputs needed by `encode_observation`.
@@ -107,7 +174,7 @@ pub struct ObsInput<'a> {
     /// Unit vector of the ship's forward direction in world space.
     pub ship_heading: [f32; 2],
     /// Current target, if any (pre-processed into ego frame).
-    pub target: Option<TargetSlotData>,
+    pub target: Option<EntitySlotData>,
     /// Up to K_PLANETS nearest planets, sorted by distance, in ego frame.
     pub nearby_planets: Vec<EntitySlotData>,
     /// Up to K_ASTEROIDS nearest asteroids, sorted by distance, in ego frame.
@@ -134,7 +201,7 @@ pub struct ObsInput<'a> {
 ///
 /// Applying `rotate_to_ego(v, sin_a, cos_a)` maps a world-space 2-D vector
 /// `v` into the ship's local frame where +x is the ship's forward direction.
-/// This matches the rotation used in `simple_ai_control`.
+/// This matches the rotation used in `classic_ai_control`.
 pub fn ego_frame_sincos(ship_heading: [f32; 2]) -> (f32, f32) {
     let frame_angle = -ship_heading[1].atan2(ship_heading[0]);
     frame_angle.sin_cos()
@@ -177,12 +244,13 @@ pub fn select_secondary_weapon<'a>(ship: &'a Ship, target_is_ship: bool) -> Opti
 // Action-space helpers
 // ---------------------------------------------------------------------------
 
-/// Action space: (turn_idx, thrust_idx, fire_primary, fire_secondary)
+/// Action space: (turn_idx, thrust_idx, fire_primary, fire_secondary, target_idx)
 /// - turn_idx:      0 = left, 1 = straight, 2 = right
 /// - thrust_idx:    0 = no thrust, 1 = thrust
 /// - fire_primary:  0 = no, 1 = yes
 /// - fire_secondary: 0 = no, 1 = yes  (which weapon fires is chosen deterministically)
-pub type DiscreteAction = (u8, u8, u8, u8);
+/// - target_idx:    index into entity slots (0..N_OBJECTS-1), or N_OBJECTS = "no target"
+pub type DiscreteAction = (u8, u8, u8, u8, u8);
 
 /// Map a bearing angle (convention from `ai_ships::angle_to_controls`) to a
 /// discrete `(turn_idx, thrust_idx)` pair.
@@ -297,11 +365,11 @@ fn aim_indicator(angle: Option<f32>) -> f32 {
 ///
 /// Layout (total = OBS_DIM):
 /// ```text
-/// [self: SELF_SIZE] [target: TARGET_SLOT_SIZE]
-/// [planets: K_PLANETS×ENTITY_SLOT_SIZE] [asteroids: K_ASTEROIDS×ENTITY_SLOT_SIZE]
-/// [hostile_ships: K_HOSTILE_SHIPS×ENTITY_SLOT_SIZE]
-/// [friendly_ships: K_FRIENDLY_SHIPS×ENTITY_SLOT_SIZE]
-/// [pickups: K_PICKUPS×ENTITY_SLOT_SIZE]
+/// [self: SELF_SIZE]
+/// [target: SLOT_SIZE] [planets: K_PLANETS×SLOT_SIZE] [asteroids: K_ASTEROIDS×SLOT_SIZE]
+/// [hostile_ships: K_HOSTILE_SHIPS×SLOT_SIZE]
+/// [friendly_ships: K_FRIENDLY_SHIPS×SLOT_SIZE]
+/// [pickups: K_PICKUPS×SLOT_SIZE]
 /// ```
 pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let mut obs = Vec::with_capacity(OBS_DIM);
@@ -328,7 +396,7 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let target_is_ship = input
         .target
         .as_ref()
-        .map(|t| t.entity_type == 0)
+        .map(|t| t.core.entity_type == 0)
         .unwrap_or(false);
     let ammo_frac = select_secondary_weapon(input.ship, target_is_ship)
         .map(|(_, ammo)| (ammo as f32 / MAX_AMMO_REF).min(1.0))
@@ -346,14 +414,13 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     obs.extend_from_slice(&personality);
     debug_assert_eq!(obs.len(), SELF_SIZE);
 
-    // Context for angle computations in sub-encoders.
+    // Context for angle computations.
     let max_speed = input.ship.data.max_speed.max(f32::EPSILON);
-    // Ship's own velocity in ego frame (needed to recover target absolute velocity
-    // from the stored relative velocity for the fire-lead angle).
     let ego_vel = rotate_to_ego(input.velocity, sin_a, cos_a);
 
-    // -- Target slot ----------------------------------------------------------
-    encode_target_slot(
+    // -- All entity slots (unified layout) ------------------------------------
+    // Slot 0: target
+    encode_slot(
         input.target.as_ref(),
         max_speed,
         input.primary_weapon_speed,
@@ -361,24 +428,27 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
         ego_vel,
         &mut obs,
     );
-    debug_assert_eq!(obs.len(), SELF_SIZE + TARGET_SLOT_SIZE);
 
-    // -- Nearby entity buckets ------------------------------------------------
-    encode_entity_bucket(&input.nearby_planets, K_PLANETS, max_speed, &mut obs);
-    encode_entity_bucket(&input.nearby_asteroids, K_ASTEROIDS, max_speed, &mut obs);
-    encode_entity_bucket(
-        &input.nearby_hostile_ships,
-        K_HOSTILE_SHIPS,
-        max_speed,
-        &mut obs,
-    );
-    encode_entity_bucket(
-        &input.nearby_friendly_ships,
-        K_FRIENDLY_SHIPS,
-        max_speed,
-        &mut obs,
-    );
-    encode_entity_bucket(&input.nearby_pickups, K_PICKUPS, max_speed, &mut obs);
+    // Slots 1..: nearby entity buckets
+    let buckets: &[(&[EntitySlotData], usize)] = &[
+        (&input.nearby_planets, K_PLANETS),
+        (&input.nearby_asteroids, K_ASTEROIDS),
+        (&input.nearby_hostile_ships, K_HOSTILE_SHIPS),
+        (&input.nearby_friendly_ships, K_FRIENDLY_SHIPS),
+        (&input.nearby_pickups, K_PICKUPS),
+    ];
+    for &(slots, max_count) in buckets {
+        for i in 0..max_count {
+            encode_slot(
+                slots.get(i),
+                max_speed,
+                input.primary_weapon_speed,
+                input.primary_weapon_range,
+                ego_vel,
+                &mut obs,
+            );
+        }
+    }
 
     debug_assert_eq!(
         obs.len(),
@@ -394,64 +464,79 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
 // Private helpers
 // ---------------------------------------------------------------------------
 
-fn encode_target_slot(
-    target: Option<&TargetSlotData>,
+/// Encode a single entity slot (SLOT_SIZE floats). `None` → all zeros.
+fn encode_slot(
+    slot: Option<&EntitySlotData>,
     max_speed: f32,
     weapon_speed: f32,
     weapon_range: f32,
     ego_vel: [f32; 2],
     obs: &mut Vec<f32>,
 ) {
-    if let Some(t) = target {
-        obs.push(1.0); // is_present
-        obs.extend_from_slice(&entity_type_onehot(t.entity_type));
-        obs.extend_from_slice(&t.rel_pos);
-        obs.extend_from_slice(&t.rel_vel);
-        obs.push(t.should_engage);
-        obs.push(t.value_hint);
+    let Some(s) = slot else {
+        obs.extend(std::iter::repeat(0.0_f32).take(SLOT_SIZE));
+        return;
+    };
+    let rel_pos = s.core.rel_pos;
+    let rel_vel = s.core.rel_vel;
 
-        // Pursuit angle — intercept using ship max speed; obj_vel = relative velocity.
-        let pursuit = intercept_angle(max_speed, t.rel_pos, t.rel_vel);
-        obs.push(pursuit.unwrap_or(0.0));
-        obs.push(aim_indicator(pursuit));
+    // Write into a fixed-size buffer using the named offsets so that any
+    // reordering is caught at compile time via the final length assert.
+    let mut buf = [0.0_f32; SLOT_SIZE];
 
-        // Fire-lead angle — obj_vel = absolute target velocity (rel_vel + ship_vel_ego).
-        let tgt_vel_abs = [t.rel_vel[0] + ego_vel[0], t.rel_vel[1] + ego_vel[1]];
-        let fire = intercept_angle(weapon_speed, t.rel_pos, tgt_vel_abs);
-        obs.push(fire.unwrap_or(0.0));
-        obs.push(aim_indicator(fire));
+    buf[SLOT_IS_PRESENT] = 1.0;
+    buf[SLOT_TYPE_ONEHOT..SLOT_TYPE_ONEHOT + 4]
+        .copy_from_slice(&entity_type_onehot(s.core.entity_type));
+    buf[SLOT_REL_POS..SLOT_REL_POS + 2].copy_from_slice(&rel_pos);
+    buf[SLOT_REL_VEL..SLOT_REL_VEL + 2].copy_from_slice(&rel_vel);
+    buf[SLOT_IS_CURRENT_TARGET] = if s.is_current_target { 1.0 } else { 0.0 };
 
-        // In-range flag.
-        let dist = (t.rel_pos[0].powi(2) + t.rel_pos[1].powi(2)).sqrt();
-        obs.push(if weapon_range > 0.0 && dist <= weapon_range {
-            1.0
-        } else {
-            0.0
-        });
+    let pursuit = intercept_angle(max_speed, rel_pos, rel_vel);
+    buf[SLOT_PURSUIT_ANGLE] = pursuit.unwrap_or(0.0);
+    buf[SLOT_PURSUIT_INDICATOR] = aim_indicator(pursuit);
+
+    let abs_vel = [rel_vel[0] + ego_vel[0], rel_vel[1] + ego_vel[1]];
+    let fire = intercept_angle(weapon_speed, rel_pos, abs_vel);
+    buf[SLOT_FIRE_ANGLE] = fire.unwrap_or(0.0);
+    buf[SLOT_FIRE_INDICATOR] = aim_indicator(fire);
+
+    let dist = (rel_pos[0].powi(2) + rel_pos[1].powi(2)).sqrt();
+    buf[SLOT_IN_RANGE] = if weapon_range > 0.0 && dist <= weapon_range {
+        1.0
     } else {
-        obs.extend(std::iter::repeat(0.0_f32).take(TARGET_SLOT_SIZE));
-    }
-}
+        0.0
+    };
 
-fn encode_entity_bucket(
-    slots: &[EntitySlotData],
-    max_count: usize,
-    max_speed: f32,
-    obs: &mut Vec<f32>,
-) {
-    for i in 0..max_count {
-        if let Some(slot) = slots.get(i) {
-            // Pursuit angle — rel_pos and rel_vel are raw (un-normalised) ego-frame values.
-            let pursuit = intercept_angle(max_speed, slot.rel_pos, slot.rel_vel);
-            obs.extend_from_slice(&slot.rel_pos);
-            obs.extend_from_slice(&slot.rel_vel);
-            obs.push(slot.extra);
-            obs.push(pursuit.unwrap_or(0.0));
-            obs.push(aim_indicator(pursuit));
-        } else {
-            obs.extend(std::iter::repeat(0.0_f32).take(ENTITY_SLOT_SIZE));
+    buf[SLOT_VALUE] = s.value;
+
+    // Type-specific (zero-padded to TYPE_SPECIFIC_SIZE).
+    let ts = &mut buf[SLOT_TYPE_SPECIFIC..];
+    match &s.kind {
+        EntityKind::Ship(ship) => {
+            ts[0] = ship.max_health;
+            ts[1] = ship.health;
+            ts[2] = ship.max_speed;
+            ts[3] = ship.torque;
+            ts[4] = ship.is_hostile;
+            ts[5] = ship.should_engage;
+            let p = personality_onehot(&ship.personality);
+            ts[6..9].copy_from_slice(&p);
+        }
+        EntityKind::Planet(planet) => {
+            ts[0] = planet.cargo_sale_value;
+            ts[1] = planet.has_ammo;
+            ts[2] = planet.commodity_margin;
+        }
+        EntityKind::Asteroid(asteroid) => {
+            ts[0] = asteroid.size;
+            ts[1] = asteroid.value;
+        }
+        EntityKind::Pickup(pickup) => {
+            ts[0] = pickup.value;
         }
     }
+
+    obs.extend_from_slice(&buf);
 }
 
 fn entity_type_onehot(entity_type: u8) -> [f32; 4] {
@@ -477,420 +562,6 @@ fn personality_onehot(personality: &Personality) -> [f32; 3] {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ship::{Ship, ShipData};
-    use std::collections::HashMap;
+#[path = "tests/rl_obs_tests.rs"]
+mod tests;
 
-    fn dummy_ship() -> Ship {
-        Ship {
-            ship_type: "test".to_string(),
-            data: ShipData {
-                max_health: 100,
-                max_speed: 200.0,
-                cargo_space: 50,
-                thrust: 100.0,
-                torque: 10.0,
-                ..Default::default()
-            },
-            health: 50,
-            cargo: {
-                let mut m = HashMap::new();
-                m.insert("ore".to_string(), 10u16);
-                m
-            },
-            ..Default::default()
-        }
-    }
-
-    fn minimal_obs_input(ship: &Ship) -> ObsInput<'_> {
-        ObsInput {
-            personality: &ship.data.personality,
-            ship,
-            velocity: [0.0, 0.0],
-            angular_velocity: 0.0,
-            ship_heading: [0.0, 1.0], // facing up
-            target: None,
-            nearby_planets: vec![],
-            nearby_asteroids: vec![],
-            nearby_hostile_ships: vec![],
-            nearby_friendly_ships: vec![],
-            nearby_pickups: vec![],
-            primary_weapon_speed: 400.0,
-            primary_weapon_range: 800.0,
-        }
-    }
-
-    #[test]
-    fn test_observation_shape_constant() {
-        let ship = dummy_ship();
-
-        // No nearby entities.
-        let obs0 = encode_observation(&minimal_obs_input(&ship));
-        assert_eq!(obs0.len(), OBS_DIM, "zero entities");
-
-        // One of each type.
-        let slot = EntitySlotData {
-            rel_pos: [0.1, 0.2],
-            rel_vel: [0.0, 0.0],
-            extra: 1.0,
-            ..Default::default()
-        };
-        let obs1 = encode_observation(&ObsInput {
-            personality: &ship.data.personality,
-            ship: &ship,
-            velocity: [10.0, 0.0],
-            angular_velocity: 0.5,
-            ship_heading: [1.0, 0.0],
-            target: Some(TargetSlotData {
-                entity_type: 1,
-                rel_pos: [0.3, 0.4],
-                rel_vel: [0.0, 0.0],
-                is_hostile: 0.0,
-                should_engage: 0.0,
-                value_hint: 1.0,
-            }),
-            nearby_planets: vec![slot.clone()],
-            nearby_asteroids: vec![slot.clone(), slot.clone()],
-            nearby_hostile_ships: vec![slot.clone()],
-            nearby_friendly_ships: vec![],
-            nearby_pickups: vec![slot.clone()],
-            primary_weapon_speed: 400.0,
-            primary_weapon_range: 800.0,
-        });
-        assert_eq!(obs1.len(), OBS_DIM, "some entities");
-
-        // Fully-populated buckets.
-        let obs2 = encode_observation(&ObsInput {
-            personality: &ship.data.personality,
-            ship: &ship,
-            velocity: [0.0, 0.0],
-            angular_velocity: 0.0,
-            ship_heading: [0.0, 1.0],
-            target: Some(TargetSlotData {
-                entity_type: 0,
-                rel_pos: [0.1, 0.0],
-                rel_vel: [0.0, 0.0],
-                is_hostile: 1.0,
-                should_engage: 1.0,
-                value_hint: 0.5,
-            }),
-            nearby_planets: vec![slot.clone(); K_PLANETS],
-            nearby_asteroids: vec![slot.clone(); K_ASTEROIDS],
-            nearby_hostile_ships: vec![slot.clone(); K_HOSTILE_SHIPS],
-            nearby_friendly_ships: vec![slot.clone(); K_FRIENDLY_SHIPS],
-            nearby_pickups: vec![slot.clone(); K_PICKUPS],
-            primary_weapon_speed: 400.0,
-            primary_weapon_range: 800.0,
-        });
-        assert_eq!(obs2.len(), OBS_DIM, "full buckets");
-    }
-
-    #[test]
-    fn test_ego_centric_encoding() {
-        // Ship facing +x (right). A target directly in front should have
-        // rel_pos = [positive, ~0] in ego frame.
-        let (sin_a, cos_a) = ego_frame_sincos([1.0_f32, 0.0]);
-        let world_offset = [100.0_f32, 0.0]; // directly to the right in world = forward in ego
-        let ego = rotate_to_ego(world_offset, sin_a, cos_a);
-        assert!(
-            (ego[0] - 100.0).abs() < 1e-4,
-            "ego x should be ~100, got {}",
-            ego[0]
-        );
-        assert!(ego[1].abs() < 1e-4, "ego y should be ~0, got {}", ego[1]);
-
-        // Ship facing +y (up). A target directly above should map to forward.
-        let (sin_a, cos_a) = ego_frame_sincos([0.0_f32, 1.0]);
-        let world_offset = [0.0_f32, 100.0];
-        let ego = rotate_to_ego(world_offset, sin_a, cos_a);
-        assert!(
-            (ego[0] - 100.0).abs() < 1e-4,
-            "ego x should be ~100, got {}",
-            ego[0]
-        );
-        assert!(ego[1].abs() < 1e-4, "ego y should be ~0, got {}", ego[1]);
-    }
-
-    #[test]
-    fn test_action_to_ship_command() {
-        // thrust=1, turn=left(0) → thrust=1.0, turn=-1.0
-        let (thrust, turn) = discrete_to_controls(1, 0);
-        assert_eq!(thrust, 1.0);
-        assert_eq!(turn, -1.0);
-
-        // thrust=0, turn=right(2) → thrust=0.0, turn=1.0
-        let (thrust, turn) = discrete_to_controls(0, 2);
-        assert_eq!(thrust, 0.0);
-        assert_eq!(turn, 1.0);
-
-        // thrust=1, turn=straight(1) → thrust=1.0, turn=0.0
-        let (thrust, turn) = discrete_to_controls(1, 1);
-        assert_eq!(thrust, 1.0);
-        assert_eq!(turn, 0.0);
-    }
-
-    #[test]
-    fn test_angle_to_discrete() {
-        use std::f32::consts::PI;
-
-        // Large left angle → turn left, no thrust
-        let (turn, thrust) = angle_to_discrete(PI / 2.0);
-        assert_eq!(turn, 0);
-        assert_eq!(thrust, 0);
-
-        // Small left angle → turn left, thrust
-        let (turn, thrust) = angle_to_discrete(0.1);
-        assert_eq!(turn, 0);
-        assert_eq!(thrust, 1);
-
-        // Small right angle → turn right, thrust
-        let (turn, thrust) = angle_to_discrete(-0.1);
-        assert_eq!(turn, 2);
-        assert_eq!(thrust, 1);
-
-        // Large right angle → turn right, no thrust
-        let (turn, thrust) = angle_to_discrete(-PI / 2.0);
-        assert_eq!(turn, 2);
-        assert_eq!(thrust, 0);
-    }
-
-    #[test]
-    fn test_controls_to_discrete_roundtrip() {
-        // Verify that discrete_to_controls and controls_to_discrete are consistent.
-        for thrust_idx in 0u8..=1 {
-            for turn_idx in [0u8, 1, 2] {
-                let (t, r) = discrete_to_controls(thrust_idx, turn_idx);
-                let (t2, r2) = controls_to_discrete(t, r);
-                assert_eq!(
-                    thrust_idx, t2,
-                    "thrust mismatch for ({}, {})",
-                    thrust_idx, turn_idx
-                );
-                assert_eq!(
-                    turn_idx, r2,
-                    "turn mismatch for ({}, {})",
-                    thrust_idx, turn_idx
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_personality_onehot() {
-        assert_eq!(personality_onehot(&Personality::Miner), [1.0, 0.0, 0.0]);
-        assert_eq!(personality_onehot(&Personality::Fighter), [0.0, 1.0, 0.0]);
-        assert_eq!(personality_onehot(&Personality::Trader), [0.0, 0.0, 1.0]);
-    }
-
-    // ── Action pipeline consistency ────────────────────────────────────────
-
-    /// Verify that the BC collection path and the inference → execution path
-    /// use the same turn/thrust ordering.
-    ///
-    /// BC collection: `controls_to_discrete(thrust, turn)` → `(thrust_idx, turn_idx)`
-    ///   → stored as `DiscreteAction = (turn_idx, thrust_idx, ...)`.
-    ///
-    /// Inference:  `logits_to_discrete_action` → `(turn_idx, thrust_idx, ...)`
-    ///   → `repeat_actions` destructures as `(turn_idx, thrust_idx, ...)`
-    ///   → calls `discrete_to_controls(thrust_idx, turn_idx)`.
-    ///
-    /// This test ensures the full roundtrip is correct.
-    #[test]
-    fn test_action_bc_roundtrip() {
-        // Simulate what BC collection does: rule-based AI produces (thrust, turn),
-        // then we go controls_to_discrete → DiscreteAction → discrete_to_controls.
-        let cases: &[(f32, f32)] = &[
-            (1.0, -1.0), // thrust forward, turn left
-            (1.0, 0.0),  // thrust forward, straight
-            (1.0, 1.0),  // thrust forward, turn right
-            (0.0, -1.0), // no thrust, turn left
-            (0.0, 0.0),  // no thrust, straight
-            (0.0, 1.0),  // no thrust, turn right
-        ];
-        for &(thrust, turn) in cases {
-            let (thrust_idx, turn_idx) = controls_to_discrete(thrust, turn);
-            // BC stores as (turn_idx, thrust_idx, fp, fs):
-            let action: DiscreteAction = (turn_idx, thrust_idx, 0, 0);
-            // Inference path destructures the same way:
-            let (turn_out, thrust_out, _, _) = action;
-            let (t_back, r_back) = discrete_to_controls(thrust_out, turn_out);
-            assert_eq!(
-                t_back, thrust,
-                "thrust mismatch for input ({thrust}, {turn}): got {t_back}"
-            );
-            assert_eq!(
-                r_back, turn,
-                "turn mismatch for input ({thrust}, {turn}): got {r_back}"
-            );
-        }
-    }
-
-    // ── intercept_angle / aim_indicator ─────────────────────────────────────
-
-    /// Object directly ahead (ego +X), stationary → intercept angle = 0.
-    #[test]
-    fn test_intercept_angle_directly_ahead() {
-        let angle = intercept_angle(200.0, [500.0, 0.0], [0.0, 0.0]).unwrap();
-        assert!(angle.abs() < 1e-4, "expected ~0, got {}", angle);
-    }
-
-    /// Object directly to the left (ego +Y) → angle should be +π/2.
-    #[test]
-    fn test_intercept_angle_left() {
-        let angle = intercept_angle(200.0, [0.0, 500.0], [0.0, 0.0]).unwrap();
-        assert!(
-            (angle - PI / 2.0).abs() < 1e-4,
-            "expected ~π/2, got {}",
-            angle
-        );
-    }
-
-    /// Object directly to the right (ego −Y) → angle should be −π/2.
-    #[test]
-    fn test_intercept_angle_right() {
-        let angle = intercept_angle(200.0, [0.0, -500.0], [0.0, 0.0]).unwrap();
-        assert!(
-            (angle + PI / 2.0).abs() < 1e-4,
-            "expected ~−π/2, got {}",
-            angle
-        );
-    }
-
-    /// All intercept angles must lie in [−π, π].
-    #[test]
-    fn test_intercept_angle_always_in_range() {
-        let cases: &[([f32; 2], [f32; 2])] = &[
-            ([100.0, 0.0], [0.0, 0.0]),
-            ([0.0, 100.0], [0.0, 0.0]),
-            ([-100.0, 0.0], [0.0, 0.0]),
-            ([100.0, 100.0], [50.0, -50.0]),
-            ([-200.0, 150.0], [-30.0, 20.0]),
-            ([50.0, -300.0], [10.0, -5.0]),
-        ];
-        for &(pos, vel) in cases {
-            if let Some(a) = intercept_angle(200.0, pos, vel) {
-                assert!(
-                    a >= -PI && a <= PI,
-                    "angle {} out of [-π, π] for pos={:?} vel={:?}",
-                    a,
-                    pos,
-                    vel
-                );
-            }
-        }
-    }
-
-    /// aim_indicator is 1.0 when angle is exactly 0 (perfectly aimed forward).
-    #[test]
-    fn test_aim_indicator_perfect() {
-        let ind = aim_indicator(Some(0.0));
-        assert!((ind - 1.0).abs() < 1e-5, "expected 1.0, got {}", ind);
-    }
-
-    /// aim_indicator is ≤ epsilon when angle is ±π/2 (boundary, floating point).
-    /// aim_indicator is exactly 0 when |angle| > π/2.
-    #[test]
-    fn test_aim_indicator_perpendicular() {
-        // At the exact boundary the value should be essentially zero (float rounding).
-        assert!(aim_indicator(Some(PI / 2.0)) < 1e-10);
-        assert!(aim_indicator(Some(-PI / 2.0)) < 1e-10);
-        // Clearly beyond the boundary: must be exactly 0.
-        assert_eq!(aim_indicator(Some(PI)), 0.0);
-        assert_eq!(aim_indicator(Some(-PI)), 0.0);
-        assert_eq!(aim_indicator(Some(PI * 0.75)), 0.0);
-    }
-
-    /// aim_indicator is 0.0 when there is no intercept.
-    #[test]
-    fn test_aim_indicator_none() {
-        assert_eq!(aim_indicator(None), 0.0);
-    }
-
-    /// aim_indicator is strictly between 0 and 1 for a small off-axis angle.
-    #[test]
-    fn test_aim_indicator_partial() {
-        let ind = aim_indicator(Some(PI / 4.0));
-        assert!(ind > 0.0 && ind < 1.0, "expected (0,1), got {}", ind);
-    }
-
-    /// Angles near ±π are treated as "facing backward" → indicator = 0.
-    #[test]
-    fn test_aim_indicator_backwards_wrapping() {
-        // An angle of just under π should give 0.
-        let ind = aim_indicator(Some(PI - 0.01));
-        assert_eq!(ind, 0.0);
-        // An angle of just over −π should give 0 (wrapping handles it).
-        let ind2 = aim_indicator(Some(-PI + 0.01));
-        assert_eq!(ind2, 0.0);
-    }
-
-    /// Pursuit angle for a moving target: object ahead moving away should still
-    /// give a small angle (near 0) if ship is faster than the target.
-    #[test]
-    fn test_intercept_angle_moving_target_ahead() {
-        // Object 300 m ahead, moving away at 50 m/s; ship max speed = 200 m/s.
-        let angle = intercept_angle(200.0, [300.0, 0.0], [50.0, 0.0]).unwrap();
-        assert!(angle.abs() < 0.1, "expected near-zero angle, got {}", angle);
-    }
-
-    /// encode_observation produces the correct OBS_DIM even with the new slot sizes.
-    #[test]
-    fn test_obs_dim_matches_constant() {
-        let expected = SELF_SIZE
-            + TARGET_SLOT_SIZE
-            + (K_PLANETS + K_ASTEROIDS + K_HOSTILE_SHIPS + K_FRIENDLY_SHIPS + K_PICKUPS)
-                * ENTITY_SLOT_SIZE;
-        assert_eq!(
-            OBS_DIM, expected,
-            "OBS_DIM constant does not match slot layout"
-        );
-
-        let ship = dummy_ship();
-        let obs = encode_observation(&minimal_obs_input(&ship));
-        assert_eq!(obs.len(), OBS_DIM);
-    }
-
-    /// Target pursuit angle is near 0 when target is directly ahead and stationary.
-    #[test]
-    fn test_target_pursuit_angle_ahead() {
-        let ship = dummy_ship();
-        // Ship facing +x, target directly ahead at (500, 0) in world space.
-        // In ego frame (+x = forward) this maps to rel_pos ≈ (0.25, 0) after /DETECTION_RADIUS.
-        let obs = encode_observation(&ObsInput {
-            personality: &ship.data.personality,
-            ship: &ship,
-            velocity: [0.0, 0.0],
-            angular_velocity: 0.0,
-            ship_heading: [1.0, 0.0], // facing right
-            target: Some(TargetSlotData {
-                entity_type: 1,
-                rel_pos: [500.0, 0.0], // ahead in ego frame (raw, un-normalised)
-                rel_vel: [0.0, 0.0],
-                is_hostile: 0.0,
-                should_engage: 0.0,
-                value_hint: 1.0,
-            }),
-            nearby_planets: vec![],
-            nearby_asteroids: vec![],
-            nearby_hostile_ships: vec![],
-            nearby_friendly_ships: vec![],
-            nearby_pickups: vec![],
-            primary_weapon_speed: 400.0,
-            primary_weapon_range: 1000.0,
-        });
-        // Target slot starts at SELF_SIZE; pursuit_angle is at offset 11 (after present+4+2+2+1+1).
-        let pursuit_angle = obs[SELF_SIZE + 11];
-        assert!(
-            pursuit_angle.abs() < 1e-4,
-            "expected ~0, got {}",
-            pursuit_angle
-        );
-        // Aim indicator should be ~1.
-        let aim_ind = obs[SELF_SIZE + 12];
-        assert!((aim_ind - 1.0).abs() < 1e-4, "expected ~1, got {}", aim_ind);
-        // In range (weapon_range=1000 > dist=500).
-        let in_range = obs[SELF_SIZE + 15];
-        assert_eq!(in_range, 1.0);
-    }
-}

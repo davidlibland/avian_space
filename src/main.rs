@@ -21,6 +21,11 @@ mod ship;
 mod starfield;
 mod utils;
 mod weapons;
+
+#[cfg(test)]
+#[path = "tests/policy_tests.rs"]
+mod policy_tests;
+
 use ai_ships::ai_ship_bundle;
 use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
 use explosions::explosions_plugin;

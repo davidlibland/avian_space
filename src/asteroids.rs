@@ -51,7 +51,7 @@ pub struct ShatterAsteroid(pub Entity);
 #[derive(Component)]
 pub struct Asteroid {
     pub size: f32,
-    field: Entity,
+    pub field: Entity,
 }
 
 #[derive(Deserialize, Serialize)]

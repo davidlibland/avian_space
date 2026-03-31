@@ -40,6 +40,18 @@ pub struct ItemUniverse {
     /// system → planet name → commodity with the biggest discount vs. system average (best to buy).
     #[serde(skip)]
     pub system_planet_best_commodity_to_buy: HashMap<String, HashMap<String, String>>,
+    /// system → planet name → best commodity margin (min over commodities of
+    /// `price_here - max_price_elsewhere`). Negative = profitable to buy here and sell elsewhere.
+    #[serde(skip)]
+    pub planet_best_margin: HashMap<String, HashMap<String, f64>>,
+    /// planet name → set of ship types that can replenish ammo at this planet.
+    #[serde(skip)]
+    pub planet_has_ammo_for: HashMap<String, std::collections::HashSet<String>>,
+    /// Expected value of shattering an asteroid in each field, keyed by
+    /// `AsteroidField` entity index within the system (system_name → vec index → value).
+    /// Computed as `sum(weight_i * avg_price_i) / total_weight * E[qty]`.
+    #[serde(skip)]
+    pub asteroid_field_expected_value: HashMap<String, Vec<f64>>,
 }
 
 impl ItemUniverse {
@@ -129,6 +141,120 @@ impl ItemUniverse {
             }
             self.system_planet_best_commodity_to_buy
                 .insert(system_name.clone(), best_buy);
+
+            // ── planet_best_margin ──────────────────────────────────────────
+            // For each planet, compute: min over commodities of
+            // (price_here - max_price_on_any_other_planet_in_system).
+            // A large negative value means there's a commodity that's cheap
+            // here relative to the best sell price elsewhere → good trade.
+            let mut planet_margins: HashMap<String, f64> = HashMap::new();
+            for (planet_name, planet) in &system.planets {
+                let mut best_margin = f64::INFINITY;
+                for (commodity, &price) in &planet.commodities {
+                    // Max price of this commodity on any OTHER planet in system.
+                    let max_elsewhere = system
+                        .planets
+                        .iter()
+                        .filter(|(pn, _)| *pn != planet_name)
+                        .filter_map(|(_, p)| p.commodities.get(commodity))
+                        .copied()
+                        .max()
+                        .unwrap_or(price);
+                    let margin = price as f64 - max_elsewhere as f64;
+                    if margin < best_margin {
+                        best_margin = margin;
+                    }
+                }
+                if best_margin.is_finite() {
+                    planet_margins.insert(planet_name.clone(), best_margin);
+                }
+            }
+            self.planet_best_margin
+                .insert(system_name.clone(), planet_margins);
+        }
+    }
+
+    /// For each planet, determine which ship types can replenish ammo there.
+    /// A ship type can replenish if the planet's outfitter sells any secondary
+    /// weapon type that appears in the ship's base_weapons.
+    fn compute_planet_ammo(&mut self) {
+        use std::collections::HashSet;
+        // Collect all secondary weapon types from outfitter items.
+        let secondary_types: HashSet<&str> = self
+            .outfitter_items
+            .iter()
+            .filter_map(|(_, item)| match item {
+                OutfitterItem::SecondaryWeapon { weapon_type, .. } => Some(weapon_type.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        for system in self.star_systems.values() {
+            for (planet_name, planet) in &system.planets {
+                let mut ship_set: HashSet<String> = HashSet::new();
+                // Which secondary weapon types does this planet sell?
+                let planet_secondary: HashSet<&str> = planet
+                    .outfitter
+                    .iter()
+                    .filter(|item_name| {
+                        self.outfitter_items
+                            .get(*item_name)
+                            .map(|item| matches!(item, OutfitterItem::SecondaryWeapon { .. }))
+                            .unwrap_or(false)
+                    })
+                    .filter_map(|item_name| match self.outfitter_items.get(item_name) {
+                        Some(OutfitterItem::SecondaryWeapon { weapon_type, .. }) => {
+                            Some(weapon_type.as_str())
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                // For each ship type, check if any of its secondary weapons match.
+                for (ship_type, ship_data) in &self.ships {
+                    let has_ammo = ship_data.base_weapons.iter().any(|(wname, _)| {
+                        // Check if this weapon is a secondary type sold here.
+                        planet_secondary.contains(wname.as_str())
+                    });
+                    if has_ammo {
+                        ship_set.insert(ship_type.clone());
+                    }
+                }
+                self.planet_has_ammo_for
+                    .insert(planet_name.clone(), ship_set);
+            }
+        }
+    }
+
+    /// Compute expected value of shattering asteroids in each field.
+    fn compute_asteroid_values(&mut self) {
+        for (system_name, system) in &self.star_systems {
+            let mut field_values = Vec::new();
+            for field_data in &system.astroid_fields {
+                let total_weight: f32 = field_data.commodities.values().sum();
+                if total_weight <= 0.0 {
+                    field_values.push(0.0);
+                    continue;
+                }
+                // Expected value = sum(weight_i/total * avg_price_i)
+                // We don't multiply by expected quantity here — that depends on
+                // asteroid size which varies. The caller can multiply by size.
+                let ev: f64 = field_data
+                    .commodities
+                    .iter()
+                    .map(|(commodity, &weight)| {
+                        let prob = weight as f64 / total_weight as f64;
+                        let avg_price = self
+                            .global_average_price
+                            .get(commodity)
+                            .copied()
+                            .unwrap_or(0.0);
+                        prob * avg_price
+                    })
+                    .sum();
+                field_values.push(ev);
+            }
+            self.asteroid_field_expected_value
+                .insert(system_name.clone(), field_values);
         }
     }
 }
@@ -223,6 +349,8 @@ pub fn item_universe_plugin(app: &mut App) {
 
     item_universe.compute_global_averages();
     item_universe.compute_trade_maps();
+    item_universe.compute_planet_ammo();
+    item_universe.compute_asteroid_values();
     item_universe.validate();
     app.insert_resource::<ItemUniverse>(item_universe);
 }
@@ -261,3 +389,7 @@ pub fn parse_dir<T: DeserializeOwned>(dir: &Path) -> Result<T, serde_yaml::Error
     let value = dir_to_yaml(dir).unwrap_or(Value::Mapping(Mapping::new()));
     serde_yaml::from_value(value)
 }
+
+#[cfg(test)]
+#[path = "tests/item_universe_tests.rs"]
+mod tests;
