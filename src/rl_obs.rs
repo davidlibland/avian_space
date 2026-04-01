@@ -15,12 +15,16 @@ use crate::ship::{Personality, Ship};
 pub const OBS_DIM: usize = SELF_SIZE
     + (N_ENTITY_SLOTS) * SLOT_SIZE;
 
-/// Number of entity slots: 1 target + nearby buckets.
+/// Number of entity slots (one per bucket position).
 pub const N_ENTITY_SLOTS: usize =
-    1 + K_PLANETS + K_ASTEROIDS + K_HOSTILE_SHIPS + K_FRIENDLY_SHIPS + K_PICKUPS;
+    K_PLANETS + K_ASTEROIDS + K_HOSTILE_SHIPS + K_FRIENDLY_SHIPS + K_PICKUPS;
 
 /// Detection radius (must match ai_ships.rs DETECTION_RADIUS).
 pub const DETECTION_RADIUS: f32 = 2000.0;
+
+/// Length scale for the proximity feature: K / (distance + K).
+/// Gives proximity = 0.5 at distance K, ~0.2 at the detection edge.
+const PROXIMITY_SCALE: f32 = DETECTION_RADIUS / 4.0;
 
 /// Reference ammo count for ammo normalisation.
 const MAX_AMMO_REF: f32 = 50.0;
@@ -40,37 +44,57 @@ pub const K_PICKUPS: usize = 2;
 // These constants are the single source of truth for the slot encoding.
 // Both `encode_slot` (which writes) and any code that reads back from the
 // flat observation (e.g. `choose_target_slot`) must use these offsets.
+//
+// The slot is divided into 4 contiguous blocks for the forward pass:
+//
+//   Block 1: type_onehot  (N_ENTITY_TYPES floats)   — selects type-specific embedding
+//   Block 2: is_present   (1 float)                  — mask for attention / target head
+//   Block 3: core features (CORE_FEAT_SIZE floats)   — shared embedding (same meaning for all types)
+//   Block 4: type-specific (TYPE_BLOCK_SIZE floats)  — type-conditioned embedding
+//
 
-/// Offset of `is_present` (1 float).
-pub const SLOT_IS_PRESENT: usize = 0;
-/// Offset of `type_onehot` (4 floats).
-pub const SLOT_TYPE_ONEHOT: usize = 1;
-/// Offset of `rel_pos` (2 floats).
-pub const SLOT_REL_POS: usize = 5;
-/// Offset of `rel_vel` (2 floats).
-pub const SLOT_REL_VEL: usize = 7;
-/// Offset of `is_current_target` (1 float).
-pub const SLOT_IS_CURRENT_TARGET: usize = 9;
-/// Offset of `pursuit_angle` (1 float).
-pub const SLOT_PURSUIT_ANGLE: usize = 10;
-/// Offset of `pursuit_indicator` (1 float).
-pub const SLOT_PURSUIT_INDICATOR: usize = 11;
-/// Offset of `fire_angle` (1 float).
-pub const SLOT_FIRE_ANGLE: usize = 12;
-/// Offset of `fire_indicator` (1 float).
-pub const SLOT_FIRE_INDICATOR: usize = 13;
-/// Offset of `in_range` (1 float).
-pub const SLOT_IN_RANGE: usize = 14;
-/// Offset of `value` (1 float).
-pub const SLOT_VALUE: usize = 15;
-/// Offset of type-specific features (TYPE_SPECIFIC_SIZE floats).
-pub const SLOT_TYPE_SPECIFIC: usize = 16;
+/// Number of entity types.
+pub const N_ENTITY_TYPES: usize = 4;
 
-/// Number of type-specific floats (padded to the max across all types).
+// ── Block 1: type one-hot ────────────────────────────────────────────────
+/// Offset and size of the type one-hot block.
+pub const SLOT_TYPE_ONEHOT: usize = 0;
+pub const TYPE_ONEHOT_SIZE: usize = N_ENTITY_TYPES; // 4
+
+// ── Block 2: is_present ──────────────────────────────────────────────────
+/// Offset of is_present (1 float).
+pub const SLOT_IS_PRESENT: usize = TYPE_ONEHOT_SIZE; // 4
+
+// ── Block 3: core features (type-independent) ────────────────────────────
+/// Offset of the core feature block.
+pub const CORE_BLOCK_START: usize = SLOT_IS_PRESENT + 1; // 5
+/// Offsets within the core block (absolute, for reading from flat obs).
+pub const SLOT_REL_POS: usize = CORE_BLOCK_START;         // 5  (2 floats)
+pub const SLOT_REL_VEL: usize = CORE_BLOCK_START + 2;     // 7  (2 floats)
+pub const SLOT_IS_CURRENT_TARGET: usize = CORE_BLOCK_START + 4; // 9
+pub const SLOT_PROXIMITY: usize = CORE_BLOCK_START + 5;   // 10
+pub const SLOT_PURSUIT_ANGLE: usize = CORE_BLOCK_START + 6;     // 11
+pub const SLOT_PURSUIT_INDICATOR: usize = CORE_BLOCK_START + 7; // 12
+pub const SLOT_FIRE_ANGLE: usize = CORE_BLOCK_START + 8;        // 13
+pub const SLOT_FIRE_INDICATOR: usize = CORE_BLOCK_START + 9;    // 14
+pub const SLOT_IN_RANGE: usize = CORE_BLOCK_START + 10;         // 15
+/// Number of core features.
+pub const CORE_FEAT_SIZE: usize = 11; // rel_pos(2)+rel_vel(2)+is_current_target+proximity+pursuit_angle+pursuit_indicator+fire_angle+fire_indicator+in_range
+
+// ── Block 4: type-specific features ──────────────────────────────────────
+/// Offset of the type-specific block (value + entity-kind features).
+pub const TYPE_BLOCK_START: usize = CORE_BLOCK_START + CORE_FEAT_SIZE; // 16
+/// Offset of `value` (first float of type-specific block).
+pub const SLOT_VALUE: usize = TYPE_BLOCK_START; // 16
+/// Offset of entity-kind features (after value).
+pub const SLOT_TYPE_SPECIFIC: usize = TYPE_BLOCK_START + 1; // 17
+/// Number of entity-kind feature floats (padded to max across all types).
 pub const TYPE_SPECIFIC_SIZE: usize = 9;
+/// Total size of block 4 (value + type_specific).
+pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 10
 
-/// Floats per entity slot (derived from layout offsets above).
-pub const SLOT_SIZE: usize = SLOT_TYPE_SPECIFIC + TYPE_SPECIFIC_SIZE; // = 25
+/// Floats per entity slot (sum of all blocks).
+pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE; // = 26
 
 /// Floats for the self-state block.
 pub const SELF_SIZE: usize = 10; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, personality(3)
@@ -149,6 +173,9 @@ impl Default for EntityKind {
 /// Unified entity slot data, used for both nearby entities and the target.
 ///
 /// All vectors are already in the ship's ego frame (raw, un-normalised).
+/// All entries in the `entity_slots` vec of `ObsInput` are real (present)
+/// entities. Empty/absent slots are represented by the vec being shorter
+/// than `N_ENTITY_SLOTS`; the encoder pads the remainder with zeros.
 #[derive(Clone, Default)]
 pub struct EntitySlotData {
     pub core: CoreSlotData,
@@ -173,18 +200,10 @@ pub struct ObsInput<'a> {
     pub angular_velocity: f32,
     /// Unit vector of the ship's forward direction in world space.
     pub ship_heading: [f32; 2],
-    /// Current target, if any (pre-processed into ego frame).
-    pub target: Option<EntitySlotData>,
-    /// Up to K_PLANETS nearest planets, sorted by distance, in ego frame.
-    pub nearby_planets: Vec<EntitySlotData>,
-    /// Up to K_ASTEROIDS nearest asteroids, sorted by distance, in ego frame.
-    pub nearby_asteroids: Vec<EntitySlotData>,
-    /// Up to K_HOSTILE_SHIPS nearest hostile ships, sorted by distance, in ego frame.
-    pub nearby_hostile_ships: Vec<EntitySlotData>,
-    /// Up to K_FRIENDLY_SHIPS nearest friendly ships, sorted by distance, in ego frame.
-    pub nearby_friendly_ships: Vec<EntitySlotData>,
-    /// Up to K_PICKUPS nearest pickups, sorted by distance, in ego frame.
-    pub nearby_pickups: Vec<EntitySlotData>,
+    /// Nearby entities, ordered by bucket (planets, asteroids, hostile ships,
+    /// friendly ships, pickups). Length may be less than `N_ENTITY_SLOTS`;
+    /// the encoder pads the remainder with zero slots.
+    pub entity_slots: Vec<EntitySlotData>,
     /// Speed of the ship's primary weapon (m/s), used to compute the fire lead angle.
     /// 0.0 if the ship has no primary weapon.
     pub primary_weapon_speed: f32,
@@ -394,10 +413,9 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let cargo_frac = cargo_used as f32 / input.ship.data.cargo_space.max(1) as f32;
 
     let target_is_ship = input
-        .target
-        .as_ref()
-        .map(|t| t.core.entity_type == 0)
-        .unwrap_or(false);
+        .entity_slots
+        .iter()
+        .any(|s| s.is_current_target && s.core.entity_type == 0);
     let ammo_frac = select_secondary_weapon(input.ship, target_is_ship)
         .map(|(_, ammo)| (ammo as f32 / MAX_AMMO_REF).min(1.0))
         .unwrap_or(0.0);
@@ -418,36 +436,25 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let max_speed = input.ship.data.max_speed.max(f32::EPSILON);
     let ego_vel = rotate_to_ego(input.velocity, sin_a, cos_a);
 
-    // -- All entity slots (unified layout) ------------------------------------
-    // Slot 0: target
-    encode_slot(
-        input.target.as_ref(),
-        max_speed,
-        input.primary_weapon_speed,
-        input.primary_weapon_range,
-        ego_vel,
-        &mut obs,
+    // -- Entity slots ---------------------------------------------------------
+    debug_assert!(
+        input.entity_slots.len() <= N_ENTITY_SLOTS,
+        "Too many entity slots: {} > {N_ENTITY_SLOTS}",
+        input.entity_slots.len()
     );
-
-    // Slots 1..: nearby entity buckets
-    let buckets: &[(&[EntitySlotData], usize)] = &[
-        (&input.nearby_planets, K_PLANETS),
-        (&input.nearby_asteroids, K_ASTEROIDS),
-        (&input.nearby_hostile_ships, K_HOSTILE_SHIPS),
-        (&input.nearby_friendly_ships, K_FRIENDLY_SHIPS),
-        (&input.nearby_pickups, K_PICKUPS),
-    ];
-    for &(slots, max_count) in buckets {
-        for i in 0..max_count {
-            encode_slot(
-                slots.get(i),
-                max_speed,
-                input.primary_weapon_speed,
-                input.primary_weapon_range,
-                ego_vel,
-                &mut obs,
-            );
-        }
+    for slot in &input.entity_slots {
+        encode_slot(
+            Some(slot),
+            max_speed,
+            input.primary_weapon_speed,
+            input.primary_weapon_range,
+            ego_vel,
+            &mut obs,
+        );
+    }
+    // Pad remaining slots with zeros.
+    for _ in input.entity_slots.len()..N_ENTITY_SLOTS {
+        encode_slot(None, max_speed, 0.0, 0.0, ego_vel, &mut obs);
     }
 
     debug_assert_eq!(
@@ -491,6 +498,9 @@ fn encode_slot(
     buf[SLOT_REL_VEL..SLOT_REL_VEL + 2].copy_from_slice(&rel_vel);
     buf[SLOT_IS_CURRENT_TARGET] = if s.is_current_target { 1.0 } else { 0.0 };
 
+    let dist = (rel_pos[0].powi(2) + rel_pos[1].powi(2)).sqrt();
+    buf[SLOT_PROXIMITY] = PROXIMITY_SCALE / (dist + PROXIMITY_SCALE);
+
     let pursuit = intercept_angle(max_speed, rel_pos, rel_vel);
     buf[SLOT_PURSUIT_ANGLE] = pursuit.unwrap_or(0.0);
     buf[SLOT_PURSUIT_INDICATOR] = aim_indicator(pursuit);
@@ -499,8 +509,6 @@ fn encode_slot(
     let fire = intercept_angle(weapon_speed, rel_pos, abs_vel);
     buf[SLOT_FIRE_ANGLE] = fire.unwrap_or(0.0);
     buf[SLOT_FIRE_INDICATOR] = aim_indicator(fire);
-
-    let dist = (rel_pos[0].powi(2) + rel_pos[1].powi(2)).sqrt();
     buf[SLOT_IN_RANGE] = if weapon_range > 0.0 && dist <= weapon_range {
         1.0
     } else {

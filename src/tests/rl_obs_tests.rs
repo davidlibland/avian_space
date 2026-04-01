@@ -30,12 +30,7 @@ fn minimal_obs_input(ship: &Ship) -> ObsInput<'_> {
         velocity: [0.0, 0.0],
         angular_velocity: 0.0,
         ship_heading: [0.0, 1.0], // facing up
-        target: None,
-        nearby_planets: vec![],
-        nearby_asteroids: vec![],
-        nearby_hostile_ships: vec![],
-        nearby_friendly_ships: vec![],
-        nearby_pickups: vec![],
+        entity_slots: vec![],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
     }
@@ -49,7 +44,7 @@ fn test_observation_shape_constant() {
     let obs0 = encode_observation(&minimal_obs_input(&ship));
     assert_eq!(obs0.len(), OBS_DIM, "zero entities");
 
-    // One of each type.
+    // Some entities populated.
     let slot = EntitySlotData {
         core: CoreSlotData {
             rel_pos: [0.1, 0.2],
@@ -60,60 +55,29 @@ fn test_observation_shape_constant() {
         value: 1.0,
         is_current_target: false,
     };
-    let target_slot = EntitySlotData {
-        core: CoreSlotData {
-            rel_pos: [0.3, 0.4],
-            rel_vel: [0.0, 0.0],
-            entity_type: 1,
-        },
-        kind: EntityKind::Asteroid(AsteroidSlotData { size: 10.0, value: 1.0 }),
-        value: 1.0,
-        is_current_target: true,
-    };
+    let mut target_slot = slot.clone();
+    target_slot.is_current_target = true;
+    let some_slots = vec![slot.clone(), target_slot];
     let obs1 = encode_observation(&ObsInput {
         personality: &ship.data.personality,
         ship: &ship,
         velocity: [10.0, 0.0],
         angular_velocity: 0.5,
         ship_heading: [1.0, 0.0],
-        target: Some(target_slot),
-        nearby_planets: vec![slot.clone()],
-        nearby_asteroids: vec![slot.clone(), slot.clone()],
-        nearby_hostile_ships: vec![slot.clone()],
-        nearby_friendly_ships: vec![],
-        nearby_pickups: vec![slot.clone()],
+        entity_slots: some_slots,
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
     });
     assert_eq!(obs1.len(), OBS_DIM, "some entities");
 
-    // Fully-populated buckets.
-    let target_slot2 = EntitySlotData {
-        core: CoreSlotData {
-            rel_pos: [0.1, 0.0],
-            rel_vel: [0.0, 0.0],
-            entity_type: 0,
-        },
-        kind: EntityKind::Ship(ShipSlotData {
-            is_hostile: 1.0,
-            should_engage: 1.0,
-            ..Default::default()
-        }),
-        value: 0.5,
-        is_current_target: true,
-    };
+    // Fully-populated.
     let obs2 = encode_observation(&ObsInput {
         personality: &ship.data.personality,
         ship: &ship,
         velocity: [0.0, 0.0],
         angular_velocity: 0.0,
         ship_heading: [0.0, 1.0],
-        target: Some(target_slot2),
-        nearby_planets: vec![slot.clone(); K_PLANETS],
-        nearby_asteroids: vec![slot.clone(); K_ASTEROIDS],
-        nearby_hostile_ships: vec![slot.clone(); K_HOSTILE_SHIPS],
-        nearby_friendly_ships: vec![slot.clone(); K_FRIENDLY_SHIPS],
-        nearby_pickups: vec![slot.clone(); K_PICKUPS],
+        entity_slots: vec![slot.clone(); N_ENTITY_SLOTS],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
     });
@@ -300,34 +264,193 @@ fn test_obs_dim_matches_constant() {
 #[test]
 fn test_target_pursuit_angle_ahead() {
     let ship = dummy_ship();
+    // Place an asteroid directly ahead as the sole entity.
+    let asteroid = EntitySlotData {
+        core: CoreSlotData {
+            entity_type: 1,
+            rel_pos: [500.0, 0.0],
+            rel_vel: [0.0, 0.0],
+        },
+        kind: EntityKind::Asteroid(AsteroidSlotData { size: 10.0, value: 1.0 }),
+        value: 1.0,
+        is_current_target: true,
+    };
     let obs = encode_observation(&ObsInput {
         personality: &ship.data.personality,
         ship: &ship,
         velocity: [0.0, 0.0],
         angular_velocity: 0.0,
         ship_heading: [1.0, 0.0],
-        target: Some(EntitySlotData {
-            core: CoreSlotData {
-                entity_type: 1,
-                rel_pos: [500.0, 0.0],
-                rel_vel: [0.0, 0.0],
-            },
-            kind: EntityKind::Asteroid(AsteroidSlotData { size: 10.0, value: 1.0 }),
-            value: 1.0,
-            is_current_target: true,
-        }),
-        nearby_planets: vec![],
-        nearby_asteroids: vec![],
-        nearby_hostile_ships: vec![],
-        nearby_friendly_ships: vec![],
-        nearby_pickups: vec![],
+        entity_slots: vec![asteroid],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 1000.0,
     });
-    let pursuit_angle = obs[SELF_SIZE + SLOT_PURSUIT_ANGLE];
+    // The asteroid is in slot 0 (first and only entity).
+    let slot_offset = SELF_SIZE;
+    let pursuit_angle = obs[slot_offset + SLOT_PURSUIT_ANGLE];
     assert!(pursuit_angle.abs() < 1e-4, "expected ~0, got {}", pursuit_angle);
-    let aim_ind = obs[SELF_SIZE + SLOT_PURSUIT_INDICATOR];
+    let aim_ind = obs[slot_offset + SLOT_PURSUIT_INDICATOR];
     assert!((aim_ind - 1.0).abs() < 1e-4, "expected ~1, got {}", aim_ind);
-    let in_range = obs[SELF_SIZE + SLOT_IN_RANGE];
+    let in_range = obs[slot_offset + SLOT_IN_RANGE];
     assert_eq!(in_range, 1.0);
+}
+
+// ── Slot block layout tests ─────────────────────────────────────────────
+
+/// Verify that the 4 blocks are contiguous and sum to SLOT_SIZE.
+#[test]
+fn test_slot_block_layout_sizes() {
+    assert_eq!(
+        TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE,
+        SLOT_SIZE,
+        "block sizes must sum to SLOT_SIZE"
+    );
+    // Blocks are contiguous:
+    assert_eq!(SLOT_TYPE_ONEHOT, 0);
+    assert_eq!(SLOT_IS_PRESENT, TYPE_ONEHOT_SIZE);
+    assert_eq!(CORE_BLOCK_START, SLOT_IS_PRESENT + 1);
+    assert_eq!(TYPE_BLOCK_START, CORE_BLOCK_START + CORE_FEAT_SIZE);
+    assert_eq!(SLOT_SIZE, TYPE_BLOCK_START + TYPE_BLOCK_SIZE);
+}
+
+/// Encode a known entity and verify each block contains the expected values.
+#[test]
+fn test_slot_block_extraction() {
+    let ship = dummy_ship();
+
+    // Create a hostile ship entity directly ahead at 400 units.
+    let hostile_ship = EntitySlotData {
+        core: CoreSlotData {
+            rel_pos: [400.0, 0.0],
+            rel_vel: [10.0, 5.0],
+            entity_type: 0, // Ship
+        },
+        kind: EntityKind::Ship(ShipSlotData {
+            max_health: 100.0,
+            health: 75.0,
+            max_speed: 200.0,
+            torque: 10.0,
+            is_hostile: 1.0,
+            should_engage: 1.0,
+            personality: Personality::Fighter,
+        }),
+        value: 0.0,
+        is_current_target: true,
+    };
+
+    let obs = encode_observation(&ObsInput {
+        personality: &ship.data.personality,
+        ship: &ship,
+        velocity: [0.0, 0.0],
+        angular_velocity: 0.0,
+        ship_heading: [1.0, 0.0],
+        entity_slots: vec![hostile_ship],
+        primary_weapon_speed: 400.0,
+        primary_weapon_range: 800.0,
+    });
+
+    // Slot 0 starts at SELF_SIZE.
+    let s = SELF_SIZE;
+
+    // Block 1: type_onehot — Ship = [1, 0, 0, 0]
+    assert_eq!(obs[s + SLOT_TYPE_ONEHOT], 1.0, "ship onehot[0]");
+    assert_eq!(obs[s + SLOT_TYPE_ONEHOT + 1], 0.0, "ship onehot[1]");
+    assert_eq!(obs[s + SLOT_TYPE_ONEHOT + 2], 0.0, "ship onehot[2]");
+    assert_eq!(obs[s + SLOT_TYPE_ONEHOT + 3], 0.0, "ship onehot[3]");
+
+    // Block 2: is_present
+    assert_eq!(obs[s + SLOT_IS_PRESENT], 1.0, "is_present");
+
+    // Block 3: core features
+    assert_eq!(obs[s + SLOT_REL_POS], 400.0, "rel_pos_x");
+    assert_eq!(obs[s + SLOT_REL_POS + 1], 0.0, "rel_pos_y");
+    assert_eq!(obs[s + SLOT_REL_VEL], 10.0, "rel_vel_x");
+    assert_eq!(obs[s + SLOT_REL_VEL + 1], 5.0, "rel_vel_y");
+    assert_eq!(obs[s + SLOT_IS_CURRENT_TARGET], 1.0, "is_current_target");
+    // Proximity: 500 / (400 + 500) = 0.5556
+    let prox = obs[s + SLOT_PROXIMITY];
+    assert!((prox - 500.0 / 900.0).abs() < 1e-4, "proximity={prox}");
+    // Pursuit angle: target ahead but with lateral velocity → small nonzero angle.
+    assert!(obs[s + SLOT_PURSUIT_ANGLE].abs() < 0.2, "pursuit_angle");
+    // In range: dist=400 < weapon_range=800
+    assert_eq!(obs[s + SLOT_IN_RANGE], 1.0, "in_range");
+
+    // Block 4: value + type-specific
+    assert_eq!(obs[s + SLOT_VALUE], 0.0, "value (ship)");
+    // Type-specific for ships: max_health, health, max_speed, torque,
+    // is_hostile, should_engage, personality(3)
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 0], 100.0, "max_health");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 1], 75.0, "health");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 2], 200.0, "max_speed");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 3], 10.0, "torque");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 4], 1.0, "is_hostile");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 5], 1.0, "should_engage");
+    // Fighter personality = [0, 1, 0]
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 6], 0.0, "personality[0]");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 7], 1.0, "personality[1]");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 8], 0.0, "personality[2]");
+}
+
+/// Verify that an empty slot is all zeros.
+#[test]
+fn test_empty_slot_all_zeros() {
+    let ship = dummy_ship();
+    let obs = encode_observation(&minimal_obs_input(&ship));
+
+    // Slot 0 is empty (default entity).
+    let s = SELF_SIZE;
+    for i in 0..SLOT_SIZE {
+        assert_eq!(
+            obs[s + i], 0.0,
+            "empty slot byte {i} should be 0, got {}",
+            obs[s + i]
+        );
+    }
+}
+
+/// Verify planet type-specific block encoding.
+#[test]
+fn test_planet_slot_block_extraction() {
+    let ship = dummy_ship();
+
+    let planet = EntitySlotData {
+        core: CoreSlotData {
+            rel_pos: [1000.0, 200.0],
+            rel_vel: [0.0, 0.0],
+            entity_type: 2, // Planet
+        },
+        kind: EntityKind::Planet(PlanetSlotData {
+            cargo_sale_value: 500.0,
+            has_ammo: 1.0,
+            commodity_margin: -100.0,
+        }),
+        value: 500.0,
+        is_current_target: false,
+    };
+
+    let obs = encode_observation(&ObsInput {
+        personality: &ship.data.personality,
+        ship: &ship,
+        velocity: [0.0, 0.0],
+        angular_velocity: 0.0,
+        ship_heading: [1.0, 0.0],
+        entity_slots: vec![planet],
+        primary_weapon_speed: 400.0,
+        primary_weapon_range: 800.0,
+    });
+
+    let s = SELF_SIZE;
+
+    // Block 1: Planet = [0, 0, 1, 0]
+    assert_eq!(obs[s + SLOT_TYPE_ONEHOT + 2], 1.0, "planet onehot");
+
+    // Block 4: value + type-specific
+    assert_eq!(obs[s + SLOT_VALUE], 500.0, "value");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 0], 500.0, "cargo_sale_value");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 1], 1.0, "has_ammo");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 2], -100.0, "commodity_margin");
+    // Remaining type-specific should be zero-padded.
+    for i in 3..TYPE_SPECIFIC_SIZE {
+        assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + i], 0.0, "type_specific[{i}] should be 0");
+    }
 }

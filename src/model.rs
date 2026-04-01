@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use bevy::prelude::Resource;
 use burn::{
     backend::{ndarray::NdArray, wgpu::Wgpu, Autodiff},
-    module::Initializer,
+    module::{Initializer, Param},
     nn::{LayerNorm, LayerNormConfig, Linear, LinearConfig},
     optim::{Adam, AdamConfig, adaptor::OptimizerAdaptor},
     prelude::*,
@@ -26,8 +26,10 @@ use burn::{
 };
 
 use crate::rl_obs::{
-    DiscreteAction, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_PICKUPS,
-    K_PLANETS, N_ENTITY_SLOTS, OBS_DIM, SELF_SIZE, SLOT_SIZE,
+    self, CORE_BLOCK_START, CORE_FEAT_SIZE, DiscreteAction, K_ASTEROIDS, K_FRIENDLY_SHIPS,
+    K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, N_ENTITY_SLOTS, N_ENTITY_TYPES, OBS_DIM, SELF_SIZE,
+    SLOT_IS_PRESENT, SLOT_SIZE, SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START,
+    TYPE_ONEHOT_SIZE,
 };
 
 // ---------------------------------------------------------------------------
@@ -38,16 +40,12 @@ use crate::rl_obs::{
 pub const SELF_INPUT_DIM: usize = SELF_SIZE;
 
 /// Per-object feature count — must equal `SLOT_SIZE` in `rl_obs.rs`.
-/// Layout: `is_present(1) + type_onehot(4) + rel_pos(2) + rel_vel(2)
-///          + pursuit_angle(1) + pursuit_indicator(1)
-///          + fire_angle(1) + fire_indicator(1) + in_range(1) + value(1)
-///          + type_specific(9)`
 pub const OBJECT_INPUT_DIM: usize = SLOT_SIZE;
 
 /// Total entity floats per observation (`N_OBJECTS × OBJECT_INPUT_DIM`).
 pub const ENTITIES_FLAT_DIM: usize = N_OBJECTS * OBJECT_INPUT_DIM;
 
-/// Number of object slots per observation: target + all buckets.
+/// Number of object slots per observation.
 pub const N_OBJECTS: usize = N_ENTITY_SLOTS;
 
 /// Policy output: factored logits `turn(3) | thrust(2) | fire_primary(2) | fire_secondary(2)`.
@@ -108,14 +106,46 @@ type Block<B> = NetBlock<B>;
 // RLNet — policy / value network
 // ---------------------------------------------------------------------------
 
+/// Split a `[B, N, SLOT_SIZE]` object-feature tensor into the 4 blocks
+/// defined by the slot layout.
+///
+/// Returns `(type_onehot, is_present, core_feat, type_feat)`:
+/// - `type_onehot`: `[B, N, N_ENTITY_TYPES]`
+/// - `is_present`:  `[B, N]`
+/// - `core_feat`:   `[B, N, CORE_FEAT_SIZE]`
+/// - `type_feat`:   `[B, N, TYPE_BLOCK_SIZE]`
+pub fn split_obj_feat<B: Backend>(
+    obj_feat: Tensor<B, 3>,
+) -> (Tensor<B, 3>, Tensor<B, 2>, Tensor<B, 3>, Tensor<B, 3>) {
+    let type_onehot = obj_feat.clone().narrow(2, SLOT_TYPE_ONEHOT, TYPE_ONEHOT_SIZE);
+    let is_present = obj_feat
+        .clone()
+        .narrow(2, SLOT_IS_PRESENT, 1)
+        .squeeze_dim(2);
+    let core_feat = obj_feat.clone().narrow(2, CORE_BLOCK_START, CORE_FEAT_SIZE);
+    let type_feat = obj_feat.narrow(2, TYPE_BLOCK_START, TYPE_BLOCK_SIZE);
+    (type_onehot, is_present, core_feat, type_feat)
+}
+
 /// Shared policy and value network.
 ///
 /// ## Architecture
 ///
-/// 1. **Object encoder**: `obj_features [B,N,OBJECT_DIM] → [B,N,H]`
-///    via `Linear + 2×NetBlock`.
-/// 2. **Self encoder**: `self_features [B,SELF_DIM] → [B,H]`
-///    via 2-layer MLP.
+/// 1. **Object encoder** (type-conditioned):
+///    Each entity type (Ship, Asteroid, Planet, Pickup) gets its own linear
+///    projection via a shared weight tensor `obj_embed_w [T, H, F]` and bias
+///    `obj_embed_b [T, H]`, where T=4 entity types, H=hidden_dim, F=feature_dim
+///    (slot features excluding the type one-hot).
+///
+///    Given `one_hot [B,N,T]` and `feat [B,N,F]`:
+///    ```text
+///    W_blended = einsum("thf, bnt -> bnhf", obj_embed_w, one_hot)  // [B,N,H,F]
+///    b_blended = einsum("th, bnt -> bnh", obj_embed_b, one_hot)    // [B,N,H]
+///    obj_enc   = einsum("bnhf, bnf -> bnh", W_blended, feat) + b_blended
+///    ```
+///    Followed by `2×NetBlock`.
+///
+/// 2. **Self encoder**: `self_features [B,SELF_DIM] → [B,H]` via 2-layer MLP.
 /// 3. **Attention**: self as query, object-enc as keys/values → `[B,H]`.
 /// 4. **Merge**: `concat(attn, self_enc) [B,2H] → Linear → [B,H]`.
 /// 5. **Decoder**: `2×NetBlock + LayerNorm + SiLU → output [B,output_dim]`.
@@ -131,8 +161,15 @@ pub struct RLNet<B: Backend> {
     #[module(skip)]
     hidden_dim: usize,
 
-    // Object encoder
-    obj_embed: Linear<B>,
+    // Object encoder — dual embedding:
+    //   core_embed:  shared Linear for core features (same meaning for all types)
+    //   type_embed_w / type_embed_b:  type-conditioned for type-specific features
+    /// Shared linear for core features: `[CORE_FEAT_SIZE] → [H]`.
+    core_embed: Linear<B>,
+    /// Type-conditioned weight: `[N_ENTITY_TYPES, hidden_dim, TYPE_BLOCK_SIZE]`.
+    type_embed_w: Param<Tensor<B, 3>>,
+    /// Type-conditioned bias: `[N_ENTITY_TYPES, hidden_dim]`.
+    type_embed_b: Param<Tensor<B, 2>>,
     eblock1: Block<B>,
     eblock2: Block<B>,
 
@@ -163,9 +200,20 @@ pub struct RLNet<B: Backend> {
 
 impl<B: Backend> RLNet<B> {
     pub fn new(device: &B::Device, hidden_dim: usize, output_dim: usize) -> Self {
+        // Type-conditioned embedding for type-specific features.
+        let type_std = (2.0 / (TYPE_BLOCK_SIZE + hidden_dim) as f64).sqrt();
+        let type_w = Tensor::<B, 3>::random(
+            [N_ENTITY_TYPES, hidden_dim, TYPE_BLOCK_SIZE],
+            burn::tensor::Distribution::Normal(0.0, type_std),
+            device,
+        );
+        let type_b = Tensor::<B, 2>::zeros([N_ENTITY_TYPES, hidden_dim], device);
+
         Self {
             hidden_dim,
-            obj_embed: LinearConfig::new(OBJECT_INPUT_DIM, hidden_dim).init(device),
+            core_embed: LinearConfig::new(CORE_FEAT_SIZE, hidden_dim).init(device),
+            type_embed_w: Param::from_tensor(type_w),
+            type_embed_b: Param::from_tensor(type_b),
             eblock1: Block::new(device, hidden_dim),
             eblock2: Block::new(device, hidden_dim),
             self_embed: LinearConfig::new(SELF_INPUT_DIM, hidden_dim).init(device),
@@ -180,12 +228,8 @@ impl<B: Backend> RLNet<B> {
             output: LinearConfig::new(hidden_dim, output_dim)
                 .with_initializer(Initializer::Zeros)
                 .init(device),
-            target_q_proj: LinearConfig::new(hidden_dim, hidden_dim)
-                .with_initializer(Initializer::Zeros)
-                .init(device),
-            target_k_proj: LinearConfig::new(hidden_dim, hidden_dim)
-                .with_initializer(Initializer::Zeros)
-                .init(device),
+            target_q_proj: LinearConfig::new(hidden_dim, hidden_dim).init(device),
+            target_k_proj: LinearConfig::new(hidden_dim, hidden_dim).init(device),
             target_no_tgt: LinearConfig::new(hidden_dim, 1)
                 .with_initializer(Initializer::Zeros)
                 .init(device),
@@ -205,11 +249,45 @@ impl<B: Backend> RLNet<B> {
         self_feat: Tensor<B, 2>,
         obj_feat: Tensor<B, 3>,
     ) -> (Tensor<B, 2>, Tensor<B, 2>) {
-        // is_present flag: first float of object features in each row.
-        let is_present = obj_feat.clone().narrow(2, 0, 1).squeeze_dim(2); // [B, N]
+        let (type_onehot, is_present, core_feat, type_feat) = split_obj_feat(obj_feat);
 
-        // Object encoder: [B, N, OBJECT_INPUT_DIM] → [B, N, H]
-        let obj_enc = self.obj_embed.forward(obj_feat);
+        // ── Dual object embedding ──────────────────────────────────────────
+        //
+        // 1. core_embed (shared Linear): core_feat [B,N,C] → [B,N,H]
+        //    All entity types use the same projection since these features
+        //    (rel_pos, pursuit_angle, etc.) have the same meaning for all types.
+        //
+        // 2. type_embed (type-conditioned):
+        //    type_embed_w [T, H, S] blended via type_onehot [B,N,T]:
+        //      W_blended = einsum("ths, bnt -> bnhs", type_embed_w, type_onehot)
+        //      b_blended = einsum("th, bnt -> bnh", type_embed_b, type_onehot)
+        //      type_enc  = einsum("bnhs, bns -> bnh", W_blended, type_feat) + b_blended
+        //
+        // 3. obj_enc = core_enc + type_enc    (summed, then through NetBlocks)
+
+        let h = self.hidden_dim;
+
+        // Core embedding: [B, N, CORE_FEAT_SIZE] → [B, N, H]
+        let core_enc = self.core_embed.forward(core_feat);
+
+        // Type-conditioned embedding via matmul with one-hot blending:
+        // W: [T, H*S] → one_hot [B,N,T] @ W [T,H*S] → [B,N,H*S] → [B,N,H,S]
+        let ts = TYPE_BLOCK_SIZE;
+        let w_flat = self.type_embed_w.val().reshape([N_ENTITY_TYPES, h * ts]);
+        let w_blended = type_onehot.clone().matmul(w_flat.unsqueeze());  // [B, N, H*S]
+        let [batch_size, n_ents, _] = w_blended.dims();
+        let w_blended = w_blended.reshape([batch_size, n_ents, h, ts]);  // [B, N, H, S]
+
+        // b: one_hot [B,N,T] @ b [T,H] → [B,N,H]
+        let b_blended = type_onehot.matmul(self.type_embed_b.val().unsqueeze()); // [B, N, H]
+
+        // Batched matmul: [B,N,H,S] × [B,N,S,1] → [B,N,H,1] → [B,N,H]
+        let type_feat_col = type_feat.unsqueeze_dim::<4>(3);            // [B, N, S, 1]
+        let type_enc = w_blended.matmul(type_feat_col).squeeze_dim(3);  // [B, N, H]
+        let type_enc = type_enc + b_blended;
+
+        // Sum and refine through NetBlocks.
+        let obj_enc = core_enc + type_enc;
         let obj_enc = self.eblock1.forward(obj_enc);
         let obj_enc = self.eblock2.forward(obj_enc);
 

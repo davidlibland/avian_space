@@ -668,7 +668,7 @@ fn build_all_observations(
         pickups.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         // Build EntitySlotData for each bucket.
-        let nearby_planets: Vec<EntitySlotData> = planets
+        let mut nearby_planets: Vec<EntitySlotData> = planets
             .iter()
             .take(K_PLANETS)
             .map(|(e, _)| {
@@ -700,7 +700,7 @@ fn build_all_observations(
             })
             .collect();
 
-        let nearby_asteroids: Vec<EntitySlotData> = asteroids
+        let mut nearby_asteroids: Vec<EntitySlotData> = asteroids
             .iter()
             .take(K_ASTEROIDS)
             .map(|(e, _)| {
@@ -781,18 +781,18 @@ fn build_all_observations(
             }
         };
 
-        let nearby_hostile_ships: Vec<EntitySlotData> = hostile_ships
+        let mut nearby_hostile_ships: Vec<EntitySlotData> = hostile_ships
             .iter()
             .take(K_HOSTILE_SHIPS)
             .map(|(e, _)| make_ship_slot(*e))
             .collect();
-        let nearby_friendly_ships: Vec<EntitySlotData> = friendly_ships
+        let mut nearby_friendly_ships: Vec<EntitySlotData> = friendly_ships
             .iter()
             .take(K_FRIENDLY_SHIPS)
             .map(|(e, _)| make_ship_slot(*e))
             .collect();
 
-        let nearby_pickups: Vec<EntitySlotData> = pickups
+        let mut nearby_pickups: Vec<EntitySlotData> = pickups
             .iter()
             .take(K_PICKUPS)
             .map(|(e, _)| {
@@ -817,117 +817,91 @@ fn build_all_observations(
             })
             .collect();
 
-        // Target slot — build from ship.target using the same EntitySlotData format.
-        let target_slot: Option<EntitySlotData> = ship.target.as_ref().and_then(|tgt| {
-            let tgt_entity = tgt.get_entity();
-            // Verify entity still exists.
-            all_positions.get(tgt_entity).ok()?;
-            let mut slot = match tgt {
-                Target::Ship(_) => make_ship_slot(tgt_entity),
-                Target::Planet(e) => {
-                    let core = make_core(*e, 2);
-                    let planet_name = planet_query
-                        .get(*e)
-                        .map(|(_, p)| p.0.as_str())
-                        .unwrap_or("");
-                    let csv = cargo_sale_value(planet_name);
-                    let has_ammo = item_universe
-                        .planet_has_ammo_for
-                        .get(planet_name)
-                        .map(|set| set.contains(&ship.ship_type))
-                        .unwrap_or(false);
-                    let margin = planet_margins
-                        .and_then(|m| m.get(planet_name))
-                        .copied()
-                        .unwrap_or(0.0) as f32;
-                    EntitySlotData {
-                        core,
-                        kind: EntityKind::Planet(PlanetSlotData {
-                            cargo_sale_value: csv,
-                            has_ammo: if has_ammo { 1.0 } else { 0.0 },
-                            commodity_margin: margin,
-                        }),
-                        value: csv,
-                        is_current_target: false,
-                    }
-                }
-                Target::Asteroid(e) => {
-                    let core = make_core(*e, 1);
-                    let (size, ev) = asteroid_query
-                        .get(*e)
-                        .map(|(_, ast)| {
-                            let field_ev = field_values
-                                .and_then(|fv| fv.first().copied())
-                                .unwrap_or(0.0);
-                            let expected_qty = (ast.size * 0.2 * 0.5).max(0.5);
-                            (ast.size, (field_ev * expected_qty as f64) as f32)
-                        })
-                        .unwrap_or((0.0, 0.0));
-                    EntitySlotData {
-                        core,
-                        kind: EntityKind::Asteroid(AsteroidSlotData { size, value: ev }),
-                        value: ev,
-                        is_current_target: false,
-                    }
-                }
-                Target::Pickup(e) => {
-                    let core = make_core(*e, 3);
-                    let pv = pickup_query
-                        .get(*e)
-                        .map(|(_, p)| {
-                            let avg = item_universe
-                                .global_average_price
-                                .get(&p.commodity)
-                                .copied()
-                                .unwrap_or(0.0);
-                            (avg * p.quantity as f64) as f32
-                        })
-                        .unwrap_or(0.0);
-                    EntitySlotData {
-                        core,
-                        kind: EntityKind::Pickup(PickupSlotData { value: pv }),
-                        value: pv,
-                        is_current_target: false,
-                    }
-                }
-            };
-            slot.is_current_target = true;
-            Some(slot)
-        });
-
-        // Build slot→target mapping (N_OBJECTS entries).
+        // Build the unified entity_slots vec and slot_targets mapping.
+        //
+        // Phase 1: add up to K entities of each type (no padding).
+        // Phase 2: fill remaining capacity with the personality's preferred types.
+        let target_entity = ship.target.as_ref().map(|t| t.get_entity());
+        let mut entity_slots = Vec::with_capacity(model::N_OBJECTS);
         let mut slot_targets: Vec<Option<Target>> = Vec::with_capacity(model::N_OBJECTS);
-        slot_targets.push(ship.target.clone());
-        for (e, _) in planets.iter().take(K_PLANETS) {
-            slot_targets.push(Some(Target::Planet(*e)));
+
+        // Helper: push up to `max_count` entities, returns how many were added.
+        let mut push_up_to = |slot_data: &mut [EntitySlotData],
+                              entity_list: &[(Entity, f32)],
+                              max_count: usize,
+                              make_target: fn(Entity) -> Target|
+         -> usize {
+            let cap = max_count.min(entity_list.len());
+            let room = model::N_OBJECTS - entity_slots.len();
+            let n = cap.min(room);
+            for i in 0..n {
+                let (e, _) = entity_list[i];
+                if let Some(slot) = slot_data.get_mut(i) {
+                    if target_entity == Some(e) {
+                        slot.is_current_target = true;
+                    }
+                    entity_slots.push(slot.clone());
+                }
+                slot_targets.push(Some(make_target(e)));
+            }
+            n
+        };
+
+        // Phase 1: each type gets up to its base allocation.
+        let n_planets = push_up_to(
+            &mut nearby_planets, &planets, K_PLANETS, Target::Planet,
+        );
+        let n_asteroids = push_up_to(
+            &mut nearby_asteroids, &asteroids, K_ASTEROIDS, Target::Asteroid,
+        );
+        let n_hostile = push_up_to(
+            &mut nearby_hostile_ships, &hostile_ships, K_HOSTILE_SHIPS, Target::Ship,
+        );
+        let n_friendly = push_up_to(
+            &mut nearby_friendly_ships, &friendly_ships, K_FRIENDLY_SHIPS, Target::Ship,
+        );
+        let n_pickups = push_up_to(
+            &mut nearby_pickups, &pickups, K_PICKUPS, Target::Pickup,
+        );
+
+        // Phase 2: fill remaining slots with personality-preferred entities.
+        // Each call continues from where phase 1 left off (skip already-added).
+        // Use usize::MAX as max_count since push_up_to clamps to remaining room.
+        match agent.personality {
+            Personality::Trader => {
+                push_up_to(
+                    &mut nearby_planets[n_planets..], &planets[n_planets..],
+                    usize::MAX, Target::Planet,
+                );
+            }
+            Personality::Miner => {
+                push_up_to(
+                    &mut nearby_asteroids[n_asteroids..], &asteroids[n_asteroids..],
+                    usize::MAX, Target::Asteroid,
+                );
+                push_up_to(
+                    &mut nearby_planets[n_planets..], &planets[n_planets..],
+                    usize::MAX, Target::Planet,
+                );
+            }
+            Personality::Fighter => {
+                push_up_to(
+                    &mut nearby_hostile_ships[n_hostile..], &hostile_ships[n_hostile..],
+                    usize::MAX, Target::Ship,
+                );
+                push_up_to(
+                    &mut nearby_friendly_ships[n_friendly..], &friendly_ships[n_friendly..],
+                    usize::MAX, Target::Ship,
+                );
+            }
         }
-        for _ in planets.len().min(K_PLANETS)..K_PLANETS {
+
+        // Pad slot_targets to N_OBJECTS (entity_slots may be shorter — the
+        // encoder handles padding with zero slots).
+        while slot_targets.len() < model::N_OBJECTS {
             slot_targets.push(None);
         }
-        for (e, _) in asteroids.iter().take(K_ASTEROIDS) {
-            slot_targets.push(Some(Target::Asteroid(*e)));
-        }
-        for _ in asteroids.len().min(K_ASTEROIDS)..K_ASTEROIDS {
-            slot_targets.push(None);
-        }
-        for (e, _) in hostile_ships.iter().take(K_HOSTILE_SHIPS) {
-            slot_targets.push(Some(Target::Ship(*e)));
-        }
-        for _ in hostile_ships.len().min(K_HOSTILE_SHIPS)..K_HOSTILE_SHIPS {
-            slot_targets.push(None);
-        }
-        for (e, _) in friendly_ships.iter().take(K_FRIENDLY_SHIPS) {
-            slot_targets.push(Some(Target::Ship(*e)));
-        }
-        for _ in friendly_ships.len().min(K_FRIENDLY_SHIPS)..K_FRIENDLY_SHIPS {
-            slot_targets.push(None);
-        }
-        for (e, _) in pickups.iter().take(K_PICKUPS) {
-            slot_targets.push(Some(Target::Pickup(*e)));
-        }
-        for _ in pickups.len().min(K_PICKUPS)..K_PICKUPS {
-            slot_targets.push(None);
-        }
+        debug_assert!(entity_slots.len() <= model::N_OBJECTS);
         debug_assert_eq!(slot_targets.len(), model::N_OBJECTS);
 
         // Primary weapon speed / range for fire-lead angle in the observation.
@@ -945,12 +919,7 @@ fn build_all_observations(
             velocity: [vel.x, vel.y],
             angular_velocity: ang_vel.0,
             ship_heading: heading,
-            target: target_slot,
-            nearby_planets,
-            nearby_asteroids,
-            nearby_hostile_ships,
-            nearby_friendly_ships,
-            nearby_pickups,
+            entity_slots,
             primary_weapon_speed,
             primary_weapon_range,
         };
@@ -965,13 +934,12 @@ fn build_all_observations(
 /// Choose the best target slot index for a ship, mirroring the priority logic
 /// in `classic_ai_target_selection`.
 ///
-/// Operates on `slot_targets` which already contains nearby entities sorted by
-/// distance within each bucket. The slot layout is:
-///   0 = current target, 1-2 = planets, 3-5 = asteroids,
-///   6-8 = hostile ships, 9-10 = friendly ships, 11-12 = pickups.
+/// Reads entity types and hostility directly from the observation's slot
+/// features (via named offsets), so this function does not depend on the
+/// order of entity buckets.
 ///
 /// Priority:
-/// 1. Traders with cargo → planet with highest cargo_sale_value (from obs)
+/// 1. Traders with cargo → planet with highest value
 /// 2. All personalities → nearest pickup
 /// 3. Miner → nearest asteroid → nearest planet
 ///    Fighter → nearest hostile ship → nearest planet
@@ -981,27 +949,36 @@ fn build_all_observations(
 fn choose_target_slot(
     personality: &Personality,
     has_cargo: bool,
-    slot_targets: &[Option<Target>],
     obs: &[f32],
 ) -> u8 {
+    use rl_obs::*;
     let no_target = model::N_OBJECTS as u8;
+    let n = model::N_OBJECTS;
 
-    // Helper: find first occupied slot in a range.
-    let first_in = |range: std::ops::Range<usize>| -> Option<u8> {
-        range
-            .into_iter()
-            .find(|&i| slot_targets.get(i).map(|s| s.is_some()).unwrap_or(false))
+    // Read slot features from the flat observation.
+    let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
+    let is_present = |i: usize| obs[slot_base(i) + SLOT_IS_PRESENT] > 0.5;
+    let type_onehot = |i: usize| &obs[slot_base(i) + SLOT_TYPE_ONEHOT..slot_base(i) + SLOT_TYPE_ONEHOT + 4];
+    let is_ship = |i: usize| type_onehot(i)[0] > 0.5;
+    let is_asteroid = |i: usize| type_onehot(i)[1] > 0.5;
+    let is_planet = |i: usize| type_onehot(i)[2] > 0.5;
+    let is_pickup = |i: usize| type_onehot(i)[3] > 0.5;
+    let should_engage = |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + 5] > 0.5;
+    let value = |i: usize| obs[slot_base(i) + SLOT_VALUE];
+
+    // Helper: find the first present slot matching a predicate.
+    let first_matching = |pred: &dyn Fn(usize) -> bool| -> Option<u8> {
+        (0..n)
+            .find(|&i| is_present(i) && pred(i))
             .map(|i| i as u8)
     };
 
     // 1. Traders with cargo → planet with highest value (= cargo_sale_value).
     if has_cargo && matches!(personality, Personality::Trader) {
-        let best_planet = (K_PLANETS_START..K_PLANETS_END)
-            .filter(|&i| slot_targets.get(i).map(|s| s.is_some()).unwrap_or(false))
+        let best_planet = (0..n)
+            .filter(|&i| is_present(i) && is_planet(i))
             .max_by(|&a, &b| {
-                let va = obs[SELF_SIZE + a * SLOT_SIZE + rl_obs::SLOT_VALUE];
-                let vb = obs[SELF_SIZE + b * SLOT_SIZE + rl_obs::SLOT_VALUE];
-                va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal)
+                value(a).partial_cmp(&value(b)).unwrap_or(std::cmp::Ordering::Equal)
             });
         if let Some(idx) = best_planet {
             return idx as u8;
@@ -1009,33 +986,21 @@ fn choose_target_slot(
     }
 
     // 2. All personalities: nearest pickup first.
-    if let Some(idx) = first_in(K_PICKUPS_START..K_PICKUPS_END) {
+    if let Some(idx) = first_matching(&|i| is_pickup(i)) {
         return idx;
     }
 
     // 3. Personality-based fallback.
     match personality {
-        Personality::Miner => first_in(K_ASTEROIDS_START..K_ASTEROIDS_END)
-            .or_else(|| first_in(K_PLANETS_START..K_PLANETS_END))
+        Personality::Miner => first_matching(&|i| is_asteroid(i))
+            .or_else(|| first_matching(&|i| is_planet(i)))
             .unwrap_or(no_target),
-        Personality::Fighter => first_in(K_HOSTILE_START..K_HOSTILE_END)
-            .or_else(|| first_in(K_PLANETS_START..K_PLANETS_END))
+        Personality::Fighter => first_matching(&|i| is_ship(i) && should_engage(i))
+            .or_else(|| first_matching(&|i| is_planet(i)))
             .unwrap_or(no_target),
-        Personality::Trader => first_in(K_PLANETS_START..K_PLANETS_END).unwrap_or(no_target),
+        Personality::Trader => first_matching(&|i| is_planet(i)).unwrap_or(no_target),
     }
 }
-
-// Slot index ranges for each bucket (excluding the target slot at index 0).
-const K_PLANETS_START: usize = 1;
-const K_PLANETS_END: usize = K_PLANETS_START + K_PLANETS;
-const K_ASTEROIDS_START: usize = K_PLANETS_END;
-const K_ASTEROIDS_END: usize = K_ASTEROIDS_START + K_ASTEROIDS;
-const K_HOSTILE_START: usize = K_ASTEROIDS_END;
-const K_HOSTILE_END: usize = K_HOSTILE_START + K_HOSTILE_SHIPS;
-const K_FRIENDLY_START: usize = K_HOSTILE_END;
-const K_FRIENDLY_END: usize = K_FRIENDLY_START + K_FRIENDLY_SHIPS;
-const K_PICKUPS_START: usize = K_FRIENDLY_END;
-const K_PICKUPS_END: usize = K_PICKUPS_START + K_PICKUPS;
 
 /// Store the previous (obs, action, reward) transition for each agent, update
 /// agent state with the new observation and action, and flush full segments.
@@ -1074,7 +1039,7 @@ fn store_obs_actions(
 
         // Choose target first so compute_ai_action can act on it.
         let has_cargo = ship.cargo.values().sum::<u16>() > 0;
-        let target_idx = choose_target_slot(&agent.personality, has_cargo, slot_targets, obs);
+        let target_idx = choose_target_slot(&agent.personality, has_cargo, obs);
         if (target_idx as usize) < model::N_OBJECTS {
             ship.target = slot_targets[target_idx as usize].clone();
         } else {
