@@ -89,6 +89,9 @@ pub struct Transition {
     pub reward: f32,
     /// True when the ship died at this step (terminal state).
     pub done: bool,
+    /// Sum of per-head log π(a|s) at the time the action was sampled.
+    /// `0.0` for rule-based actions (BC mode).
+    pub log_prob: f32,
 }
 
 /// A fixed-length segment of transitions, ready for PPO / recurrent-PPO training.
@@ -119,10 +122,6 @@ pub struct BCTransition {
 /// Sender side of the PPO trajectory channel.
 #[derive(Resource)]
 pub struct RLSender(pub mpsc::SyncSender<Segment>);
-
-/// Receiver side of the PPO trajectory channel.
-/// Stored as a `NonSend` resource because `Receiver` is not `Sync`.
-pub struct RLReceiver(pub mpsc::Receiver<Segment>);
 
 /// Sender side of the BC data channel.
 #[derive(Resource)]
@@ -194,6 +193,8 @@ pub struct RLAgent {
     pub last_obs: Option<Vec<f32>>,
     /// Action chosen at the previous decision step.
     pub last_action: Option<DiscreteAction>,
+    /// Log-probability of the action under the policy at sampling time.
+    pub last_log_prob: f32,
     /// Sum of rewards since the last decision step.
     pub accumulated_reward: f32,
     /// Transitions collected since the last segment flush.
@@ -215,6 +216,7 @@ impl RLAgent {
             hidden_state: vec![0.0; 64], // placeholder size
             last_obs: None,
             last_action: None,
+            last_log_prob: 0.0,
             accumulated_reward: 0.0,
             segment_buffer: Vec::with_capacity(RL_SEGMENT_LEN),
             segment_initial_hidden: vec![0.0; 64],
@@ -249,10 +251,10 @@ impl Plugin for RLCollectionPlugin {
         match self.mode {
             crate::AppMode::BCTraining => {
                 spawn_bc_training_thread(bc_rx, inference_net_arc, experiment);
+                drop(rl_rx);
             }
             crate::AppMode::RLTraining => {
-                // TODO: spawn PPO training thread here.
-                // For now the channel has no consumer; data is silently dropped.
+                crate::ppo::spawn_ppo_training_thread(rl_rx, inference_net_arc, experiment);
                 drop(bc_rx);
             }
             crate::AppMode::Inference => {
@@ -271,10 +273,12 @@ impl Plugin for RLCollectionPlugin {
                     }
                 }
                 drop(bc_rx);
+                drop(rl_rx);
             }
             crate::AppMode::Classic => {
                 // No training — channels have no consumer; data is silently dropped.
                 drop(bc_rx);
+                drop(rl_rx);
             }
         }
 
@@ -284,8 +288,8 @@ impl Plugin for RLCollectionPlugin {
             crate::AppMode::Inference | crate::AppMode::RLTraining => AIPlayMode::RLControl,
         };
 
-        app.insert_resource(RLSender(rl_tx))
-            .insert_non_send_resource(RLReceiver(rl_rx))
+        app
+            .insert_resource(RLSender(rl_tx))
             .insert_resource(BCSender(bc_tx))
             .insert_resource(rl_resource)
             .insert_resource(ai_play_mode)
@@ -395,7 +399,7 @@ fn rl_step(
     // ── Sub-function 2: run batched model inference (RLControl mode only) ──
     // In BehavioralCloning mode the rule-based action from compute_ai_action
     // is used instead, so we skip the model entirely.
-    let model_actions: Option<Vec<DiscreteAction>> =
+    let model_actions: Option<Vec<(DiscreteAction, f32)>> =
         if **mode == AIPlayMode::RLControl && !obs_data.is_empty() {
             let batch_size = obs_data.len();
             let mut self_flat = Vec::with_capacity(batch_size * model::SELF_INPUT_DIM);
@@ -408,10 +412,11 @@ fn rl_step(
             let inference = rl_resource.inference_net.lock().unwrap();
             let (action_logits, target_logits) =
                 inference.run_inference(self_flat, obj_flat, batch_size);
+            let mut rng = rand::thread_rng();
             let actions = action_logits
                 .chunks(model::POLICY_OUTPUT_DIM)
                 .zip(target_logits.chunks(model::TARGET_OUTPUT_DIM))
-                .map(|(al, tl)| model::logits_to_discrete_action(al, tl))
+                .map(|(al, tl)| model::sample_discrete_action(al, tl, &mut rng))
                 .collect();
             Some(actions)
         } else {
@@ -1005,13 +1010,13 @@ fn choose_target_slot(
 /// Store the previous (obs, action, reward) transition for each agent, update
 /// agent state with the new observation and action, and flush full segments.
 ///
-/// `model_actions` — when `Some`, contains one `DiscreteAction` per entry in
-/// `decisions` (same order). Used as the executed action in `RLControl` mode.
-/// In `BehavioralCloning` mode (or when `None`) the rule-based action from
-/// `compute_ai_action` is used for both execution and BC labels.
+/// `model_actions` — when `Some`, contains one `(DiscreteAction, log_prob)` per
+/// entry in `decisions` (same order). Used as the executed action in `RLControl`
+/// mode. In `BehavioralCloning` mode (or when `None`) the rule-based action
+/// from `compute_ai_action` is used for both execution and BC labels.
 fn store_obs_actions(
     decisions: &[(Entity, Vec<f32>, Vec<Option<Target>>)],
-    model_actions: Option<&[DiscreteAction]>,
+    model_actions: Option<&[(DiscreteAction, f32)]>,
     agents: &mut Query<(
         Entity,
         &mut RLAgent,
@@ -1089,14 +1094,15 @@ fn store_obs_actions(
         };
 
         // In RLControl mode use the model's action; otherwise use rule-based.
-        let executed_action: DiscreteAction = if *mode == AIPlayMode::RLControl {
-            model_actions
-                .and_then(|ma| ma.get(idx))
-                .copied()
-                .unwrap_or(rule_based_action)
-        } else {
-            rule_based_action
-        };
+        let (executed_action, action_log_prob): (DiscreteAction, f32) =
+            if *mode == AIPlayMode::RLControl {
+                model_actions
+                    .and_then(|ma| ma.get(idx))
+                    .copied()
+                    .unwrap_or((rule_based_action, 0.0))
+            } else {
+                (rule_based_action, 0.0)
+            };
         // In RLControl mode, the model may have chosen a different target.
         // Apply it so the next observation reflects the model's choice.
         if *mode == AIPlayMode::RLControl {
@@ -1128,6 +1134,7 @@ fn store_obs_actions(
                 action: last_action,
                 reward: total_reward,
                 done: false,
+                log_prob: agent.last_log_prob,
             };
             agent.segment_buffer.push(transition.clone());
             agent.accumulated_reward = 0.0;
@@ -1165,6 +1172,7 @@ fn store_obs_actions(
         // Update agent with new observation and action.
         agent.last_obs = Some(obs.clone());
         agent.last_action = Some(executed_action);
+        agent.last_log_prob = action_log_prob;
     }
 }
 

@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::Resource;
 use burn::{
-    backend::{ndarray::NdArray, wgpu::Wgpu, Autodiff},
+    backend::{Autodiff, ndarray::NdArray, wgpu::Wgpu},
     module::{Initializer, Param},
     nn::{LayerNorm, LayerNormConfig, Linear, LinearConfig},
     optim::{Adam, AdamConfig, adaptor::OptimizerAdaptor},
@@ -117,7 +117,9 @@ type Block<B> = NetBlock<B>;
 pub fn split_obj_feat<B: Backend>(
     obj_feat: Tensor<B, 3>,
 ) -> (Tensor<B, 3>, Tensor<B, 2>, Tensor<B, 3>, Tensor<B, 3>) {
-    let type_onehot = obj_feat.clone().narrow(2, SLOT_TYPE_ONEHOT, TYPE_ONEHOT_SIZE);
+    let type_onehot = obj_feat
+        .clone()
+        .narrow(2, SLOT_TYPE_ONEHOT, TYPE_ONEHOT_SIZE);
     let is_present = obj_feat
         .clone()
         .narrow(2, SLOT_IS_PRESENT, 1)
@@ -274,16 +276,16 @@ impl<B: Backend> RLNet<B> {
         // W: [T, H*S] → one_hot [B,N,T] @ W [T,H*S] → [B,N,H*S] → [B,N,H,S]
         let ts = TYPE_BLOCK_SIZE;
         let w_flat = self.type_embed_w.val().reshape([N_ENTITY_TYPES, h * ts]);
-        let w_blended = type_onehot.clone().matmul(w_flat.unsqueeze());  // [B, N, H*S]
+        let w_blended = type_onehot.clone().matmul(w_flat.unsqueeze()); // [B, N, H*S]
         let [batch_size, n_ents, _] = w_blended.dims();
-        let w_blended = w_blended.reshape([batch_size, n_ents, h, ts]);  // [B, N, H, S]
+        let w_blended = w_blended.reshape([batch_size, n_ents, h, ts]); // [B, N, H, S]
 
         // b: one_hot [B,N,T] @ b [T,H] → [B,N,H]
         let b_blended = type_onehot.matmul(self.type_embed_b.val().unsqueeze()); // [B, N, H]
 
         // Batched matmul: [B,N,H,S] × [B,N,S,1] → [B,N,H,1] → [B,N,H]
-        let type_feat_col = type_feat.unsqueeze_dim::<4>(3);            // [B, N, S, 1]
-        let type_enc = w_blended.matmul(type_feat_col).squeeze_dim(3);  // [B, N, H]
+        let type_feat_col = type_feat.unsqueeze_dim::<4>(3); // [B, N, S, 1]
+        let type_enc = w_blended.matmul(type_feat_col).squeeze_dim(3); // [B, N, H]
         let type_enc = type_enc + b_blended;
 
         // Sum and refine through NetBlocks.
@@ -298,15 +300,15 @@ impl<B: Backend> RLNet<B> {
         // Scaled dot-product attention (self as Q, objects as K/V)
         let scale = (self.hidden_dim as f64).sqrt() as f32;
         let q = self.q_proj.forward(self_enc.clone()).unsqueeze_dim::<3>(1); // [B, 1, H]
-        let k = self.k_proj.forward(obj_enc.clone()).swap_dims(1, 2);        // [B, H, N]
-        let v = self.v_proj.forward(obj_enc.clone());                        // [B, N, H]
-        let scores = q.matmul(k).div_scalar(scale);                          // [B, 1, N]
-        let weights = softmax(scores, 2);                                    // [B, 1, N]
-        let attn_out = weights.matmul(v).squeeze_dim(1);                     // [B, H]
+        let k = self.k_proj.forward(obj_enc.clone()).swap_dims(1, 2); // [B, H, N]
+        let v = self.v_proj.forward(obj_enc.clone()); // [B, N, H]
+        let scores = q.matmul(k).div_scalar(scale); // [B, 1, N]
+        let weights = softmax(scores, 2); // [B, 1, N]
+        let attn_out = weights.matmul(v).squeeze_dim(1); // [B, H]
 
         // Merge: concat(attn_out, self_enc) → H
         let merged = Tensor::cat(vec![attn_out, self_enc], 1); // [B, 2H]
-        let x = silu(self.merge_proj.forward(merged.clone()));  // [B, H]
+        let x = silu(self.merge_proj.forward(merged.clone())); // [B, H]
 
         // Decoder → action logits
         let x = self.dblock1.forward(x);
@@ -316,8 +318,8 @@ impl<B: Backend> RLNet<B> {
         let action_logits = self.output.forward(x.clone()); // [B, output_dim]
 
         // Target-selection pointer head
-        let tq = self.target_q_proj.forward(x.clone()).unsqueeze_dim::<3>(1);  // [B, 1, H]
-        let tk = self.target_k_proj.forward(obj_enc).swap_dims(1, 2);   // [B, H, N]
+        let tq = self.target_q_proj.forward(x.clone()).unsqueeze_dim::<3>(1); // [B, 1, H]
+        let tk = self.target_k_proj.forward(obj_enc).swap_dims(1, 2); // [B, H, N]
         let entity_logits = tq.matmul(tk).div_scalar(scale).squeeze_dim(1); // [B, N]
 
         // "No target" logit: learned bias from the merged representation.
@@ -332,7 +334,8 @@ impl<B: Backend> RLNet<B> {
         let mask = Tensor::cat(vec![is_present, ones], 1); // [B, N+1]
         // Where mask == 0, set logits to -1e9 (large negative, acts as -inf).
         let neg_inf = Tensor::<B, 2>::full([batch_size, N_OBJECTS + 1], -1e9, &device);
-        let target_logits = target_logits.clone() * mask.clone() + neg_inf * (mask.ones_like() - mask);
+        let target_logits =
+            target_logits.clone() * mask.clone() + neg_inf * (mask.ones_like() - mask);
 
         (action_logits, target_logits)
     }
@@ -408,8 +411,7 @@ impl InferenceNet {
         let recorder = BinBytesRecorder::<FullPrecisionSettings>::default();
         let record = Recorder::<InferBackend>::load(&recorder, bytes, &self.device)
             .expect("failed to deserialize weights");
-        self.net =
-            RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM).load_record(record);
+        self.net = RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM).load_record(record);
     }
 }
 
@@ -485,10 +487,7 @@ pub fn split_obs(obs: &[f32]) -> (&[f32], &[f32]) {
 ///
 /// Action logit layout: `turn(3) | thrust(2) | fire_primary(2) | fire_secondary(2)`
 /// Target logits: `[N_OBJECTS + 1]` (one per entity slot + "no target")
-pub fn logits_to_discrete_action(
-    action_logits: &[f32],
-    target_logits: &[f32],
-) -> DiscreteAction {
+pub fn logits_to_discrete_action(action_logits: &[f32], target_logits: &[f32]) -> DiscreteAction {
     debug_assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM);
     debug_assert_eq!(target_logits.len(), TARGET_OUTPUT_DIM);
     let turn_idx = argmax(&action_logits[0..3]) as u8;
@@ -496,15 +495,69 @@ pub fn logits_to_discrete_action(
     let fire_primary = argmax(&action_logits[5..7]) as u8;
     let fire_secondary = argmax(&action_logits[7..9]) as u8;
     let target_idx = argmax(target_logits) as u8;
-    (turn_idx, thrust_idx, fire_primary, fire_secondary, target_idx)
+    (
+        turn_idx,
+        thrust_idx,
+        fire_primary,
+        fire_secondary,
+        target_idx,
+    )
 }
 
-fn argmax(vals: &[f32]) -> usize {
-    vals.iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(i, _)| i)
-        .unwrap_or(0)
+/// Sample an action stochastically from the policy logits.
+///
+/// Returns `(action, log_prob)` where `log_prob` is the sum of per-head
+/// log-probabilities for the sampled action.
+pub fn sample_discrete_action(
+    action_logits: &[f32],
+    target_logits: &[f32],
+    rng: &mut impl rand::Rng,
+) -> (DiscreteAction, f32) {
+    debug_assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM);
+    debug_assert_eq!(target_logits.len(), TARGET_OUTPUT_DIM);
+
+    let mut total_log_prob: f32 = 0.0;
+
+    let turn_idx = sample_categorical(&action_logits[0..3], rng, &mut total_log_prob);
+    let thrust_idx = sample_categorical(&action_logits[3..5], rng, &mut total_log_prob);
+    let fire_primary = sample_categorical(&action_logits[5..7], rng, &mut total_log_prob);
+    let fire_secondary = sample_categorical(&action_logits[7..9], rng, &mut total_log_prob);
+    let target_idx = sample_categorical(target_logits, rng, &mut total_log_prob);
+
+    let action = (
+        turn_idx as u8,
+        thrust_idx as u8,
+        fire_primary as u8,
+        fire_secondary as u8,
+        target_idx as u8,
+    );
+    (action, total_log_prob)
+}
+
+/// Sample from a categorical distribution defined by logits.
+///
+/// Applies the log-sum-exp trick for numerical stability, samples an index
+/// from the resulting probabilities, and accumulates the log-prob of the
+/// sampled index into `log_prob_acc`.
+fn sample_categorical(logits: &[f32], rng: &mut impl rand::Rng, log_prob_acc: &mut f32) -> usize {
+    let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let exp_sum: f32 = logits.iter().map(|l| (l - max_logit).exp()).sum();
+    let log_sum_exp = max_logit + exp_sum.ln();
+
+    // Sample from the distribution.
+    let u: f32 = rng.r#gen();
+    let mut cumulative = 0.0_f32;
+    let mut sampled = logits.len() - 1; // fallback to last
+    for (i, &l) in logits.iter().enumerate() {
+        cumulative += (l - log_sum_exp).exp();
+        if u < cumulative {
+            sampled = i;
+            break;
+        }
+    }
+
+    *log_prob_acc += logits[sampled] - log_sum_exp;
+    sampled
 }
 
 // ---------------------------------------------------------------------------
@@ -569,9 +622,46 @@ pub fn load_training_net(
     let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
         Ok(record) => {
-            let net =
-                RLNet::<TrainBackend>::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM).load_record(record);
+            let net = RLNet::<TrainBackend>::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM)
+                .load_record(record);
             println!("[model] Loaded training net from {path}");
+            Some(net)
+        }
+        Err(e) => {
+            eprintln!("[model] Failed to deserialise training net from {path}: {e}");
+            None
+        }
+    }
+}
+
+/// Like [`load_training_net`] but with an explicit `output_dim`, so it can
+/// load networks with a non-policy output size (e.g. the value network).
+pub fn load_training_net_with_dim(
+    path: &str,
+    device: &<TrainBackend as Backend>::Device,
+    output_dim: usize,
+) -> Option<RLNet<TrainBackend>> {
+    use burn::record::{BinBytesRecorder, BinFileRecorder, FullPrecisionSettings, Recorder};
+    // Load directly from file into the inference backend with the given output_dim.
+    let infer_device: <InferBackend as Backend>::Device = Default::default();
+    let recorder = BinFileRecorder::<FullPrecisionSettings>::default();
+    let infer_net = match RLNet::<InferBackend>::new(&infer_device, HIDDEN_DIM, output_dim)
+        .load_file(path, &recorder, &infer_device)
+    {
+        Ok(net) => net,
+        Err(e) => {
+            eprintln!("[model] Failed to load net (dim={output_dim}) from {path}: {e}");
+            return None;
+        }
+    };
+    // Transfer to training backend via bytes.
+    let bytes = net_to_bytes(infer_net);
+    let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
+    match Recorder::<TrainBackend>::load(&rec, bytes, device) {
+        Ok(record) => {
+            let net =
+                RLNet::<TrainBackend>::new(device, HIDDEN_DIM, output_dim).load_record(record);
+            println!("[model] Loaded training net (dim={output_dim}) from {path}");
             Some(net)
         }
         Err(e) => {
@@ -596,6 +686,58 @@ pub fn net_to_bytes<B: Backend>(net: RLNet<B>) -> Vec<u8> {
     let recorder = BinBytesRecorder::<FullPrecisionSettings>::default();
     Recorder::<B>::record(&recorder, net.into_record(), ())
         .expect("failed to serialize net to bytes")
+}
+
+// ---------------------------------------------------------------------------
+// Optimizer save / load
+// ---------------------------------------------------------------------------
+
+/// Save an optimizer's state to `path` (`.bin` extension appended).
+pub fn save_optimizer(
+    optim: &OptimizerAdaptor<Adam, RLNet<TrainBackend>, TrainBackend>,
+    path: &str,
+) {
+    use burn::optim::Optimizer;
+    use burn::record::{BinBytesRecorder, FullPrecisionSettings, Recorder};
+    let record = optim.to_record();
+    let recorder = BinBytesRecorder::<FullPrecisionSettings>::default();
+    match Recorder::<TrainBackend>::record(&recorder, record, ()) {
+        Ok(bytes) => {
+            let file = format!("{path}.bin");
+            if let Err(e) = std::fs::write(&file, bytes) {
+                eprintln!("[model] Failed to save optimizer to {file}: {e}");
+            } else {
+                println!("[model] Optimizer saved to {file}");
+            }
+        }
+        Err(e) => eprintln!("[model] Failed to serialize optimizer: {e}"),
+    }
+}
+
+/// Load an optimizer's state from `path` (`.bin` extension appended).
+/// Returns `None` on failure.
+pub fn load_optimizer(
+    path: &str,
+    device: &<TrainBackend as Backend>::Device,
+) -> Option<OptimizerAdaptor<Adam, RLNet<TrainBackend>, TrainBackend>> {
+    use burn::optim::Optimizer;
+    use burn::record::{BinBytesRecorder, FullPrecisionSettings, Recorder};
+    let file = format!("{path}.bin");
+    let bytes = std::fs::read(&file).ok()?;
+    let recorder = BinBytesRecorder::<FullPrecisionSettings>::default();
+    match Recorder::<TrainBackend>::load(&recorder, bytes, device) {
+        Ok(record) => {
+            let optim = AdamConfig::new()
+                .init::<TrainBackend, RLNet<TrainBackend>>()
+                .load_record(record);
+            println!("[model] Optimizer loaded from {file}");
+            Some(optim)
+        }
+        Err(e) => {
+            eprintln!("[model] Failed to load optimizer from {file}: {e}");
+            None
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

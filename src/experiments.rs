@@ -34,9 +34,29 @@ impl ExperimentSetup {
         format!("{}/policy", self.run_dir)
     }
 
+    /// Path prefix for the value-network checkpoint (burn appends `.bin`).
+    pub fn value_checkpoint_path(&self) -> String {
+        format!("{}/value", self.run_dir)
+    }
+
     /// Path for the serialised BC replay buffer.
     pub fn buffer_checkpoint_path(&self) -> String {
         format!("{}/bc_buffer.bin", self.run_dir)
+    }
+
+    /// Path prefix for the policy optimizer state (burn appends `.bin`).
+    pub fn policy_optim_checkpoint_path(&self) -> String {
+        format!("{}/policy_optim", self.run_dir)
+    }
+
+    /// Path prefix for the value optimizer state (burn appends `.bin`).
+    pub fn value_optim_checkpoint_path(&self) -> String {
+        format!("{}/value_optim", self.run_dir)
+    }
+
+    /// Path for the serialised RL segment buffer.
+    pub fn rl_buffer_checkpoint_path(&self) -> String {
+        format!("{}/rl_buffer.bin", self.run_dir)
     }
 
     /// Returns true if a checkpoint file is present on disk.
