@@ -138,6 +138,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
             is_hostile: 1.0,
             should_engage: 1.0,
             personality: Personality::Fighter,
+            distressed: 0.0,
         }),
         value: 0.0,
         is_current_target: true,
@@ -183,6 +184,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
         credit_scale: 1000.0,
+        distressed: 0.0,
     });
     assert_eq!(obs.len(), OBS_DIM);
 

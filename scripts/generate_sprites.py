@@ -63,7 +63,7 @@ import os
 
 from PIL import Image, ImageDraw
 
-OUT = os.path.dirname(__file__)  # write into the same directory as this script
+OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "ship_sprites")
 
 
 def make_img(size):
@@ -823,6 +823,82 @@ def draw_pirate_missile_boat():
     img.save(os.path.join(OUT, "pirate_missile_boat.png"))
 
 
+# ─── IR MISSILE (14×14) – guided heat-seeking missile ────────────────────────
+# Design note: narrow dart shape with warm orange body matching the weapon
+# colour.  Tiny exhaust plume at the rear.  Must be smaller than the smallest
+# ship (corvette 20×20).
+
+
+def draw_ir_missile():
+    S = 14
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Slim pointed body – orange/red (narrow profile)
+    body = [(cx, 1), (cx + 1.5, 5), (cx + 1.25, 11), (cx - 1.25, 11), (cx - 1.5, 5)]
+    d.polygon(body, fill=(220, 120, 30, 255))
+
+    # Nose tip – bright yellow-white
+    nose = [(cx, 1), (cx + 0.75, 4), (cx - 0.75, 4)]
+    d.polygon(nose, fill=(255, 220, 120, 255))
+
+    # Small tail fins
+    lfin = [(cx - 1.25, 9), (cx - 3.5, 12), (cx - 1, 12)]
+    rfin = [(cx + 1.25, 9), (cx + 3.5, 12), (cx + 1, 12)]
+    d.polygon(lfin, fill=(180, 80, 15, 255))
+    d.polygon(rfin, fill=(180, 80, 15, 255))
+
+    # Engine plume – small warm glow
+    d.rectangle([int(cx) - 1, 11, int(cx) + 1, 13], fill=(255, 180, 60, 200))
+
+    img.save(os.path.join(OUT, "ir_missile.png"))
+
+
+# ─── SPACE MINE (16×16) – slow guided proximity mine ────────────────────────
+# Design note: round spiky shape suggesting danger.  Dark red body with
+# brighter red spikes radiating outward.  Must be smaller than the smallest
+# ship (corvette 20×20).
+
+
+def draw_space_mine():
+    S = 16
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+    cy = S / 2
+
+    import math
+
+    # Central sphere – dark red/maroon
+    r_core = 4
+    d.ellipse(
+        [int(cx) - r_core, int(cy) - r_core, int(cx) + r_core, int(cy) + r_core],
+        fill=(140, 35, 35, 255),
+    )
+
+    # Spikes radiating outward (8 spikes)
+    num_spikes = 8
+    for i in range(num_spikes):
+        angle = (i / num_spikes) * 2 * math.pi
+        # Spike base at core edge, tip extends outward
+        bx1 = cx + math.cos(angle - 0.3) * 3
+        by1 = cy + math.sin(angle - 0.3) * 3
+        bx2 = cx + math.cos(angle + 0.3) * 3
+        by2 = cy + math.sin(angle + 0.3) * 3
+        tx = cx + math.cos(angle) * 7
+        ty = cy + math.sin(angle) * 7
+        d.polygon([(bx1, by1), (tx, ty), (bx2, by2)], fill=(200, 55, 55, 255))
+
+    # Bright centre dot – menacing glow
+    d.ellipse(
+        [int(cx) - 2, int(cy) - 2, int(cx) + 2, int(cy) + 2],
+        fill=(255, 100, 80, 230),
+    )
+
+    img.save(os.path.join(OUT, "space_mine.png"))
+
+
 if __name__ == "__main__":
     draw_shuttle()
     draw_fighter()
@@ -841,4 +917,6 @@ if __name__ == "__main__":
     draw_rebel_frigate()
     draw_pirate_corvette()
     draw_pirate_missile_boat()
+    draw_ir_missile()
+    draw_space_mine()
     print("Sprites written to", OUT)

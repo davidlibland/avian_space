@@ -7,6 +7,7 @@ shuttle:
   item_space: 5
   base_weapons:
     "laser": [1, null]
+    "space_mine": [1, 5]
   radius: 10.0
   price: 5000
   sprite_path: ship_sprites/shuttle.png
@@ -48,7 +49,8 @@ hauler:
   max_health: 150
   cargo_space: 80
   item_space: 3
-  base_weapons: {}
+  base_weapons:
+    "space_mine": [1, 12]
   radius: 40.0
   price: 50000
   sprite_path: ship_sprites/hauler.png
@@ -97,6 +99,7 @@ courier:
   item_space: 4
   base_weapons:
     laser: [1, null]
+    space_mine: [1, 5]
   radius: 12.0
   price: 15000
   sprite_path: ship_sprites/courier.png
@@ -110,7 +113,8 @@ freighter:
   max_health: 120
   cargo_space: 55
   item_space: 4
-  base_weapons: {}
+  base_weapons:
+    space_mine: [1, 8]
   radius: 32.0
   price: 45000
   sprite_path: ship_sprites/freighter.png
@@ -124,7 +128,8 @@ bulk_carrier:
   max_health: 280
   cargo_space: 160
   item_space: 2
-  base_weapons: {}
+  base_weapons:
+    space_mine: [1, 20]
   radius: 55.0
   price: 85000
   sprite_path: ship_sprites/bulk_carrier.png

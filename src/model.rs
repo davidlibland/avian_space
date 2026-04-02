@@ -54,8 +54,8 @@ pub const POLICY_OUTPUT_DIM: usize = 9;
 /// Target-selection output: one logit per object slot plus one "no target" logit.
 pub const TARGET_OUTPUT_DIM: usize = N_OBJECTS + 1;
 
-/// Value output: scalar state estimate.
-pub const VALUE_OUTPUT_DIM: usize = 1;
+/// Value output: one head per reward type.
+pub const VALUE_OUTPUT_DIM: usize = crate::consts::N_REWARD_TYPES;
 
 /// Default hidden dimension for all network layers.
 pub const HIDDEN_DIM: usize = 64;

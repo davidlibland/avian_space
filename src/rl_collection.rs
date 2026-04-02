@@ -81,12 +81,13 @@ const BC_STEPS_PER_DRAIN: usize = 10;
 // Types sent to the trainer thread
 // ---------------------------------------------------------------------------
 
-/// A single (obs, action, reward, done) tuple.
+/// A single (obs, action, rewards, done) tuple.
 #[derive(Clone)]
 pub struct Transition {
     pub obs: Vec<f32>,
     pub action: DiscreteAction,
-    pub reward: f32,
+    /// Per-reward-type rewards, indexed by `consts::REWARD_*`.
+    pub rewards: [f32; crate::consts::N_REWARD_TYPES],
     /// True when the ship died at this step (terminal state).
     pub done: bool,
     /// Sum of per-head log π(a|s) at the time the action was sampled.
@@ -102,8 +103,8 @@ pub struct Segment {
     /// LSTM/GRU hidden state at the start of this segment (zeros on first segment).
     pub initial_hidden: Vec<f32>,
     pub transitions: Vec<Transition>,
-    /// None when the last transition is terminal; Some(V(s_T)) when truncated.
-    pub bootstrap_value: Option<f32>,
+    /// None when the last transition is terminal; `Some([V_1(s_T), ..])` when truncated.
+    pub bootstrap_value: Option<[f32; crate::consts::N_REWARD_TYPES]>,
 }
 
 /// A (observation, action) pair for behavioural-cloning pre-training.
@@ -155,6 +156,8 @@ struct RLStepTimer(Timer);
 pub struct RLReward {
     pub entity: Entity,
     pub reward: f32,
+    /// Index into `consts::REWARD_TYPE_NAMES` identifying the reward channel.
+    pub reward_type: usize,
 }
 
 /// Emitted by `apply_damage` (in ship.rs) just before an `RLAgent` ship is
@@ -195,8 +198,8 @@ pub struct RLAgent {
     pub last_action: Option<DiscreteAction>,
     /// Log-probability of the action under the policy at sampling time.
     pub last_log_prob: f32,
-    /// Sum of rewards since the last decision step.
-    pub accumulated_reward: f32,
+    /// Per-type accumulated rewards since the last decision step.
+    pub accumulated_rewards: [f32; crate::consts::N_REWARD_TYPES],
     /// Transitions collected since the last segment flush.
     pub segment_buffer: Vec<Transition>,
     /// Hidden state at the start of the current segment (for BPTT).
@@ -217,7 +220,7 @@ impl RLAgent {
             last_obs: None,
             last_action: None,
             last_log_prob: 0.0,
-            accumulated_reward: 0.0,
+            accumulated_rewards: [0.0; crate::consts::N_REWARD_TYPES],
             segment_buffer: Vec::with_capacity(RL_SEGMENT_LEN),
             segment_initial_hidden: vec![0.0; 64],
             steps_since_flush: 0,
@@ -328,7 +331,9 @@ impl Plugin for RLCollectionPlugin {
 fn accumulate_rewards(mut reward_events: MessageReader<RLReward>, mut agents: Query<&mut RLAgent>) {
     for ev in reward_events.read() {
         if let Ok(mut agent) = agents.get_mut(ev.entity) {
-            agent.accumulated_reward += ev.reward;
+            if ev.reward_type < crate::consts::N_REWARD_TYPES {
+                agent.accumulated_rewards[ev.reward_type] += ev.reward;
+            }
         }
     }
 }
@@ -354,6 +359,7 @@ fn rl_step(
         &MaxLinearSpeed,
         &Transform,
         &ShipHostility,
+        &crate::ship::Distressed,
     )>,
     // Queries for nearby entities (non-overlapping with the agent query).
     all_positions: Query<&Position>,
@@ -369,6 +375,7 @@ fn rl_step(
     // ShipHostility for ALL ships — used to bucket nearby ships as hostile/friendly.
     // Only reads ShipHostility (not Ship), so disjoint with the `agents` query.
     all_ship_factions: Query<&ShipHostility, With<Ship>>,
+    all_distressed: Query<&crate::ship::Distressed>,
     spatial_query: SpatialQuery,
     resources: (
         Res<ItemUniverse>,
@@ -397,6 +404,7 @@ fn rl_step(
         pickup_query,
         ship_query,
         &all_ship_factions,
+        &all_distressed,
         &spatial_query,
         item_universe,
         current_system,
@@ -551,6 +559,7 @@ fn build_all_observations(
         &MaxLinearSpeed,
         &Transform,
         &ShipHostility,
+        &crate::ship::Distressed,
     )>,
     all_positions: &Query<&Position>,
     all_velocities: &Query<&LinearVelocity>,
@@ -560,13 +569,14 @@ fn build_all_observations(
     pickup_query: &Query<(Entity, &Pickup)>,
     ship_query: &Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
     all_ship_factions: &Query<&ShipHostility, With<Ship>>,
+    all_distressed: &Query<&crate::ship::Distressed>,
     spatial_query: &SpatialQuery,
     item_universe: &ItemUniverse,
     current_system: &CurrentStarSystem,
 ) -> Vec<(Entity, Vec<f32>, Vec<Option<Target>>)> {
     let mut results = Vec::new();
 
-    for (entity, agent, ship, pos, vel, ang_vel, max_speed, transform, self_hostility) in
+    for (entity, agent, ship, pos, vel, ang_vel, max_speed, transform, self_hostility, self_distressed) in
         agents.iter()
     {
         // Ego-frame rotation parameters.
@@ -754,7 +764,7 @@ fn build_all_observations(
                 .or_else(|| {
                     agents
                         .get(e)
-                        .map(|(_, _, s, _, _, _, _, _, h)| (s as &Ship, h as &ShipHostility))
+                        .map(|(_, _, s, _, _, _, _, _, h, _)| (s as &Ship, h as &ShipHostility))
                         .ok()
                 });
             let (ship_data, value) = other_ship_ref
@@ -772,6 +782,10 @@ fn build_all_observations(
                             -1.0
                         };
                     let data = item_universe.ships.get(&other_ship.ship_type);
+                    let other_distressed = all_distressed
+                        .get(e)
+                        .map(|d| d.level)
+                        .unwrap_or(0.0);
                     let sd = ShipSlotData {
                         max_health: data.map(|d| d.max_health as f32).unwrap_or(0.0),
                         health: other_ship.health as f32,
@@ -780,6 +794,7 @@ fn build_all_observations(
                         is_hostile,
                         should_engage,
                         personality: data.map(|d| d.personality.clone()).unwrap_or_default(),
+                        distressed: other_distressed,
                     };
                     (sd, 0.0_f32)
                 })
@@ -940,6 +955,7 @@ fn build_all_observations(
             primary_weapon_speed,
             primary_weapon_range,
             credit_scale,
+            distressed: self_distressed.level,
         };
         let obs = rl_obs::encode_observation(&obs_input);
 
@@ -1040,6 +1056,7 @@ fn store_obs_actions(
         &MaxLinearSpeed,
         &Transform,
         &ShipHostility,
+        &crate::ship::Distressed,
     )>,
     all_positions: &Query<&Position>,
     all_velocities: &Query<&LinearVelocity>,
@@ -1049,7 +1066,7 @@ fn store_obs_actions(
     mode: &AIPlayMode,
 ) {
     for (idx, (entity, obs, slot_targets)) in decisions.iter().enumerate() {
-        let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _)) =
+        let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _, _)) =
             agents.get_mut(*entity)
         else {
             continue;
@@ -1133,24 +1150,24 @@ fn store_obs_actions(
         // Store the PREVIOUS step's transition (obs recorded at t-1, action taken
         // at t-1, rewards accumulated between t-1 and t).
         if let (Some(last_obs), Some(last_action)) = (agent.last_obs.clone(), agent.last_action) {
-            let reward = agent.accumulated_reward;
-            // Add health-fraction as a per-step reward signal.
+            // Build per-type reward array from accumulated events + health signal.
+            let mut rewards = agent.accumulated_rewards;
             let health_reward = ship.health as f32 / ship.data.max_health.max(1) as f32;
             let personality_health_weight = match agent.personality {
                 Personality::Fighter => crate::consts::HEALTH_STEP_FIGHTER,
                 Personality::Miner | Personality::Trader => crate::consts::HEALTH_STEP_MINER_TRADER,
             };
-            let total_reward = reward + health_reward * personality_health_weight;
+            rewards[crate::consts::REWARD_HEALTH] += health_reward * personality_health_weight;
 
             let transition = Transition {
                 obs: last_obs,
                 action: last_action,
-                reward: total_reward,
+                rewards,
                 done: false,
                 log_prob: agent.last_log_prob,
             };
             agent.segment_buffer.push(transition.clone());
-            agent.accumulated_reward = 0.0;
+            agent.accumulated_rewards = [0.0; crate::consts::N_REWARD_TYPES];
             agent.steps_since_flush += 1;
 
             // Also send BC data.  Pre-process obs → model_input here so the
@@ -1174,7 +1191,7 @@ fn store_obs_actions(
                     personality: agent.personality.clone(),
                     initial_hidden: agent.segment_initial_hidden.clone(),
                     transitions: agent.segment_buffer.drain(..).collect(),
-                    bootstrap_value: Some(0.0), // TODO: replace with V(s_T) from model
+                    bootstrap_value: Some([0.0; crate::consts::N_REWARD_TYPES]),
                 };
                 let _ = rl_sender.0.try_send(segment);
                 agent.segment_initial_hidden = agent.hidden_state.clone();

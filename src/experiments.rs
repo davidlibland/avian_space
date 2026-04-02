@@ -70,6 +70,11 @@ impl ExperimentSetup {
         format!("{}/value_optim", self.run_dir)
     }
 
+    /// Path for the persisted PPO step counter.
+    pub fn step_counter_path(&self) -> String {
+        format!("{}/step_counter.bin", self.run_dir)
+    }
+
     /// Path for the serialised RL segment buffer.
     pub fn rl_buffer_checkpoint_path(&self) -> String {
         format!("{}/rl_buffer.bin", self.run_dir)

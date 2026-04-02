@@ -132,6 +132,10 @@ pub struct Weapon {
     pub guided: bool,
     #[serde(default)]
     pub turn_rate: f32,
+    /// Optional path to a sprite image. When set, the projectile uses this
+    /// image instead of a plain colored rectangle.
+    #[serde(default)]
+    pub sprite_path: Option<String>,
 }
 
 #[derive(Component)]
@@ -193,6 +197,7 @@ pub fn weapon_fire(
     mut commands: Commands,
     mut ships: Query<(&Transform, &mut Ship)>,
     item_universe: Res<ItemUniverse>,
+    asset_server: Res<AssetServer>,
 ) {
     for cmd in reader.read() {
         let Ok((ship_transform, mut ship)) = ships.get_mut(cmd.ship) else {
@@ -217,6 +222,15 @@ pub fn weapon_fire(
         let tip = ship_transform.translation + forward * 20.0;
         let vel = forward.truncate() * weapon.speed;
         let [r, g, b] = weapon.color;
+        let sprite = if let Some(path) = &weapon.sprite_path {
+            Sprite::from_image(asset_server.load(path.clone()))
+        } else {
+            Sprite {
+                color: Color::srgb(r, g, b),
+                custom_size: Some(Vec2::new(3.0, 12.0)),
+                ..default()
+            }
+        };
         let mut entity_cmd = commands.spawn((
             DespawnOnExit(PlayState::Flying),
             Projectile {
@@ -229,11 +243,7 @@ pub fn weapon_fire(
             RigidBody::Dynamic,
             LinearVelocity(vel),
             Transform::from_translation(tip.xy().extend(-0.3)).with_rotation(ship_transform.rotation),
-            Sprite {
-                color: Color::srgb(r, g, b),
-                custom_size: Some(Vec2::new(3.0, 12.0)),
-                ..default()
-            },
+            sprite,
         ));
         // Decrease the ammo:
         specific.ammo_quantity = specific.ammo_quantity.map(|x| x - 1);

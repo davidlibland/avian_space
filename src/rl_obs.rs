@@ -89,7 +89,7 @@ pub const SLOT_VALUE: usize = TYPE_BLOCK_START; // 16
 /// Offset of entity-kind features (after value).
 pub const SLOT_TYPE_SPECIFIC: usize = TYPE_BLOCK_START + 1; // 17
 /// Number of entity-kind feature floats (padded to max across all types).
-pub const TYPE_SPECIFIC_SIZE: usize = 9;
+pub const TYPE_SPECIFIC_SIZE: usize = 10;
 /// Total size of block 4 (value + type_specific).
 pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 10
 
@@ -97,7 +97,7 @@ pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 10
 pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE; // = 26
 
 /// Floats for the self-state block.
-pub const SELF_SIZE: usize = 11; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, credits, personality(3)
+pub const SELF_SIZE: usize = 12; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, credits, distressed, personality(3)
 
 // ---------------------------------------------------------------------------
 // Data structures passed from the Bevy system to the encoder
@@ -126,6 +126,8 @@ pub struct ShipSlotData {
     /// 1.0 = should_engage, 0.0 = unknown / neutral, -1.0 = friendly.
     pub should_engage: f32,
     pub personality: Personality,
+    /// Distressed level (1.0 = just hit, decays toward 0).
+    pub distressed: f32,
 }
 
 /// Planet-specific features.
@@ -212,6 +214,8 @@ pub struct ObsInput<'a> {
     pub primary_weapon_range: f32,
     /// Per-ship-type credit scale for normalising the credit observation.
     pub credit_scale: f32,
+    /// Current distressed level (1.0 = just hit, decays toward 0).
+    pub distressed: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +439,7 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let c = input.ship.credits as f32;
     let s = input.credit_scale;
     obs.push(s / (c + s));
+    obs.push(input.distressed);
     obs.extend_from_slice(&personality);
     debug_assert_eq!(obs.len(), SELF_SIZE);
 
@@ -535,6 +540,7 @@ fn encode_slot(
             ts[5] = ship.should_engage;
             let p = personality_onehot(&ship.personality);
             ts[6..9].copy_from_slice(&p);
+            ts[9] = ship.distressed;
         }
         EntityKind::Planet(planet) => {
             ts[0] = planet.cargo_sale_value;

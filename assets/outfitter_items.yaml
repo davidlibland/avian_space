@@ -15,3 +15,10 @@ ir_missile:
     weapon_type: ir_missile
     ammo_price: 50
     ammo_space: 1
+space_mine:
+  !SecondaryWeapon
+    price: 500
+    space: 4
+    weapon_type: space_mine
+    ammo_price: 30
+    ammo_space: 2

@@ -103,6 +103,20 @@ pub fn ai_ship_bundle(app: &mut App) {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Explicit mass properties for a ship turned into a `Sensor`.
+/// Sensor colliders don't contribute to mass, so we provide it manually
+/// to avoid Avian2D "no mass" warnings on dynamic rigid bodies.
+fn sensor_mass_for_ship(radius: f32) -> (Mass, AngularInertia) {
+    let density = 2.0; // matches ColliderDensity in ShipBundle
+    let mass_val = density * PI * radius * radius;
+    let inertia_val = 0.5 * mass_val * radius * radius;
+    (Mass(mass_val), AngularInertia(inertia_val))
+}
+
+// ---------------------------------------------------------------------------
 // Spawn helpers
 // ---------------------------------------------------------------------------
 
@@ -144,7 +158,7 @@ fn spawn_ai_ship_jumping_in(
     commands: &mut Commands,
     asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
-    explosion_writer: &mut MessageWriter<crate::explosions::TriggerExplosion>,
+    jump_flash_writer: &mut MessageWriter<crate::explosions::TriggerJumpFlash>,
     ship_type: &str,
 ) {
     let mut rng = rand::thread_rng();
@@ -161,13 +175,15 @@ fn spawn_ai_ship_jumping_in(
     let vel = dir * JUMP_SPEED;
 
     // Small flash at entry point.
-    explosion_writer.write(crate::explosions::TriggerExplosion {
+    jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
         location: edge_pos,
         size: 8.0,
     });
 
     let bundle = ship_bundle(ship_type, asset_server, item_universe, edge_pos);
     let personality = bundle.get_personality();
+    let radius = item_universe.ships.get(ship_type).map(|s| s.radius).unwrap_or(20.0);
+    let (mass, inertia) = sensor_mass_for_ship(radius);
     commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
@@ -176,6 +192,9 @@ fn spawn_ai_ship_jumping_in(
             },
             RLAgent::new(personality),
             JumpingIn,
+            Sensor,
+            mass,
+            inertia,
             bundle,
         ))
         .insert(LinearVelocity(vel))
@@ -232,7 +251,7 @@ fn jump_in_system(
         let speed = vel.0.length();
         let target = ship.data.max_speed;
         if speed <= target {
-            commands.entity(entity).remove::<JumpingIn>();
+            commands.entity(entity).remove::<(JumpingIn, Sensor, Mass, AngularInertia)>();
             // Clamp to max_speed so MaxLinearSpeed constraint isn't violated.
             if speed > f32::EPSILON {
                 vel.0 = vel.0.normalize() * target;
@@ -262,7 +281,7 @@ fn jump_out_system(
         ),
         With<JumpingOut>,
     >,
-    mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+    mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
     mut rl_jumped_writer: MessageWriter<RLShipJumped>,
 ) {
     let dt = time.delta_secs();
@@ -279,7 +298,7 @@ fn jump_out_system(
                 let ev = build_rl_ship_jumped(entity, agent);
                 rl_jumped_writer.write(ev);
             }
-            explosion_writer.write(crate::explosions::TriggerExplosion {
+            jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
                 location: transform.translation.xy(),
                 size: 8.0,
             });
@@ -303,9 +322,9 @@ fn manage_ship_population(
     star_system: Res<CurrentStarSystem>,
     time: Res<Time>,
     mut timer: ResMut<ShipPopulationTimer>,
-    ai_ships: Query<Entity, (With<AIShip>, Without<JumpingOut>)>,
+    ai_ships: Query<(Entity, &Ship), (With<AIShip>, Without<JumpingOut>)>,
     all_ai_ships: Query<Entity, With<AIShip>>,
-    mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+    mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
 ) {
     if !timer.0.tick(time.delta()).just_finished() {
         return;
@@ -329,16 +348,18 @@ fn manage_ship_population(
                 &mut commands,
                 &asset_server,
                 &item_universe,
-                &mut explosion_writer,
+                &mut jump_flash_writer,
                 &ship_type,
             );
         }
     } else if total > dist.max {
         // Pick a random ship (not already jumping out) and trigger jump-out.
-        let candidates: Vec<Entity> = ai_ships.iter().collect();
+        let candidates: Vec<(Entity, &Ship)> = ai_ships.iter().collect();
         if !candidates.is_empty() {
             let idx = rng.gen_range(0..candidates.len());
-            commands.entity(candidates[idx]).insert(JumpingOut);
+            let (e, ship) = candidates[idx];
+            let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
+            commands.entity(e).insert((JumpingOut, Sensor, mass, inertia));
         }
     }
 }
@@ -839,6 +860,7 @@ fn land_ship(
                             rl_reward_writer.write(RLReward {
                                 entity: ship_entity,
                                 reward,
+                                reward_type: crate::consts::REWARD_LANDING,
                             });
                         }
                     }
@@ -879,6 +901,7 @@ fn land_ship(
                             rl_reward_writer.write(RLReward {
                                 entity: ship_entity,
                                 reward: credit_frac * personality_weight,
+                                reward_type: crate::consts::REWARD_CARGO_SOLD,
                             });
                         }
 
@@ -904,6 +927,10 @@ fn land_ship(
                     }
 
                     // Fighters: if no hostile ships are visible, jump out.
+                    let jump_out_bundle = {
+                        let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
+                        (JumpingOut, Sensor, mass, inertia)
+                    };
                     if matches!(ai_ship.personality, Personality::Fighter) {
                         let has_hostile =
                             ship_factions.iter().any(|(other_e, other_h, other_pos)| {
@@ -912,12 +939,12 @@ fn land_ship(
                                     && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
                             });
                         if !has_hostile {
-                            commands.entity(ship_entity).insert(JumpingOut);
+                            commands.entity(ship_entity).insert(jump_out_bundle);
                         }
                     } else {
                         let choose_to_jump = rng.gen_bool(0.1);
                         if choose_to_jump {
-                            commands.entity(ship_entity).insert(JumpingOut);
+                            commands.entity(ship_entity).insert(jump_out_bundle);
                         }
                     }
                 }

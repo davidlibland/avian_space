@@ -1,0 +1,4 @@
+tbparse==0.0.9
+pandas>=2.0
+numpy>=1.22
+tensorboard>=2.12

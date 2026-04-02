@@ -131,7 +131,7 @@ fn spawn_ore_crystals(
         }
 
         // Small irregular polygon (3-5 vertices) for crystal shape
-        let crystal_size = asteroid_size * rng.gen_range(0.08..0.18);
+        let crystal_size = asteroid_size * rng.gen_range(0.15..0.30);
         let crystal_segments = rng.gen_range(3..=5);
         let mut verts: Vec<Vec2> = Vec::new();
         for i in 0..crystal_segments {

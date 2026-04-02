@@ -23,6 +23,20 @@ ir_missile:
     damage: 40
     guided: true
     turn_rate: 2.5
-    ammo: 
-        !Ammo: 
+    sprite_path: ship_sprites/ir_missile.png
+    ammo:
+        !Ammo:
             space: 1
+space_mine:
+    name: space_mine
+    lifetime: 12.0
+    speed: 40.0
+    cooldown: 2.0
+    color: [0.8, 0.2, 0.2]
+    damage: 80
+    guided: true
+    turn_rate: 1.0
+    sprite_path: ship_sprites/space_mine.png
+    ammo:
+        !Ammo:
+            space: 2

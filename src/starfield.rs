@@ -188,7 +188,7 @@ struct WindowSize(Vec2);
 fn origin_shift_system(
     mut player_q: Query<(&mut Transform, &mut Position), With<Player>>,
     mut others_q: Query<(&mut Transform, &mut Position), Without<Player>>,
-    mut visual_query: Query<&mut Transform, (Without<Player>, Without<Position>)>,
+    mut visual_query: Query<&mut Transform, (Without<Player>, Without<Position>, Without<ChildOf>)>,
     mut old_pos: ResMut<WorldOffset>,
 ) {
     let Ok((mut pt, mut pp)) = player_q.single_mut() else {

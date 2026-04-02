@@ -18,6 +18,7 @@ use burn::{
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
+use crate::consts::{N_REWARD_TYPES, REWARD_TYPE_NAMES};
 use crate::gae::{self, SegmentInfo};
 use crate::model::{
     self, InferenceNet, N_OBJECTS, OBJECT_INPUT_DIM, RLInner, SELF_INPUT_DIM, TrainBackend,
@@ -46,7 +47,7 @@ const PPO_SAVE_INTERVAL: usize = 10;
 const PPO_HUBER_DELTA: f32 = 1.0;
 /// Skip policy updates when explained variance is below this threshold,
 /// allowing the value function to burn in before the policy starts changing.
-const PPO_VALUE_BURNIN_EV_THRESHOLD: f32 = 0.8;
+const PPO_VALUE_BURNIN_EV_THRESHOLD: f32 = 0.3;
 
 // ---------------------------------------------------------------------------
 // Batch data structures
@@ -57,13 +58,27 @@ pub struct PpoBatch {
     pub self_flat: Vec<f32>,
     pub obj_flat: Vec<f32>,
     pub actions: Vec<DiscreteAction>,
-    pub rewards: Vec<f32>,
+    /// Per-step per-head rewards, length = total_steps.
+    pub rewards: Vec<[f32; N_REWARD_TYPES]>,
     pub dones: Vec<bool>,
     /// Log π(a|s) recorded at rollout time (behaviour policy).
     pub old_log_probs: Vec<f32>,
     pub segment_infos: Vec<SegmentInfo>,
     pub total_steps: usize,
+    /// Per-segment personality index (0=Miner, 1=Fighter, 2=Trader).
+    pub personalities: Vec<usize>,
 }
+
+fn personality_index(p: &crate::ship::Personality) -> usize {
+    match p {
+        crate::ship::Personality::Miner => 0,
+        crate::ship::Personality::Fighter => 1,
+        crate::ship::Personality::Trader => 2,
+    }
+}
+
+pub const N_PERSONALITIES: usize = 3;
+pub const PERSONALITY_NAMES: [&str; N_PERSONALITIES] = ["miner", "fighter", "trader"];
 
 /// Flatten a collection of segments into contiguous arrays for training.
 pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
@@ -75,6 +90,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
     let mut dones = Vec::with_capacity(total_steps);
     let mut old_log_probs = Vec::with_capacity(total_steps);
     let mut segment_infos = Vec::with_capacity(segments.len());
+    let mut personalities = Vec::with_capacity(segments.len());
     let mut idx = 0;
 
     for seg in segments {
@@ -84,7 +100,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
             self_flat.extend_from_slice(s);
             obj_flat.extend_from_slice(o);
             actions.push(t.action);
-            rewards.push(t.reward);
+            rewards.push(t.rewards);
             dones.push(t.done);
             old_log_probs.push(t.log_prob);
             idx += 1;
@@ -92,8 +108,9 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
         segment_infos.push(SegmentInfo {
             start_idx: start,
             end_idx: idx,
-            bootstrap_value: seg.bootstrap_value.unwrap_or(0.0),
+            bootstrap_values: seg.bootstrap_value.unwrap_or([0.0; N_REWARD_TYPES]),
         });
+        personalities.push(personality_index(&seg.personality));
     }
 
     PpoBatch {
@@ -105,6 +122,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
         old_log_probs,
         segment_infos,
         total_steps,
+        personalities,
     }
 }
 
@@ -236,17 +254,26 @@ fn save_rl_buffer(segments: &[Segment], path: &str) {
     use std::io::Write;
     let result = (|| -> std::io::Result<()> {
         let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
-        // Header: segment count.
         f.write_all(&(segments.len() as u32).to_le_bytes())?;
         for seg in segments {
-            // Segment header.
             f.write_all(&(seg.transitions.len() as u32).to_le_bytes())?;
-            let bv = seg.bootstrap_value.unwrap_or(f32::NAN);
-            f.write_all(&bv.to_le_bytes())?;
-            // Transitions.
+            // Bootstrap: 1 byte flag + N_REWARD_TYPES f32s if present.
+            match &seg.bootstrap_value {
+                Some(bv) => {
+                    f.write_all(&[1u8])?;
+                    for &v in bv {
+                        f.write_all(&v.to_le_bytes())?;
+                    }
+                }
+                None => f.write_all(&[0u8])?,
+            }
+            // Personality index.
+            f.write_all(&[personality_index(&seg.personality) as u8])?;
             for t in &seg.transitions {
                 f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3, t.action.4])?;
-                f.write_all(&t.reward.to_le_bytes())?;
+                for &r in &t.rewards {
+                    f.write_all(&r.to_le_bytes())?;
+                }
                 f.write_all(&[t.done as u8])?;
                 f.write_all(&t.log_prob.to_le_bytes())?;
                 for &v in &t.obs {
@@ -272,15 +299,35 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
     f.read_exact(&mut u32_buf).ok()?;
     let n_segments = u32::from_le_bytes(u32_buf) as usize;
 
+    let personalities_map = [
+        crate::ship::Personality::Miner,
+        crate::ship::Personality::Fighter,
+        crate::ship::Personality::Trader,
+    ];
+
     let mut segments = Vec::with_capacity(n_segments);
     for _ in 0..n_segments {
         f.read_exact(&mut u32_buf).ok()?;
         let n_trans = u32::from_le_bytes(u32_buf) as usize;
 
-        let mut bv_buf = [0u8; 4];
-        f.read_exact(&mut bv_buf).ok()?;
-        let bv = f32::from_le_bytes(bv_buf);
-        let bootstrap_value = if bv.is_nan() { None } else { Some(bv) };
+        let mut flag = [0u8; 1];
+        f.read_exact(&mut flag).ok()?;
+        let bootstrap_value = if flag[0] == 1 {
+            let mut bv = [0.0_f32; N_REWARD_TYPES];
+            let mut bv_bytes = [0u8; 4];
+            for v in &mut bv {
+                f.read_exact(&mut bv_bytes).ok()?;
+                *v = f32::from_le_bytes(bv_bytes);
+            }
+            Some(bv)
+        } else {
+            None
+        };
+
+        let mut pers_buf = [0u8; 1];
+        f.read_exact(&mut pers_buf).ok()?;
+        let personality =
+            personalities_map.get(pers_buf[0] as usize).cloned().unwrap_or(crate::ship::Personality::Fighter);
 
         let mut transitions = Vec::with_capacity(n_trans);
         let mut action_buf = [0u8; 5];
@@ -290,8 +337,11 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
 
         for _ in 0..n_trans {
             f.read_exact(&mut action_buf).ok()?;
-            f.read_exact(&mut f32_buf).ok()?;
-            let reward = f32::from_le_bytes(f32_buf);
+            let mut rewards = [0.0_f32; N_REWARD_TYPES];
+            for r in &mut rewards {
+                f.read_exact(&mut f32_buf).ok()?;
+                *r = f32::from_le_bytes(f32_buf);
+            }
             f.read_exact(&mut done_buf).ok()?;
             let done = done_buf[0] != 0;
             f.read_exact(&mut f32_buf).ok()?;
@@ -304,14 +354,8 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
 
             transitions.push(crate::rl_collection::Transition {
                 obs,
-                action: (
-                    action_buf[0],
-                    action_buf[1],
-                    action_buf[2],
-                    action_buf[3],
-                    action_buf[4],
-                ),
-                reward,
+                action: (action_buf[0], action_buf[1], action_buf[2], action_buf[3], action_buf[4]),
+                rewards,
                 done,
                 log_prob,
             });
@@ -319,7 +363,7 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
 
         segments.push(Segment {
             entity_id: 0,
-            personality: crate::ship::Personality::Fighter,
+            personality,
             initial_hidden: vec![],
             transitions,
             bootstrap_value,
@@ -334,21 +378,40 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
 // Main training thread
 // ---------------------------------------------------------------------------
 
-/// Save all PPO training state: networks, optimizers, and segment buffer.
+/// Save all PPO training state: networks, optimizers, segment buffer, and step counter.
 fn save_all_checkpoints(
     inner: &RLInner<TrainBackend>,
     segments: &[Segment],
+    update_cycle: usize,
     policy_path: &str,
     value_path: &str,
     policy_optim_path: &str,
     value_optim_path: &str,
     buffer_path: &str,
+    step_counter_path: &str,
 ) {
     model::save_training_net(inner.policy_net.as_ref().unwrap(), policy_path);
     model::save_training_net(inner.value_net.as_ref().unwrap(), value_path);
     model::save_optimizer(&inner.policy_optim, policy_optim_path);
     model::save_optimizer(&inner.value_optim, value_optim_path);
     save_rl_buffer(segments, buffer_path);
+    save_step_counter(update_cycle, step_counter_path);
+}
+
+fn save_step_counter(step: usize, path: &str) {
+    if let Err(e) = std::fs::write(path, (step as u64).to_le_bytes()) {
+        eprintln!("[ppo] Failed to save step counter to {path}: {e}");
+    }
+}
+
+fn load_step_counter(path: &str) -> Option<usize> {
+    let bytes = std::fs::read(path).ok()?;
+    if bytes.len() < 8 {
+        return None;
+    }
+    let val = u64::from_le_bytes(bytes[..8].try_into().ok()?);
+    println!("[ppo] Loaded step counter = {val} from {path}");
+    Some(val as usize)
 }
 
 /// Spawn the PPO training thread.
@@ -369,6 +432,7 @@ pub fn spawn_ppo_training_thread(
         let policy_optim_path = experiment.policy_optim_checkpoint_path();
         let value_optim_path = experiment.value_optim_checkpoint_path();
         let buffer_path = experiment.rl_buffer_checkpoint_path();
+        let step_counter_path = experiment.step_counter_path();
 
         // Try to load existing checkpoints.
         if !experiment.is_fresh {
@@ -393,7 +457,11 @@ pub fn spawn_ppo_training_thread(
             }
         }
 
-        let mut update_cycle: usize = 0;
+        let mut update_cycle: usize = if !experiment.is_fresh {
+            load_step_counter(&step_counter_path).unwrap_or(0)
+        } else {
+            0
+        };
         let mut segments: Vec<Segment> = if !experiment.is_fresh {
             load_rl_buffer(&buffer_path).unwrap_or_default()
         } else {
@@ -426,8 +494,10 @@ pub fn spawn_ppo_training_thread(
                     Err(mpsc::RecvTimeoutError::Timeout) => continue,
                     Err(mpsc::RecvTimeoutError::Disconnected) => {
                         println!("[ppo] Channel disconnected, saving and exiting.");
-                        save_all_checkpoints(&inner, &segments, &policy_path, &value_path,
-                            &policy_optim_path, &value_optim_path, &buffer_path);
+                        save_all_checkpoints(&inner, &segments, update_cycle,
+                            &policy_path, &value_path,
+                            &policy_optim_path, &value_optim_path,
+                            &buffer_path, &step_counter_path);
                         break;
                     }
                 }
@@ -443,31 +513,56 @@ pub fn spawn_ppo_training_thread(
             let t0 = Instant::now();
             let n_segments = segments.len();
 
-            // ── Rollout metrics (before flattening) ──────────────────────
-            let mut total_reward = 0.0_f32;
-            let mut total_traj_steps = 0_usize;
+            // ── Rollout metrics: per personality × reward_type ────────────
+            // Accumulators: [personality][reward_type] for total and count.
+            let mut rew_total = [[0.0_f32; N_REWARD_TYPES]; N_PERSONALITIES];
+            let mut rew_steps = [0_usize; N_PERSONALITIES];
             for seg in &segments {
-                let seg_reward: f32 = seg.transitions.iter().map(|t| t.reward).sum();
-                total_reward += seg_reward;
-                total_traj_steps += seg.transitions.len();
+                let pi = personality_index(&seg.personality);
+                for t in &seg.transitions {
+                    for h in 0..N_REWARD_TYPES {
+                        rew_total[pi][h] += t.rewards[h];
+                    }
+                    rew_steps[pi] += 1;
+                }
                 writer.add_scalar(
                     "reward/trajectory_length",
                     seg.transitions.len() as f32,
                     update_cycle,
                 );
             }
+            // Log personality × reward_type matrices.
+            let total_traj_steps: usize = rew_steps.iter().sum();
+            for pi in 0..N_PERSONALITIES {
+                let pn = PERSONALITY_NAMES[pi];
+                let ns = rew_steps[pi].max(1) as f32;
+                for h in 0..N_REWARD_TYPES {
+                    let rn = REWARD_TYPE_NAMES[h];
+                    writer.add_scalar(
+                        &format!("reward_total/{pn}/{rn}"),
+                        rew_total[pi][h],
+                        update_cycle,
+                    );
+                    writer.add_scalar(
+                        &format!("reward_per_step/{pn}/{rn}"),
+                        rew_total[pi][h] / ns,
+                        update_cycle,
+                    );
+                }
+            }
+            // Aggregate reward stats.
+            let total_reward: f32 = rew_total.iter().flat_map(|r| r.iter()).sum();
             let mean_reward_per_step = if total_traj_steps > 0 {
                 total_reward / total_traj_steps as f32
             } else {
                 0.0
             };
-            let mean_segment_return = if n_segments > 0 {
-                total_reward / n_segments as f32
-            } else {
-                0.0
-            };
             writer.add_scalar("reward/mean_per_step", mean_reward_per_step, update_cycle);
-            writer.add_scalar("reward/mean_segment_return", mean_segment_return, update_cycle);
+            writer.add_scalar(
+                "reward/mean_segment_return",
+                if n_segments > 0 { total_reward / n_segments as f32 } else { 0.0 },
+                update_cycle,
+            );
 
             // ── Phase 2: Recompute bootstrap values ──────────────────────
             value_fn::recompute_bootstrap_values(
@@ -481,22 +576,21 @@ pub fn spawn_ppo_training_thread(
             let total_steps = batch.total_steps;
 
             // ── Phase 4: PPO epochs ───────────────────────────────────────
-            // Old log-probs were recorded at rollout time and are stored in
-            // `batch.old_log_probs`, so no re-inference is needed.
             let mut epoch_policy_loss = 0.0_f32;
             let mut epoch_value_loss = 0.0_f32;
             let mut epoch_entropy = 0.0_f32;
             let mut epoch_frac_clipped = 0.0_f32;
             let mut epoch_mean_ratio = 0.0_f32;
             let mut total_mini_batches = 0_usize;
-            // Track advantage and explained variance from the first epoch only
-            // (before the value net updates change the landscape).
+            // First-epoch stats for logging.
             let mut first_epoch_adv_mean = 0.0_f32;
             let mut first_epoch_adv_std = 0.0_f32;
             let mut first_epoch_explained_var = 0.0_f32;
+            let mut first_epoch_head_ev = [0.0_f32; N_REWARD_TYPES];
+            let mut first_epoch_head_td = [0.0_f32; N_REWARD_TYPES];
 
             for epoch in 0..PPO_EPOCHS {
-                // 5a. Fresh value estimates (detached).
+                // 5a. Fresh multi-head value estimates (detached).
                 let values = value_fn::batch_value_inference(
                     inner.value_net.as_ref().unwrap(),
                     &batch.self_flat,
@@ -505,8 +599,8 @@ pub fn spawn_ppo_training_thread(
                     &device,
                 );
 
-                // 5b. GAE with fresh values.
-                let (advantages, returns) = gae::compute_gae(
+                // 5b. Multi-head GAE.
+                let gae_result = gae::compute_gae_multihead(
                     &batch.rewards,
                     &batch.dones,
                     &values,
@@ -515,29 +609,71 @@ pub fn spawn_ppo_training_thread(
                     PPO_LAMBDA,
                 );
 
-                // 5c. Normalize advantages.
-                let n = advantages.len() as f32;
-                let adv_mean: f32 = advantages.iter().sum::<f32>() / n;
-                let adv_var: f32 =
-                    advantages.iter().map(|a| (a - adv_mean).powi(2)).sum::<f32>() / n;
+                // 5c. Normalize total advantages for policy.
+                let n = total_steps as f32;
+                let adv_mean: f32 = gae_result.total_advantages.iter().sum::<f32>() / n;
+                let adv_var: f32 = gae_result
+                    .total_advantages
+                    .iter()
+                    .map(|a| (a - adv_mean).powi(2))
+                    .sum::<f32>()
+                    / n;
                 let adv_std = adv_var.sqrt();
-                let norm_advantages: Vec<f32> = advantages
+                let norm_advantages: Vec<f32> = gae_result
+                    .total_advantages
                     .iter()
                     .map(|a| (a - adv_mean) / (adv_std + 1e-8))
                     .collect();
 
-                // Explained variance: 1 - Var(returns - V) / Var(returns)
+                // First-epoch diagnostics: explained variance (total + per-head).
                 if epoch == 0 {
                     first_epoch_adv_mean = adv_mean;
                     first_epoch_adv_std = adv_std;
-                    let return_mean: f32 = returns.iter().sum::<f32>() / n;
-                    let var_returns: f32 =
-                        returns.iter().map(|r| (r - return_mean).powi(2)).sum::<f32>() / n;
-                    let var_residuals: f32 = advantages.iter().map(|a| a.powi(2)).sum::<f32>() / n;
-                    first_epoch_explained_var = 1.0 - var_residuals / (var_returns + 1e-8);
+                    // Total explained variance.
+                    let ret_mean: f32 = gae_result.total_returns.iter().sum::<f32>() / n;
+                    let var_ret: f32 = gae_result
+                        .total_returns
+                        .iter()
+                        .map(|r| (r - ret_mean).powi(2))
+                        .sum::<f32>()
+                        / n;
+                    let var_adv: f32 = gae_result
+                        .total_advantages
+                        .iter()
+                        .map(|a| a.powi(2))
+                        .sum::<f32>()
+                        / n;
+                    first_epoch_explained_var = 1.0 - var_adv / (var_ret + 1e-8);
+                    // Per-head explained variance and mean TD error.
+                    for h in 0..N_REWARD_TYPES {
+                        let h_ret_mean: f32 =
+                            gae_result.head_returns.iter().map(|r| r[h]).sum::<f32>() / n;
+                        let h_var_ret: f32 = gae_result
+                            .head_returns
+                            .iter()
+                            .map(|r| (r[h] - h_ret_mean).powi(2))
+                            .sum::<f32>()
+                            / n;
+                        let h_var_adv: f32 = gae_result
+                            .head_advantages
+                            .iter()
+                            .map(|a| a[h].powi(2))
+                            .sum::<f32>()
+                            / n;
+                        first_epoch_head_ev[h] = 1.0 - h_var_adv / (h_var_ret + 1e-8);
+                        // Mean absolute TD error for this head:
+                        // td_error = reward + gamma * V_next - V
+                        // which equals advantage when lambda=1; approximate with advantage mean.
+                        first_epoch_head_td[h] = gae_result
+                            .head_advantages
+                            .iter()
+                            .map(|a| a[h].abs())
+                            .sum::<f32>()
+                            / n;
+                    }
                 }
 
-                // Skip policy updates until the value function is accurate enough.
+                // Skip policy updates until value function is accurate enough.
                 let skip_policy = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
 
                 // 5d. Shuffle indices for mini-batching.
@@ -548,13 +684,13 @@ pub fn spawn_ppo_training_thread(
                 for mb_indices in indices.chunks(PPO_MINI_BATCH_SIZE) {
                     let mb = mb_indices.len();
 
-                    // Gather mini-batch data.
                     let mut mb_self = Vec::with_capacity(mb * SELF_INPUT_DIM);
                     let mut mb_obj = Vec::with_capacity(mb * N_OBJECTS * OBJECT_INPUT_DIM);
                     let mut mb_actions = Vec::with_capacity(mb);
                     let mut mb_old_lp = Vec::with_capacity(mb);
                     let mut mb_adv = Vec::with_capacity(mb);
-                    let mut mb_ret = Vec::with_capacity(mb);
+                    // Per-head returns flattened to [mb * N_REWARD_TYPES] for the tensor.
+                    let mut mb_ret_flat = Vec::with_capacity(mb * N_REWARD_TYPES);
 
                     for &i in mb_indices {
                         let s_start = i * SELF_INPUT_DIM;
@@ -567,10 +703,9 @@ pub fn spawn_ppo_training_thread(
                         mb_actions.push(batch.actions[i]);
                         mb_old_lp.push(batch.old_log_probs[i]);
                         mb_adv.push(norm_advantages[i]);
-                        mb_ret.push(returns[i]);
+                        mb_ret_flat.extend_from_slice(&gae_result.head_returns[i]);
                     }
 
-                    // Build tensors.
                     let self_t = Tensor::<TrainBackend, 2>::from_data(
                         TensorData::new(mb_self, [mb, SELF_INPUT_DIM]),
                         &device,
@@ -613,17 +748,17 @@ pub fn spawn_ppo_training_thread(
                             Some(inner.policy_optim.step(PPO_POLICY_LR, net, policy_grads));
                     }
 
-                    // ── Value update ──────────────────────────────────────
+                    // ── Value update (multi-head) ─────────────────────────
                     let value_grads = {
                         let vnet = inner.value_net.as_ref().unwrap();
                         let (value_out, _) = vnet.forward(self_t, obj_t);
-                        let value_pred: Tensor<TrainBackend, 1> = value_out.squeeze_dim::<1>(1); // [B]
-                        let targets = Tensor::<TrainBackend, 1>::from_data(
-                            TensorData::new(mb_ret, [mb]),
+                        // value_out: [B, N_REWARD_TYPES]
+                        let targets = Tensor::<TrainBackend, 2>::from_data(
+                            TensorData::new(mb_ret_flat, [mb, N_REWARD_TYPES]),
                             &device,
                         );
                         let vloss =
-                            value_fn::huber_value_loss(value_pred, targets, PPO_HUBER_DELTA);
+                            value_fn::huber_value_loss(value_out, targets, PPO_HUBER_DELTA);
 
                         epoch_value_loss += f32::from(vloss.clone().into_scalar());
 
@@ -651,8 +786,10 @@ pub fn spawn_ppo_training_thread(
 
             // ── Phase 8: Checkpoint ──────────────────────────────────────
             if update_cycle % PPO_SAVE_INTERVAL == 0 {
-                save_all_checkpoints(&inner, &segments, &policy_path, &value_path,
-                    &policy_optim_path, &value_optim_path, &buffer_path);
+                save_all_checkpoints(&inner, &segments, update_cycle,
+                    &policy_path, &value_path,
+                    &policy_optim_path, &value_optim_path,
+                    &buffer_path, &step_counter_path);
             }
 
             // ── Phase 9: Diagnostics + TensorBoard ───────────────────────
@@ -669,13 +806,27 @@ pub fn spawn_ppo_training_thread(
             writer.add_scalar("train/policy_loss", avg_ploss, update_cycle);
             writer.add_scalar("train/value_loss", avg_vloss, update_cycle);
             writer.add_scalar("train/entropy", avg_ent, update_cycle);
-            // PPO-specific diagnostics.
             writer.add_scalar("train/frac_clipped", avg_clip, update_cycle);
             writer.add_scalar("train/mean_ratio", avg_ratio, update_cycle);
-            // Advantage statistics (from first epoch, before value net updates).
+            // Advantage statistics.
             writer.add_scalar("train/advantage_mean", first_epoch_adv_mean, update_cycle);
             writer.add_scalar("train/advantage_std", first_epoch_adv_std, update_cycle);
+            // Overall explained variance.
             writer.add_scalar("train/explained_variance", first_epoch_explained_var, update_cycle);
+            // Per-head explained variance and TD error.
+            for h in 0..N_REWARD_TYPES {
+                let rn = REWARD_TYPE_NAMES[h];
+                writer.add_scalar(
+                    &format!("value_head/{rn}/explained_variance"),
+                    first_epoch_head_ev[h],
+                    update_cycle,
+                );
+                writer.add_scalar(
+                    &format!("value_head/{rn}/mean_abs_td_error"),
+                    first_epoch_head_td[h],
+                    update_cycle,
+                );
+            }
             let policy_skipped = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
             writer.add_scalar("train/value_burnin", policy_skipped as u8 as f32, update_cycle);
             // Throughput.

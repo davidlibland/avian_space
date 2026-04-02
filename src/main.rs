@@ -20,10 +20,10 @@ mod pickups;
 mod ppo;
 mod rl_collection;
 mod rl_obs;
-mod value_fn;
 mod ship;
 mod starfield;
 mod utils;
+mod value_fn;
 mod weapons;
 
 #[cfg(test)]
@@ -226,7 +226,13 @@ fn spawn_asteroids(
 ) {
     if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {
         for field in system_data.astroid_fields.iter() {
-            build_asteroid_field(&mut commands, &mut meshes, &mut materials, field, &item_universe);
+            build_asteroid_field(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                field,
+                &item_universe,
+            );
         }
     }
 }
@@ -237,9 +243,16 @@ fn reset_nearby_planet(mut nearby: ResMut<NearbyPlanet>) {
 
 /// Runs during Flying state: boosts the player ship toward JUMP_SPEED, then triggers Traveling.
 fn accelerate_for_jump(
+    mut commands: Commands,
     mut ctx: ResMut<TravelContext>,
     mut player_q: Query<
-        (&Transform, &mut LinearVelocity, &mut MaxLinearSpeed, &Ship),
+        (
+            Entity,
+            &Transform,
+            &mut LinearVelocity,
+            &mut MaxLinearSpeed,
+            &Ship,
+        ),
         With<Player>,
     >,
     time: Res<Time>,
@@ -248,12 +261,19 @@ fn accelerate_for_jump(
     if ctx.phase != TravelPhase::Accelerating {
         return;
     }
-    let Ok((transform, mut vel, mut max_speed, ship)) = player_q.single_mut() else {
+    let Ok((entity, transform, mut vel, mut max_speed, ship)) = player_q.single_mut() else {
         return;
     };
-    // Save the normal cap on the first tick.
+    // Save the normal cap on the first tick and disable collisions.
     if ctx.saved_max_speed == 0.0 {
         ctx.saved_max_speed = ship.data.max_speed;
+        let density = 2.0;
+        let r = ship.data.radius;
+        let mass_val = density * std::f32::consts::PI * r * r;
+        let inertia_val = 0.5 * mass_val * r * r;
+        commands
+            .entity(entity)
+            .insert((Sensor, Mass(mass_val), AngularInertia(inertia_val)));
     }
 
     let forward = (transform.rotation * Vec3::Y).xy();
@@ -295,20 +315,27 @@ fn travel_system(
 
 /// Runs OnEnter(Flying): if we just completed a jump, restore max speed and set arrival velocity.
 fn set_arrival_velocity(
+    mut commands: Commands,
     mut ctx: ResMut<TravelContext>,
-    mut player_q: Query<(&Transform, &mut LinearVelocity, &mut MaxLinearSpeed), With<Player>>,
+    mut player_q: Query<
+        (Entity, &Transform, &mut LinearVelocity, &mut MaxLinearSpeed),
+        With<Player>,
+    >,
 ) {
     // Only act when returning from a jump (saved_max_speed was set by accelerate_for_jump).
     if ctx.saved_max_speed == 0.0 {
         return;
     }
-    let Ok((transform, mut vel, mut max_speed)) = player_q.single_mut() else {
+    let Ok((entity, transform, mut vel, mut max_speed)) = player_q.single_mut() else {
         return;
     };
     let normal_speed = ctx.saved_max_speed;
     max_speed.0 = normal_speed;
     vel.0 = (transform.rotation * Vec3::Y).xy() * normal_speed;
     ctx.saved_max_speed = 0.0; // clear so this doesn't re-run on planet launches
+    commands
+        .entity(entity)
+        .remove::<(Sensor, Mass, AngularInertia)>();
 }
 
 /// Sends [`MovementAction`] events based on keyboard input.
@@ -356,10 +383,10 @@ fn keyboard_input(
         }
     }
 
-    let left = keyboard_input.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
-    let right = keyboard_input.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
-    let up = keyboard_input.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
-    let down = keyboard_input.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
+    let left = keyboard_input.any_pressed([KeyCode::ArrowLeft]);
+    let right = keyboard_input.any_pressed([KeyCode::ArrowRight]);
+    let up = keyboard_input.any_pressed([KeyCode::ArrowUp]);
+    let down = keyboard_input.any_pressed([KeyCode::ArrowDown]);
 
     let horizontal = right as i8 - left as i8;
     let turn = horizontal as Scalar;

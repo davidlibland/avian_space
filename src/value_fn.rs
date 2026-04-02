@@ -1,44 +1,39 @@
 //! Value-function helpers for PPO training.
 //!
-//! Provides batched (detached) value inference, bootstrap recomputation,
-//! and the Huber value-function loss used by the PPO training loop.
+//! Provides batched (detached) multi-head value inference, bootstrap
+//! recomputation, and the Huber value-function loss.
 
 use burn::{
     prelude::*,
-    tensor::{
-        Tensor, TensorData,
-        backend::AutodiffBackend,
-    },
+    tensor::{Tensor, TensorData, backend::AutodiffBackend},
 };
 
-use crate::model::{
-    self, N_OBJECTS, OBJECT_INPUT_DIM, RLNet, SELF_INPUT_DIM,
-    TrainBackend,
-};
+use crate::consts::N_REWARD_TYPES;
+use crate::model::{self, N_OBJECTS, OBJECT_INPUT_DIM, RLNet, SELF_INPUT_DIM, TrainBackend};
 use crate::rl_collection::Segment;
 
 // Maximum steps to forward through the value net at once (avoid OOM).
 const VALUE_CHUNK_SIZE: usize = 2048;
 
 // ---------------------------------------------------------------------------
-// Batched value inference (detached — no gradient tape)
+// Batched multi-head value inference (detached — no gradient tape)
 // ---------------------------------------------------------------------------
 
-/// Run the value network on all observations and return scalar predictions.
+/// Run the value network on all observations and return per-head predictions.
 ///
 /// Uses `.valid()` to strip the autodiff wrapper so no gradient tape is built.
-/// The result is a plain `Vec<f32>` suitable for GAE computation.
+/// Returns `Vec<[f32; N_REWARD_TYPES]>` of length `total_steps`.
 pub fn batch_value_inference(
     value_net: &RLNet<TrainBackend>,
     self_flat: &[f32],
     obj_flat: &[f32],
     total_steps: usize,
     _device: &<TrainBackend as Backend>::Device,
-) -> Vec<f32> {
+) -> Vec<[f32; N_REWARD_TYPES]> {
     use burn::module::AutodiffModule;
 
-    let inner_net = value_net.clone().valid(); // RLNet<Wgpu>
-    let inner_device = Default::default();
+    let inner_net = value_net.clone().valid();
+    let inner_device: burn::backend::wgpu::WgpuDevice = Default::default();
     let mut values = Vec::with_capacity(total_steps);
 
     for chunk_start in (0..total_steps).step_by(VALUE_CHUNK_SIZE) {
@@ -59,11 +54,14 @@ pub fn batch_value_inference(
             &inner_device,
         );
 
-        let (value_out, _target_logits) = inner_net.forward(self_t, obj_t);
-        // value_out: [B, 1] → squeeze to [B]
-        let data = value_out.squeeze_dim::<1>(1).into_data();
-        let chunk_vals: Vec<f32> = data.to_vec().expect("f32 conversion");
-        values.extend_from_slice(&chunk_vals);
+        let (value_out, _) = inner_net.forward(self_t, obj_t);
+        // value_out: [B, N_REWARD_TYPES]
+        let flat: Vec<f32> = value_out.into_data().to_vec().expect("f32 conversion");
+        for row in flat.chunks_exact(N_REWARD_TYPES) {
+            let mut arr = [0.0_f32; N_REWARD_TYPES];
+            arr.copy_from_slice(row);
+            values.push(arr);
+        }
     }
 
     values
@@ -74,9 +72,7 @@ pub fn batch_value_inference(
 // ---------------------------------------------------------------------------
 
 /// For segments with `bootstrap_value == Some(_)` (truncated, not terminal),
-/// recompute V(s_last) using the value net on the last observation.
-///
-/// This replaces the placeholder `Some(0.0)` set by the game thread.
+/// recompute per-head V(s_last) using the value net on the last observation.
 pub fn recompute_bootstrap_values(
     segments: &mut [Segment],
     value_net: &RLNet<TrainBackend>,
@@ -85,11 +81,11 @@ pub fn recompute_bootstrap_values(
     use burn::module::AutodiffModule;
 
     let inner_net = value_net.clone().valid();
-    let inner_device = Default::default();
+    let inner_device: burn::backend::wgpu::WgpuDevice = Default::default();
 
     for seg in segments.iter_mut() {
         if seg.bootstrap_value.is_none() {
-            continue; // terminal — bootstrap stays at 0
+            continue; // terminal — bootstrap stays at None
         }
         if let Some(last_t) = seg.transitions.last() {
             let (s, o) = model::split_obs(&last_t.obs);
@@ -102,30 +98,31 @@ pub fn recompute_bootstrap_values(
                 &inner_device,
             );
             let (val, _) = inner_net.forward(self_t, obj_t);
-            // val is [1, 1] — flatten to scalar.
-            let v: f32 = val.squeeze_dim::<1>(1).into_scalar().into();
-            seg.bootstrap_value = Some(v);
+            // val: [1, N_REWARD_TYPES] → extract as array.
+            let flat: Vec<f32> = val.into_data().to_vec().expect("f32 conversion");
+            let mut bv = [0.0_f32; N_REWARD_TYPES];
+            bv.copy_from_slice(&flat[..N_REWARD_TYPES]);
+            seg.bootstrap_value = Some(bv);
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Value loss (Huber)
+// Value loss (Huber) — works on 2-D tensors for multi-head
 // ---------------------------------------------------------------------------
 
-/// Huber loss between predicted values and regression targets.
+/// Per-element Huber loss between predicted and target tensors, averaged.
 ///
-/// `delta` controls the transition from quadratic to linear loss.
+/// Works for any dimensionality — operates element-wise then takes the mean.
 pub fn huber_value_loss<B: AutodiffBackend>(
-    predictions: Tensor<B, 1>,
-    targets: Tensor<B, 1>,
+    predictions: Tensor<B, 2>,
+    targets: Tensor<B, 2>,
     delta: f32,
 ) -> Tensor<B, 1> {
     let diff = predictions - targets;
     let abs_diff = diff.clone().abs();
     let quadratic = diff.clone() * diff * 0.5;
     let linear = abs_diff.clone() * delta - 0.5 * delta * delta;
-    // mask: 1 where |diff| <= delta, 0 otherwise
     let mask = abs_diff.lower_equal_elem(delta).float();
     let loss = quadratic * mask.clone() + linear * (mask.ones_like() - mask);
     loss.mean()

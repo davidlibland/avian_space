@@ -114,6 +114,7 @@ fn collect_pickups(
                 rl_reward_writer.write(RLReward {
                     entity: ship_entity,
                     reward: weight,
+                    reward_type: crate::consts::REWARD_PICKUP,
                 });
             }
         }

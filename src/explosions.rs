@@ -5,15 +5,22 @@ use crate::PlayState;
 
 pub fn explosions_plugin(app: &mut App) {
     app.add_message::<TriggerExplosion>()
+        .add_message::<TriggerJumpFlash>()
         .add_systems(
             Update,
-            trigger_explosions.run_if(in_state(PlayState::Flying)),
+            (trigger_explosions, trigger_jump_flashes).run_if(in_state(PlayState::Flying)),
         )
         .add_systems(Update, tick_particles.run_if(in_state(PlayState::Flying)));
 }
 
 #[derive(Event, Message)]
 pub struct TriggerExplosion {
+    pub location: Vec2,
+    pub size: f32,
+}
+
+#[derive(Event, Message)]
+pub struct TriggerJumpFlash {
     pub location: Vec2,
     pub size: f32,
 }
@@ -53,6 +60,56 @@ fn trigger_explosions(
             let offset = Vec2::new(
                 rng.gen_range(-event.size * 0.3..event.size * 0.3),
                 rng.gen_range(-event.size * 0.3..event.size * 0.3),
+            );
+            let pos = event.location + offset;
+
+            commands.spawn((
+                DespawnOnExit(PlayState::Flying),
+                Particle {
+                    lifetime,
+                    max_lifetime: lifetime,
+                    velocity,
+                },
+                Mesh2d(meshes.add(Circle::new(size))),
+                MeshMaterial2d(materials.add(ColorMaterial::from_color(color))),
+                Transform::from_xyz(pos.x, pos.y, 1.0),
+            ));
+        }
+    }
+}
+
+fn trigger_jump_flashes(
+    mut commands: Commands,
+    mut reader: MessageReader<TriggerJumpFlash>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let mut rng = rand::thread_rng();
+
+    for event in reader.read() {
+        let particle_count = (event.size * 3.0) as usize;
+        let max_speed = event.size * 4.0;
+        let max_lifetime = 0.3 + event.size * 0.015;
+
+        for _ in 0..particle_count {
+            let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+            let speed: f32 = rng.gen_range(max_speed * 0.3..max_speed);
+            let velocity = Vec2::new(angle.cos(), angle.sin()) * speed;
+
+            let lifetime = rng.gen_range(max_lifetime * 0.4..max_lifetime);
+            let size = rng.gen_range(1.0..3.0) * (event.size / 20.0).clamp(0.5, 2.5);
+
+            // White-blue palette for hyperspace flash
+            let t: f32 = rng.gen_range(0.0..1.0);
+            let color = Color::srgb(
+                0.7 + 0.3 * t,
+                0.8 + 0.2 * t,
+                1.0,
+            );
+
+            let offset = Vec2::new(
+                rng.gen_range(-event.size * 0.2..event.size * 0.2),
+                rng.gen_range(-event.size * 0.2..event.size * 0.2),
             );
             let pos = event.location + offset;
 

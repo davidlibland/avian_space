@@ -67,18 +67,18 @@ sol:
   astroid_fields:
     -
       location: [500., 300.]
-      number: 10
-      radius: 300.
+      number: 40
+      radius: 1500.
   ships:
-    min: 15
-    max: 20
+    min: 25
+    max: 40
     types:
-      fed_patrol: 3
+      fed_patrol: 3.0
       fed_destroyer: 2.0
       fed_missile_cruiser: 1.0
-      shuttle: 0.5
-      hauler: 0.5
-      freighter: 0.5
+      shuttle: 1.5
+      hauler: 2.0
+      freighter: 1.0
       courier: 0.5
       asteroid_miner: 3.0
       rebel_fighter: 3.0        # occasional Rebel scout near the border

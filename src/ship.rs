@@ -13,6 +13,16 @@ use std::f32::consts::PI;
 #[derive(Resource)]
 struct PlayerDeathTimer(Timer);
 
+/// Half-life in seconds for the distressed flag's geometric decay.
+const DISTRESSED_HALF_LIFE_SECS: f32 = 3.0;
+
+/// Marks a ship that was recently damaged.  The `level` starts at 1.0 on each
+/// hit and decays geometrically toward 0 with half-life `DISTRESSED_HALF_LIFE_SECS`.
+#[derive(Component, Clone, Default)]
+pub struct Distressed {
+    pub level: f32,
+}
+
 /// Tracks the ratio of good (non-neutral) to neutral combat hits across all
 /// RL agents, used to compute the adaptive neutral-hit penalty.
 #[derive(Resource, Default)]
@@ -97,6 +107,22 @@ fn save_combat_stats_periodic(
     stats.save(&exp.combat_stats_path());
 }
 
+/// Geometrically decay the distressed level toward 0 each frame.
+fn tick_distressed(time: Res<Time>, mut query: Query<&mut Distressed>) {
+    let dt = time.delta_secs();
+    // decay = 0.5^(dt / half_life)
+    let decay = (0.5_f32).powf(dt / DISTRESSED_HALF_LIFE_SECS);
+    for mut d in &mut query {
+        if d.level > 0.0 {
+            d.level *= decay;
+            // Snap to zero to avoid denormals.
+            if d.level < 1e-4 {
+                d.level = 0.0;
+            }
+        }
+    }
+}
+
 pub fn ship_plugin(app: &mut App) {
     app.init_resource::<CombatHitStats>()
         .insert_resource(CombatStatsSaveTimer(Timer::from_seconds(
@@ -114,7 +140,8 @@ pub fn ship_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (apply_damage, sync_hostilites, score_hits).run_if(in_state(PlayState::Flying)),
+            (apply_damage, sync_hostilites, score_hits, tick_distressed)
+                .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(Update, save_combat_stats_periodic)
         .add_systems(Update, tick_player_death_timer)
@@ -452,6 +479,7 @@ impl Ship {
 pub struct ShipBundle {
     ship: Ship,
     faction: ShipHostility,
+    distressed: Distressed,
     sprite: Sprite,
     transform: Transform,
     body: RigidBody,
@@ -496,8 +524,7 @@ pub fn ship_bundle(
     ShipBundle {
         faction: ShipHostility(ship.enemies.clone()),
         ship,
-        // mesh: Mesh2d(meshes.add(build_ship_mesh())),
-        // material: MeshMaterial2d(materials.add(Color::srgb(0.2, 0.7, 0.9))),
+        distressed: Distressed::default(),
         sprite: Sprite::from_image(asset_server.load(ship_data.sprite_path.to_string())),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
@@ -532,6 +559,7 @@ pub fn ship_bundle_from_pilot(
     ship.weapon_systems = WeaponSystems::build(weapon_loadout, item_universe);
     ShipBundle {
         faction: ShipHostility(ship.enemies.clone()),
+        distressed: Distressed::default(),
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
         max_angular_speed: MaxAngularSpeed(4.0 * PI),
@@ -602,7 +630,7 @@ fn ship_movement(
 fn apply_damage(
     mut commands: Commands,
     mut reader: MessageReader<DamageShip>,
-    mut ships: Query<(&mut Ship, &Transform)>,
+    mut ships: Query<(&mut Ship, &Transform, &mut Distressed)>,
     ai_ships: Query<(), With<crate::ai_ships::AIShip>>,
     rl_agents: Query<&RLAgent>,
     player_ships: Query<(), With<Player>>,
@@ -614,10 +642,11 @@ fn apply_damage(
     use rand::Rng;
     let mut rng = rand::thread_rng();
     for event in reader.read() {
-        let Ok((mut ship, transform)) = ships.get_mut(event.entity) else {
+        let Ok((mut ship, transform, mut distressed)) = ships.get_mut(event.entity) else {
             continue;
         };
         ship.health = (ship.health - event.damage as i32).max(0);
+        distressed.level = 1.0;
         if ship.health == 0 {
             let location = transform.translation.xy();
             if player_ships.contains(event.entity) {
@@ -799,6 +828,7 @@ fn score_hits(
                     rl_reward_writer.write(RLReward {
                         entity: *source,
                         reward: r * personality_scale,
+                        reward_type: crate::consts::REWARD_WEAPON_HIT,
                     });
                 }
             }
@@ -811,6 +841,7 @@ fn score_hits(
                     rl_reward_writer.write(RLReward {
                         entity: *source,
                         reward,
+                        reward_type: crate::consts::REWARD_WEAPON_HIT,
                     });
                 }
             }
