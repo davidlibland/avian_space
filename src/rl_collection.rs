@@ -1036,6 +1036,70 @@ fn choose_target_slot(
     }
 }
 
+/// Compute the per-step goal-target reward from the flat observation vector.
+///
+/// Returns a non-negative reward, gated by health and distress, that rewards
+/// ships for targeting the right entity for their personality.
+fn compute_goal_target_reward(personality: &Personality, obs: &[f32]) -> f32 {
+    use rl_obs::*;
+
+    // Self-state indices.
+    let health_frac = obs[0];
+    let cargo_frac = obs[5];
+    let distressed = obs[8];
+
+    // Gating: must be healthy and calm.
+    if health_frac < 0.3 || distressed > 0.5 {
+        return 0.0;
+    }
+    let gate = health_frac * (1.0 - distressed);
+
+    // Find the current-target slot.
+    let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
+    let n = model::N_OBJECTS;
+
+    let mut raw = 0.0_f32;
+    for i in 0..n {
+        let base = slot_base(i);
+        if obs[base + SLOT_IS_PRESENT] < 0.5 {
+            continue;
+        }
+        if obs[base + SLOT_IS_CURRENT_TARGET] < 0.5 {
+            continue;
+        }
+
+        let is_ship = obs[base + SLOT_TYPE_ONEHOT] > 0.5;
+        let is_asteroid = obs[base + SLOT_TYPE_ONEHOT + 1] > 0.5;
+        let is_planet = obs[base + SLOT_TYPE_ONEHOT + 2] > 0.5;
+
+        let is_hostile_val = obs[base + SLOT_TYPE_SPECIFIC + 4];
+        let should_engage_val = obs[base + SLOT_TYPE_SPECIFIC + 5];
+
+        raw = match personality {
+            Personality::Fighter => {
+                if is_ship && (should_engage_val > 0.5 || is_hostile_val > 0.5) {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Personality::Miner => {
+                if cargo_frac > 0.75 {
+                    if is_planet { 1.0 } else { 0.0 }
+                } else {
+                    if is_asteroid { 1.0 } else { 0.0 }
+                }
+            }
+            Personality::Trader => {
+                if is_planet { 1.0 } else { 0.0 }
+            }
+        };
+        break; // only one slot is the current target
+    }
+
+    raw * gate * crate::consts::GOAL_TARGET_STEP_WEIGHT
+}
+
 /// Store the previous (obs, action, reward) transition for each agent, update
 /// agent state with the new observation and action, and flush full segments.
 ///
@@ -1158,6 +1222,8 @@ fn store_obs_actions(
                 Personality::Miner | Personality::Trader => crate::consts::HEALTH_STEP_MINER_TRADER,
             };
             rewards[crate::consts::REWARD_HEALTH] += health_reward * personality_health_weight;
+            rewards[crate::consts::REWARD_GOAL_TARGET] +=
+                compute_goal_target_reward(&agent.personality, &last_obs);
 
             let transition = Transition {
                 obs: last_obs,

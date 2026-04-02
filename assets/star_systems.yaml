@@ -74,8 +74,8 @@ sol:
     max: 40
     types:
       fed_patrol: 3.0
-      fed_destroyer: 2.0
-      fed_missile_cruiser: 1.0
+      fed_destroyer: 1.0
+      fed_missile_cruiser: 0.5
       shuttle: 1.5
       hauler: 2.0
       freighter: 1.0

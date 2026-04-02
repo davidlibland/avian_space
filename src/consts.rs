@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 
 /// Number of distinct reward channels tracked separately.
-pub const N_REWARD_TYPES: usize = 5;
+pub const N_REWARD_TYPES: usize = 6;
 
 /// Index for planet-landing rewards.
 pub const REWARD_LANDING: usize = 0;
@@ -21,16 +21,18 @@ pub const REWARD_WEAPON_HIT: usize = 2;
 pub const REWARD_PICKUP: usize = 3;
 /// Index for per-step health rewards.
 pub const REWARD_HEALTH: usize = 4;
+/// Index for per-step goal-target rewards (targeting the right entity).
+pub const REWARD_GOAL_TARGET: usize = 5;
 
 /// Human-readable names for TensorBoard logging, indexed by reward type.
 pub const REWARD_TYPE_NAMES: [&str; N_REWARD_TYPES] =
-    ["landing", "cargo_sold", "weapon_hit", "pickup", "health"];
+    ["landing", "cargo_sold", "weapon_hit", "pickup", "health", "goal_target"];
 
 /// Per-type weights applied when summing head rewards into the total reward
 /// used for the policy advantage.  Tune these to control the relative
 /// importance of each reward channel.
-/// Indexed by: [LANDING, CARGO_SOLD, WEAPON_HIT, PICKUP, HEALTH].
-pub const REWARD_TYPE_WEIGHTS: [f32; N_REWARD_TYPES] = [1.0, 1.0, 1.0, 1.0, 0.1];
+/// Indexed by: [LANDING, CARGO_SOLD, WEAPON_HIT, PICKUP, HEALTH, GOAL_TARGET].
+pub const REWARD_TYPE_WEIGHTS: [f32; N_REWARD_TYPES] = [1.0, 1.0, 1.0, 1.0, 0.1, 0.1];
 
 // ---------------------------------------------------------------------------
 // Combat: hit on a ship
@@ -115,3 +117,11 @@ pub const PICKUP_REWARD_TRADER: f32 = 0.1;
 pub const HEALTH_STEP_FIGHTER: f32 = 0.03;
 /// Per-step health fraction weight (Miner / Trader). Multiplied by `health / max_health`.
 pub const HEALTH_STEP_MINER_TRADER: f32 = 0.05;
+
+// ---------------------------------------------------------------------------
+// Per-step goal-target reward
+// ---------------------------------------------------------------------------
+
+/// Per-step weight for the goal-target reward.
+/// Gated by `health_frac >= 0.3` and `distressed <= 0.5`, scaled by both.
+pub const GOAL_TARGET_STEP_WEIGHT: f32 = 0.05;

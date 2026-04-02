@@ -34,11 +34,14 @@ use crate::value_fn;
 
 const PPO_GAMMA: f32 = 0.99;
 const PPO_LAMBDA: f32 = 0.95;
-const PPO_CLIP_EPS: f32 = 0.2;
+const PPO_CLIP_EPS: f32 = 0.1;
 const PPO_ENTROPY_COEFF: f32 = 0.01;
 const PPO_POLICY_LR: f64 = 3e-4;
 const PPO_VALUE_LR: f64 = 1e-3;
-const PPO_EPOCHS: usize = 4;
+/// Number of epochs for policy updates (fewer to limit policy drift).
+const PPO_POLICY_EPOCHS: usize = 2;
+/// Number of epochs for value function updates (more for better regression).
+const PPO_VALUE_EPOCHS: usize = 4;
 const PPO_MINI_BATCH_SIZE: usize = 256;
 /// Minimum segments before first update (~2048 steps at 128 steps/seg).
 const PPO_MIN_SEGMENTS: usize = 16;
@@ -241,7 +244,10 @@ pub fn ppo_clipped_loss<B: AutodiffBackend>(
     let min_surr: Tensor<B, 1> = stacked.min_dim(1).squeeze_dim::<1>(1); // [B]
 
     let loss = -(min_surr.mean());
-    let diag = PpoLossDiag { mean_ratio, frac_clipped };
+    let diag = PpoLossDiag {
+        mean_ratio,
+        frac_clipped,
+    };
     (loss, diag)
 }
 
@@ -326,8 +332,10 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
 
         let mut pers_buf = [0u8; 1];
         f.read_exact(&mut pers_buf).ok()?;
-        let personality =
-            personalities_map.get(pers_buf[0] as usize).cloned().unwrap_or(crate::ship::Personality::Fighter);
+        let personality = personalities_map
+            .get(pers_buf[0] as usize)
+            .cloned()
+            .unwrap_or(crate::ship::Personality::Fighter);
 
         let mut transitions = Vec::with_capacity(n_trans);
         let mut action_buf = [0u8; 5];
@@ -354,7 +362,13 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
 
             transitions.push(crate::rl_collection::Transition {
                 obs,
-                action: (action_buf[0], action_buf[1], action_buf[2], action_buf[3], action_buf[4]),
+                action: (
+                    action_buf[0],
+                    action_buf[1],
+                    action_buf[2],
+                    action_buf[3],
+                    action_buf[4],
+                ),
                 rewards,
                 done,
                 log_prob,
@@ -480,10 +494,12 @@ pub fn spawn_ppo_training_thread(
         writer.add_scalar("hparams/entropy_coeff", PPO_ENTROPY_COEFF, 0);
         writer.add_scalar("hparams/policy_lr", PPO_POLICY_LR as f32, 0);
         writer.add_scalar("hparams/value_lr", PPO_VALUE_LR as f32, 0);
-        writer.add_scalar("hparams/epochs", PPO_EPOCHS as f32, 0);
+        writer.add_scalar("hparams/policy_epochs", PPO_POLICY_EPOCHS as f32, 0);
+        writer.add_scalar("hparams/value_epochs", PPO_VALUE_EPOCHS as f32, 0);
         writer.add_scalar("hparams/mini_batch_size", PPO_MINI_BATCH_SIZE as f32, 0);
 
         println!("[ppo] Training thread started, waiting for segments...");
+        let mut t_wait_start = Instant::now();
 
         loop {
             // ── Phase 1: Collect segments ─────────────────────────────────
@@ -494,10 +510,17 @@ pub fn spawn_ppo_training_thread(
                     Err(mpsc::RecvTimeoutError::Timeout) => continue,
                     Err(mpsc::RecvTimeoutError::Disconnected) => {
                         println!("[ppo] Channel disconnected, saving and exiting.");
-                        save_all_checkpoints(&inner, &segments, update_cycle,
-                            &policy_path, &value_path,
-                            &policy_optim_path, &value_optim_path,
-                            &buffer_path, &step_counter_path);
+                        save_all_checkpoints(
+                            &inner,
+                            &segments,
+                            update_cycle,
+                            &policy_path,
+                            &value_path,
+                            &policy_optim_path,
+                            &value_optim_path,
+                            &buffer_path,
+                            &step_counter_path,
+                        );
                         break;
                     }
                 }
@@ -510,6 +533,7 @@ pub fn spawn_ppo_training_thread(
                 continue;
             }
 
+            let wait_secs = t_wait_start.elapsed().as_secs_f32();
             let t0 = Instant::now();
             let n_segments = segments.len();
 
@@ -560,7 +584,11 @@ pub fn spawn_ppo_training_thread(
             writer.add_scalar("reward/mean_per_step", mean_reward_per_step, update_cycle);
             writer.add_scalar(
                 "reward/mean_segment_return",
-                if n_segments > 0 { total_reward / n_segments as f32 } else { 0.0 },
+                if n_segments > 0 {
+                    total_reward / n_segments as f32
+                } else {
+                    0.0
+                },
                 update_cycle,
             );
 
@@ -589,7 +617,7 @@ pub fn spawn_ppo_training_thread(
             let mut first_epoch_head_ev = [0.0_f32; N_REWARD_TYPES];
             let mut first_epoch_head_td = [0.0_f32; N_REWARD_TYPES];
 
-            for epoch in 0..PPO_EPOCHS {
+            for epoch in 0..PPO_VALUE_EPOCHS {
                 // 5a. Fresh multi-head value estimates (detached).
                 let values = value_fn::batch_value_inference(
                     inner.value_net.as_ref().unwrap(),
@@ -715,8 +743,8 @@ pub fn spawn_ppo_training_thread(
                         &device,
                     );
 
-                    // ── Policy update (skipped during value burn-in) ──────
-                    if !skip_policy {
+                    // ── Policy update (skipped during burn-in or after policy epochs) ──
+                    if !skip_policy && epoch < PPO_POLICY_EPOCHS {
                         let policy_grads = {
                             let net = inner.policy_net.as_ref().unwrap();
                             let (action_logits, target_logits) =
@@ -729,7 +757,11 @@ pub fn spawn_ppo_training_thread(
                             );
 
                             let (policy_loss, diag) = ppo_clipped_loss(
-                                new_lp, &mb_old_lp, &mb_adv, PPO_CLIP_EPS, &device,
+                                new_lp,
+                                &mb_old_lp,
+                                &mb_adv,
+                                PPO_CLIP_EPS,
+                                &device,
                             );
                             let entropy_bonus = -(entropy.mean());
                             let total_policy_loss =
@@ -757,8 +789,7 @@ pub fn spawn_ppo_training_thread(
                             TensorData::new(mb_ret_flat, [mb, N_REWARD_TYPES]),
                             &device,
                         );
-                        let vloss =
-                            value_fn::huber_value_loss(value_out, targets, PPO_HUBER_DELTA);
+                        let vloss = value_fn::huber_value_loss(value_out, targets, PPO_HUBER_DELTA);
 
                         epoch_value_loss += f32::from(vloss.clone().into_scalar());
 
@@ -786,10 +817,17 @@ pub fn spawn_ppo_training_thread(
 
             // ── Phase 8: Checkpoint ──────────────────────────────────────
             if update_cycle % PPO_SAVE_INTERVAL == 0 {
-                save_all_checkpoints(&inner, &segments, update_cycle,
-                    &policy_path, &value_path,
-                    &policy_optim_path, &value_optim_path,
-                    &buffer_path, &step_counter_path);
+                save_all_checkpoints(
+                    &inner,
+                    &segments,
+                    update_cycle,
+                    &policy_path,
+                    &value_path,
+                    &policy_optim_path,
+                    &value_optim_path,
+                    &buffer_path,
+                    &step_counter_path,
+                );
             }
 
             // ── Phase 9: Diagnostics + TensorBoard ───────────────────────
@@ -812,7 +850,11 @@ pub fn spawn_ppo_training_thread(
             writer.add_scalar("train/advantage_mean", first_epoch_adv_mean, update_cycle);
             writer.add_scalar("train/advantage_std", first_epoch_adv_std, update_cycle);
             // Overall explained variance.
-            writer.add_scalar("train/explained_variance", first_epoch_explained_var, update_cycle);
+            writer.add_scalar(
+                "train/explained_variance",
+                first_epoch_explained_var,
+                update_cycle,
+            );
             // Per-head explained variance and TD error.
             for h in 0..N_REWARD_TYPES {
                 let rn = REWARD_TYPE_NAMES[h];
@@ -828,10 +870,31 @@ pub fn spawn_ppo_training_thread(
                 );
             }
             let policy_skipped = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
-            writer.add_scalar("train/value_burnin", policy_skipped as u8 as f32, update_cycle);
-            // Throughput.
-            writer.add_scalar("throughput/steps_per_sec", steps_per_sec, update_cycle);
+            writer.add_scalar(
+                "train/value_burnin",
+                policy_skipped as u8 as f32,
+                update_cycle,
+            );
+            // Throughput: training vs data collection.
+            let train_secs = elapsed.as_secs_f32();
+            let cycle_secs = wait_secs + train_secs;
+            writer.add_scalar("throughput/train_steps_per_sec", steps_per_sec, update_cycle);
+            writer.add_scalar("throughput/train_secs", train_secs, update_cycle);
+            writer.add_scalar("throughput/wait_secs", wait_secs, update_cycle);
+            writer.add_scalar("throughput/cycle_secs", cycle_secs, update_cycle);
             writer.add_scalar("throughput/segments", n_segments as f32, update_cycle);
+            // Data generation rate: steps collected per second of wall time spent waiting.
+            let data_steps_per_sec = if wait_secs > 0.01 {
+                total_steps as f32 / wait_secs
+            } else {
+                0.0
+            };
+            writer.add_scalar("throughput/data_steps_per_sec", data_steps_per_sec, update_cycle);
+            writer.add_scalar(
+                "throughput/wait_fraction",
+                wait_secs / cycle_secs.max(1e-6),
+                update_cycle,
+            );
             writer.flush();
 
             let burnin_tag = if policy_skipped { " [BURNIN]" } else { "" };
@@ -839,9 +902,11 @@ pub fn spawn_ppo_training_thread(
                 "[ppo] cycle={update_cycle:>4}  segs={n_segments:>3}  steps={total_steps:>5}  \
                  p_loss={avg_ploss:.4}  v_loss={avg_vloss:.4}  entropy={avg_ent:.3}  \
                  clip={avg_clip:.3}  expl_var={first_epoch_explained_var:.3}  \
-                 time={:.1}s{burnin_tag}",
-                elapsed.as_secs_f32()
+                 wait={wait_secs:.1}s  train={train_secs:.1}s{burnin_tag}",
             );
+
+            // Reset wait timer for next cycle.
+            t_wait_start = Instant::now();
         }
     })
 }
