@@ -49,7 +49,7 @@ fn spawn_pickups(
                 commodity: drop.commodity.clone(),
                 quantity: drop.quantity,
             },
-            Transform::from_translation(drop.location.extend(0.0)),
+            Transform::from_translation(drop.location.extend(-0.5)),
             RigidBody::Dynamic,
             MassPropertiesBundle::from_shape(&Collider::circle(PICKUP_RADIUS), 1.0),
             LinearVelocity(random_velocity(30.0)),
@@ -104,11 +104,12 @@ fn collect_pickups(
             *ship.cargo.entry(pickup.commodity.clone()).or_insert(0) += qty;
             // Flat pickup reward for RLAgent ships, personality-weighted.
             if let Ok(agent) = rl_agents.get(ship_entity) {
+                use crate::consts::*;
                 use crate::ship::Personality;
                 let weight = match agent.personality {
-                    Personality::Fighter => 0.1,
-                    Personality::Miner => 0.8,
-                    Personality::Trader => 0.1,
+                    Personality::Fighter => PICKUP_REWARD_FIGHTER,
+                    Personality::Miner => PICKUP_REWARD_MINER,
+                    Personality::Trader => PICKUP_REWARD_TRADER,
                 };
                 rl_reward_writer.write(RLReward {
                     entity: ship_entity,

@@ -52,6 +52,10 @@ pub struct ItemUniverse {
     /// Computed as `sum(weight_i * avg_price_i) / total_weight * E[qty]`.
     #[serde(skip)]
     pub asteroid_field_expected_value: HashMap<String, Vec<f64>>,
+    /// Per-ship-type credit scale: cargo_space * avg_commodity_value + max ammo refill cost.
+    /// Used to normalise credit observations and cargo-sale rewards.
+    #[serde(skip)]
+    pub ship_credit_scale: HashMap<String, f32>,
 }
 
 impl ItemUniverse {
@@ -257,6 +261,54 @@ impl ItemUniverse {
                 .insert(system_name.clone(), field_values);
         }
     }
+
+    /// Compute per-ship-type credit scale.
+    ///
+    /// `credit_scale = cargo_space * avg_commodity_value
+    ///                + max_ammo_fill_cost`
+    ///
+    /// where `max_ammo_fill_cost` is the cost of filling the ship's remaining
+    /// item space with the most expensive ammo among its base weapons.
+    fn compute_ship_credit_scales(&mut self) {
+        let avg_commodity_value: f64 = if self.global_average_price.is_empty() {
+            1.0
+        } else {
+            let sum: f64 = self.global_average_price.values().sum();
+            sum / self.global_average_price.len() as f64
+        };
+
+        for (ship_type, ship_data) in &self.ships {
+            let cargo_value = ship_data.cargo_space as f64 * avg_commodity_value;
+
+            // Find the most expensive ammo per item-space unit among this ship's weapons.
+            let max_ammo_cost_per_space: f64 = ship_data
+                .base_weapons
+                .keys()
+                .filter_map(|wt| self.outfitter_items.get(wt))
+                .filter_map(|item| match item {
+                    OutfitterItem::SecondaryWeapon {
+                        ammo_price,
+                        ammo_space,
+                        ..
+                    } => Some(*ammo_price as f64 / (*ammo_space).max(1) as f64),
+                    _ => None,
+                })
+                .fold(0.0_f64, f64::max);
+
+            // Remaining item space after base weapons are mounted.
+            let consumed: i32 = WeaponSystems::build(&ship_data.base_weapons, self)
+                .iter_all()
+                .map(|(_, s)| s.space_consumed())
+                .sum();
+            let remaining_item_space =
+                (ship_data.item_space as i32 - consumed).max(0) as f64;
+
+            let ammo_fill_cost = remaining_item_space * max_ammo_cost_per_space;
+
+            let scale = (cargo_value + ammo_fill_cost).max(1.0) as f32;
+            self.ship_credit_scale.insert(ship_type.clone(), scale);
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -351,6 +403,7 @@ pub fn item_universe_plugin(app: &mut App) {
     item_universe.compute_trade_maps();
     item_universe.compute_planet_ammo();
     item_universe.compute_asteroid_values();
+    item_universe.compute_ship_credit_scales();
     item_universe.validate();
     app.insert_resource::<ItemUniverse>(item_universe);
 }

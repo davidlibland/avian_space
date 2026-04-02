@@ -228,7 +228,7 @@ pub fn weapon_fire(
             CollisionLayers::new(GameLayer::Weapon, [GameLayer::Asteroid, GameLayer::Ship]),
             RigidBody::Dynamic,
             LinearVelocity(vel),
-            Transform::from_translation(tip).with_rotation(ship_transform.rotation),
+            Transform::from_translation(tip.xy().extend(-0.3)).with_rotation(ship_transform.rotation),
             Sprite {
                 color: Color::srgb(r, g, b),
                 custom_size: Some(Vec2::new(3.0, 12.0)),

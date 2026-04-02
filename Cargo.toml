@@ -12,5 +12,6 @@ rand = "0.8.0"
 serde = {version="1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
 burn = { version = "0.20", default-features = false, features = ["wgpu", "ndarray", "std", "train", "autodiff"] }
+tensorboard-rs = "0.5"
 # Force naga 26 to compile with termcolor to fix WriteColor trait error
 naga = { version = "=26.0.0", features = ["termcolor", "wgsl-in"] }

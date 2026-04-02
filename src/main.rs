@@ -13,6 +13,7 @@ mod planet_ui;
 mod planets;
 use planets::planets_plugin;
 mod ai_ships;
+mod consts;
 mod gae;
 mod model;
 mod pickups;
@@ -225,7 +226,7 @@ fn spawn_asteroids(
 ) {
     if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {
         for field in system_data.astroid_fields.iter() {
-            build_asteroid_field(&mut commands, &mut meshes, &mut materials, field);
+            build_asteroid_field(&mut commands, &mut meshes, &mut materials, field, &item_universe);
         }
     }
 }

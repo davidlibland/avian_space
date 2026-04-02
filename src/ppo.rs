@@ -8,6 +8,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use tensorboard_rs::summary_writer::SummaryWriter;
+
 use burn::{
     optim::{GradientsParams, Optimizer},
     prelude::*,
@@ -42,6 +44,9 @@ const PPO_MIN_SEGMENTS: usize = 16;
 const PPO_WEIGHT_SYNC_INTERVAL: usize = 1;
 const PPO_SAVE_INTERVAL: usize = 10;
 const PPO_HUBER_DELTA: f32 = 1.0;
+/// Skip policy updates when explained variance is below this threshold,
+/// allowing the value function to burn in before the policy starts changing.
+const PPO_VALUE_BURNIN_EV_THRESHOLD: f32 = 0.8;
 
 // ---------------------------------------------------------------------------
 // Batch data structures
@@ -178,21 +183,38 @@ pub fn compute_log_probs_and_entropy<B: Backend>(
 // PPO clipped loss
 // ---------------------------------------------------------------------------
 
+/// Diagnostics extracted from the PPO clipped loss computation.
+pub struct PpoLossDiag {
+    pub mean_ratio: f32,
+    pub frac_clipped: f32,
+}
+
 /// Compute the PPO clipped surrogate loss (scalar, ready for `.backward()`).
 ///
-/// Returns `loss` such that minimizing it maximizes the clipped objective.
+/// Returns `(loss, diagnostics)`.
 pub fn ppo_clipped_loss<B: AutodiffBackend>(
     new_log_probs: Tensor<B, 1>,
     old_log_probs: &[f32],
     advantages: &[f32],
     clip_eps: f32,
     device: &B::Device,
-) -> Tensor<B, 1> {
+) -> (Tensor<B, 1>, PpoLossDiag) {
     let b = old_log_probs.len();
     let old_lp = Tensor::<B, 1>::from_data(TensorData::new(old_log_probs.to_vec(), [b]), device);
     let adv = Tensor::<B, 1>::from_data(TensorData::new(advantages.to_vec(), [b]), device);
 
     let ratio = (new_log_probs - old_lp).exp();
+
+    // Extract ratio stats before further computation consumes it.
+    let ratio_data: Vec<f32> = ratio.clone().into_data().to_vec().expect("f32 conversion");
+    let n = ratio_data.len() as f32;
+    let mean_ratio = ratio_data.iter().sum::<f32>() / n;
+    let frac_clipped = ratio_data
+        .iter()
+        .filter(|&&r| r < 1.0 - clip_eps || r > 1.0 + clip_eps)
+        .count() as f32
+        / n;
+
     let surr1 = ratio.clone() * adv.clone();
     let surr2 = ratio.clamp(1.0 - clip_eps, 1.0 + clip_eps) * adv;
 
@@ -200,8 +222,9 @@ pub fn ppo_clipped_loss<B: AutodiffBackend>(
     let stacked = Tensor::stack::<2>(vec![surr1, surr2], 1); // [B, 2]
     let min_surr: Tensor<B, 1> = stacked.min_dim(1).squeeze_dim::<1>(1); // [B]
 
-    // Negate because we minimize the loss but want to maximize the objective.
-    -(min_surr.mean())
+    let loss = -(min_surr.mean());
+    let diag = PpoLossDiag { mean_ratio, frac_clipped };
+    (loss, diag)
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +401,20 @@ pub fn spawn_ppo_training_thread(
         };
         let mut rng = thread_rng();
 
+        // TensorBoard writer — logs go to the experiment run directory.
+        let tb_dir = format!("{}/tb", experiment.run_dir);
+        std::fs::create_dir_all(&tb_dir).ok();
+        let mut writer = SummaryWriter::new(&tb_dir);
+        // Log hyperparameters once.
+        writer.add_scalar("hparams/gamma", PPO_GAMMA, 0);
+        writer.add_scalar("hparams/lambda", PPO_LAMBDA, 0);
+        writer.add_scalar("hparams/clip_eps", PPO_CLIP_EPS, 0);
+        writer.add_scalar("hparams/entropy_coeff", PPO_ENTROPY_COEFF, 0);
+        writer.add_scalar("hparams/policy_lr", PPO_POLICY_LR as f32, 0);
+        writer.add_scalar("hparams/value_lr", PPO_VALUE_LR as f32, 0);
+        writer.add_scalar("hparams/epochs", PPO_EPOCHS as f32, 0);
+        writer.add_scalar("hparams/mini_batch_size", PPO_MINI_BATCH_SIZE as f32, 0);
+
         println!("[ppo] Training thread started, waiting for segments...");
 
         loop {
@@ -406,6 +443,32 @@ pub fn spawn_ppo_training_thread(
             let t0 = Instant::now();
             let n_segments = segments.len();
 
+            // ── Rollout metrics (before flattening) ──────────────────────
+            let mut total_reward = 0.0_f32;
+            let mut total_traj_steps = 0_usize;
+            for seg in &segments {
+                let seg_reward: f32 = seg.transitions.iter().map(|t| t.reward).sum();
+                total_reward += seg_reward;
+                total_traj_steps += seg.transitions.len();
+                writer.add_scalar(
+                    "reward/trajectory_length",
+                    seg.transitions.len() as f32,
+                    update_cycle,
+                );
+            }
+            let mean_reward_per_step = if total_traj_steps > 0 {
+                total_reward / total_traj_steps as f32
+            } else {
+                0.0
+            };
+            let mean_segment_return = if n_segments > 0 {
+                total_reward / n_segments as f32
+            } else {
+                0.0
+            };
+            writer.add_scalar("reward/mean_per_step", mean_reward_per_step, update_cycle);
+            writer.add_scalar("reward/mean_segment_return", mean_segment_return, update_cycle);
+
             // ── Phase 2: Recompute bootstrap values ──────────────────────
             value_fn::recompute_bootstrap_values(
                 &mut segments,
@@ -423,9 +486,16 @@ pub fn spawn_ppo_training_thread(
             let mut epoch_policy_loss = 0.0_f32;
             let mut epoch_value_loss = 0.0_f32;
             let mut epoch_entropy = 0.0_f32;
+            let mut epoch_frac_clipped = 0.0_f32;
+            let mut epoch_mean_ratio = 0.0_f32;
             let mut total_mini_batches = 0_usize;
+            // Track advantage and explained variance from the first epoch only
+            // (before the value net updates change the landscape).
+            let mut first_epoch_adv_mean = 0.0_f32;
+            let mut first_epoch_adv_std = 0.0_f32;
+            let mut first_epoch_explained_var = 0.0_f32;
 
-            for _epoch in 0..PPO_EPOCHS {
+            for epoch in 0..PPO_EPOCHS {
                 // 5a. Fresh value estimates (detached).
                 let values = value_fn::batch_value_inference(
                     inner.value_net.as_ref().unwrap(),
@@ -446,17 +516,29 @@ pub fn spawn_ppo_training_thread(
                 );
 
                 // 5c. Normalize advantages.
-                let adv_mean: f32 = advantages.iter().sum::<f32>() / advantages.len() as f32;
-                let adv_var: f32 = advantages
-                    .iter()
-                    .map(|a| (a - adv_mean).powi(2))
-                    .sum::<f32>()
-                    / advantages.len() as f32;
+                let n = advantages.len() as f32;
+                let adv_mean: f32 = advantages.iter().sum::<f32>() / n;
+                let adv_var: f32 =
+                    advantages.iter().map(|a| (a - adv_mean).powi(2)).sum::<f32>() / n;
                 let adv_std = adv_var.sqrt();
                 let norm_advantages: Vec<f32> = advantages
                     .iter()
                     .map(|a| (a - adv_mean) / (adv_std + 1e-8))
                     .collect();
+
+                // Explained variance: 1 - Var(returns - V) / Var(returns)
+                if epoch == 0 {
+                    first_epoch_adv_mean = adv_mean;
+                    first_epoch_adv_std = adv_std;
+                    let return_mean: f32 = returns.iter().sum::<f32>() / n;
+                    let var_returns: f32 =
+                        returns.iter().map(|r| (r - return_mean).powi(2)).sum::<f32>() / n;
+                    let var_residuals: f32 = advantages.iter().map(|a| a.powi(2)).sum::<f32>() / n;
+                    first_epoch_explained_var = 1.0 - var_residuals / (var_returns + 1e-8);
+                }
+
+                // Skip policy updates until the value function is accurate enough.
+                let skip_policy = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
 
                 // 5d. Shuffle indices for mini-batching.
                 let mut indices: Vec<usize> = (0..total_steps).collect();
@@ -498,33 +580,38 @@ pub fn spawn_ppo_training_thread(
                         &device,
                     );
 
-                    // ── Policy update ─────────────────────────────────────
-                    let policy_grads = {
-                        let net = inner.policy_net.as_ref().unwrap();
-                        let (action_logits, target_logits) =
-                            net.forward(self_t.clone(), obj_t.clone());
-                        let (new_lp, entropy) = compute_log_probs_and_entropy(
-                            action_logits,
-                            target_logits,
-                            &mb_actions,
-                            &device,
-                        );
+                    // ── Policy update (skipped during value burn-in) ──────
+                    if !skip_policy {
+                        let policy_grads = {
+                            let net = inner.policy_net.as_ref().unwrap();
+                            let (action_logits, target_logits) =
+                                net.forward(self_t.clone(), obj_t.clone());
+                            let (new_lp, entropy) = compute_log_probs_and_entropy(
+                                action_logits,
+                                target_logits,
+                                &mb_actions,
+                                &device,
+                            );
 
-                        let policy_loss =
-                            ppo_clipped_loss(new_lp, &mb_old_lp, &mb_adv, PPO_CLIP_EPS, &device);
-                        let entropy_bonus = -(entropy.mean());
-                        let total_policy_loss =
-                            policy_loss.clone() + entropy_bonus.clone() * PPO_ENTROPY_COEFF;
+                            let (policy_loss, diag) = ppo_clipped_loss(
+                                new_lp, &mb_old_lp, &mb_adv, PPO_CLIP_EPS, &device,
+                            );
+                            let entropy_bonus = -(entropy.mean());
+                            let total_policy_loss =
+                                policy_loss.clone() + entropy_bonus.clone() * PPO_ENTROPY_COEFF;
 
-                        epoch_policy_loss += f32::from(policy_loss.clone().into_scalar());
-                        epoch_entropy += f32::from((-entropy_bonus.clone()).into_scalar());
+                            epoch_policy_loss += f32::from(policy_loss.clone().into_scalar());
+                            epoch_entropy += f32::from((-entropy_bonus.clone()).into_scalar());
+                            epoch_frac_clipped += diag.frac_clipped;
+                            epoch_mean_ratio += diag.mean_ratio;
 
-                        let raw = total_policy_loss.backward();
-                        GradientsParams::from_grads(raw, net)
-                    };
-                    let net = inner.policy_net.take().unwrap();
-                    inner.policy_net =
-                        Some(inner.policy_optim.step(PPO_POLICY_LR, net, policy_grads));
+                            let raw = total_policy_loss.backward();
+                            GradientsParams::from_grads(raw, net)
+                        };
+                        let net = inner.policy_net.take().unwrap();
+                        inner.policy_net =
+                            Some(inner.policy_optim.step(PPO_POLICY_LR, net, policy_grads));
+                    }
 
                     // ── Value update ──────────────────────────────────────
                     let value_grads = {
@@ -568,15 +655,40 @@ pub fn spawn_ppo_training_thread(
                     &policy_optim_path, &value_optim_path, &buffer_path);
             }
 
-            // ── Phase 9: Diagnostics ─────────────────────────────────────
+            // ── Phase 9: Diagnostics + TensorBoard ───────────────────────
             let elapsed = t0.elapsed();
-            let avg_ploss = epoch_policy_loss / total_mini_batches as f32;
-            let avg_vloss = epoch_value_loss / total_mini_batches as f32;
-            let avg_ent = epoch_entropy / total_mini_batches as f32;
+            let n_mb = total_mini_batches.max(1) as f32;
+            let avg_ploss = epoch_policy_loss / n_mb;
+            let avg_vloss = epoch_value_loss / n_mb;
+            let avg_ent = epoch_entropy / n_mb;
+            let avg_clip = epoch_frac_clipped / n_mb;
+            let avg_ratio = epoch_mean_ratio / n_mb;
+            let steps_per_sec = total_steps as f32 / elapsed.as_secs_f32();
+
+            // Training losses.
+            writer.add_scalar("train/policy_loss", avg_ploss, update_cycle);
+            writer.add_scalar("train/value_loss", avg_vloss, update_cycle);
+            writer.add_scalar("train/entropy", avg_ent, update_cycle);
+            // PPO-specific diagnostics.
+            writer.add_scalar("train/frac_clipped", avg_clip, update_cycle);
+            writer.add_scalar("train/mean_ratio", avg_ratio, update_cycle);
+            // Advantage statistics (from first epoch, before value net updates).
+            writer.add_scalar("train/advantage_mean", first_epoch_adv_mean, update_cycle);
+            writer.add_scalar("train/advantage_std", first_epoch_adv_std, update_cycle);
+            writer.add_scalar("train/explained_variance", first_epoch_explained_var, update_cycle);
+            let policy_skipped = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
+            writer.add_scalar("train/value_burnin", policy_skipped as u8 as f32, update_cycle);
+            // Throughput.
+            writer.add_scalar("throughput/steps_per_sec", steps_per_sec, update_cycle);
+            writer.add_scalar("throughput/segments", n_segments as f32, update_cycle);
+            writer.flush();
+
+            let burnin_tag = if policy_skipped { " [BURNIN]" } else { "" };
             println!(
                 "[ppo] cycle={update_cycle:>4}  segs={n_segments:>3}  steps={total_steps:>5}  \
                  p_loss={avg_ploss:.4}  v_loss={avg_vloss:.4}  entropy={avg_ent:.3}  \
-                 time={:.1}s",
+                 clip={avg_clip:.3}  expl_var={first_epoch_explained_var:.3}  \
+                 time={:.1}s{burnin_tag}",
                 elapsed.as_secs_f32()
             );
         }

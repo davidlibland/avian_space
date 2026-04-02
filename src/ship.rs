@@ -13,11 +13,101 @@ use std::f32::consts::PI;
 #[derive(Resource)]
 struct PlayerDeathTimer(Timer);
 
+/// Tracks the ratio of good (non-neutral) to neutral combat hits across all
+/// RL agents, used to compute the adaptive neutral-hit penalty.
+#[derive(Resource, Default)]
+struct CombatHitStats {
+    good_hits: u64,
+    neutral_hits: u64,
+}
+
+impl CombatHitStats {
+    /// Fraction of good hits: `good / (good + neutral)`.  Returns 0 when no hits recorded.
+    fn good_fraction(&self) -> f32 {
+        let total = self.good_hits + self.neutral_hits;
+        if total == 0 {
+            0.0
+        } else {
+            self.good_hits as f32 / total as f32
+        }
+    }
+
+    /// Serialise to a file as two little-endian u64 values.
+    fn save(&self, path: &str) {
+        use std::io::Write;
+        let mut buf = Vec::with_capacity(16);
+        buf.extend_from_slice(&self.good_hits.to_le_bytes());
+        buf.extend_from_slice(&self.neutral_hits.to_le_bytes());
+        if let Ok(mut f) = std::fs::File::create(path) {
+            let _ = f.write_all(&buf);
+        }
+    }
+
+    /// Deserialise from a file written by [`save`].
+    fn load(path: &str) -> Option<Self> {
+        let data = std::fs::read(path).ok()?;
+        if data.len() < 16 {
+            return None;
+        }
+        Some(Self {
+            good_hits: u64::from_le_bytes(data[0..8].try_into().ok()?),
+            neutral_hits: u64::from_le_bytes(data[8..16].try_into().ok()?),
+        })
+    }
+}
+
+/// Interval (in seconds) between periodic saves of `CombatHitStats`.
+const COMBAT_STATS_SAVE_INTERVAL: f32 = 60.0;
+
+/// Timer resource that drives periodic saving of `CombatHitStats`.
+#[derive(Resource)]
+struct CombatStatsSaveTimer(Timer);
+
+/// Load `CombatHitStats` from the experiment directory at startup.
+fn load_combat_stats(
+    exp_dir: Option<Res<crate::experiments::ExperimentDir>>,
+    mut stats: ResMut<CombatHitStats>,
+) {
+    let Some(exp) = exp_dir else { return };
+    if exp.is_fresh {
+        return;
+    }
+    let path = exp.combat_stats_path();
+    if let Some(loaded) = CombatHitStats::load(&path) {
+        println!(
+            "[combat_stats] Loaded: {} good, {} neutral hits from {path}",
+            loaded.good_hits, loaded.neutral_hits
+        );
+        *stats = loaded;
+    }
+}
+
+/// Periodically save `CombatHitStats` to the experiment directory.
+fn save_combat_stats_periodic(
+    time: Res<Time>,
+    mut timer: ResMut<CombatStatsSaveTimer>,
+    stats: Res<CombatHitStats>,
+    exp_dir: Option<Res<crate::experiments::ExperimentDir>>,
+) {
+    timer.0.tick(time.delta());
+    if !timer.0.just_finished() {
+        return;
+    }
+    let Some(exp) = exp_dir else { return };
+    stats.save(&exp.combat_stats_path());
+}
+
 pub fn ship_plugin(app: &mut App) {
-    app.add_message::<ShipCommand>()
+    app.init_resource::<CombatHitStats>()
+        .insert_resource(CombatStatsSaveTimer(Timer::from_seconds(
+            COMBAT_STATS_SAVE_INTERVAL,
+            TimerMode::Repeating,
+        )))
+        .add_message::<ShipCommand>()
         .add_message::<DamageShip>()
         .add_message::<ScoreHit>()
         .add_message::<BuyShip>()
+        .add_systems(Startup, load_combat_stats)
         .add_systems(
             FixedUpdate,
             ship_movement.run_if(in_state(PlayState::Flying)),
@@ -26,6 +116,7 @@ pub fn ship_plugin(app: &mut App) {
             Update,
             (apply_damage, sync_hostilites, score_hits).run_if(in_state(PlayState::Flying)),
         )
+        .add_systems(Update, save_combat_stats_periodic)
         .add_systems(Update, tick_player_death_timer)
         .add_systems(Update, handle_buy_ship);
 }
@@ -632,7 +723,9 @@ fn score_hits(
     ships: Query<&Ship>,
     rl_agents: Query<&RLAgent>,
     mut rl_reward_writer: MessageWriter<RLReward>,
+    mut combat_stats: ResMut<CombatHitStats>,
 ) {
+    use crate::consts::*;
     for event in reader.read() {
         match event {
             ScoreHit::OnShip { source, target } => {
@@ -647,28 +740,80 @@ fn score_hits(
                         }
                     }
                 }
-                // RL reward: flat hit bonus if shooting at the current target.
+                // RL reward for hitting a ship.
                 if let Ok(agent) = rl_agents.get(*source) {
-                    let on_target = ships
-                        .get(*source)
-                        .ok()
+                    let source_ship = ships.get(*source).ok();
+                    let target_ship = ships.get(*target).ok();
+
+                    // Check if the target is hostile or should-engage.
+                    let is_engaged = match (&source_ship, &target_ship) {
+                        (Some(ss), Some(ts)) => {
+                            // should_engage: my hostility to their faction is positive
+                            let should_engage = ss.should_engage(
+                                &ship_hostilities
+                                    .get(*target)
+                                    .map(|h| h.clone())
+                                    .unwrap_or_default(),
+                            );
+                            // hostile: their hostility to my faction is positive
+                            let hostile = ts.should_engage(
+                                &ship_hostilities
+                                    .get(*source)
+                                    .map(|h| h.clone())
+                                    .unwrap_or_default(),
+                            );
+                            should_engage || hostile
+                        }
+                        _ => false,
+                    };
+
+                    let on_target = source_ship
                         .and_then(|s| s.target.as_ref())
                         .map(|t| t.get_entity() == *target)
                         .unwrap_or(false);
-                    if on_target {
-                        let weight = match agent.personality {
-                            Personality::Fighter => 1.0,
-                            Personality::Miner | Personality::Trader => 0.1,
-                        };
-                        rl_reward_writer.write(RLReward {
-                            entity: *source,
-                            reward: weight,
-                        });
-                    }
+
+                    let r = if is_engaged && on_target {
+                        combat_stats.good_hits += 1;
+                        COMBAT_HIT_ENGAGED_TARGETED
+                    } else if is_engaged {
+                        combat_stats.good_hits += 1;
+                        COMBAT_HIT_ENGAGED_UNTARGETED
+                    } else {
+                        // Adaptive neutral penalty: c = -p * r / (EPS + (1-p))
+                        // bounded in [-r / EPS, 0].
+                        combat_stats.neutral_hits += 1;
+                        let p = combat_stats.good_fraction();
+                        let c = -p * COMBAT_HIT_ENGAGED_UNTARGETED
+                            / (COMBAT_HIT_EPS + (1.0 - p));
+                        c.clamp(
+                            -COMBAT_HIT_ENGAGED_UNTARGETED / COMBAT_HIT_EPS,
+                            0.0,
+                        )
+                    };
+
+                    let personality_scale = match agent.personality {
+                        Personality::Fighter => COMBAT_PERSONALITY_FIGHTER,
+                        Personality::Miner | Personality::Trader => COMBAT_PERSONALITY_OTHER,
+                    };
+
+                    rl_reward_writer.write(RLReward {
+                        entity: *source,
+                        reward: r * personality_scale,
+                    });
                 }
             }
-            // To Do: Also reward asteroid hits.
-            _ => (),
+            ScoreHit::OnAsteroid { source, .. } => {
+                if let Ok(agent) = rl_agents.get(*source) {
+                    let reward = match agent.personality {
+                        Personality::Miner => ASTEROID_HIT_MINER,
+                        Personality::Fighter | Personality::Trader => ASTEROID_HIT_OTHER,
+                    };
+                    rl_reward_writer.write(RLReward {
+                        entity: *source,
+                        reward,
+                    });
+                }
+            }
         }
     }
 }

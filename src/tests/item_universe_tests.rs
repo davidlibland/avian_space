@@ -96,11 +96,13 @@ fn test_universe() -> ItemUniverse {
         planet_best_margin: HashMap::new(),
         planet_has_ammo_for: HashMap::new(),
         asteroid_field_expected_value: HashMap::new(),
+        ship_credit_scale: HashMap::new(),
     };
     iu.compute_global_averages();
     iu.compute_trade_maps();
     iu.compute_planet_ammo();
     iu.compute_asteroid_values();
+    iu.compute_ship_credit_scales();
     iu
 }
 

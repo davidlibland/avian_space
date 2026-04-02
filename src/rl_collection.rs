@@ -247,6 +247,12 @@ impl Plugin for RLCollectionPlugin {
         // Resolve the run directory once; training threads own it from here.
         let experiment = crate::experiments::setup_experiment(self.fresh);
 
+        // Make the experiment directory available to game-thread systems.
+        app.insert_resource(crate::experiments::ExperimentDir {
+            run_dir: experiment.run_dir.clone(),
+            is_fresh: experiment.is_fresh,
+        });
+
         // Spawn training threads only for the modes that need them.
         match self.mode {
             crate::AppMode::BCTraining => {
@@ -918,6 +924,12 @@ fn build_all_observations(
             .map(|ws| (ws.weapon.speed, ws.weapon.range()))
             .unwrap_or((0.0, 0.0));
 
+        let credit_scale = item_universe
+            .ship_credit_scale
+            .get(&ship.ship_type)
+            .copied()
+            .unwrap_or(1.0);
+
         let obs_input = ObsInput {
             personality: &agent.personality,
             ship: &ship,
@@ -927,6 +939,7 @@ fn build_all_observations(
             entity_slots,
             primary_weapon_speed,
             primary_weapon_range,
+            credit_scale,
         };
         let obs = rl_obs::encode_observation(&obs_input);
 
@@ -1124,8 +1137,8 @@ fn store_obs_actions(
             // Add health-fraction as a per-step reward signal.
             let health_reward = ship.health as f32 / ship.data.max_health.max(1) as f32;
             let personality_health_weight = match agent.personality {
-                Personality::Fighter => 0.3,
-                Personality::Miner | Personality::Trader => 0.5,
+                Personality::Fighter => crate::consts::HEALTH_STEP_FIGHTER,
+                Personality::Miner | Personality::Trader => crate::consts::HEALTH_STEP_MINER_TRADER,
             };
             let total_reward = reward + health_reward * personality_health_weight;
 

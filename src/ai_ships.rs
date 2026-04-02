@@ -762,22 +762,89 @@ fn land_ship(
                     if (planet_pos.0 - ship_pos.0).length() > LANDING_RADIUS {
                         continue;
                     }
-                    // Landed on the target planet → bonus reward for RLAgent ships.
+                    // Resolve planet data for reward computation and transactions.
+                    let planet_name = planet.0.clone();
+                    let system_name = current_star_system.0.clone();
+                    let planet_data = item_universe
+                        .star_systems
+                        .get(&system_name)
+                        .and_then(|s| s.planets.get(&planet_name));
+
+                    // ── Landing reward for RLAgent ships ──────────────────
                     if rl_agent.is_some() {
-                        let personality_weight = match ai_ship.personality {
-                            Personality::Fighter => 0.2,
-                            Personality::Miner => 0.5,
-                            Personality::Trader => 0.8,
-                        };
-                        rl_reward_writer.write(RLReward {
-                            entity: ship_entity,
-                            reward: personality_weight,
-                        });
+                        use crate::consts::*;
+                        let cargo_held: u16 = ship.cargo.values().sum();
+                        let cargo_cap = ship.data.cargo_space.max(1) as f32;
+                        let cargo_frac = cargo_held as f32 / cargo_cap;
+                        let health_frac = ship.health as f32
+                            / ship.data.max_health.max(1) as f32;
+
+                        let mut reward = 0.0_f32;
+
+                        // Any personality: low health → incentive to heal.
+                        reward += (1.0 - health_frac) * LANDING_LOW_HEALTH;
+
+                        match ai_ship.personality {
+                            Personality::Trader => {
+                                // Can sell: has cargo to unload.
+                                if cargo_held > 0 {
+                                    reward += cargo_frac * LANDING_TRADER_CAN_SELL;
+                                }
+                                // Can buy: has cargo space AND credits for at least something.
+                                let can_buy = ship.remaining_cargo_space() > 0
+                                    && ship.credits > 0
+                                    && planet_data
+                                        .map(|pd| !pd.commodities.is_empty())
+                                        .unwrap_or(false);
+                                if can_buy {
+                                    reward += LANDING_TRADER_CAN_BUY;
+                                }
+                            }
+                            Personality::Fighter => {
+                                // Can rearm: planet sells ammo for a weapon we carry.
+                                let can_rearm = planet_data
+                                    .map(|pd| {
+                                        ship.weapon_systems.secondary.keys().any(|wt| {
+                                            pd.outfitter.contains(wt) && ship.credits > 0
+                                        })
+                                    })
+                                    .unwrap_or(false);
+                                if can_rearm {
+                                    reward += LANDING_FIGHTER_CAN_REARM;
+                                }
+                                // Cargo full → sell it off.
+                                if ship.remaining_cargo_space() == 0 {
+                                    reward += LANDING_FIGHTER_CARGO_FULL;
+                                }
+                            }
+                            Personality::Miner => {
+                                // Can sell: has cargo to unload.
+                                if cargo_held > 0 {
+                                    reward += cargo_frac * LANDING_MINER_CAN_SELL;
+                                }
+                            }
+                        }
+
+                        // Targeting bonus.
+                        let targeting_mult =
+                            if matches!(ship.target, Some(Target::Planet(e)) if e == planet_entity)
+                            {
+                                LANDING_ON_TARGET_MULTIPLIER
+                            } else {
+                                LANDING_OFF_TARGET_MULTIPLIER
+                            };
+                        reward *= targeting_mult;
+
+                        if reward > 0.0 {
+                            rl_reward_writer.write(RLReward {
+                                entity: ship_entity,
+                                reward,
+                            });
+                        }
                     }
 
                     // Landed successfully, so clear the target
                     if matches!(ship.target, Some(Target::Planet(e)) if e == planet_entity) {
-                        // Get a new target
                         ship.target = None;
                     }
 
@@ -785,15 +852,8 @@ fn land_ship(
                     ship.health = ship.data.max_health;
 
                     // Sell all cargo at the planet's listed prices.
-                    let planet_name = planet.0.clone();
-                    let system_name = current_star_system.0.clone();
-                    if let Some(planet_data) = item_universe
-                        .star_systems
-                        .get(&system_name)
-                        .and_then(|s| s.planets.get(&planet_name))
-                    {
-                        // Compute cargo value before selling (for reward normalisation).
-                        let total_cargo_before: u16 = ship.cargo.values().sum();
+                    if let Some(planet_data) = planet_data {
+                        let credits_before = ship.credits;
 
                         for (commodity, qty) in ship.clone().cargo.iter() {
                             if let Some(&price) = planet_data.commodities.get(commodity) {
@@ -801,18 +861,24 @@ fn land_ship(
                             }
                         }
 
-                        // Reward: fraction of cargo sold (normalised by cargo space).
-                        if rl_agent.is_some() && total_cargo_before > 0 {
-                            let sold_frac =
-                                total_cargo_before as f32 / ship.data.cargo_space.max(1) as f32;
+                        // Reward: credits earned normalised by ship credit scale.
+                        let credits_earned = (ship.credits - credits_before).max(0) as f32;
+                        if rl_agent.is_some() && credits_earned > 0.0 {
+                            use crate::consts::*;
+                            let credit_scale = item_universe
+                                .ship_credit_scale
+                                .get(&ship.ship_type)
+                                .copied()
+                                .unwrap_or(1.0);
+                            let credit_frac = credits_earned / credit_scale;
                             let personality_weight = match ai_ship.personality {
-                                Personality::Fighter => 0.1,
-                                Personality::Miner => 0.8,
-                                Personality::Trader => 1.0,
+                                Personality::Fighter => CARGO_SOLD_FIGHTER,
+                                Personality::Miner => CARGO_SOLD_MINER,
+                                Personality::Trader => CARGO_SOLD_TRADER,
                             };
                             rl_reward_writer.write(RLReward {
                                 entity: ship_entity,
-                                reward: sold_frac * personality_weight,
+                                reward: credit_frac * personality_weight,
                             });
                         }
 

@@ -97,7 +97,7 @@ pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 10
 pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE; // = 26
 
 /// Floats for the self-state block.
-pub const SELF_SIZE: usize = 10; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, personality(3)
+pub const SELF_SIZE: usize = 11; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, credits, personality(3)
 
 // ---------------------------------------------------------------------------
 // Data structures passed from the Bevy system to the encoder
@@ -210,6 +210,8 @@ pub struct ObsInput<'a> {
     /// Range of the ship's primary weapon (m), used to compute the in-range flag.
     /// 0.0 if the ship has no primary weapon.
     pub primary_weapon_range: f32,
+    /// Per-ship-type credit scale for normalising the credit observation.
+    pub credit_scale: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -429,6 +431,10 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     obs.push((input.angular_velocity / MAX_ANG_SPEED).clamp(-1.0, 1.0));
     obs.push(cargo_frac.clamp(0.0, 1.0));
     obs.push(ammo_frac);
+    // Credits normalised per ship type: scale / (credits + scale).
+    let c = input.ship.credits as f32;
+    let s = input.credit_scale;
+    obs.push(s / (c + s));
     obs.extend_from_slice(&personality);
     debug_assert_eq!(obs.len(), SELF_SIZE);
 

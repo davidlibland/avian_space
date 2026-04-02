@@ -9,6 +9,7 @@
 //! the [`ExperimentSetup`] it returns.  All path-construction details stay
 //! here so the rest of the codebase never hard-codes a checkpoint path.
 
+use bevy::prelude::*;
 use std::fs;
 use std::path::Path;
 
@@ -24,6 +25,21 @@ pub struct ExperimentSetup {
     pub run_dir: String,
     /// True when this is a brand-new run (no weights to load).
     pub is_fresh: bool,
+}
+
+/// Lightweight Bevy resource so game-thread systems can read/write
+/// checkpoints to the current experiment directory.
+#[derive(Resource, Clone)]
+pub struct ExperimentDir {
+    pub run_dir: String,
+    pub is_fresh: bool,
+}
+
+impl ExperimentDir {
+    /// Path for the serialised combat-hit statistics.
+    pub fn combat_stats_path(&self) -> String {
+        format!("{}/combat_stats.bin", self.run_dir)
+    }
 }
 
 impl ExperimentSetup {
@@ -57,6 +73,11 @@ impl ExperimentSetup {
     /// Path for the serialised RL segment buffer.
     pub fn rl_buffer_checkpoint_path(&self) -> String {
         format!("{}/rl_buffer.bin", self.run_dir)
+    }
+
+    /// Path for the serialised combat-hit statistics.
+    pub fn combat_stats_checkpoint_path(&self) -> String {
+        format!("{}/combat_stats.bin", self.run_dir)
     }
 
     /// Returns true if a checkpoint file is present on disk.

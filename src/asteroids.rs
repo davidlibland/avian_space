@@ -1,3 +1,4 @@
+use crate::item_universe::ItemUniverse;
 use crate::pickups::PickupDrop;
 use crate::utils::{polygon_mesh, random_velocity, safe_despawn};
 use crate::{GameLayer, PlayState};
@@ -82,6 +83,78 @@ impl AsteroidField {
     }
 }
 
+/// Build weighted commodity colors from a field's commodities map and the item universe.
+fn commodity_colors(
+    commodities: &HashMap<String, f32>,
+    item_universe: &ItemUniverse,
+) -> Vec<([f32; 3], f32)> {
+    commodities
+        .iter()
+        .filter_map(|(name, &weight)| {
+            item_universe
+                .commodities
+                .get(name)
+                .map(|c| (c.color, weight))
+        })
+        .collect()
+}
+
+/// Spawn small irregular polygon "crystal" children on an asteroid's surface.
+fn spawn_ore_crystals(
+    parent: &mut ChildSpawnerCommands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<ColorMaterial>>,
+    asteroid_size: f32,
+    colors: &[([f32; 3], f32)],
+) {
+    if colors.is_empty() {
+        return;
+    }
+    let mut rng = rand::thread_rng();
+    let max_crystals = (asteroid_size / 5.0).ceil() as usize;
+    let num_crystals = rng.gen_range(0..=max_crystals);
+    let total_weight: f32 = colors.iter().map(|(_, w)| w).sum();
+    if total_weight <= 0.0 {
+        return;
+    }
+
+    for _ in 0..num_crystals {
+        // Pick a random commodity color weighted by field weights
+        let mut roll = rng.gen_range(0.0..total_weight);
+        let mut color = colors[0].0;
+        for &(c, w) in colors {
+            roll -= w;
+            if roll <= 0.0 {
+                color = c;
+                break;
+            }
+        }
+
+        // Small irregular polygon (3-5 vertices) for crystal shape
+        let crystal_size = asteroid_size * rng.gen_range(0.08..0.18);
+        let crystal_segments = rng.gen_range(3..=5);
+        let mut verts: Vec<Vec2> = Vec::new();
+        for i in 0..crystal_segments {
+            let angle = (i as f32 / crystal_segments as f32) * std::f32::consts::TAU;
+            let r = crystal_size * rng.gen_range(0.6..1.4);
+            verts.push(Vec2::new(angle.cos() * r, angle.sin() * r));
+        }
+
+        // Position on asteroid surface (within the asteroid radius)
+        let place_angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let place_r = asteroid_size * rng.gen_range(0.2..0.75);
+        let offset = Vec2::new(place_angle.cos() * place_r, place_angle.sin() * place_r);
+
+        let mesh = polygon_mesh(&verts);
+        let [r, g, b] = color;
+        parent.spawn((
+            Mesh2d(meshes.add(mesh)),
+            MeshMaterial2d(materials.add(Color::srgb(r, g, b))),
+            Transform::from_xyz(offset.x, offset.y, 0.01),
+        ));
+    }
+}
+
 pub fn spawn_asteroid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -90,6 +163,7 @@ pub fn spawn_asteroid(
     size: f32,
     pos: Vec2,
     vel: Vec2,
+    colors: &[([f32; 3], f32)],
 ) -> Entity {
     let mut rng = rand::thread_rng();
     let segments = rng.gen_range(5..10);
@@ -105,7 +179,7 @@ pub fn spawn_asteroid(
 
     let mesh = polygon_mesh(&verts);
     // Asteroids
-    commands
+    let mut entity_cmd = commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
             Asteroid { size, field },
@@ -130,8 +204,11 @@ pub fn spawn_asteroid(
             Restitution::new(1.0),
             MaxLinearSpeed(ASTEROID_MAX_VELOCITY),
             MaxAngularSpeed(3.0 * PI),
-        ))
-        .id()
+        ));
+    entity_cmd.with_children(|parent| {
+        spawn_ore_crystals(parent, meshes, materials, size, colors);
+    });
+    entity_cmd.id()
 }
 
 pub fn build_asteroid_field(
@@ -139,6 +216,7 @@ pub fn build_asteroid_field(
     mut meshes: &mut ResMut<Assets<Mesh>>,
     mut materials: &mut ResMut<Assets<ColorMaterial>>,
     field_data: &AsteroidFieldData,
+    item_universe: &ItemUniverse,
 ) {
     // Asteroids
     let field = commands
@@ -152,6 +230,7 @@ pub fn build_asteroid_field(
             Transform::from_xyz(field_data.location.x, field_data.location.y, 0.0),
         ))
         .id();
+    let colors = commodity_colors(&field_data.commodities, item_universe);
     let mut rng = rand::thread_rng();
     for _ in 0..field_data.number {
         let r = rng.gen_range((field_data.radius * 0.5)..(field_data.radius * 1.5));
@@ -174,6 +253,7 @@ pub fn build_asteroid_field(
             size,
             Vec2 { x, y } + field_data.location,
             vel,
+            &colors,
         );
     }
 }
@@ -184,6 +264,7 @@ pub fn shatter_asteroid(
     mut materials: &mut ResMut<Assets<ColorMaterial>>,
     asteroid_entity: &Entity,
     asteroids: &Query<(&Asteroid, &Transform, &LinearVelocity)>,
+    colors: &[([f32; 3], f32)],
 ) {
     if let Ok((asteroid, transform, vel)) = asteroids.get(*asteroid_entity) {
         let mut rng = rand::thread_rng();
@@ -205,6 +286,7 @@ pub fn shatter_asteroid(
                     new_size,
                     pos + offset,
                     new_vel,
+                    colors,
                 );
             }
         }
@@ -218,6 +300,7 @@ fn handle_shatter(
     mut reader: MessageReader<ShatterAsteroid>,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
     mut pickup_writer: MessageWriter<PickupDrop>,
+    item_universe: Res<ItemUniverse>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
     fields: Query<&AsteroidField>,
 ) {
@@ -259,12 +342,19 @@ fn handle_shatter(
                 quantity: qty,
             });
         }
+        let colors = asteroids
+            .get(*entity)
+            .ok()
+            .and_then(|(a, _, _)| fields.get(a.field).ok())
+            .map(|f| commodity_colors(&f.commodities, &item_universe))
+            .unwrap_or_default();
         shatter_asteroid(
             &mut commands,
             &mut meshes,
             &mut materials,
             entity,
             &asteroids,
+            &colors,
         );
     }
 }
@@ -279,6 +369,7 @@ pub fn spawn_growing_asteroid(
     size: f32,
     pos: Vec2,
     vel: Vec2,
+    colors: &[([f32; 3], f32)],
 ) {
     let mut rng = rand::thread_rng();
     let segments = rng.gen_range(5..10);
@@ -333,7 +424,10 @@ pub fn spawn_growing_asteroid(
             Restitution::new(1.0),
             MaxLinearSpeed(ASTEROID_MAX_VELOCITY),
             MaxAngularSpeed(3.0 * PI),
-        ));
+        ))
+        .with_children(|parent| {
+            spawn_ore_crystals(parent, meshes, materials, size, colors);
+        });
 }
 
 /// Advance the growth of all `GrowingAsteroid` entities.
@@ -365,6 +459,7 @@ fn respawn_asteroids(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut timer: ResMut<AsteroidRespawnTimer>,
     time: Res<Time>,
+    item_universe: Res<ItemUniverse>,
     fields: Query<(Entity, &AsteroidField, &Transform)>,
     asteroids: Query<&Asteroid>,
 ) {
@@ -380,6 +475,7 @@ fn respawn_asteroids(
         if live_count >= target {
             continue;
         }
+        let colors = commodity_colors(&field.commodities, &item_universe);
         // Spawn one new asteroid per tick to avoid frame spikes.
         let field_pos = field_transform.translation.xy();
         let r = rng.gen_range((field.radius * 0.5)..(field.radius * 1.5));
@@ -398,6 +494,7 @@ fn respawn_asteroids(
             size,
             pos,
             vel,
+            &colors,
         );
     }
 }

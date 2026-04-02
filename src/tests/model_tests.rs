@@ -182,6 +182,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
         entity_slots: vec![hostile_ship, planet, asteroid],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
+        credit_scale: 1000.0,
     });
     assert_eq!(obs.len(), OBS_DIM);
 

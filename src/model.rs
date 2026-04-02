@@ -560,6 +560,14 @@ fn sample_categorical(logits: &[f32], rng: &mut impl rand::Rng, log_prob_acc: &m
     sampled
 }
 
+fn argmax(vals: &[f32]) -> usize {
+    vals.iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(i, _)| i)
+        .unwrap_or(0)
+}
+
 // ---------------------------------------------------------------------------
 // Save / load
 // ---------------------------------------------------------------------------

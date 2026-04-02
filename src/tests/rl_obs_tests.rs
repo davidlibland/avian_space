@@ -33,6 +33,7 @@ fn minimal_obs_input(ship: &Ship) -> ObsInput<'_> {
         entity_slots: vec![],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
+        credit_scale: 1000.0,
     }
 }
 
@@ -67,6 +68,7 @@ fn test_observation_shape_constant() {
         entity_slots: some_slots,
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
+        credit_scale: 1000.0,
     });
     assert_eq!(obs1.len(), OBS_DIM, "some entities");
 
@@ -80,6 +82,7 @@ fn test_observation_shape_constant() {
         entity_slots: vec![slot.clone(); N_ENTITY_SLOTS],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
+        credit_scale: 1000.0,
     });
     assert_eq!(obs2.len(), OBS_DIM, "full buckets");
 }
@@ -284,6 +287,7 @@ fn test_target_pursuit_angle_ahead() {
         entity_slots: vec![asteroid],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 1000.0,
+        credit_scale: 1000.0,
     });
     // The asteroid is in slot 0 (first and only entity).
     let slot_offset = SELF_SIZE;
@@ -347,6 +351,7 @@ fn test_slot_block_extraction() {
         entity_slots: vec![hostile_ship],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
+        credit_scale: 1000.0,
     });
 
     // Slot 0 starts at SELF_SIZE.
@@ -437,6 +442,7 @@ fn test_planet_slot_block_extraction() {
         entity_slots: vec![planet],
         primary_weapon_speed: 400.0,
         primary_weapon_range: 800.0,
+        credit_scale: 1000.0,
     });
 
     let s = SELF_SIZE;
