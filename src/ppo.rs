@@ -35,7 +35,7 @@ use crate::value_fn;
 const PPO_GAMMA: f32 = 0.99;
 const PPO_LAMBDA: f32 = 0.95;
 const PPO_CLIP_EPS: f32 = 0.1;
-const PPO_ENTROPY_COEFF: f32 = 0.01;
+const PPO_ENTROPY_COEFF: f32 = 0.05;
 const PPO_POLICY_LR: f64 = 3e-4;
 const PPO_VALUE_LR: f64 = 1e-3;
 /// Number of epochs for policy updates (fewer to limit policy drift).
@@ -45,8 +45,11 @@ const PPO_VALUE_EPOCHS: usize = 4;
 const PPO_MINI_BATCH_SIZE: usize = 256;
 /// Minimum segments before first update (~2048 steps at 128 steps/seg).
 const PPO_MIN_SEGMENTS: usize = 16;
+/// Maximum segments consumed per update cycle. Excess segments stay in the
+/// channel for the next cycle, keeping batch size bounded and data fresh.
+const PPO_MAX_SEGMENTS: usize = 64;
 const PPO_WEIGHT_SYNC_INTERVAL: usize = 1;
-const PPO_SAVE_INTERVAL: usize = 10;
+const PPO_SAVE_INTERVAL: usize = 30;
 const PPO_HUBER_DELTA: f32 = 1.0;
 /// Skip policy updates when explained variance is below this threshold,
 /// allowing the value function to burn in before the policy starts changing.
@@ -525,12 +528,17 @@ pub fn spawn_ppo_training_thread(
                     }
                 }
             }
-            // Non-blocking drain of any additional segments.
+            // Non-blocking drain of all available segments.
             while let Ok(seg) = rl_rx.try_recv() {
                 segments.push(seg);
             }
             if segments.len() < PPO_MIN_SEGMENTS {
                 continue;
+            }
+            // Keep only the most recent segments so we train on the freshest data.
+            if segments.len() > PPO_MAX_SEGMENTS {
+                let excess = segments.len() - PPO_MAX_SEGMENTS;
+                segments.drain(..excess);
             }
 
             let wait_secs = t_wait_start.elapsed().as_secs_f32();
@@ -803,11 +811,9 @@ pub fn spawn_ppo_training_thread(
                 }
             }
 
-            // ── Phase 6: Discard on-policy data ──────────────────────────
-            segments.clear();
             update_cycle += 1;
 
-            // ── Phase 7: Weight sync ─────────────────────────────────────
+            // ── Phase 6: Weight sync ─────────────────────────────────────
             if update_cycle % PPO_WEIGHT_SYNC_INTERVAL == 0 {
                 let bytes = model::training_net_to_bytes(inner.policy_net.as_ref().unwrap());
                 if let Ok(mut lock) = inference_net.lock() {
@@ -815,7 +821,7 @@ pub fn spawn_ppo_training_thread(
                 }
             }
 
-            // ── Phase 8: Checkpoint ──────────────────────────────────────
+            // ── Phase 7: Checkpoint (before clearing buffer) ─────────────
             if update_cycle % PPO_SAVE_INTERVAL == 0 {
                 save_all_checkpoints(
                     &inner,
@@ -829,6 +835,9 @@ pub fn spawn_ppo_training_thread(
                     &step_counter_path,
                 );
             }
+
+            // ── Phase 8: Discard on-policy data ──────────────────────────
+            segments.clear();
 
             // ── Phase 9: Diagnostics + TensorBoard ───────────────────────
             let elapsed = t0.elapsed();
@@ -878,7 +887,11 @@ pub fn spawn_ppo_training_thread(
             // Throughput: training vs data collection.
             let train_secs = elapsed.as_secs_f32();
             let cycle_secs = wait_secs + train_secs;
-            writer.add_scalar("throughput/train_steps_per_sec", steps_per_sec, update_cycle);
+            writer.add_scalar(
+                "throughput/train_steps_per_sec",
+                steps_per_sec,
+                update_cycle,
+            );
             writer.add_scalar("throughput/train_secs", train_secs, update_cycle);
             writer.add_scalar("throughput/wait_secs", wait_secs, update_cycle);
             writer.add_scalar("throughput/cycle_secs", cycle_secs, update_cycle);
@@ -889,7 +902,11 @@ pub fn spawn_ppo_training_thread(
             } else {
                 0.0
             };
-            writer.add_scalar("throughput/data_steps_per_sec", data_steps_per_sec, update_cycle);
+            writer.add_scalar(
+                "throughput/data_steps_per_sec",
+                data_steps_per_sec,
+                update_cycle,
+            );
             writer.add_scalar(
                 "throughput/wait_fraction",
                 wait_secs / cycle_secs.max(1e-6),

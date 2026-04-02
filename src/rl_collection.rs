@@ -297,8 +297,7 @@ impl Plugin for RLCollectionPlugin {
             crate::AppMode::Inference | crate::AppMode::RLTraining => AIPlayMode::RLControl,
         };
 
-        app
-            .insert_resource(RLSender(rl_tx))
+        app.insert_resource(RLSender(rl_tx))
             .insert_resource(BCSender(bc_tx))
             .insert_resource(rl_resource)
             .insert_resource(ai_play_mode)
@@ -576,8 +575,18 @@ fn build_all_observations(
 ) -> Vec<(Entity, Vec<f32>, Vec<Option<Target>>)> {
     let mut results = Vec::new();
 
-    for (entity, agent, ship, pos, vel, ang_vel, max_speed, transform, self_hostility, self_distressed) in
-        agents.iter()
+    for (
+        entity,
+        agent,
+        ship,
+        pos,
+        vel,
+        ang_vel,
+        max_speed,
+        transform,
+        self_hostility,
+        self_distressed,
+    ) in agents.iter()
     {
         // Ego-frame rotation parameters.
         let ship_dir = (transform.rotation * Vec3::Y).xy();
@@ -757,11 +766,8 @@ fn build_all_observations(
         let make_ship_slot = |e: Entity| -> EntitySlotData {
             let core = make_core(e, 0); // Ship
             // Get the other ship's data from either query.
-            let other_ship_ref: Option<(&Ship, &ShipHostility)> = ship_query
-                .get(e)
-                .map(|(_, s, h)| (s, h))
-                .ok()
-                .or_else(|| {
+            let other_ship_ref: Option<(&Ship, &ShipHostility)> =
+                ship_query.get(e).map(|(_, s, h)| (s, h)).ok().or_else(|| {
                     agents
                         .get(e)
                         .map(|(_, _, s, _, _, _, _, _, h, _)| (s as &Ship, h as &ShipHostility))
@@ -775,17 +781,13 @@ fn build_all_observations(
                         } else {
                             -1.0
                         };
-                    let should_engage =
-                        if ship.should_engage(other_hostility) {
-                            1.0
-                        } else {
-                            -1.0
-                        };
+                    let should_engage = if ship.should_engage(other_hostility) {
+                        1.0
+                    } else {
+                        -1.0
+                    };
                     let data = item_universe.ships.get(&other_ship.ship_type);
-                    let other_distressed = all_distressed
-                        .get(e)
-                        .map(|d| d.level)
-                        .unwrap_or(0.0);
+                    let other_distressed = all_distressed.get(e).map(|d| d.level).unwrap_or(0.0);
                     let sd = ShipSlotData {
                         max_health: data.map(|d| d.max_health as f32).unwrap_or(0.0),
                         health: other_ship.health as f32,
@@ -867,28 +869,33 @@ fn build_all_observations(
                         slot.is_current_target = true;
                     }
                     entity_slots.push(slot.clone());
+                    slot_targets.push(Some(make_target(e)));
                 }
-                slot_targets.push(Some(make_target(e)));
             }
             n
         };
 
         // Phase 1: each type gets up to its base allocation.
-        let n_planets = push_up_to(
-            &mut nearby_planets, &planets, K_PLANETS, Target::Planet,
-        );
+        let n_planets = push_up_to(&mut nearby_planets, &planets, K_PLANETS, Target::Planet);
         let n_asteroids = push_up_to(
-            &mut nearby_asteroids, &asteroids, K_ASTEROIDS, Target::Asteroid,
+            &mut nearby_asteroids,
+            &asteroids,
+            K_ASTEROIDS,
+            Target::Asteroid,
         );
         let n_hostile = push_up_to(
-            &mut nearby_hostile_ships, &hostile_ships, K_HOSTILE_SHIPS, Target::Ship,
+            &mut nearby_hostile_ships,
+            &hostile_ships,
+            K_HOSTILE_SHIPS,
+            Target::Ship,
         );
         let n_friendly = push_up_to(
-            &mut nearby_friendly_ships, &friendly_ships, K_FRIENDLY_SHIPS, Target::Ship,
+            &mut nearby_friendly_ships,
+            &friendly_ships,
+            K_FRIENDLY_SHIPS,
+            Target::Ship,
         );
-        let n_pickups = push_up_to(
-            &mut nearby_pickups, &pickups, K_PICKUPS, Target::Pickup,
-        );
+        let n_pickups = push_up_to(&mut nearby_pickups, &pickups, K_PICKUPS, Target::Pickup);
 
         // Phase 2: fill remaining slots with personality-preferred entities.
         // Each call continues from where phase 1 left off (skip already-added).
@@ -896,28 +903,38 @@ fn build_all_observations(
         match agent.personality {
             Personality::Trader => {
                 push_up_to(
-                    &mut nearby_planets[n_planets..], &planets[n_planets..],
-                    usize::MAX, Target::Planet,
+                    &mut nearby_planets[n_planets..],
+                    &planets[n_planets..],
+                    usize::MAX,
+                    Target::Planet,
                 );
             }
             Personality::Miner => {
                 push_up_to(
-                    &mut nearby_asteroids[n_asteroids..], &asteroids[n_asteroids..],
-                    usize::MAX, Target::Asteroid,
+                    &mut nearby_asteroids[n_asteroids..],
+                    &asteroids[n_asteroids..],
+                    usize::MAX,
+                    Target::Asteroid,
                 );
                 push_up_to(
-                    &mut nearby_planets[n_planets..], &planets[n_planets..],
-                    usize::MAX, Target::Planet,
+                    &mut nearby_planets[n_planets..],
+                    &planets[n_planets..],
+                    usize::MAX,
+                    Target::Planet,
                 );
             }
             Personality::Fighter => {
                 push_up_to(
-                    &mut nearby_hostile_ships[n_hostile..], &hostile_ships[n_hostile..],
-                    usize::MAX, Target::Ship,
+                    &mut nearby_hostile_ships[n_hostile..],
+                    &hostile_ships[n_hostile..],
+                    usize::MAX,
+                    Target::Ship,
                 );
                 push_up_to(
-                    &mut nearby_friendly_ships[n_friendly..], &friendly_ships[n_friendly..],
-                    usize::MAX, Target::Ship,
+                    &mut nearby_friendly_ships[n_friendly..],
+                    &friendly_ships[n_friendly..],
+                    usize::MAX,
+                    Target::Ship,
                 );
             }
         }
@@ -980,11 +997,7 @@ fn build_all_observations(
 ///    Trader → nearest planet
 ///
 /// Returns the slot index, or `N_OBJECTS` for "no target".
-fn choose_target_slot(
-    personality: &Personality,
-    has_cargo: bool,
-    obs: &[f32],
-) -> u8 {
+fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -> u8 {
     use rl_obs::*;
     let no_target = model::N_OBJECTS as u8;
     let n = model::N_OBJECTS;
@@ -992,7 +1005,8 @@ fn choose_target_slot(
     // Read slot features from the flat observation.
     let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
     let is_present = |i: usize| obs[slot_base(i) + SLOT_IS_PRESENT] > 0.5;
-    let type_onehot = |i: usize| &obs[slot_base(i) + SLOT_TYPE_ONEHOT..slot_base(i) + SLOT_TYPE_ONEHOT + 4];
+    let type_onehot =
+        |i: usize| &obs[slot_base(i) + SLOT_TYPE_ONEHOT..slot_base(i) + SLOT_TYPE_ONEHOT + 4];
     let is_ship = |i: usize| type_onehot(i)[0] > 0.5;
     let is_asteroid = |i: usize| type_onehot(i)[1] > 0.5;
     let is_planet = |i: usize| type_onehot(i)[2] > 0.5;
@@ -1002,9 +1016,7 @@ fn choose_target_slot(
 
     // Helper: find the first present slot matching a predicate.
     let first_matching = |pred: &dyn Fn(usize) -> bool| -> Option<u8> {
-        (0..n)
-            .find(|&i| is_present(i) && pred(i))
-            .map(|i| i as u8)
+        (0..n).find(|&i| is_present(i) && pred(i)).map(|i| i as u8)
     };
 
     // 1. Traders with cargo → planet with highest value (= cargo_sale_value).
@@ -1012,7 +1024,9 @@ fn choose_target_slot(
         let best_planet = (0..n)
             .filter(|&i| is_present(i) && is_planet(i))
             .max_by(|&a, &b| {
-                value(a).partial_cmp(&value(b)).unwrap_or(std::cmp::Ordering::Equal)
+                value(a)
+                    .partial_cmp(&value(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
             });
         if let Some(idx) = best_planet {
             return idx as u8;
@@ -1091,7 +1105,11 @@ fn compute_goal_target_reward(personality: &Personality, obs: &[f32]) -> f32 {
                 }
             }
             Personality::Trader => {
-                if is_planet { 1.0 } else { 0.0 }
+                if is_planet {
+                    1.0
+                } else {
+                    0.0
+                }
             }
         };
         break; // only one slot is the current target

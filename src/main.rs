@@ -119,12 +119,15 @@ pub struct AppArgs {
     pub mode: AppMode,
     /// When true, ignore any existing checkpoint and start a fresh run.
     pub fresh: bool,
+    /// When true, run without a window or renderer for faster training.
+    pub headless: bool,
 }
 
 fn parse_args() -> AppArgs {
     let args: Vec<String> = std::env::args().collect();
     let mut mode = AppMode::BCTraining; // default: preserves previous behaviour
     let mut fresh = false;
+    let mut headless = false;
     for arg in &args[1..] {
         match arg.as_str() {
             "--classic" => mode = AppMode::Classic,
@@ -132,10 +135,11 @@ fn parse_args() -> AppArgs {
             "--bc-training" | "--bc" => mode = AppMode::BCTraining,
             "--rl-training" | "--rl" => mode = AppMode::RLTraining,
             "--fresh" => fresh = true,
+            "--headless" => headless = true,
             _ => {}
         }
     }
-    AppArgs { mode, fresh }
+    AppArgs { mode, fresh, headless }
 }
 
 #[derive(Resource)]
@@ -148,63 +152,131 @@ fn main() {
     let AppArgs {
         mode: app_mode,
         fresh,
+        headless,
     } = parse_args();
-    App::new()
-        .add_plugins((
-            DefaultPlugins,
-            // Add physics plugins and specify a units-per-meter scaling factor, 1 meter = 20 pixels.
-            // The unit allows the engine to tune its parameters for the scale of the world, improving stability.
-            PhysicsPlugins::default().with_length_unit(20.0),
+
+    let mut app = App::new();
+
+    // ── Core plugins (rendering vs headless) ─────────────────────────────
+    if headless {
+        use bevy::app::ScheduleRunnerPlugin;
+        use bevy::time::TimeUpdateStrategy;
+        use bevy::window::WindowPlugin;
+        use bevy::winit::WinitPlugin;
+        // DefaultPlugins with no window and no exit-on-close, plus a headless
+        // schedule runner.  The render pipeline still initialises (to satisfy
+        // asset-type registrations) but draws nothing because there is no
+        // surface to present to.
+        app.add_plugins(
+            DefaultPlugins
+                .build()
+                .disable::<bevy::winit::WinitPlugin>()
+                .set(WindowPlugin {
+                    primary_window: None,
+                    exit_condition: bevy::window::ExitCondition::DontExit,
+                    ..default()
+                }),
+        )
+        .add_plugins(ScheduleRunnerPlugin::run_loop(
+            std::time::Duration::from_millis(1),
+        ))
+        // Advance 50ms of game time per frame (~10-25x real-time).
+        .insert_resource(TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_millis(50),
+        ));
+    } else {
+        app.add_plugins(DefaultPlugins);
+    }
+
+    // ── Physics ──────────────────────────────────────────────────────────
+    app.add_plugins(PhysicsPlugins::default().with_length_unit(20.0));
+
+    // ── Rendering-dependent plugins (skipped in headless) ────────────────
+    if headless {
+        app.add_plugins(starfield::ToroidalWrapPlugin::default());
+        // Register resources that skipped plugins would normally provide
+        // but that game-logic systems still depend on.
+        app.insert_resource(crate::planet_ui::LandedContext::default());
+    } else {
+        app.add_plugins((
             planet_ui_plugin,
             jump_ui_plugin,
             StarfieldPlugin::default(),
             HudPlugin::default(),
-            ship_plugin,
-            weapons_plugin,
-            item_universe_plugin,
-            planets_plugin,
-            asteroid_plugin,
-            ai_ship_bundle,
-            RLCollectionPlugin {
-                mode: app_mode,
-                fresh,
-            },
-        ))
-        .add_plugins((
-            explosions_plugin,
-            pickup_plugin,
-            game_save_plugin,
             main_menu_plugin,
-        ))
-        .init_state::<PlayState>()
+        ));
+    }
+    // Explosions plugin registers messages used by game logic (asteroid shatter),
+    // so it's needed even in headless mode (particles just won't render).
+    app.add_plugins(explosions_plugin);
+
+    // ── Game-logic plugins (always loaded) ───────────────────────────────
+    app.add_plugins((
+        ship_plugin,
+        weapons_plugin,
+        item_universe_plugin,
+        planets_plugin,
+        asteroid_plugin,
+        ai_ship_bundle,
+        RLCollectionPlugin {
+            mode: app_mode,
+            fresh,
+        },
+        pickup_plugin,
+        game_save_plugin,
+    ));
+
+    // ── State and resources ──────────────────────────────────────────────
+    app.init_state::<PlayState>()
         .init_resource::<TravelContext>()
         .insert_resource(CurrentStarSystem("sol".to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
         .insert_resource(match app_mode {
-            AppMode::BCTraining => ModelMode::Training,
-            AppMode::RLTraining => ModelMode::Training,
-            AppMode::Classic => ModelMode::Eval,
-            AppMode::Inference => ModelMode::Eval,
-        })
-        .add_systems(Startup, setup)
-        .add_systems(
-            OnEnter(PlayState::Flying),
-            (spawn_asteroids, set_arrival_velocity),
-        )
-        .add_systems(OnEnter(PlayState::Traveling), reset_nearby_planet)
-        .add_systems(
+            AppMode::BCTraining | AppMode::RLTraining => ModelMode::Training,
+            AppMode::Classic | AppMode::Inference => ModelMode::Eval,
+        });
+
+    // ── Startup systems ──────────────────────────────────────────────────
+    if !headless {
+        app.add_systems(Startup, setup); // spawns Camera2d
+    }
+
+    // In headless mode, skip the main menu and jump straight to Flying.
+    if headless {
+        app.add_systems(Startup, |mut next_state: ResMut<NextState<PlayState>>| {
+            next_state.set(PlayState::Flying);
+        });
+    }
+
+    // ── Flying-state systems ─────────────────────────────────────────────
+    app.add_systems(
+        OnEnter(PlayState::Flying),
+        (spawn_asteroids, set_arrival_velocity),
+    )
+    .add_systems(OnEnter(PlayState::Traveling), reset_nearby_planet);
+
+    if headless {
+        // No player → only collision_system (no keyboard_input / accelerate_for_jump).
+        app.add_systems(
+            Update,
+            collision_system.run_if(in_state(PlayState::Flying)),
+        );
+    } else {
+        app.add_systems(
             Update,
             (keyboard_input, collision_system, accelerate_for_jump)
                 .run_if(in_state(PlayState::Flying)),
-        )
-        .add_systems(
-            Update,
-            ApplyDeferred
-                .after(collision_system)
-                .before(weapon_lifetime),
-        )
-        .add_systems(Update, travel_system.run_if(in_state(PlayState::Traveling)))
-        .run();
+        );
+    }
+
+    app.add_systems(
+        Update,
+        ApplyDeferred
+            .after(collision_system)
+            .before(weapon_lifetime),
+    )
+    .add_systems(Update, travel_system.run_if(in_state(PlayState::Traveling)))
+    .run();
 }
 
 #[derive(Component)]

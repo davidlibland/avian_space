@@ -16,29 +16,47 @@ impl Default for StarfieldPlugin {
     }
 }
 
+/// Lightweight plugin that only provides the toroidal wrapping system.
+/// Used in headless mode where the full `StarfieldPlugin` (which requires a
+/// window) cannot be loaded.
+pub struct ToroidalWrapPlugin {
+    pub world_size: f32,
+}
+
+impl Default for ToroidalWrapPlugin {
+    fn default() -> Self {
+        Self { world_size: BOUNDS }
+    }
+}
+
+impl Plugin for ToroidalWrapPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(ToroidalWorld {
+            size: self.world_size,
+        })
+        .add_systems(Update, toroidal_wrap_system);
+    }
+}
+
 impl Plugin for StarfieldPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<WorldOffset>()
-            .init_resource::<WindowSize>()
-            .insert_resource(ToroidalWorld {
-                size: self.world_size,
-            })
-            .add_systems(Startup, spawn_starfield)
-            .add_systems(
-                Update,
-                (shift_starfield, wrap_starfield)
-                    .chain()
-                    .before(PhysicsSystems::Writeback),
-            )
-            .add_systems(
-                Update,
-                (
-                    origin_shift_system.run_if(player_is_far_from_origin),
-                    toroidal_wrap_system,
-                )
-                    .chain(),
-            )
-            .add_systems(FixedUpdate, camera_follow_player);
+        app.add_plugins(ToroidalWrapPlugin {
+            world_size: self.world_size,
+        })
+        .init_resource::<WorldOffset>()
+        .init_resource::<WindowSize>()
+        .add_systems(Startup, spawn_starfield)
+        .add_systems(
+            Update,
+            (shift_starfield, wrap_starfield)
+                .chain()
+                .before(PhysicsSystems::Writeback),
+        )
+        .add_systems(
+            Update,
+            origin_shift_system.run_if(player_is_far_from_origin),
+        )
+        .add_systems(FixedUpdate, camera_follow_player);
     }
 }
 
