@@ -45,11 +45,12 @@ use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, DETECTION_RADIUS, DiscreteAction, EntityKind,
-    EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, ObsInput,
-    PickupSlotData, PlanetSlotData, SELF_SIZE, SLOT_SIZE, ShipSlotData,
+    EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_OTHER_PROJECTILES, K_PICKUPS,
+    K_PLANETS, ObsInput, PickupSlotData, PlanetSlotData, ProjectileSlotData, SELF_SIZE, SLOT_SIZE,
+    ShipSlotData,
 };
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target};
-use crate::weapons::FireCommand;
+use crate::weapons::{FireCommand, GuidedMissile, Projectile, Tracer, TracerSlots};
 use crate::{GameLayer, PlayState};
 
 // ---------------------------------------------------------------------------
@@ -85,6 +86,8 @@ const BC_STEPS_PER_DRAIN: usize = 10;
 #[derive(Clone)]
 pub struct Transition {
     pub obs: Vec<f32>,
+    /// Flat projectile features `[K_PROJECTILES × PROJ_SLOT_SIZE]`.
+    pub proj_obs: Vec<f32>,
     pub action: DiscreteAction,
     /// Per-reward-type rewards, indexed by `consts::REWARD_*`.
     pub rewards: [f32; crate::consts::N_REWARD_TYPES],
@@ -113,6 +116,8 @@ pub struct Segment {
 /// splits it into self-features and entity-features via [`model::split_obs`].
 pub struct BCTransition {
     pub obs: Vec<f32>,
+    /// Flat projectile features `[K_PROJECTILES × PROJ_SLOT_SIZE]`.
+    pub proj_obs: Vec<f32>,
     pub action: DiscreteAction,
 }
 
@@ -194,6 +199,8 @@ pub struct RLAgent {
     pub hidden_state: Vec<f32>,
     /// Observation from the previous decision step.
     pub last_obs: Option<Vec<f32>>,
+    /// Projectile observation from the previous decision step.
+    pub last_proj_obs: Option<Vec<f32>>,
     /// Action chosen at the previous decision step.
     pub last_action: Option<DiscreteAction>,
     /// Log-probability of the action under the policy at sampling time.
@@ -218,6 +225,7 @@ impl RLAgent {
             personality,
             hidden_state: vec![0.0; 64], // placeholder size
             last_obs: None,
+            last_proj_obs: None,
             last_action: None,
             last_log_prob: 0.0,
             accumulated_rewards: [0.0; crate::consts::N_REWARD_TYPES],
@@ -359,6 +367,7 @@ fn rl_step(
         &Transform,
         &ShipHostility,
         &crate::ship::Distressed,
+        &TracerSlots,
     )>,
     // Queries for nearby entities (non-overlapping with the agent query).
     all_positions: Query<&Position>,
@@ -375,6 +384,7 @@ fn rl_step(
     // Only reads ShipHostility (not Ship), so disjoint with the `agents` query.
     all_ship_factions: Query<&ShipHostility, With<Ship>>,
     all_distressed: Query<&crate::ship::Distressed>,
+    projectile_query: Query<(&Projectile, Option<&GuidedMissile>)>,
     spatial_query: SpatialQuery,
     resources: (
         Res<ItemUniverse>,
@@ -393,7 +403,7 @@ fn rl_step(
     }
 
     // ── Sub-function 1: build observations for all agents ──────────────────
-    let obs_data: Vec<(Entity, Vec<f32>, Vec<Option<Target>>)> = build_all_observations(
+    let obs_data: Vec<(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)> = build_all_observations(
         &agents,
         &all_positions,
         &all_velocities,
@@ -404,6 +414,7 @@ fn rl_step(
         ship_query,
         &all_ship_factions,
         &all_distressed,
+        &projectile_query,
         &spatial_query,
         item_universe,
         current_system,
@@ -417,14 +428,16 @@ fn rl_step(
             let batch_size = obs_data.len();
             let mut self_flat = Vec::with_capacity(batch_size * model::SELF_INPUT_DIM);
             let mut obj_flat = Vec::with_capacity(batch_size * model::ENTITIES_FLAT_DIM);
-            for (_, obs, _) in &obs_data {
+            let mut proj_flat = Vec::with_capacity(batch_size * model::PROJECTILES_FLAT_DIM);
+            for (_, obs, proj_obs, _) in &obs_data {
                 let (s, o) = model::split_obs(obs);
                 self_flat.extend_from_slice(s);
                 obj_flat.extend_from_slice(o);
+                proj_flat.extend_from_slice(proj_obs);
             }
             let inference = rl_resource.inference_net.lock().unwrap();
             let (action_logits, target_logits) =
-                inference.run_inference(self_flat, obj_flat, batch_size);
+                inference.run_inference(self_flat, obj_flat, proj_flat, batch_size);
             let mut rng = rand::thread_rng();
             let actions = action_logits
                 .chunks(model::POLICY_OUTPUT_DIM)
@@ -559,6 +572,7 @@ fn build_all_observations(
         &Transform,
         &ShipHostility,
         &crate::ship::Distressed,
+        &TracerSlots,
     )>,
     all_positions: &Query<&Position>,
     all_velocities: &Query<&LinearVelocity>,
@@ -569,10 +583,11 @@ fn build_all_observations(
     ship_query: &Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
     all_ship_factions: &Query<&ShipHostility, With<Ship>>,
     all_distressed: &Query<&crate::ship::Distressed>,
+    projectile_query: &Query<(&Projectile, Option<&GuidedMissile>)>,
     spatial_query: &SpatialQuery,
     item_universe: &ItemUniverse,
     current_system: &CurrentStarSystem,
-) -> Vec<(Entity, Vec<f32>, Vec<Option<Target>>)> {
+) -> Vec<(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)> {
     let mut results = Vec::new();
 
     for (
@@ -586,6 +601,7 @@ fn build_all_observations(
         transform,
         self_hostility,
         self_distressed,
+        self_tracer_slots,
     ) in agents.iter()
     {
         // Ego-frame rotation parameters.
@@ -752,9 +768,18 @@ fn build_all_observations(
                         (ast.size, (field_ev * expected_qty as f64) as f32)
                     })
                     .unwrap_or((0.0, 0.0));
+                let col_ind = rl_obs::collision_indicator(
+                    core.rel_pos,
+                    core.rel_vel,
+                    ship.data.radius,
+                );
                 EntitySlotData {
                     core,
-                    kind: EntityKind::Asteroid(AsteroidSlotData { size, value: ev }),
+                    kind: EntityKind::Asteroid(AsteroidSlotData {
+                        size,
+                        value: ev,
+                        collision_indicator: col_ind,
+                    }),
                     value: ev,
                     is_current_target: false,
                 }
@@ -770,7 +795,7 @@ fn build_all_observations(
                 ship_query.get(e).map(|(_, s, h)| (s, h)).ok().or_else(|| {
                     agents
                         .get(e)
-                        .map(|(_, _, s, _, _, _, _, _, h, _)| (s as &Ship, h as &ShipHostility))
+                        .map(|(_, _, s, _, _, _, _, _, h, _, _)| (s as &Ship, h as &ShipHostility))
                         .ok()
                 });
             let (ship_data, value) = other_ship_ref
@@ -962,6 +987,66 @@ fn build_all_observations(
             .copied()
             .unwrap_or(1.0);
 
+        // -- Projectile slots -------------------------------------------------
+        // Helper to build a ProjectileSlotData from a projectile entity.
+        let make_proj_slot = |e: Entity, is_ours: f32| -> Option<ProjectileSlotData> {
+            let (proj, guided) = projectile_query.get(e).ok()?;
+            let p = all_positions.get(e).ok()?;
+            let v = all_velocities.get(e).ok()?;
+            let world_offset = [p.x - pos.x, p.y - pos.y];
+            let world_rel_vel = [v.x - vel.x, v.y - vel.y];
+            let weapon = item_universe.weapons.get(&proj.weapon_type);
+            Some(ProjectileSlotData {
+                rel_pos: rl_obs::rotate_to_ego(world_offset, sin_a, cos_a),
+                rel_vel: rl_obs::rotate_to_ego(world_rel_vel, sin_a, cos_a),
+                is_ours,
+                is_guided: if guided.is_some() { 1.0 } else { 0.0 },
+                speed: weapon.map(|w| w.speed).unwrap_or(0.0),
+                damage: weapon.map(|w| w.damage as f32).unwrap_or(0.0),
+                lifetime_remaining: proj.lifetime,
+                lifetime_max: weapon.map(|w| w.lifetime).unwrap_or(1.0),
+                target_radius: ship.data.radius,
+            })
+        };
+
+        // Other ships' projectiles: nearest K_OTHER_PROJECTILES.
+        let proj_filter = SpatialQueryFilter::from_mask([GameLayer::Weapon])
+            .with_excluded_entities([entity]);
+        let mut nearby_other_projs: Vec<(Entity, f32)> = spatial_query
+            .shape_intersections(
+                &Collider::circle(DETECTION_RADIUS),
+                pos.0,
+                0.0,
+                &proj_filter,
+            )
+            .into_iter()
+            .filter_map(|hit| {
+                let proj = projectile_query.get(hit).ok()?;
+                if proj.0.owner == entity {
+                    return None;
+                }
+                let p = all_positions.get(hit).ok()?;
+                Some((hit, (p.0 - pos.0).length_squared()))
+            })
+            .collect();
+        nearby_other_projs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        let other_projectile_slots: Vec<ProjectileSlotData> = nearby_other_projs
+            .iter()
+            .take(K_OTHER_PROJECTILES)
+            .filter_map(|(e, _)| make_proj_slot(*e, 0.0))
+            .collect();
+
+        // Own projectiles: tracer-tagged projectiles in their assigned slot order.
+        let mut own_projectile_slots: Vec<ProjectileSlotData> = Vec::new();
+        for slot_entry in &self_tracer_slots.slots {
+            if let Some(proj_entity) = slot_entry {
+                if let Some(slot_data) = make_proj_slot(*proj_entity, 1.0) {
+                    own_projectile_slots.push(slot_data);
+                }
+            }
+        }
+
         let obs_input = ObsInput {
             personality: &agent.personality,
             ship: &ship,
@@ -973,10 +1058,18 @@ fn build_all_observations(
             primary_weapon_range,
             credit_scale,
             distressed: self_distressed.level,
+            other_projectile_slots,
+            own_projectile_slots,
         };
         let obs = rl_obs::encode_observation(&obs_input);
+        let max_speed = ship.data.max_speed.max(f32::EPSILON);
+        let proj_obs = rl_obs::encode_projectiles(
+            &obs_input.other_projectile_slots,
+            &obs_input.own_projectile_slots,
+            max_speed,
+        );
 
-        results.push((entity, obs, slot_targets));
+        results.push((entity, obs, proj_obs, slot_targets));
     }
 
     results
@@ -1126,7 +1219,7 @@ fn compute_goal_target_reward(personality: &Personality, obs: &[f32]) -> f32 {
 /// mode. In `BehavioralCloning` mode (or when `None`) the rule-based action
 /// from `compute_ai_action` is used for both execution and BC labels.
 fn store_obs_actions(
-    decisions: &[(Entity, Vec<f32>, Vec<Option<Target>>)],
+    decisions: &[(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)],
     model_actions: Option<&[(DiscreteAction, f32)]>,
     agents: &mut Query<(
         Entity,
@@ -1139,6 +1232,7 @@ fn store_obs_actions(
         &Transform,
         &ShipHostility,
         &crate::ship::Distressed,
+        &TracerSlots,
     )>,
     all_positions: &Query<&Position>,
     all_velocities: &Query<&LinearVelocity>,
@@ -1147,8 +1241,8 @@ fn store_obs_actions(
     bc_sender: &BCSender,
     mode: &AIPlayMode,
 ) {
-    for (idx, (entity, obs, slot_targets)) in decisions.iter().enumerate() {
-        let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _, _)) =
+    for (idx, (entity, obs, proj_obs, slot_targets)) in decisions.iter().enumerate() {
+        let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _, _, _)) =
             agents.get_mut(*entity)
         else {
             continue;
@@ -1231,6 +1325,7 @@ fn store_obs_actions(
 
         // Store the PREVIOUS step's transition (obs recorded at t-1, action taken
         // at t-1, rewards accumulated between t-1 and t).
+        let last_proj = agent.last_proj_obs.clone().unwrap_or_default();
         if let (Some(last_obs), Some(last_action)) = (agent.last_obs.clone(), agent.last_action) {
             // Build per-type reward array from accumulated events + health signal.
             let mut rewards = agent.accumulated_rewards;
@@ -1245,6 +1340,7 @@ fn store_obs_actions(
 
             let transition = Transition {
                 obs: last_obs,
+                proj_obs: last_proj.clone(),
                 action: last_action,
                 rewards,
                 done: false,
@@ -1263,6 +1359,7 @@ fn store_obs_actions(
             if *mode == AIPlayMode::BehavioralCloning {
                 let bc = BCTransition {
                     obs: transition.obs.clone(),
+                    proj_obs: transition.proj_obs.clone(),
                     action: transition.action,
                 };
                 let _ = bc_sender.0.try_send(bc);
@@ -1285,6 +1382,7 @@ fn store_obs_actions(
 
         // Update agent with new observation and action.
         agent.last_obs = Some(obs.clone());
+        agent.last_proj_obs = Some(proj_obs.clone());
         agent.last_action = Some(executed_action);
         agent.last_log_prob = action_log_prob;
     }
@@ -1410,10 +1508,12 @@ fn spawn_bc_training_thread(
 
                 let mut self_flat = Vec::with_capacity(BC_BATCH_SIZE * SELF_INPUT_DIM);
                 let mut obj_flat = Vec::with_capacity(BC_BATCH_SIZE * N_OBJECTS * OBJECT_INPUT_DIM);
+                let mut proj_flat = Vec::with_capacity(BC_BATCH_SIZE * model::PROJECTILES_FLAT_DIM);
                 for t in &batch {
                     let (s, o) = split_obs(&t.obs);
                     self_flat.extend_from_slice(s);
                     obj_flat.extend_from_slice(o);
+                    proj_flat.extend_from_slice(&t.proj_obs);
                 }
                 let self_input = burn::tensor::Tensor::<TrainBackend, 2>::from_data(
                     TensorData::new(self_flat, [BC_BATCH_SIZE, SELF_INPUT_DIM]),
@@ -1421,6 +1521,10 @@ fn spawn_bc_training_thread(
                 );
                 let obj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
                     TensorData::new(obj_flat, [BC_BATCH_SIZE, N_OBJECTS, OBJECT_INPUT_DIM]),
+                    &device,
+                );
+                let proj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
+                    TensorData::new(proj_flat, [BC_BATCH_SIZE, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
                     &device,
                 );
 
@@ -1466,7 +1570,7 @@ fn spawn_bc_training_thread(
                 // ── Forward + loss ───────────────────────────────────────────
                 let grads = {
                     let net = inner.policy_net.as_ref().unwrap();
-                    let (action_logits, target_logits) = net.forward(self_input, obj_input);
+                    let (action_logits, target_logits) = net.forward(self_input, obj_input, proj_input);
 
                     let turn_loss = loss_fn.forward(action_logits.clone().narrow(1, 0, 3), turn_t);
                     let thrust_loss =
@@ -1583,6 +1687,7 @@ pub(crate) fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
             .collect();
         buffer.push_back(BCTransition {
             obs,
+            proj_obs: vec![0.0; crate::rl_obs::K_PROJECTILES * crate::rl_obs::PROJ_SLOT_SIZE],
             action: (
                 action_buf[0],
                 action_buf[1],

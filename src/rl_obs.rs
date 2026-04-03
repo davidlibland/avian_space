@@ -11,7 +11,8 @@ use crate::ship::{Personality, Ship};
 // Constants
 // ---------------------------------------------------------------------------
 
-/// Total length of the observation vector (computed from slot sizes below).
+/// Total length of the observation vector (self + entity slots only).
+/// Projectile data is stored in a separate tensor.
 pub const OBS_DIM: usize = SELF_SIZE
     + (N_ENTITY_SLOTS) * SLOT_SIZE;
 
@@ -38,6 +39,14 @@ pub const K_ASTEROIDS: usize = 3;
 pub const K_HOSTILE_SHIPS: usize = 3;
 pub const K_FRIENDLY_SHIPS: usize = 2;
 pub const K_PICKUPS: usize = 2;
+
+// Projectile bucket sizes (stored in a separate tensor, not in entity slots)
+/// Nearest projectiles fired by other ships.
+pub const K_OTHER_PROJECTILES: usize = 5;
+/// Tracer projectiles fired by this ship (tracked across their full lifetime).
+pub const K_OWN_PROJECTILES: usize = 5;
+/// Total projectile slots.
+pub const K_PROJECTILES: usize = K_OTHER_PROJECTILES + K_OWN_PROJECTILES;
 
 // ── Entity slot layout (offsets within each SLOT_SIZE block) ─────────────
 //
@@ -99,6 +108,28 @@ pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_
 /// Floats for the self-state block.
 pub const SELF_SIZE: usize = 12; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, credits, distressed, personality(3)
 
+// ── Projectile slot layout ─────────────────────────────────────────────
+//
+// Projectile slots are separate from entity slots. They cannot be targeted.
+// Layout: is_present(1) + core(5) + features(5) = 11 floats.
+//
+//   is_present    (1 float)
+//   rel_pos       (2 floats) — relative position in ego frame
+//   rel_vel       (2 floats) — relative velocity in ego frame
+//   proximity     (1 float)  — K / (distance + K)
+//   is_ours       (1 float)  — 1.0 if fired by this ship, 0.0 otherwise
+//   is_guided     (1 float)  — 1.0 if guided missile
+//   speed_frac    (1 float)  — projectile speed / max_speed (ship's)
+//   damage_norm   (1 float)  — damage / 50 (reference scale)
+//   lifetime_frac (1 float)  — remaining lifetime / initial lifetime
+//   collision_ind (1 float)  — 0→1 indicator of collision likelihood
+
+/// Floats per projectile slot.
+pub const PROJ_SLOT_SIZE: usize = 12;
+
+/// Reference damage for normalisation.
+const PROJ_DAMAGE_REF: f32 = 50.0;
+
 // ---------------------------------------------------------------------------
 // Data structures passed from the Bevy system to the encoder
 // ---------------------------------------------------------------------------
@@ -148,6 +179,8 @@ pub struct AsteroidSlotData {
     pub size: f32,
     /// Expected value of shattering (avg_price * expected_quantity).
     pub value: f32,
+    /// 0→1 indicator: likelihood of a collision with the ship given current trajectories.
+    pub collision_indicator: f32,
 }
 
 /// Pickup-specific features.
@@ -188,6 +221,29 @@ pub struct EntitySlotData {
     pub is_current_target: bool,
 }
 
+/// Projectile slot data (separate from entity slots).
+#[derive(Clone, Default)]
+pub struct ProjectileSlotData {
+    /// Relative position in ego frame (raw world units).
+    pub rel_pos: [f32; 2],
+    /// Relative velocity in ego frame (raw world units/s).
+    pub rel_vel: [f32; 2],
+    /// 1.0 if fired by this ship, 0.0 otherwise.
+    pub is_ours: f32,
+    /// 1.0 if guided missile, 0.0 otherwise.
+    pub is_guided: f32,
+    /// Projectile speed (world units/s).
+    pub speed: f32,
+    /// Damage dealt on hit.
+    pub damage: f32,
+    /// Remaining lifetime (seconds).
+    pub lifetime_remaining: f32,
+    /// Initial lifetime of this weapon type (seconds), for normalisation.
+    pub lifetime_max: f32,
+    /// Radius of the target (ship or asteroid) for collision prediction.
+    pub target_radius: f32,
+}
+
 /// All pre-processed inputs needed by `encode_observation`.
 ///
 /// The Bevy system is responsible for collecting entity data, performing the
@@ -216,6 +272,10 @@ pub struct ObsInput<'a> {
     pub credit_scale: f32,
     /// Current distressed level (1.0 = just hit, decays toward 0).
     pub distressed: f32,
+    /// Nearest projectiles from other ships (up to `K_OTHER_PROJECTILES`).
+    pub other_projectile_slots: Vec<ProjectileSlotData>,
+    /// Tracer projectiles fired by this ship (up to `K_OWN_PROJECTILES`).
+    pub own_projectile_slots: Vec<ProjectileSlotData>,
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +440,41 @@ fn aim_indicator(angle: Option<f32>) -> f32 {
     } else {
         0.0
     }
+}
+
+/// Collision likelihood indicator for a projectile heading toward a target.
+///
+/// Models the projectile as a point moving along `rel_vel` from `rel_pos`
+/// (both in the target's frame). Returns a 0→1 value: 1.0 when the closest
+/// approach distance is 0, decaying smoothly as miss distance grows relative
+/// to `target_radius`.
+///
+/// Returns 0.0 when the projectile is moving away or will never approach.
+pub fn collision_indicator(rel_pos: [f32; 2], rel_vel: [f32; 2], target_radius: f32) -> f32 {
+    let [px, py] = rel_pos;
+    let [vx, vy] = rel_vel;
+
+    // Velocity squared (how fast the projectile closes).
+    let v_sq = vx * vx + vy * vy;
+    if v_sq < f32::EPSILON {
+        return 0.0; // stationary → no collision
+    }
+
+    // Time of closest approach: t = -dot(pos, vel) / |vel|²
+    let t_closest = -(px * vx + py * vy) / v_sq;
+    if t_closest < 0.0 {
+        return 0.0; // closest approach is in the past
+    }
+
+    // Closest approach distance squared.
+    let cx = px + t_closest * vx;
+    let cy = py + t_closest * vy;
+    let miss_sq = cx * cx + cy * cy;
+
+    // Smooth indicator: 1 at miss=0, decays as miss grows relative to radius.
+    let r = target_radius.max(1.0);
+    let scale_sq = r * r;
+    scale_sq / (miss_sq + scale_sq)
 }
 
 // ---------------------------------------------------------------------------
@@ -550,6 +645,7 @@ fn encode_slot(
         EntityKind::Asteroid(asteroid) => {
             ts[0] = asteroid.size;
             ts[1] = asteroid.value;
+            ts[2] = asteroid.collision_indicator;
         }
         EntityKind::Pickup(pickup) => {
             ts[0] = pickup.value;
@@ -557,6 +653,65 @@ fn encode_slot(
     }
 
     obs.extend_from_slice(&buf);
+}
+
+/// Encode all projectile slots into a flat vector (separate from the main obs).
+///
+/// Layout: `[other_projectiles: K_OTHER_PROJECTILES × PROJ_SLOT_SIZE]
+///          [own_projectiles:   K_OWN_PROJECTILES   × PROJ_SLOT_SIZE]`
+///
+/// Total length = `K_PROJECTILES × PROJ_SLOT_SIZE`.
+pub fn encode_projectiles(
+    other_projectiles: &[ProjectileSlotData],
+    own_projectiles: &[ProjectileSlotData],
+    max_speed: f32,
+) -> Vec<f32> {
+    let total = K_PROJECTILES * PROJ_SLOT_SIZE;
+    let mut out = Vec::with_capacity(total);
+
+    for i in 0..K_OTHER_PROJECTILES {
+        encode_projectile_slot(other_projectiles.get(i), max_speed, &mut out);
+    }
+    for i in 0..K_OWN_PROJECTILES {
+        encode_projectile_slot(own_projectiles.get(i), max_speed, &mut out);
+    }
+
+    debug_assert_eq!(out.len(), total);
+    out
+}
+
+/// Encode a single projectile slot (PROJ_SLOT_SIZE floats). `None` → all zeros.
+fn encode_projectile_slot(
+    slot: Option<&ProjectileSlotData>,
+    max_speed: f32,
+    obs: &mut Vec<f32>,
+) {
+    let Some(p) = slot else {
+        obs.extend(std::iter::repeat(0.0_f32).take(PROJ_SLOT_SIZE));
+        return;
+    };
+
+    let dist = (p.rel_pos[0].powi(2) + p.rel_pos[1].powi(2)).sqrt();
+    let lifetime_frac = if p.lifetime_max > f32::EPSILON {
+        p.lifetime_remaining / p.lifetime_max
+    } else {
+        0.0
+    };
+
+    let col_ind = collision_indicator(p.rel_pos, p.rel_vel, p.target_radius);
+
+    obs.push(1.0); // is_present
+    obs.push(p.rel_pos[0]);
+    obs.push(p.rel_pos[1]);
+    obs.push(p.rel_vel[0]);
+    obs.push(p.rel_vel[1]);
+    obs.push(PROXIMITY_SCALE / (dist + PROXIMITY_SCALE));
+    obs.push(p.is_ours);
+    obs.push(p.is_guided);
+    obs.push(p.speed / max_speed.max(f32::EPSILON));
+    obs.push(p.damage / PROJ_DAMAGE_REF);
+    obs.push(lifetime_frac.clamp(0.0, 1.0));
+    obs.push(col_ind);
 }
 
 fn entity_type_onehot(entity_type: u8) -> [f32; 4] {

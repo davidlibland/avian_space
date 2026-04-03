@@ -35,6 +35,8 @@ fn minimal_obs_input(ship: &Ship) -> ObsInput<'_> {
         primary_weapon_range: 800.0,
         credit_scale: 1000.0,
         distressed: 0.0,
+        other_projectile_slots: vec![],
+        own_projectile_slots: vec![],
     }
 }
 
@@ -71,6 +73,8 @@ fn test_observation_shape_constant() {
         primary_weapon_range: 800.0,
         credit_scale: 1000.0,
         distressed: 0.0,
+        other_projectile_slots: vec![],
+        own_projectile_slots: vec![],
     });
     assert_eq!(obs1.len(), OBS_DIM, "some entities");
 
@@ -86,6 +90,8 @@ fn test_observation_shape_constant() {
         primary_weapon_range: 800.0,
         credit_scale: 1000.0,
         distressed: 0.0,
+        other_projectile_slots: vec![],
+        own_projectile_slots: vec![],
     });
     assert_eq!(obs2.len(), OBS_DIM, "full buckets");
 }
@@ -277,7 +283,7 @@ fn test_target_pursuit_angle_ahead() {
             rel_pos: [500.0, 0.0],
             rel_vel: [0.0, 0.0],
         },
-        kind: EntityKind::Asteroid(AsteroidSlotData { size: 10.0, value: 1.0 }),
+        kind: EntityKind::Asteroid(AsteroidSlotData { size: 10.0, value: 1.0, collision_indicator: 0.0 }),
         value: 1.0,
         is_current_target: true,
     };
@@ -292,6 +298,8 @@ fn test_target_pursuit_angle_ahead() {
         primary_weapon_range: 1000.0,
         credit_scale: 1000.0,
         distressed: 0.0,
+        other_projectile_slots: vec![],
+        own_projectile_slots: vec![],
     });
     // The asteroid is in slot 0 (first and only entity).
     let slot_offset = SELF_SIZE;
@@ -358,6 +366,8 @@ fn test_slot_block_extraction() {
         primary_weapon_range: 800.0,
         credit_scale: 1000.0,
         distressed: 0.0,
+        other_projectile_slots: vec![],
+        own_projectile_slots: vec![],
     });
 
     // Slot 0 starts at SELF_SIZE.
@@ -450,6 +460,8 @@ fn test_planet_slot_block_extraction() {
         primary_weapon_range: 800.0,
         credit_scale: 1000.0,
         distressed: 0.0,
+        other_projectile_slots: vec![],
+        own_projectile_slots: vec![],
     });
 
     let s = SELF_SIZE;

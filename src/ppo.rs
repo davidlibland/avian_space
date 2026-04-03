@@ -63,6 +63,7 @@ const PPO_VALUE_BURNIN_EV_THRESHOLD: f32 = 0.3;
 pub struct PpoBatch {
     pub self_flat: Vec<f32>,
     pub obj_flat: Vec<f32>,
+    pub proj_flat: Vec<f32>,
     pub actions: Vec<DiscreteAction>,
     /// Per-step per-head rewards, length = total_steps.
     pub rewards: Vec<[f32; N_REWARD_TYPES]>,
@@ -91,6 +92,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
     let total_steps: usize = segments.iter().map(|s| s.transitions.len()).sum();
     let mut self_flat = Vec::with_capacity(total_steps * SELF_INPUT_DIM);
     let mut obj_flat = Vec::with_capacity(total_steps * N_OBJECTS * OBJECT_INPUT_DIM);
+    let mut proj_flat = Vec::with_capacity(total_steps * model::PROJECTILES_FLAT_DIM);
     let mut actions = Vec::with_capacity(total_steps);
     let mut rewards = Vec::with_capacity(total_steps);
     let mut dones = Vec::with_capacity(total_steps);
@@ -105,6 +107,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
             let (s, o) = model::split_obs(&t.obs);
             self_flat.extend_from_slice(s);
             obj_flat.extend_from_slice(o);
+            proj_flat.extend_from_slice(&t.proj_obs);
             actions.push(t.action);
             rewards.push(t.rewards);
             dones.push(t.done);
@@ -122,6 +125,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
     PpoBatch {
         self_flat,
         obj_flat,
+        proj_flat,
         actions,
         rewards,
         dones,
@@ -365,6 +369,7 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
 
             transitions.push(crate::rl_collection::Transition {
                 obs,
+                proj_obs: vec![0.0; model::PROJECTILES_FLAT_DIM],
                 action: (
                     action_buf[0],
                     action_buf[1],
@@ -631,6 +636,7 @@ pub fn spawn_ppo_training_thread(
                     inner.value_net.as_ref().unwrap(),
                     &batch.self_flat,
                     &batch.obj_flat,
+                    &batch.proj_flat,
                     total_steps,
                     &device,
                 );
@@ -725,6 +731,8 @@ pub fn spawn_ppo_training_thread(
                     let mut mb_actions = Vec::with_capacity(mb);
                     let mut mb_old_lp = Vec::with_capacity(mb);
                     let mut mb_adv = Vec::with_capacity(mb);
+                    let mut mb_proj =
+                        Vec::with_capacity(mb * model::PROJECTILES_FLAT_DIM);
                     // Per-head returns flattened to [mb * N_REWARD_TYPES] for the tensor.
                     let mut mb_ret_flat = Vec::with_capacity(mb * N_REWARD_TYPES);
 
@@ -735,6 +743,10 @@ pub fn spawn_ppo_training_thread(
                         let o_start = i * N_OBJECTS * OBJECT_INPUT_DIM;
                         mb_obj.extend_from_slice(
                             &batch.obj_flat[o_start..o_start + N_OBJECTS * OBJECT_INPUT_DIM],
+                        );
+                        let p_start = i * model::PROJECTILES_FLAT_DIM;
+                        mb_proj.extend_from_slice(
+                            &batch.proj_flat[p_start..p_start + model::PROJECTILES_FLAT_DIM],
                         );
                         mb_actions.push(batch.actions[i]);
                         mb_old_lp.push(batch.old_log_probs[i]);
@@ -750,13 +762,17 @@ pub fn spawn_ppo_training_thread(
                         TensorData::new(mb_obj, [mb, N_OBJECTS, OBJECT_INPUT_DIM]),
                         &device,
                     );
+                    let proj_t = Tensor::<TrainBackend, 3>::from_data(
+                        TensorData::new(mb_proj, [mb, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
+                        &device,
+                    );
 
                     // ── Policy update (skipped during burn-in or after policy epochs) ──
                     if !skip_policy && epoch < PPO_POLICY_EPOCHS {
                         let policy_grads = {
                             let net = inner.policy_net.as_ref().unwrap();
                             let (action_logits, target_logits) =
-                                net.forward(self_t.clone(), obj_t.clone());
+                                net.forward(self_t.clone(), obj_t.clone(), proj_t.clone());
                             let (new_lp, entropy) = compute_log_probs_and_entropy(
                                 action_logits,
                                 target_logits,
@@ -791,7 +807,7 @@ pub fn spawn_ppo_training_thread(
                     // ── Value update (multi-head) ─────────────────────────
                     let value_grads = {
                         let vnet = inner.value_net.as_ref().unwrap();
-                        let (value_out, _) = vnet.forward(self_t, obj_t);
+                        let (value_out, _) = vnet.forward(self_t, obj_t, proj_t);
                         // value_out: [B, N_REWARD_TYPES]
                         let targets = Tensor::<TrainBackend, 2>::from_data(
                             TensorData::new(mb_ret_flat, [mb, N_REWARD_TYPES]),

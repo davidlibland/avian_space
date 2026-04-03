@@ -27,6 +27,7 @@ pub fn batch_value_inference(
     value_net: &RLNet<TrainBackend>,
     self_flat: &[f32],
     obj_flat: &[f32],
+    proj_flat: &[f32],
     total_steps: usize,
     _device: &<TrainBackend as Backend>::Device,
 ) -> Vec<[f32; N_REWARD_TYPES]> {
@@ -44,6 +45,8 @@ pub fn batch_value_inference(
         let self_slice = &self_flat[self_offset..self_offset + b * SELF_INPUT_DIM];
         let obj_offset = chunk_start * N_OBJECTS * OBJECT_INPUT_DIM;
         let obj_slice = &obj_flat[obj_offset..obj_offset + b * N_OBJECTS * OBJECT_INPUT_DIM];
+        let proj_offset = chunk_start * model::PROJECTILES_FLAT_DIM;
+        let proj_slice = &proj_flat[proj_offset..proj_offset + b * model::PROJECTILES_FLAT_DIM];
 
         let self_t = Tensor::<burn::backend::wgpu::Wgpu, 2>::from_data(
             TensorData::new(self_slice.to_vec(), [b, SELF_INPUT_DIM]),
@@ -53,8 +56,12 @@ pub fn batch_value_inference(
             TensorData::new(obj_slice.to_vec(), [b, N_OBJECTS, OBJECT_INPUT_DIM]),
             &inner_device,
         );
+        let proj_t = Tensor::<burn::backend::wgpu::Wgpu, 3>::from_data(
+            TensorData::new(proj_slice.to_vec(), [b, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
+            &inner_device,
+        );
 
-        let (value_out, _) = inner_net.forward(self_t, obj_t);
+        let (value_out, _) = inner_net.forward(self_t, obj_t, proj_t);
         // value_out: [B, N_REWARD_TYPES]
         let flat: Vec<f32> = value_out.into_data().to_vec().expect("f32 conversion");
         for row in flat.chunks_exact(N_REWARD_TYPES) {
@@ -97,7 +104,11 @@ pub fn recompute_bootstrap_values(
                 TensorData::new(o.to_vec(), [1, N_OBJECTS, OBJECT_INPUT_DIM]),
                 &inner_device,
             );
-            let (val, _) = inner_net.forward(self_t, obj_t);
+            let proj_t = Tensor::<burn::backend::wgpu::Wgpu, 3>::from_data(
+                TensorData::new(last_t.proj_obs.clone(), [1, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
+                &inner_device,
+            );
+            let (val, _) = inner_net.forward(self_t, obj_t, proj_t);
             // val: [1, N_REWARD_TYPES] → extract as array.
             let flat: Vec<f32> = val.into_data().to_vec().expect("f32 conversion");
             let mut bv = [0.0_f32; N_REWARD_TYPES];

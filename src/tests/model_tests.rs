@@ -168,6 +168,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
         kind: EntityKind::Asteroid(AsteroidSlotData {
             size: 25.0,
             value: 99.0,
+            collision_indicator: 0.0,
         }),
         value: 99.0,
         is_current_target: false,
@@ -185,6 +186,8 @@ fn test_roundtrip_entity_slot_to_blocks() {
         primary_weapon_range: 800.0,
         credit_scale: 1000.0,
         distressed: 0.0,
+        other_projectile_slots: vec![],
+        own_projectile_slots: vec![],
     });
     assert_eq!(obs.len(), OBS_DIM);
 
@@ -306,12 +309,22 @@ fn test_logits_to_discrete_action_all_valid() {
 
 // ── RLNet forward-pass shapes ────────────────────────────────────────────
 
-/// Helper: create zero self + obj tensors for testing.
-fn zero_inputs(batch: usize) -> (Tensor<InferBackend, 2>, Tensor<InferBackend, 3>) {
+/// Helper: create zero self + obj + proj tensors for testing.
+fn zero_inputs(
+    batch: usize,
+) -> (
+    Tensor<InferBackend, 2>,
+    Tensor<InferBackend, 3>,
+    Tensor<InferBackend, 3>,
+) {
     let device = Default::default();
     let s = Tensor::<InferBackend, 2>::zeros([batch, SELF_INPUT_DIM], &device);
     let o = Tensor::<InferBackend, 3>::zeros([batch, N_OBJECTS, OBJECT_INPUT_DIM], &device);
-    (s, o)
+    let p = Tensor::<InferBackend, 3>::zeros(
+        [batch, N_PROJECTILE_SLOTS, PROJ_INPUT_DIM],
+        &device,
+    );
+    (s, o, p)
 }
 
 #[test]
@@ -319,8 +332,8 @@ fn test_rlnet_policy_output_shape() {
     let device = Default::default();
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
     let batch = 4usize;
-    let (s, o) = zero_inputs(batch);
-    let (action_out, target_out) = net.forward(s, o);
+    let (s, o, p) = zero_inputs(batch);
+    let (action_out, target_out) = net.forward(s, o, p);
     assert_eq!(action_out.shape().dims, [batch, POLICY_OUTPUT_DIM]);
     assert_eq!(target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
 }
@@ -330,8 +343,8 @@ fn test_rlnet_value_output_shape() {
     let device = Default::default();
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, VALUE_OUTPUT_DIM);
     let batch = 3usize;
-    let (s, o) = zero_inputs(batch);
-    let (action_out, target_out) = net.forward(s, o);
+    let (s, o, p) = zero_inputs(batch);
+    let (action_out, target_out) = net.forward(s, o, p);
     assert_eq!(action_out.shape().dims, [batch, VALUE_OUTPUT_DIM]);
     assert_eq!(target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
 }
@@ -340,8 +353,8 @@ fn test_rlnet_value_output_shape() {
 fn test_rlnet_output_zero_init() {
     let device = Default::default();
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
-    let (s, o) = zero_inputs(1);
-    let (action_logits, _) = net.forward(s, o);
+    let (s, o, p) = zero_inputs(1);
+    let (action_logits, _) = net.forward(s, o, p);
     let logits: Vec<f32> = action_logits
         .into_data()
         .into_vec::<f32>()
@@ -358,8 +371,8 @@ fn test_rlnet_output_zero_init() {
 fn test_rlnet_target_logits_masked() {
     let device = Default::default();
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
-    let (s, o) = zero_inputs(1);
-    let (_, target_logits) = net.forward(s, o);
+    let (s, o, p) = zero_inputs(1);
+    let (_, target_logits) = net.forward(s, o, p);
     let tl: Vec<f32> = target_logits
         .into_data()
         .into_vec::<f32>()
@@ -384,9 +397,10 @@ fn test_rlnet_target_logits_masked() {
 fn test_inference_net_produces_valid_action() {
     let inference = InferenceNet::new();
     let obs = vec![0.0_f32; OBS_DIM];
+    let proj_obs = vec![0.0_f32; N_PROJECTILE_SLOTS * PROJ_INPUT_DIM];
     let (s, o) = split_obs(&obs);
     let (action_logits, target_logits) =
-        inference.run_inference(s.to_vec(), o.to_vec(), 1);
+        inference.run_inference(s.to_vec(), o.to_vec(), proj_obs, 1);
 
     assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM, "wrong action logit count");
     assert_eq!(target_logits.len(), TARGET_OUTPUT_DIM, "wrong target logit count");
@@ -407,8 +421,9 @@ fn test_inference_net_batched() {
     let (s, o) = split_obs(&obs);
     let self_flat: Vec<f32> = s.iter().cloned().cycle().take(batch_size * s.len()).collect();
     let obj_flat: Vec<f32> = o.iter().cloned().cycle().take(batch_size * o.len()).collect();
+    let proj_flat: Vec<f32> = vec![0.0; batch_size * N_PROJECTILE_SLOTS * PROJ_INPUT_DIM];
     let (action_logits, target_logits) =
-        inference.run_inference(self_flat, obj_flat, batch_size);
+        inference.run_inference(self_flat, obj_flat, proj_flat, batch_size);
     assert_eq!(action_logits.len(), batch_size * POLICY_OUTPUT_DIM);
     assert_eq!(target_logits.len(), batch_size * TARGET_OUTPUT_DIM);
 }

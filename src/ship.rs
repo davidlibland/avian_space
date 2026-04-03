@@ -480,6 +480,7 @@ pub struct ShipBundle {
     ship: Ship,
     faction: ShipHostility,
     distressed: Distressed,
+    tracer_slots: crate::weapons::TracerSlots,
     sprite: Sprite,
     transform: Transform,
     body: RigidBody,
@@ -525,6 +526,7 @@ pub fn ship_bundle(
         faction: ShipHostility(ship.enemies.clone()),
         ship,
         distressed: Distressed::default(),
+        tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
         sprite: Sprite::from_image(asset_server.load(ship_data.sprite_path.to_string())),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
@@ -560,6 +562,7 @@ pub fn ship_bundle_from_pilot(
     ShipBundle {
         faction: ShipHostility(ship.enemies.clone()),
         distressed: Distressed::default(),
+        tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
         max_angular_speed: MaxAngularSpeed(4.0 * PI),

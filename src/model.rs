@@ -27,9 +27,9 @@ use burn::{
 
 use crate::rl_obs::{
     self, CORE_BLOCK_START, CORE_FEAT_SIZE, DiscreteAction, K_ASTEROIDS, K_FRIENDLY_SHIPS,
-    K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, N_ENTITY_SLOTS, N_ENTITY_TYPES, OBS_DIM, SELF_SIZE,
-    SLOT_IS_PRESENT, SLOT_SIZE, SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START,
-    TYPE_ONEHOT_SIZE,
+    K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, K_PROJECTILES, N_ENTITY_SLOTS, N_ENTITY_TYPES, OBS_DIM,
+    PROJ_SLOT_SIZE, SELF_SIZE, SLOT_IS_PRESENT, SLOT_SIZE, SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE,
+    TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
 };
 
 // ---------------------------------------------------------------------------
@@ -44,6 +44,15 @@ pub const OBJECT_INPUT_DIM: usize = SLOT_SIZE;
 
 /// Total entity floats per observation (`N_OBJECTS × OBJECT_INPUT_DIM`).
 pub const ENTITIES_FLAT_DIM: usize = N_OBJECTS * OBJECT_INPUT_DIM;
+
+/// Number of projectile slots per observation.
+pub const N_PROJECTILE_SLOTS: usize = K_PROJECTILES;
+
+/// Per-projectile feature count.
+pub const PROJ_INPUT_DIM: usize = PROJ_SLOT_SIZE;
+
+/// Total projectile floats per observation.
+pub const PROJECTILES_FLAT_DIM: usize = N_PROJECTILE_SLOTS * PROJ_INPUT_DIM;
 
 /// Number of object slots per observation.
 pub const N_OBJECTS: usize = N_ENTITY_SLOTS;
@@ -76,7 +85,7 @@ pub type TrainBackend = Autodiff<Wgpu>;
 // NetBlock — pre-norm feedforward block
 // ---------------------------------------------------------------------------
 
-/// `LayerNorm → Linear(dim→dim, Xavier) → SiLU`
+/// `LayerNorm → Linear(dim→dim, Xavier) → SiLU`, with residual connection.
 #[derive(Module, Debug)]
 pub struct NetBlock<B: Backend> {
     norm: LayerNorm<B>,
@@ -94,13 +103,62 @@ impl<B: Backend> NetBlock<B> {
     }
 
     pub fn forward<const D: usize>(&self, x: Tensor<B, D>) -> Tensor<B, D> {
-        let x = self.norm.forward(x);
-        let x = self.fc.forward(x);
-        silu(x)
+        let residual = x.clone();
+        let out = self.norm.forward(x);
+        let out = self.fc.forward(out);
+        residual + silu(out)
     }
 }
 
 type Block<B> = NetBlock<B>;
+
+/// Number of attention heads for multi-head attention.
+const N_HEADS: usize = 4;
+
+/// Multi-head scaled dot-product attention.
+///
+/// * `q`: `[B, Nq, H]` queries
+/// * `k`: `[B, Nk, H]` keys
+/// * `v`: `[B, Nk, H]` values
+/// * `mask`: optional `[B, Nk]` — 0.0 masks out that key position
+///
+/// Returns `[B, Nq, H]`.
+fn multi_head_attention<B: Backend>(
+    q: Tensor<B, 3>,
+    k: Tensor<B, 3>,
+    v: Tensor<B, 3>,
+    mask: Option<Tensor<B, 2>>,
+    n_heads: usize,
+) -> Tensor<B, 3> {
+    let [b, nq, h] = q.dims();
+    let [_, nk, _] = k.dims();
+    let head_dim = h / n_heads;
+    let scale = (head_dim as f64).sqrt() as f32;
+
+    // Reshape to [B, N, n_heads, head_dim] then transpose to [B, n_heads, N, head_dim]
+    let q = q.reshape([b, nq, n_heads, head_dim]).swap_dims(1, 2); // [B, H_, Nq, D]
+    let k = k.reshape([b, nk, n_heads, head_dim]).swap_dims(1, 2); // [B, H_, Nk, D]
+    let v = v.reshape([b, nk, n_heads, head_dim]).swap_dims(1, 2); // [B, H_, Nk, D]
+
+    // Scaled dot-product: [B, H_, Nq, D] @ [B, H_, D, Nk] → [B, H_, Nq, Nk]
+    let scores = q.matmul(k.swap_dims(2, 3)).div_scalar(scale);
+
+    // Apply mask if provided
+    let scores = if let Some(m) = mask {
+        // m: [B, Nk] → [B, 1, 1, Nk]
+        let m = m.unsqueeze_dim::<3>(1).unsqueeze_dim::<4>(1);
+        let neg_inf = scores.zeros_like().add_scalar(-1e9);
+        scores.clone() * m.clone() + neg_inf * (m.ones_like() - m)
+    } else {
+        scores
+    };
+
+    let weights = softmax(scores, 3); // [B, H_, Nq, Nk]
+    let out = weights.matmul(v); // [B, H_, Nq, D]
+
+    // Transpose back and reshape: [B, Nq, H]
+    out.swap_dims(1, 2).reshape([b, nq, h])
+}
 
 // ---------------------------------------------------------------------------
 // RLNet — policy / value network
@@ -133,75 +191,91 @@ pub fn split_obj_feat<B: Backend>(
 ///
 /// ## Architecture
 ///
-/// 1. **Object encoder** (type-conditioned):
-///    Each entity type (Ship, Asteroid, Planet, Pickup) gets its own linear
-///    projection via a shared weight tensor `obj_embed_w [T, H, F]` and bias
-///    `obj_embed_b [T, H]`, where T=4 entity types, H=hidden_dim, F=feature_dim
-///    (slot features excluding the type one-hot).
+/// 1. **Entity encoder** (type-conditioned):
+///    Dual embedding (core + type-specific) → 2×NetBlock (with residual).
 ///
-///    Given `one_hot [B,N,T]` and `feat [B,N,F]`:
-///    ```text
-///    W_blended = einsum("thf, bnt -> bnhf", obj_embed_w, one_hot)  // [B,N,H,F]
-///    b_blended = einsum("th, bnt -> bnh", obj_embed_b, one_hot)    // [B,N,H]
-///    obj_enc   = einsum("bnhf, bnf -> bnh", W_blended, feat) + b_blended
-///    ```
-///    Followed by `2×NetBlock`.
+/// 2. **Projectile encoder**: Linear → NetBlock (with residual).
 ///
-/// 2. **Self encoder**: `self_features [B,SELF_DIM] → [B,H]` via 2-layer MLP.
-/// 3. **Attention**: self as query, object-enc as keys/values → `[B,H]`.
-/// 4. **Merge**: `concat(attn, self_enc) [B,2H] → Linear → [B,H]`.
-/// 5. **Decoder**: `2×NetBlock + LayerNorm + SiLU → output [B,output_dim]`.
-/// 6. **Target head** (pointer network): separate Q/K projections from
-///    merged rep and obj_enc → one logit per entity slot + "no target".
+/// 3. **Entity←Projectile cross-attention** (residual):
+///    Entities (Q) attend to projectiles (K/V).
+///    Masked so only ships and asteroids are updated (planets/pickups unchanged).
 ///
-/// The output projection is zero-initialised so the network starts near a
-/// uniform policy / zero value.
+/// 4. **Self encoder**: 2-layer MLP → [B, H].
+///
+/// 5. **Self←Entity multi-head attention** (4 heads): self queries entities.
+///
+/// 6. **Self←Projectile multi-head attention** (4 heads): self queries projectiles.
+///
+/// 7. **Merge**: concat(entity_attn, proj_attn, self_enc) [B, 3H] → [B, H].
+///
+/// 8. **Decoder**: 2×NetBlock (with residual) + LayerNorm + SiLU → action logits.
+///
+/// 9. **Target head** (pointer network): Q from decoded state, K from
+///    per-entity embeddings (post cross-attention) → one logit per entity + "no target".
+///    Empty entity slots masked to -inf.
 #[derive(Module, Debug)]
 pub struct RLNet<B: Backend> {
-    // Stored for the attention scale; excluded from saved weights because
-    // `new()` is always called before `load_record()`.
     #[module(skip)]
     hidden_dim: usize,
 
-    // Object encoder — dual embedding:
-    //   core_embed:  shared Linear for core features (same meaning for all types)
-    //   type_embed_w / type_embed_b:  type-conditioned for type-specific features
-    /// Shared linear for core features: `[CORE_FEAT_SIZE] → [H]`.
+    // ── Entity encoder (type-conditioned dual embedding) ──────────────────
     core_embed: Linear<B>,
-    /// Type-conditioned weight: `[N_ENTITY_TYPES, hidden_dim, TYPE_BLOCK_SIZE]`.
     type_embed_w: Param<Tensor<B, 3>>,
-    /// Type-conditioned bias: `[N_ENTITY_TYPES, hidden_dim]`.
     type_embed_b: Param<Tensor<B, 2>>,
     eblock1: Block<B>,
     eblock2: Block<B>,
 
-    // Self encoder
+    // ── Projectile encoder ────────────────────────────────────────────────
+    proj_embed: Linear<B>,
+    proj_block: Block<B>,
+
+    // ── Entity←Projectile cross-attention (single-head, residual) ─────────
+    cross_q_proj: Linear<B>,
+    cross_k_proj: Linear<B>,
+    cross_v_proj: Linear<B>,
+    cross_norm: LayerNorm<B>,
+
+    // ── Self encoder ──────────────────────────────────────────────────────
     self_embed: Linear<B>,
     self_fc2: Linear<B>,
 
-    // Single-head attention
-    q_proj: Linear<B>,
-    k_proj: Linear<B>,
-    v_proj: Linear<B>,
+    // ── Self←Entity multi-head attention ───────────────────────────────────
+    ent_q_proj: Linear<B>,
+    ent_k_proj: Linear<B>,
+    ent_v_proj: Linear<B>,
 
-    // Post-attention merge
+    // ── Self←Projectile multi-head attention ──────────────────────────────
+    pq_proj: Linear<B>,
+    pk_proj: Linear<B>,
+    pv_proj: Linear<B>,
+
+    // ── Merge + Decoder ──────────────────────────────────────────────────
     merge_proj: Linear<B>,
-
-    // Decoder
     dblock1: Block<B>,
     dblock2: Block<B>,
     norm: LayerNorm<B>,
     output: Linear<B>,
 
-    // Target-selection pointer head
+    // ── Target-selection pointer head ──────────────────────────────────────
     target_q_proj: Linear<B>,
     target_k_proj: Linear<B>,
-    /// Bias logit for the "no target" option (learned scalar).
     target_no_tgt: Linear<B>,
 }
 
 impl<B: Backend> RLNet<B> {
     pub fn new(device: &B::Device, hidden_dim: usize, output_dim: usize) -> Self {
+        let lin = |i, o| LinearConfig::new(i, o).init(device);
+        let lin_xavier = |i, o| {
+            LinearConfig::new(i, o)
+                .with_initializer(Initializer::XavierNormal { gain: 1.0 })
+                .init(device)
+        };
+        let lin_zero = |i, o| {
+            LinearConfig::new(i, o)
+                .with_initializer(Initializer::Zeros)
+                .init(device)
+        };
+
         // Type-conditioned embedding for type-specific features.
         let type_std = (2.0 / (TYPE_BLOCK_SIZE + hidden_dim) as f64).sqrt();
         let type_w = Tensor::<B, 3>::random(
@@ -213,126 +287,170 @@ impl<B: Backend> RLNet<B> {
 
         Self {
             hidden_dim,
-            core_embed: LinearConfig::new(CORE_FEAT_SIZE, hidden_dim).init(device),
+
+            // Entity encoder
+            core_embed: lin(CORE_FEAT_SIZE, hidden_dim),
             type_embed_w: Param::from_tensor(type_w),
             type_embed_b: Param::from_tensor(type_b),
             eblock1: Block::new(device, hidden_dim),
             eblock2: Block::new(device, hidden_dim),
-            self_embed: LinearConfig::new(SELF_INPUT_DIM, hidden_dim).init(device),
-            self_fc2: LinearConfig::new(hidden_dim, hidden_dim).init(device),
-            q_proj: LinearConfig::new(hidden_dim, hidden_dim).init(device),
-            k_proj: LinearConfig::new(hidden_dim, hidden_dim).init(device),
-            v_proj: LinearConfig::new(hidden_dim, hidden_dim).init(device),
-            merge_proj: LinearConfig::new(hidden_dim * 2, hidden_dim).init(device),
+
+            // Projectile encoder
+            proj_embed: lin(PROJ_INPUT_DIM, hidden_dim),
+            proj_block: Block::new(device, hidden_dim),
+
+            // Entity←Projectile cross-attention
+            cross_q_proj: lin_xavier(hidden_dim, hidden_dim),
+            cross_k_proj: lin_xavier(hidden_dim, hidden_dim),
+            cross_v_proj: lin_xavier(hidden_dim, hidden_dim),
+            cross_norm: LayerNormConfig::new(hidden_dim).init(device),
+
+            // Self encoder
+            self_embed: lin(SELF_INPUT_DIM, hidden_dim),
+            self_fc2: lin(hidden_dim, hidden_dim),
+
+            // Self←Entity multi-head attention
+            ent_q_proj: lin_xavier(hidden_dim, hidden_dim),
+            ent_k_proj: lin_xavier(hidden_dim, hidden_dim),
+            ent_v_proj: lin_xavier(hidden_dim, hidden_dim),
+
+            // Self←Projectile multi-head attention
+            pq_proj: lin_xavier(hidden_dim, hidden_dim),
+            pk_proj: lin_xavier(hidden_dim, hidden_dim),
+            pv_proj: lin_xavier(hidden_dim, hidden_dim),
+
+            // Merge + Decoder
+            merge_proj: lin(hidden_dim * 3, hidden_dim),
             dblock1: Block::new(device, hidden_dim),
             dblock2: Block::new(device, hidden_dim),
             norm: LayerNormConfig::new(hidden_dim).init(device),
-            output: LinearConfig::new(hidden_dim, output_dim)
-                .with_initializer(Initializer::Zeros)
-                .init(device),
-            target_q_proj: LinearConfig::new(hidden_dim, hidden_dim).init(device),
-            target_k_proj: LinearConfig::new(hidden_dim, hidden_dim).init(device),
-            target_no_tgt: LinearConfig::new(hidden_dim, 1)
-                .with_initializer(Initializer::Zeros)
-                .init(device),
+            output: lin_zero(hidden_dim, output_dim),
+
+            // Target head
+            target_q_proj: lin_xavier(hidden_dim, hidden_dim),
+            target_k_proj: lin_xavier(hidden_dim, hidden_dim),
+            target_no_tgt: lin_zero(hidden_dim, 1),
         }
     }
 
     /// Forward pass.
     ///
-    /// * `self_feat`: `[B, SELF_INPUT_DIM]` — ship self-state features.
-    /// * `obj_feat`: `[B, N_OBJECTS, OBJECT_INPUT_DIM]` — per-entity features.
+    /// * `self_feat`: `[B, SELF_INPUT_DIM]`
+    /// * `obj_feat`:  `[B, N_OBJECTS, OBJECT_INPUT_DIM]`
+    /// * `proj_feat`: `[B, K_PROJECTILES, PROJ_INPUT_DIM]`
     ///
     /// Returns `(action_logits [B, output_dim], target_logits [B, N_OBJECTS+1])`.
-    /// The last target logit (index N_OBJECTS) is the "no target" option.
-    /// Empty entity slots (is_present=0) are masked to `-inf`.
     pub fn forward(
         &self,
         self_feat: Tensor<B, 2>,
         obj_feat: Tensor<B, 3>,
+        proj_feat: Tensor<B, 3>,
     ) -> (Tensor<B, 2>, Tensor<B, 2>) {
+        let h = self.hidden_dim;
         let (type_onehot, is_present, core_feat, type_feat) = split_obj_feat(obj_feat);
 
-        // ── Dual object embedding ──────────────────────────────────────────
-        //
-        // 1. core_embed (shared Linear): core_feat [B,N,C] → [B,N,H]
-        //    All entity types use the same projection since these features
-        //    (rel_pos, pursuit_angle, etc.) have the same meaning for all types.
-        //
-        // 2. type_embed (type-conditioned):
-        //    type_embed_w [T, H, S] blended via type_onehot [B,N,T]:
-        //      W_blended = einsum("ths, bnt -> bnhs", type_embed_w, type_onehot)
-        //      b_blended = einsum("th, bnt -> bnh", type_embed_b, type_onehot)
-        //      type_enc  = einsum("bnhs, bns -> bnh", W_blended, type_feat) + b_blended
-        //
-        // 3. obj_enc = core_enc + type_enc    (summed, then through NetBlocks)
-
-        let h = self.hidden_dim;
-
-        // Core embedding: [B, N, CORE_FEAT_SIZE] → [B, N, H]
+        // ── 1. Entity embedding (type-conditioned) ───────────────────────────
         let core_enc = self.core_embed.forward(core_feat);
 
-        // Type-conditioned embedding via matmul with one-hot blending:
-        // W: [T, H*S] → one_hot [B,N,T] @ W [T,H*S] → [B,N,H*S] → [B,N,H,S]
         let ts = TYPE_BLOCK_SIZE;
         let w_flat = self.type_embed_w.val().reshape([N_ENTITY_TYPES, h * ts]);
-        let w_blended = type_onehot.clone().matmul(w_flat.unsqueeze()); // [B, N, H*S]
+        let w_blended = type_onehot.clone().matmul(w_flat.unsqueeze());
         let [batch_size, n_ents, _] = w_blended.dims();
-        let w_blended = w_blended.reshape([batch_size, n_ents, h, ts]); // [B, N, H, S]
+        let w_blended = w_blended.reshape([batch_size, n_ents, h, ts]);
+        let b_blended = type_onehot.clone().matmul(self.type_embed_b.val().unsqueeze());
+        let type_feat_col = type_feat.unsqueeze_dim::<4>(3);
+        let type_enc = w_blended.matmul(type_feat_col).squeeze_dim(3) + b_blended;
 
-        // b: one_hot [B,N,T] @ b [T,H] → [B,N,H]
-        let b_blended = type_onehot.matmul(self.type_embed_b.val().unsqueeze()); // [B, N, H]
+        let ent_enc = core_enc + type_enc;
+        let ent_enc = self.eblock1.forward(ent_enc); // residual inside
+        let ent_enc = self.eblock2.forward(ent_enc); // [B, N, H]
 
-        // Batched matmul: [B,N,H,S] × [B,N,S,1] → [B,N,H,1] → [B,N,H]
-        let type_feat_col = type_feat.unsqueeze_dim::<4>(3); // [B, N, S, 1]
-        let type_enc = w_blended.matmul(type_feat_col).squeeze_dim(3); // [B, N, H]
-        let type_enc = type_enc + b_blended;
+        // ── 2. Projectile embedding ──────────────────────────────────────────
+        let proj_enc = silu(self.proj_embed.forward(proj_feat.clone()));
+        let proj_enc = self.proj_block.forward(proj_enc); // [B, Np, H]
 
-        // Sum and refine through NetBlocks.
-        let obj_enc = core_enc + type_enc;
-        let obj_enc = self.eblock1.forward(obj_enc);
-        let obj_enc = self.eblock2.forward(obj_enc);
+        // Projectile presence mask: first float of each projectile slot.
+        let proj_present: Tensor<B, 2> = proj_feat.clone().narrow(2, 0, 1).squeeze_dim::<2>(2);
 
-        // Self encoder: [B, SELF_INPUT_DIM] → [B, H]
+        // ── 3. Entity←Projectile cross-attention (residual, masked) ──────────
+        // Only ships (type 0) and asteroids (type 1) attend to projectiles.
+        // Planets (type 2) and pickups (type 3) are unchanged.
+        let ship_or_asteroid_mask: Tensor<B, 2> = {
+            // type_onehot [B, N, 4]: columns 0=ship, 1=asteroid
+            let ship_col: Tensor<B, 2> = type_onehot.clone().narrow(2, 0, 1).squeeze_dim::<2>(2);
+            let ast_col: Tensor<B, 2> = type_onehot.clone().narrow(2, 1, 1).squeeze_dim::<2>(2);
+            (ship_col + ast_col).clamp(0.0, 1.0)
+        };
+
+        let cross_q = self.cross_q_proj.forward(self.cross_norm.forward(ent_enc.clone()));
+        let cross_k = self.cross_k_proj.forward(proj_enc.clone());
+        let cross_v = self.cross_v_proj.forward(proj_enc.clone());
+
+        // Single-head cross-attention: entities query projectiles
+        let scale = (h as f64).sqrt() as f32;
+        let scores = cross_q
+            .matmul(cross_k.swap_dims(1, 2))
+            .div_scalar(scale); // [B, N, Np]
+
+        // Mask out absent projectiles
+        let proj_mask_3d = proj_present
+            .clone()
+            .unsqueeze_dim::<3>(1)
+            .repeat_dim(1, n_ents); // [B, N, Np]
+        let neg_inf_cross =
+            Tensor::<B, 3>::full([batch_size, n_ents, K_PROJECTILES], -1e9, &scores.device());
+        let scores = scores.clone() * proj_mask_3d.clone()
+            + neg_inf_cross * (proj_mask_3d.ones_like() - proj_mask_3d);
+
+        let cross_weights = softmax(scores, 2); // [B, N, Np]
+        let cross_out = cross_weights.matmul(cross_v); // [B, N, H]
+
+        // Apply residual only to ships and asteroids
+        let gate = ship_or_asteroid_mask.unsqueeze_dim::<3>(2); // [B, N, 1]
+        let ent_enc = ent_enc + cross_out * gate; // [B, N, H]
+
+        // ── 4. Self encoder ──────────────────────────────────────────────────
         let self_enc = silu(self.self_embed.forward(self_feat));
-        let self_enc = silu(self.self_fc2.forward(self_enc));
+        let self_enc = silu(self.self_fc2.forward(self_enc)); // [B, H]
 
-        // Scaled dot-product attention (self as Q, objects as K/V)
-        let scale = (self.hidden_dim as f64).sqrt() as f32;
-        let q = self.q_proj.forward(self_enc.clone()).unsqueeze_dim::<3>(1); // [B, 1, H]
-        let k = self.k_proj.forward(obj_enc.clone()).swap_dims(1, 2); // [B, H, N]
-        let v = self.v_proj.forward(obj_enc.clone()); // [B, N, H]
-        let scores = q.matmul(k).div_scalar(scale); // [B, 1, N]
-        let weights = softmax(scores, 2); // [B, 1, N]
-        let attn_out = weights.matmul(v).squeeze_dim(1); // [B, H]
+        // ── 5. Self←Entity multi-head attention ──────────────────────────────
+        let sq = self_enc.clone().unsqueeze_dim::<3>(1); // [B, 1, H]
+        let ent_q = self.ent_q_proj.forward(sq);
+        let ent_k = self.ent_k_proj.forward(ent_enc.clone());
+        let ent_v = self.ent_v_proj.forward(ent_enc.clone());
+        let ent_attn = multi_head_attention(ent_q, ent_k, ent_v, None, N_HEADS)
+            .squeeze_dim(1); // [B, H]
 
-        // Merge: concat(attn_out, self_enc) → H
-        let merged = Tensor::cat(vec![attn_out, self_enc], 1); // [B, 2H]
-        let x = silu(self.merge_proj.forward(merged.clone())); // [B, H]
+        // ── 6. Self←Projectile multi-head attention ──────────────────────────
+        let pq = self.pq_proj.forward(self_enc.clone().unsqueeze_dim::<3>(1));
+        let pk = self.pk_proj.forward(proj_enc.clone());
+        let pv = self.pv_proj.forward(proj_enc);
+        let proj_attn = multi_head_attention(pq, pk, pv, Some(proj_present), N_HEADS)
+            .squeeze_dim(1); // [B, H]
 
-        // Decoder → action logits
+        // ── 7. Merge ─────────────────────────────────────────────────────────
+        let merged = Tensor::cat(vec![ent_attn, proj_attn, self_enc], 1); // [B, 3H]
+        let x = silu(self.merge_proj.forward(merged)); // [B, H]
+
+        // ── 8. Decoder → action logits ───────────────────────────────────────
         let x = self.dblock1.forward(x);
         let x = self.dblock2.forward(x);
         let x = self.norm.forward(x);
         let x = silu(x);
         let action_logits = self.output.forward(x.clone()); // [B, output_dim]
 
-        // Target-selection pointer head
+        // ── 9. Target head (pointer from decoded state to entity embeddings) ─
         let tq = self.target_q_proj.forward(x.clone()).unsqueeze_dim::<3>(1); // [B, 1, H]
-        let tk = self.target_k_proj.forward(obj_enc).swap_dims(1, 2); // [B, H, N]
+        let tk = self.target_k_proj.forward(ent_enc).swap_dims(1, 2); // [B, H, N]
         let entity_logits = tq.matmul(tk).div_scalar(scale).squeeze_dim(1); // [B, N]
 
-        // "No target" logit: learned bias from the merged representation.
         let no_tgt_logit = self.target_no_tgt.forward(x); // [B, 1]
         let target_logits = Tensor::cat(vec![entity_logits, no_tgt_logit], 1); // [B, N+1]
 
-        // Mask empty slots to -inf so they can't be selected.
-        // is_present [B, N] → append a 1.0 column for "no target" (always available).
-        let batch_size = is_present.dims()[0];
+        // Mask empty entity slots to -inf.
         let device = is_present.device();
         let ones = Tensor::<B, 2>::ones([batch_size, 1], &device);
-        let mask = Tensor::cat(vec![is_present, ones], 1); // [B, N+1]
-        // Where mask == 0, set logits to -1e9 (large negative, acts as -inf).
+        let mask = Tensor::cat(vec![is_present, ones], 1);
         let neg_inf = Tensor::<B, 2>::full([batch_size, N_OBJECTS + 1], -1e9, &device);
         let target_logits =
             target_logits.clone() * mask.clone() + neg_inf * (mask.ones_like() - mask);
@@ -368,14 +486,14 @@ impl InferenceNet {
     ///
     /// * `self_flat`: flattened `[batch_size × SELF_INPUT_DIM]`
     /// * `obj_flat`: flattened `[batch_size × N_OBJECTS × OBJECT_INPUT_DIM]`
+    /// * `proj_flat`: flattened `[batch_size × K_PROJECTILES × PROJ_INPUT_DIM]`
     ///
-    /// Returns `(action_logits, target_logits)` where:
-    /// - `action_logits`: flattened `[batch_size × POLICY_OUTPUT_DIM]`
-    /// - `target_logits`: flattened `[batch_size × TARGET_OUTPUT_DIM]`
+    /// Returns `(action_logits, target_logits)`.
     pub fn run_inference(
         &self,
         self_flat: Vec<f32>,
         obj_flat: Vec<f32>,
+        proj_flat: Vec<f32>,
         batch_size: usize,
     ) -> (Vec<f32>, Vec<f32>) {
         let self_input = Tensor::<InferBackend, 2>::from_data(
@@ -386,7 +504,11 @@ impl InferenceNet {
             TensorData::new(obj_flat, [batch_size, N_OBJECTS, OBJECT_INPUT_DIM]),
             &self.device,
         );
-        let (action, target) = self.net.forward(self_input, obj_input);
+        let proj_input = Tensor::<InferBackend, 3>::from_data(
+            TensorData::new(proj_flat, [batch_size, K_PROJECTILES, PROJ_INPUT_DIM]),
+            &self.device,
+        );
+        let (action, target) = self.net.forward(self_input, obj_input, proj_input);
         let action_logits = action
             .into_data()
             .into_vec::<f32>()

@@ -15,6 +15,7 @@ pub fn weapons_plugin(app: &mut App) {
             weapon_lifetime,
             weapon_system_cooldown,
             missile_guidance,
+            cleanup_tracer_slots,
         ),
     );
 }
@@ -35,6 +36,61 @@ pub struct Projectile {
     pub lifetime: f32,
     pub owner: Entity,
     pub weapon_type: String,
+}
+
+/// Marks a projectile as a tracer — tracked by the RL observation system
+/// across its full lifetime. The `slot` field is the index into the ship's
+/// `TracerSlots` array (0..K_OWN_PROJECTILES-1).
+#[derive(Component)]
+pub struct Tracer {
+    pub slot: u8,
+}
+
+/// Per-ship resource tracking which tracer slots are in use.
+/// Each slot is `None` (free) or `Some(projectile_entity)`.
+#[derive(Component)]
+pub struct TracerSlots {
+    pub slots: Vec<Option<Entity>>,
+    /// Round-robin counter across weapon types for even distribution.
+    next_weapon_idx: usize,
+}
+
+impl TracerSlots {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            slots: vec![None; capacity],
+            next_weapon_idx: 0,
+        }
+    }
+
+    /// Find the next free slot. Returns `None` if all slots are occupied.
+    pub fn next_free_slot(&self) -> Option<u8> {
+        self.slots
+            .iter()
+            .position(|s| s.is_none())
+            .map(|i| i as u8)
+    }
+
+    /// Assign a projectile to a slot.
+    pub fn assign(&mut self, slot: u8, entity: Entity) {
+        self.slots[slot as usize] = Some(entity);
+    }
+
+    /// Check if a weapon type should get the next tracer, cycling through
+    /// weapon types uniformly. `weapon_names` is the ordered list of weapon
+    /// types this ship has.
+    pub fn should_trace(&mut self, weapon_type: &str, weapon_names: &[&str]) -> bool {
+        if weapon_names.is_empty() || self.next_free_slot().is_none() {
+            return false;
+        }
+        let target_weapon = weapon_names[self.next_weapon_idx % weapon_names.len()];
+        if weapon_type == target_weapon {
+            self.next_weapon_idx += 1;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -195,12 +251,12 @@ impl WeaponSystem {
 pub fn weapon_fire(
     mut reader: MessageReader<FireCommand>,
     mut commands: Commands,
-    mut ships: Query<(&Transform, &mut Ship)>,
+    mut ships: Query<(&Transform, &mut Ship, Option<&mut TracerSlots>)>,
     item_universe: Res<ItemUniverse>,
     asset_server: Res<AssetServer>,
 ) {
     for cmd in reader.read() {
-        let Ok((ship_transform, mut ship)) = ships.get_mut(cmd.ship) else {
+        let Ok((ship_transform, mut ship, tracer_slots)) = ships.get_mut(cmd.ship) else {
             continue;
         };
         let Some(specific) = ship.weapon_systems.find_weapon(&cmd.weapon_type) else {
@@ -253,6 +309,22 @@ pub fn weapon_fire(
                 turn_rate: weapon.turn_rate,
             });
         }
+
+        // Assign tracer if this ship has TracerSlots and a slot is free.
+        if let Some(mut ts) = tracer_slots {
+            let weapon_names: Vec<&str> = ship
+                .weapon_systems
+                .iter_all()
+                .map(|(name, _)| name.as_str())
+                .collect();
+            if ts.should_trace(&cmd.weapon_type, &weapon_names) {
+                if let Some(slot) = ts.next_free_slot() {
+                    let proj_entity = entity_cmd.id();
+                    entity_cmd.insert(Tracer { slot });
+                    ts.assign(slot, proj_entity);
+                }
+            }
+        }
     }
 }
 
@@ -266,6 +338,22 @@ pub(crate) fn weapon_lifetime(
         weapon.lifetime -= dt;
         if weapon.lifetime <= 0.0 {
             safe_despawn(&mut commands, entity);
+        }
+    }
+}
+
+/// Free tracer slots whose projectile entities no longer exist.
+fn cleanup_tracer_slots(
+    mut ships: Query<&mut TracerSlots>,
+    projectiles: Query<(), With<Projectile>>,
+) {
+    for mut ts in &mut ships {
+        for slot in &mut ts.slots {
+            if let Some(e) = *slot {
+                if projectiles.get(e).is_err() {
+                    *slot = None;
+                }
+            }
         }
     }
 }

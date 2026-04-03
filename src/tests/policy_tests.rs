@@ -142,8 +142,9 @@ fn build_obs(self_state: &[f32], slots: &[Vec<f32>]) -> Vec<f32> {
 /// Run inference on a single observation, returning (action, target_idx).
 fn infer_one(net: &InferenceNet, obs: &[f32]) -> (DiscreteAction, Vec<f32>, Vec<f32>) {
     let (s, o) = model::split_obs(obs);
+    let proj = vec![0.0_f32; model::PROJECTILES_FLAT_DIM];
     let (action_logits, target_logits) =
-        net.run_inference(s.to_vec(), o.to_vec(), 1);
+        net.run_inference(s.to_vec(), o.to_vec(), proj, 1);
     let action = model::logits_to_discrete_action(&action_logits, &target_logits);
     (action, action_logits, target_logits)
 }
@@ -314,8 +315,9 @@ fn test_bc_confusion_matrix() {
             self_flat.extend_from_slice(s);
             obj_flat.extend_from_slice(o);
         }
+        let proj_flat = vec![0.0_f32; bs * model::PROJECTILES_FLAT_DIM];
         let (action_logits, target_logits) =
-            net.run_inference(self_flat, obj_flat, bs);
+            net.run_inference(self_flat, obj_flat, proj_flat, bs);
 
         for (i, t) in chunk.iter().enumerate() {
             let al = &action_logits[i * POLICY_OUTPUT_DIM..(i + 1) * POLICY_OUTPUT_DIM];
