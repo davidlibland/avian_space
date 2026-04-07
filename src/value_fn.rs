@@ -61,7 +61,7 @@ pub fn batch_value_inference(
             &inner_device,
         );
 
-        let (value_out, _) = inner_net.forward(self_t, obj_t, proj_t);
+        let (value_out, _, _) = inner_net.forward(self_t, obj_t, proj_t);
         // value_out: [B, N_REWARD_TYPES]
         let flat: Vec<f32> = value_out.into_data().to_vec().expect("f32 conversion");
         for row in flat.chunks_exact(N_REWARD_TYPES) {
@@ -108,7 +108,7 @@ pub fn recompute_bootstrap_values(
                 TensorData::new(last_t.proj_obs.clone(), [1, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
                 &inner_device,
             );
-            let (val, _) = inner_net.forward(self_t, obj_t, proj_t);
+            let (val, _, _) = inner_net.forward(self_t, obj_t, proj_t);
             // val: [1, N_REWARD_TYPES] → extract as array.
             let flat: Vec<f32> = val.into_data().to_vec().expect("f32 conversion");
             let mut bv = [0.0_f32; N_REWARD_TYPES];

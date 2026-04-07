@@ -3,6 +3,7 @@ use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, EntityKind, EntitySlotData, ObsInput, PlanetSlotData,
     ShipSlotData, CORE_BLOCK_START, CORE_FEAT_SIZE, N_ENTITY_SLOTS, OBS_DIM, SLOT_IS_PRESENT,
     SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
+    SLOT_IS_NAV_TARGET, SLOT_IS_WEAPONS_TARGET,
 };
 use crate::ship::{Personality, Ship, ShipData};
 use std::collections::HashMap;
@@ -141,7 +142,8 @@ fn test_roundtrip_entity_slot_to_blocks() {
             distressed: 0.0,
         }),
         value: 0.0,
-        is_current_target: true,
+        is_nav_target: true,
+        is_weapons_target: false,
     };
 
     let planet = EntitySlotData {
@@ -156,7 +158,8 @@ fn test_roundtrip_entity_slot_to_blocks() {
             commodity_margin: -50.0,
         }),
         value: 1234.0,
-        is_current_target: false,
+        is_nav_target: false,
+        is_weapons_target: false,
     };
 
     let asteroid = EntitySlotData {
@@ -171,7 +174,8 @@ fn test_roundtrip_entity_slot_to_blocks() {
             collision_indicator: 0.0,
         }),
         value: 99.0,
-        is_current_target: false,
+        is_nav_target: false,
+        is_weapons_target: false,
     };
 
     // Encode via the full observation pipeline.
@@ -215,14 +219,15 @@ fn test_roundtrip_entity_slot_to_blocks() {
     assert_eq!(&oh[0..t], &[1.0, 0.0, 0.0, 0.0], "slot0 type_onehot");
     // is_present: 1.0
     assert_eq!(ip[0], 1.0, "slot0 is_present");
-    // core_feat: rel_pos(300, 100), rel_vel(0, 0), is_current_target(1), proximity, ...
+    // core_feat: rel_pos(300, 100), rel_vel(0, 0), is_nav_target(1), is_weapons_target(0), proximity, ...
     assert_eq!(cf[0 * c], 300.0, "slot0 rel_pos_x");
     assert_eq!(cf[0 * c + 1], 100.0, "slot0 rel_pos_y");
     assert_eq!(cf[0 * c + 2], 0.0, "slot0 rel_vel_x");
     assert_eq!(cf[0 * c + 3], 0.0, "slot0 rel_vel_y");
-    assert_eq!(cf[0 * c + 4], 1.0, "slot0 is_current_target");
+    assert_eq!(cf[0 * c + 4], 1.0, "slot0 is_nav_target");
+    assert_eq!(cf[0 * c + 5], 0.0, "slot0 is_weapons_target");
     // proximity > 0
-    assert!(cf[0 * c + 5] > 0.0, "slot0 proximity should be > 0");
+    assert!(cf[0 * c + 6] > 0.0, "slot0 proximity should be > 0");
     // type_feat: value(0.0), max_health(100), health(80), max_speed(250),
     //            torque(15), is_hostile(1), should_engage(1), personality(0,1,0)
     assert_eq!(tf[0 * s], 0.0, "slot0 value");
@@ -238,7 +243,8 @@ fn test_roundtrip_entity_slot_to_blocks() {
     assert_eq!(&oh[1 * t..1 * t + t], &[0.0, 0.0, 1.0, 0.0], "slot1 type_onehot (Planet)");
     assert_eq!(ip[1], 1.0, "slot1 is_present");
     assert_eq!(cf[1 * c], 800.0, "slot1 rel_pos_x");
-    assert_eq!(cf[1 * c + 4], 0.0, "slot1 is_current_target");
+    assert_eq!(cf[1 * c + 4], 0.0, "slot1 is_nav_target");
+    assert_eq!(cf[1 * c + 5], 0.0, "slot1 is_weapons_target");
     assert_eq!(tf[1 * s], 1234.0, "slot1 value");
     assert_eq!(tf[1 * s + 1], 1234.0, "slot1 cargo_sale_value");
     assert_eq!(tf[1 * s + 2], 1.0, "slot1 has_ammo");
@@ -283,28 +289,33 @@ fn test_logits_to_discrete_action_argmax() {
     // Craft logits so each head has an obvious winner.
     let action_logits = [1.0_f32, 5.0, 0.0,   0.0, 3.0,   2.0, 0.0,   0.0, 4.0];
     // Target logits: slot 3 is the winner.
-    let mut target_logits = vec![-1e9_f32; TARGET_OUTPUT_DIM];
-    target_logits[3] = 5.0;
-    let (turn, thrust, fp, fs, tgt) =
-        logits_to_discrete_action(&action_logits, &target_logits);
+    let mut nav_target_logits = vec![-1e9_f32; TARGET_OUTPUT_DIM];
+    nav_target_logits[3] = 5.0;
+    let mut wep_target_logits = vec![-1e9_f32; TARGET_OUTPUT_DIM];
+    wep_target_logits[3] = 5.0;
+    let (turn, thrust, fp, fs, nav_tgt, wep_tgt) =
+        logits_to_discrete_action(&action_logits, &nav_target_logits, &wep_target_logits);
     assert_eq!(turn, 1, "turn should be straight");
     assert_eq!(thrust, 1, "thrust should be on");
     assert_eq!(fp, 0, "fire_primary should be off");
     assert_eq!(fs, 1, "fire_secondary should be on");
-    assert_eq!(tgt, 3, "target should be slot 3");
+    assert_eq!(nav_tgt, 3, "nav target should be slot 3");
+    assert_eq!(wep_tgt, 3, "weapons target should be slot 3");
 }
 
 #[test]
 fn test_logits_to_discrete_action_all_valid() {
     let action_logits = [0.0_f32; POLICY_OUTPUT_DIM];
-    let target_logits = vec![0.0_f32; TARGET_OUTPUT_DIM];
-    let (turn, thrust, fp, fs, tgt) =
-        logits_to_discrete_action(&action_logits, &target_logits);
+    let nav_target_logits = vec![0.0_f32; TARGET_OUTPUT_DIM];
+    let wep_target_logits = vec![0.0_f32; TARGET_OUTPUT_DIM];
+    let (turn, thrust, fp, fs, nav_tgt, wep_tgt) =
+        logits_to_discrete_action(&action_logits, &nav_target_logits, &wep_target_logits);
     assert!(turn <= 2);
     assert!(thrust <= 1);
     assert!(fp <= 1);
     assert!(fs <= 1);
-    assert!((tgt as usize) < TARGET_OUTPUT_DIM);
+    assert!((nav_tgt as usize) < TARGET_OUTPUT_DIM);
+    assert!((wep_tgt as usize) < TARGET_OUTPUT_DIM);
 }
 
 // ── RLNet forward-pass shapes ────────────────────────────────────────────
@@ -333,9 +344,10 @@ fn test_rlnet_policy_output_shape() {
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
     let batch = 4usize;
     let (s, o, p) = zero_inputs(batch);
-    let (action_out, target_out) = net.forward(s, o, p);
+    let (action_out, nav_target_out, wep_target_out) = net.forward(s, o, p);
     assert_eq!(action_out.shape().dims, [batch, POLICY_OUTPUT_DIM]);
-    assert_eq!(target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
+    assert_eq!(nav_target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
+    assert_eq!(wep_target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
 }
 
 #[test]
@@ -344,9 +356,10 @@ fn test_rlnet_value_output_shape() {
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, VALUE_OUTPUT_DIM);
     let batch = 3usize;
     let (s, o, p) = zero_inputs(batch);
-    let (action_out, target_out) = net.forward(s, o, p);
+    let (action_out, nav_target_out, wep_target_out) = net.forward(s, o, p);
     assert_eq!(action_out.shape().dims, [batch, VALUE_OUTPUT_DIM]);
-    assert_eq!(target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
+    assert_eq!(nav_target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
+    assert_eq!(wep_target_out.shape().dims, [batch, TARGET_OUTPUT_DIM]);
 }
 
 #[test]
@@ -354,7 +367,7 @@ fn test_rlnet_output_zero_init() {
     let device = Default::default();
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
     let (s, o, p) = zero_inputs(1);
-    let (action_logits, _) = net.forward(s, o, p);
+    let (action_logits, _, _) = net.forward(s, o, p);
     let logits: Vec<f32> = action_logits
         .into_data()
         .into_vec::<f32>()
@@ -372,8 +385,8 @@ fn test_rlnet_target_logits_masked() {
     let device = Default::default();
     let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
     let (s, o, p) = zero_inputs(1);
-    let (_, target_logits) = net.forward(s, o, p);
-    let tl: Vec<f32> = target_logits
+    let (_, nav_target_logits, _) = net.forward(s, o, p);
+    let tl: Vec<f32> = nav_target_logits
         .into_data()
         .into_vec::<f32>()
         .expect("extraction failed");
@@ -399,18 +412,20 @@ fn test_inference_net_produces_valid_action() {
     let obs = vec![0.0_f32; OBS_DIM];
     let proj_obs = vec![0.0_f32; N_PROJECTILE_SLOTS * PROJ_INPUT_DIM];
     let (s, o) = split_obs(&obs);
-    let (action_logits, target_logits) =
+    let (action_logits, nav_target_logits, wep_target_logits) =
         inference.run_inference(s.to_vec(), o.to_vec(), proj_obs, 1);
 
     assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM, "wrong action logit count");
-    assert_eq!(target_logits.len(), TARGET_OUTPUT_DIM, "wrong target logit count");
-    let (turn, thrust, fp, fs, tgt) =
-        logits_to_discrete_action(&action_logits, &target_logits);
+    assert_eq!(nav_target_logits.len(), TARGET_OUTPUT_DIM, "wrong nav target logit count");
+    assert_eq!(wep_target_logits.len(), TARGET_OUTPUT_DIM, "wrong wep target logit count");
+    let (turn, thrust, fp, fs, nav_tgt, wep_tgt) =
+        logits_to_discrete_action(&action_logits, &nav_target_logits, &wep_target_logits);
     assert!(turn <= 2, "turn_idx out of range: {turn}");
     assert!(thrust <= 1, "thrust_idx out of range: {thrust}");
     assert!(fp <= 1, "fire_primary out of range: {fp}");
     assert!(fs <= 1, "fire_secondary out of range: {fs}");
-    assert!((tgt as usize) < TARGET_OUTPUT_DIM, "target_idx out of range: {tgt}");
+    assert!((nav_tgt as usize) < TARGET_OUTPUT_DIM, "nav_target_idx out of range: {nav_tgt}");
+    assert!((wep_tgt as usize) < TARGET_OUTPUT_DIM, "wep_target_idx out of range: {wep_tgt}");
 }
 
 #[test]
@@ -422,8 +437,9 @@ fn test_inference_net_batched() {
     let self_flat: Vec<f32> = s.iter().cloned().cycle().take(batch_size * s.len()).collect();
     let obj_flat: Vec<f32> = o.iter().cloned().cycle().take(batch_size * o.len()).collect();
     let proj_flat: Vec<f32> = vec![0.0; batch_size * N_PROJECTILE_SLOTS * PROJ_INPUT_DIM];
-    let (action_logits, target_logits) =
+    let (action_logits, nav_target_logits, wep_target_logits) =
         inference.run_inference(self_flat, obj_flat, proj_flat, batch_size);
     assert_eq!(action_logits.len(), batch_size * POLICY_OUTPUT_DIM);
-    assert_eq!(target_logits.len(), batch_size * TARGET_OUTPUT_DIM);
+    assert_eq!(nav_target_logits.len(), batch_size * TARGET_OUTPUT_DIM);
+    assert_eq!(wep_target_logits.len(), batch_size * TARGET_OUTPUT_DIM);
 }

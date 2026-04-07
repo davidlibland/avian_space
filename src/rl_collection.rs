@@ -78,6 +78,8 @@ const BC_SAVE_INTERVAL: usize = 1_000;
 /// Higher values keep the compute busy between data-drain pauses.
 const BC_STEPS_PER_DRAIN: usize = 10;
 
+const OVERRIDE_TRADER_NAV_TARGET: bool = true;
+
 // ---------------------------------------------------------------------------
 // Types sent to the trainer thread
 // ---------------------------------------------------------------------------
@@ -384,6 +386,7 @@ fn rl_step(
     // Only reads ShipHostility (not Ship), so disjoint with the `agents` query.
     all_ship_factions: Query<&ShipHostility, With<Ship>>,
     all_distressed: Query<&crate::ship::Distressed>,
+    all_transforms: Query<&Transform>,
     projectile_query: Query<(&Projectile, Option<&GuidedMissile>)>,
     spatial_query: SpatialQuery,
     resources: (
@@ -407,6 +410,7 @@ fn rl_step(
         &agents,
         &all_positions,
         &all_velocities,
+        &all_transforms,
         planet_query,
         asteroid_query,
         asteroid_field_query,
@@ -436,13 +440,14 @@ fn rl_step(
                 proj_flat.extend_from_slice(proj_obs);
             }
             let inference = rl_resource.inference_net.lock().unwrap();
-            let (action_logits, target_logits) =
+            let (action_logits, nav_target_logits, wep_target_logits) =
                 inference.run_inference(self_flat, obj_flat, proj_flat, batch_size);
             let mut rng = rand::thread_rng();
             let actions = action_logits
                 .chunks(model::POLICY_OUTPUT_DIM)
-                .zip(target_logits.chunks(model::TARGET_OUTPUT_DIM))
-                .map(|(al, tl)| model::sample_discrete_action(al, tl, &mut rng))
+                .zip(nav_target_logits.chunks(model::TARGET_OUTPUT_DIM))
+                .zip(wep_target_logits.chunks(model::TARGET_OUTPUT_DIM))
+                .map(|((al, ntl), wtl)| model::sample_discrete_action(al, ntl, wtl, &mut rng))
                 .collect();
             Some(actions)
         } else {
@@ -476,7 +481,7 @@ fn repeat_actions(
         let Some(action) = agent.last_action else {
             continue;
         };
-        let (turn_idx, thrust_idx, fire_primary, fire_secondary, _target_idx) = action;
+        let (turn_idx, thrust_idx, fire_primary, fire_secondary, _nav_idx, _wep_idx) = action;
         let (thrust, turn) = rl_obs::discrete_to_controls(thrust_idx, turn_idx);
         ship_writer.write(ShipCommand {
             entity,
@@ -484,23 +489,24 @@ fn repeat_actions(
             turn,
             reverse: 0.0,
         });
-        let target_entity = ship.target.as_ref().map(|t| t.get_entity());
-        let target_is_ship = matches!(ship.target, Some(Target::Ship(_)));
+        // Weapons fire at the weapons_target, not the nav_target.
+        let wep_entity = ship.weapons_target.as_ref().map(|t| t.get_entity());
+        let wep_is_ship = matches!(ship.weapons_target, Some(Target::Ship(_)));
         if fire_primary == 1 {
             for weapon_type in ship.weapon_systems.primary.keys() {
                 fire_writer.write(FireCommand {
                     ship: entity,
                     weapon_type: weapon_type.clone(),
-                    target: target_entity,
+                    target: wep_entity,
                 });
             }
         }
         if fire_secondary == 1 {
-            if let Some((wtype, _)) = rl_obs::select_secondary_weapon(ship, target_is_ship) {
+            if let Some((wtype, _)) = rl_obs::select_secondary_weapon(ship, wep_is_ship) {
                 fire_writer.write(FireCommand {
                     ship: entity,
                     weapon_type: wtype.to_string(),
-                    target: target_entity,
+                    target: wep_entity,
                 });
             }
         }
@@ -576,6 +582,7 @@ fn build_all_observations(
     )>,
     all_positions: &Query<&Position>,
     all_velocities: &Query<&LinearVelocity>,
+    all_transforms: &Query<&Transform>,
     planet_query: &Query<(Entity, &Planet)>,
     asteroid_query: &Query<(Entity, &Asteroid)>,
     asteroid_field_query: &Query<&AsteroidField>,
@@ -621,19 +628,23 @@ fn build_all_observations(
             .shape_intersections(&Collider::circle(DETECTION_RADIUS), pos.0, 0.0, &filter)
             .into_iter()
             .filter_map(|hit| {
-                all_positions
+                let hit_pos = all_positions
                     .get(hit)
-                    .ok()
-                    .map(|p| (hit, (p.0 - pos.0).length_squared()))
+                    .map(|p| p.0)
+                    .or_else(|_| all_transforms.get(hit).map(|t| t.translation.truncate()))
+                    .ok()?;
+                Some((hit, (hit_pos - pos.0).length_squared()))
             })
             .collect();
 
         // Helper: compute ego-frame core data for any entity.
         let make_core = |e: Entity, entity_type: u8| -> CoreSlotData {
-            let world_offset = all_positions
+            let entity_pos = all_positions
                 .get(e)
-                .map(|p| p.0 - pos.0)
-                .unwrap_or(Vec2::ZERO);
+                .map(|p| p.0)
+                .or_else(|_| all_transforms.get(e).map(|t| t.translation.truncate()))
+                .unwrap_or(pos.0);
+            let world_offset = entity_pos - pos.0;
             let world_rel_vel = all_velocities
                 .get(e)
                 .map(|v| v.0 - vel.0)
@@ -668,10 +679,21 @@ fn build_all_observations(
         };
 
         // Buckets — sort by distance within each type.
-        let mut planets: Vec<(Entity, f32)> = nearby_hits
+        // Planets: include ALL planets in the system (not just nearby), since
+        // there are few and they're critical for navigation/trading.
+        // Note: static RigidBody entities may only have Transform, not Position.
+        let all_transforms: &Query<&Transform> = all_transforms;
+        let mut planets: Vec<(Entity, f32)> = planet_query
             .iter()
-            .filter(|(e, _)| planet_query.get(*e).is_ok())
-            .cloned()
+            .filter_map(|(e, _)| {
+                // Try Position first (dynamic bodies), fall back to Transform.
+                let planet_pos = all_positions
+                    .get(e)
+                    .map(|p| p.0)
+                    .or_else(|_| all_transforms.get(e).map(|t| t.translation.truncate()))
+                    .ok()?;
+                Some((e, (planet_pos - pos.0).length()))
+            })
             .collect();
         planets.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
@@ -741,7 +763,8 @@ fn build_all_observations(
                         commodity_margin: margin,
                     }),
                     value: csv,
-                    is_current_target: false,
+                    is_nav_target: false,
+                    is_weapons_target: false,
                 }
             })
             .collect();
@@ -768,11 +791,8 @@ fn build_all_observations(
                         (ast.size, (field_ev * expected_qty as f64) as f32)
                     })
                     .unwrap_or((0.0, 0.0));
-                let col_ind = rl_obs::collision_indicator(
-                    core.rel_pos,
-                    core.rel_vel,
-                    ship.data.radius,
-                );
+                let col_ind =
+                    rl_obs::collision_indicator(core.rel_pos, core.rel_vel, ship.data.radius);
                 EntitySlotData {
                     core,
                     kind: EntityKind::Asteroid(AsteroidSlotData {
@@ -781,7 +801,8 @@ fn build_all_observations(
                         collision_indicator: col_ind,
                     }),
                     value: ev,
-                    is_current_target: false,
+                    is_nav_target: false,
+                    is_weapons_target: false,
                 }
             })
             .collect();
@@ -830,7 +851,8 @@ fn build_all_observations(
                 core,
                 kind: EntityKind::Ship(ship_data),
                 value,
-                is_current_target: false,
+                is_nav_target: false,
+                is_weapons_target: false,
             }
         };
 
@@ -865,7 +887,8 @@ fn build_all_observations(
                     core,
                     kind: EntityKind::Pickup(PickupSlotData { value: pv }),
                     value: pv,
-                    is_current_target: false,
+                    is_nav_target: false,
+                    is_weapons_target: false,
                 }
             })
             .collect();
@@ -874,7 +897,8 @@ fn build_all_observations(
         //
         // Phase 1: add up to K entities of each type (no padding).
         // Phase 2: fill remaining capacity with the personality's preferred types.
-        let target_entity = ship.target.as_ref().map(|t| t.get_entity());
+        let nav_entity = ship.nav_target.as_ref().map(|t| t.get_entity());
+        let wep_entity = ship.weapons_target.as_ref().map(|t| t.get_entity());
         let mut entity_slots = Vec::with_capacity(model::N_OBJECTS);
         let mut slot_targets: Vec<Option<Target>> = Vec::with_capacity(model::N_OBJECTS);
 
@@ -890,8 +914,11 @@ fn build_all_observations(
             for i in 0..n {
                 let (e, _) = entity_list[i];
                 if let Some(slot) = slot_data.get_mut(i) {
-                    if target_entity == Some(e) {
-                        slot.is_current_target = true;
+                    if nav_entity == Some(e) {
+                        slot.is_nav_target = true;
+                    }
+                    if wep_entity == Some(e) {
+                        slot.is_weapons_target = true;
                     }
                     entity_slots.push(slot.clone());
                     slot_targets.push(Some(make_target(e)));
@@ -1010,8 +1037,8 @@ fn build_all_observations(
         };
 
         // Other ships' projectiles: nearest K_OTHER_PROJECTILES.
-        let proj_filter = SpatialQueryFilter::from_mask([GameLayer::Weapon])
-            .with_excluded_entities([entity]);
+        let proj_filter =
+            SpatialQueryFilter::from_mask([GameLayer::Weapon]).with_excluded_entities([entity]);
         let mut nearby_other_projs: Vec<(Entity, f32)> = spatial_query
             .shape_intersections(
                 &Collider::circle(DETECTION_RADIUS),
@@ -1143,72 +1170,111 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
     }
 }
 
-/// Compute the per-step goal-target reward from the flat observation vector.
+/// Compute the per-step nav-target reward from the flat observation vector.
 ///
-/// Returns a non-negative reward, gated by health and distress, that rewards
-/// ships for targeting the right entity for their personality.
-fn compute_goal_target_reward(personality: &Personality, obs: &[f32]) -> f32 {
+/// Rewards ships for having the correct navigation target for their personality,
+/// gated by health and distress level.
+fn compute_nav_target_reward(personality: &Personality, obs: &[f32]) -> (f32, bool) {
+    use crate::consts::*;
     use rl_obs::*;
 
-    // Self-state indices.
     let health_frac = obs[0];
     let cargo_frac = obs[5];
-    let distressed = obs[8];
+    let distressed = obs[8]; // distressed level (index 8 in self-state)
 
-    // Gating: must be healthy and calm.
     if health_frac < 0.3 || distressed > 0.5 {
-        return 0.0;
+        return (0.0, false); // too damaged/distressed to get nav reward
     }
-    let gate = health_frac * (1.0 - distressed);
 
-    // Find the current-target slot.
     let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
     let n = model::N_OBJECTS;
 
-    let mut raw = 0.0_f32;
     for i in 0..n {
         let base = slot_base(i);
         if obs[base + SLOT_IS_PRESENT] < 0.5 {
             continue;
         }
-        if obs[base + SLOT_IS_CURRENT_TARGET] < 0.5 {
+        if obs[base + SLOT_IS_NAV_TARGET] < 0.5 {
             continue;
         }
 
-        let is_ship = obs[base + SLOT_TYPE_ONEHOT] > 0.5;
         let is_asteroid = obs[base + SLOT_TYPE_ONEHOT + 1] > 0.5;
         let is_planet = obs[base + SLOT_TYPE_ONEHOT + 2] > 0.5;
+        let is_pickup = obs[base + SLOT_TYPE_ONEHOT + 3] > 0.5;
+        let is_ship = obs[base + SLOT_TYPE_ONEHOT] > 0.5;
 
-        let is_hostile_val = obs[base + SLOT_TYPE_SPECIFIC + 4];
-        let should_engage_val = obs[base + SLOT_TYPE_SPECIFIC + 5];
-
-        raw = match personality {
+        let (raw, is_good) = match personality {
+            Personality::Trader => {
+                if is_planet {
+                    (NAV_TARGET_TRADER_PLANET, true)
+                } else {
+                    (0.0, false)
+                }
+            }
+            Personality::Miner => {
+                if cargo_frac < 0.95 && (is_asteroid || is_pickup) {
+                    (NAV_TARGET_MINER_RESOURCE, true)
+                } else if cargo_frac >= 0.5 && is_planet {
+                    (NAV_TARGET_MINER_PLANET * cargo_frac, true)
+                } else {
+                    (0.0, false)
+                }
+            }
             Personality::Fighter => {
-                if is_ship && (should_engage_val > 0.5 || is_hostile_val > 0.5) {
-                    1.0
+                if is_ship || is_asteroid {
+                    (NAV_TARGET_FIGHTER, true)
+                } else {
+                    (0.0, false)
+                }
+            }
+        };
+        return (raw, is_good);
+    }
+    (0.0, false)
+}
+
+/// Compute the per-step weapons-target reward from the flat observation vector.
+///
+/// Fighters: rewarded for targeting anything hostile or should_engage.
+/// Miners/Traders: rewarded for targeting anything hostile (defensive only).
+fn compute_weapons_target_reward(personality: &Personality, obs: &[f32]) -> f32 {
+    use crate::consts::*;
+    use rl_obs::*;
+
+    let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
+    let n = model::N_OBJECTS;
+
+    for i in 0..n {
+        let base = slot_base(i);
+        if obs[base + SLOT_IS_PRESENT] < 0.5 {
+            continue;
+        }
+        if obs[base + SLOT_IS_WEAPONS_TARGET] < 0.5 {
+            continue;
+        }
+
+        let is_hostile = obs[base + SLOT_TYPE_SPECIFIC + 4] > 0.5;
+        let should_engage = obs[base + SLOT_TYPE_SPECIFIC + 5] > 0.5;
+
+        let raw = match personality {
+            Personality::Fighter => {
+                if is_hostile || should_engage {
+                    WEAPONS_TARGET_FIGHTER
                 } else {
                     0.0
                 }
             }
-            Personality::Miner => {
-                if cargo_frac > 0.75 {
-                    if is_planet { 1.0 } else { 0.0 }
-                } else {
-                    if is_asteroid { 1.0 } else { 0.0 }
-                }
-            }
-            Personality::Trader => {
-                if is_planet {
-                    1.0
+            Personality::Miner | Personality::Trader => {
+                if is_hostile {
+                    WEAPONS_TARGET_DEFENSIVE
                 } else {
                     0.0
                 }
             }
         };
-        break; // only one slot is the current target
+        return raw;
     }
-
-    raw * gate * crate::consts::GOAL_TARGET_STEP_WEIGHT
+    0.0
 }
 
 /// Store the previous (obs, action, reward) transition for each agent, update
@@ -1242,7 +1308,7 @@ fn store_obs_actions(
     mode: &AIPlayMode,
 ) {
     for (idx, (entity, obs, proj_obs, slot_targets)) in decisions.iter().enumerate() {
-        let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _, _, _)) =
+        let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _, self_distressed, _)) =
             agents.get_mut(*entity)
         else {
             continue;
@@ -1252,9 +1318,16 @@ fn store_obs_actions(
         let has_cargo = ship.cargo.values().sum::<u16>() > 0;
         let target_idx = choose_target_slot(&agent.personality, has_cargo, obs);
         if (target_idx as usize) < model::N_OBJECTS {
-            ship.target = slot_targets[target_idx as usize].clone();
+            let tgt = slot_targets[target_idx as usize].clone();
+            // Weapons target = nav target when it's something we'd shoot at.
+            ship.weapons_target = match &tgt {
+                Some(Target::Ship(_)) | Some(Target::Asteroid(_)) => tgt.clone(),
+                _ => None,
+            };
+            ship.nav_target = tgt;
         } else {
-            ship.target = None;
+            ship.nav_target = None;
+            ship.weapons_target = None;
         }
 
         // Compute the rule-based action — used as BC label and as the
@@ -1294,9 +1367,10 @@ fn store_obs_actions(
                 fire_primary,
                 fire_secondary,
                 target_idx,
+                target_idx, // rule-based: weapons target = nav target
             )
         } else {
-            (1, 1, 0, 0, target_idx) // no action from compute_ai_action → coast straight
+            (1, 1, 0, 0, target_idx, target_idx)
         };
 
         // In RLControl mode use the model's action; otherwise use rule-based.
@@ -1309,14 +1383,27 @@ fn store_obs_actions(
             } else {
                 (rule_based_action, 0.0)
             };
-        // In RLControl mode, the model may have chosen a different target.
-        // Apply it so the next observation reflects the model's choice.
+        // Apply both targets from the action.
         if *mode == AIPlayMode::RLControl {
-            let model_target_idx = executed_action.4 as usize;
-            if model_target_idx < model::N_OBJECTS {
-                ship.target = slot_targets[model_target_idx].clone();
+            let nav_idx = executed_action.4 as usize;
+            if nav_idx < model::N_OBJECTS {
+                ship.nav_target = slot_targets[nav_idx].clone();
             } else {
-                ship.target = None;
+                ship.nav_target = None;
+            }
+            let wep_idx = executed_action.5 as usize;
+            if wep_idx < model::N_OBJECTS {
+                ship.weapons_target = slot_targets[wep_idx].clone();
+            } else {
+                ship.weapons_target = None;
+            }
+
+            // EXPERIMENT: Override trader nav target to best cargo-value planet.
+            if OVERRIDE_TRADER_NAV_TARGET && agent.personality == Personality::Trader {
+                let best_planet_idx = choose_target_slot(&Personality::Trader, true, obs);
+                if (best_planet_idx as usize) < model::N_OBJECTS {
+                    ship.nav_target = slot_targets[best_planet_idx as usize].clone();
+                }
             }
         }
 
@@ -1335,8 +1422,88 @@ fn store_obs_actions(
                 Personality::Miner | Personality::Trader => crate::consts::HEALTH_STEP_MINER_TRADER,
             };
             rewards[crate::consts::REWARD_HEALTH] += health_reward * personality_health_weight;
-            rewards[crate::consts::REWARD_GOAL_TARGET] +=
-                compute_goal_target_reward(&agent.personality, &last_obs);
+            let (nav_target_reward, good_nav_target) =
+                compute_nav_target_reward(&agent.personality, obs);
+            rewards[crate::consts::REWARD_NAV_TARGET] += nav_target_reward;
+
+            rewards[crate::consts::REWARD_WEAPONS_TARGET] +=
+                compute_weapons_target_reward(&agent.personality, obs);
+
+            // Movement reward: dense shaping toward nav target.
+            if good_nav_target {
+                use crate::consts::*;
+                if let Some(ref nav_tgt) = ship.nav_target {
+                    let nav_entity = nav_tgt.get_entity();
+                    if let Ok(tgt_pos) = all_positions.get(nav_entity) {
+                        let dist = (tgt_pos.0 - pos.0).length();
+                        // Proximity: scale / (dist + scale)
+                        let proximity = MOVEMENT_LENGTH_SCALE / (dist + MOVEMENT_LENGTH_SCALE);
+                        // 0 <= proximity <= 1, approaches 1 as dist → 0.
+                        // Approach: reward if moving towards target beyond threshold
+                        let to_target = (tgt_pos.0 - pos.0).normalize_or_zero();
+                        let approach_cos = vel.0.dot(to_target) / (vel.0.length() + 1e-8); // positive = approaching
+                        let approach = 1.0
+                            + if dist > MOVEMENT_THRESHOLD_DIST {
+                                (approach_cos - 1.0) / 2.0
+                                    * (1.0 - (MOVEMENT_THRESHOLD_DIST / dist).min(1.0))
+                            } else {
+                                0.0
+                            }; // 0 <= approach <= 1, flat at 1 within threshold, outside of the threshold 
+                        // approaches 1 as approach_cos → 1, or distance approaches threshold.
+                        // Velocity matching within threshold radius.
+                        let vel_match = if dist < MOVEMENT_THRESHOLD_DIST {
+                            let tgt_vel = all_velocities
+                                .get(nav_entity)
+                                .map(|v| v.0)
+                                .unwrap_or(Vec2::ZERO);
+                            let rel_vel = (vel.0 - tgt_vel).length();
+                            let frac = (MOVEMENT_THRESHOLD_DIST - dist) / MOVEMENT_THRESHOLD_DIST;
+                            MOVEMENT_VEL_SCALE / (rel_vel + MOVEMENT_VEL_SCALE) * frac
+                        } else {
+                            0.0
+                        }; // 0 <= vel_match <= 1, only applies within threshold, 
+                        // approaches MOVEMENT_VEL_SCALE as relative velocity approaches 0 and dist → 0.
+                        rewards[REWARD_MOVEMENT] +=
+                            (proximity + approach + vel_match) * MOVEMENT_STEP_WEIGHT;
+
+                        // Braking reward: when nav target is a planet, approaching,
+                        // and within braking distance.
+                        if matches!(nav_tgt, Target::Planet(_))
+                            && dist < BRAKING_THRESHOLD_DIST
+                            && approach_cos > 0.0
+                        // moving toward planet
+                        {
+                            let speed = vel.0.length();
+                            let mut brake_r = 0.0_f32;
+
+                            // A) Already slow enough to land.
+                            if speed < 30.0 {
+                                // LANDING_SPEED
+                                brake_r += BRAKING_SLOW_REWARD;
+                            }
+
+                            // B) Facing retrograde (opposite to velocity).
+                            if speed > 1.0 {
+                                let ship_dir = (transform.rotation * Vec3::Y).xy();
+                                let vel_dir = vel.0 / speed;
+                                let retro_cos = ship_dir.dot(-vel_dir); // 1.0 = fully retrograde
+                                // Scale linearly: 0 when forward, max when fully retrograde.
+                                let retro_frac = ((retro_cos + 1.0) / 2.0).clamp(0.0, 1.0);
+                                brake_r += BRAKING_RETROGRADE_REWARD * retro_frac;
+
+                                // Bonus for thrusting while nearly retrograde.
+                                if retro_cos > BRAKING_RETROGRADE_COS_THRESH && last_action.1 == 1
+                                // thrust is on
+                                {
+                                    brake_r += BRAKING_THRUST_REWARD;
+                                }
+                            }
+
+                            rewards[REWARD_MOVEMENT] += brake_r * BRAKING_STEP_WEIGHT;
+                        }
+                    }
+                }
+            }
 
             let transition = Transition {
                 obs: last_obs,
@@ -1524,7 +1691,14 @@ fn spawn_bc_training_thread(
                     &device,
                 );
                 let proj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
-                    TensorData::new(proj_flat, [BC_BATCH_SIZE, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
+                    TensorData::new(
+                        proj_flat,
+                        [
+                            BC_BATCH_SIZE,
+                            model::N_PROJECTILE_SLOTS,
+                            model::PROJ_INPUT_DIM,
+                        ],
+                    ),
                     &device,
                 );
 
@@ -1560,25 +1734,42 @@ fn spawn_bc_training_thread(
                     .reshape([BC_BATCH_SIZE]);
                 let fs_t = action_labels.narrow(1, 3, 1).reshape([BC_BATCH_SIZE]);
 
-                // Target labels: [B] — the target_idx from DiscreteAction.
-                let target_labels: Vec<i64> = batch.iter().map(|t| t.action.4 as i64).collect();
-                let target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
-                    TensorData::new(target_labels, [BC_BATCH_SIZE]),
+                // Target labels: nav and weapons target indices.
+                let nav_target_labels: Vec<i64> = batch.iter().map(|t| t.action.4 as i64).collect();
+                let nav_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
+                    TensorData::new(nav_target_labels, [BC_BATCH_SIZE]),
+                    &device,
+                );
+                let wep_target_labels: Vec<i64> = batch.iter().map(|t| t.action.5 as i64).collect();
+                let wep_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
+                    TensorData::new(wep_target_labels, [BC_BATCH_SIZE]),
                     &device,
                 );
 
-                // ── Forward + loss ───────────────────────────────────────────
+                // ── Forward + loss ────────���─────────────────────────────────���
                 let grads = {
                     let net = inner.policy_net.as_ref().unwrap();
-                    let (action_logits, target_logits) = net.forward(self_input, obj_input, proj_input);
+                    let (action_logits, nav_target_logits, wep_target_logits) =
+                        net.forward(self_input, obj_input, proj_input);
 
-                    let turn_loss = loss_fn.forward(action_logits.clone().narrow(1, 0, 3), turn_t);
+                    // Weight each head's loss inversely by log(num_classes) so
+                    // the gradient contribution from each head is roughly equal
+                    // at initialisation.  Without this, the 13-class target heads
+                    // dominate and the 2/3-class action heads barely learn.
+                    let w3 = 1.0 / (3.0_f32).ln(); // turn (3 classes)
+                    let w2 = 1.0 / (2.0_f32).ln(); // thrust/fire (2 classes)
+                    let wt = 1.0 / (model::TARGET_OUTPUT_DIM as f32).ln(); // target (13 classes)
+
+                    let turn_loss =
+                        loss_fn.forward(action_logits.clone().narrow(1, 0, 3), turn_t) * w3;
                     let thrust_loss =
-                        loss_fn.forward(action_logits.clone().narrow(1, 3, 2), thrust_t);
-                    let fp_loss = loss_fn.forward(action_logits.clone().narrow(1, 5, 2), fp_t);
-                    let fs_loss = loss_fn.forward(action_logits.narrow(1, 7, 2), fs_t);
-                    let target_loss = loss_fn.forward(target_logits, target_t);
-                    let total_loss = turn_loss + thrust_loss + fp_loss + fs_loss + target_loss;
+                        loss_fn.forward(action_logits.clone().narrow(1, 3, 2), thrust_t) * w2;
+                    let fp_loss = loss_fn.forward(action_logits.clone().narrow(1, 5, 2), fp_t) * w2;
+                    let fs_loss = loss_fn.forward(action_logits.narrow(1, 7, 2), fs_t) * w2;
+                    let nav_tgt_loss = loss_fn.forward(nav_target_logits, nav_target_t) * wt;
+                    let wep_tgt_loss = loss_fn.forward(wep_target_logits, wep_target_t) * wt;
+                    let total_loss =
+                        turn_loss + thrust_loss + fp_loss + fs_loss + nav_tgt_loss + wep_tgt_loss;
 
                     if step % 100 == 0 {
                         let v = total_loss.clone().into_scalar();
@@ -1637,7 +1828,9 @@ fn save_bc_buffer(buffer: &VecDeque<BCTransition>, path: &str) {
         f.write_all(&input_dim.to_le_bytes())?;
         f.write_all(&(buffer.len() as u32).to_le_bytes())?;
         for t in buffer {
-            f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3, t.action.4])?;
+            f.write_all(&[
+                t.action.0, t.action.1, t.action.2, t.action.3, t.action.4, t.action.5,
+            ])?;
             for &v in &t.obs {
                 f.write_all(&v.to_le_bytes())?;
             }
@@ -1675,7 +1868,7 @@ pub(crate) fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
     let count = u32::from_le_bytes(u32_buf) as usize;
 
     let mut buffer = VecDeque::with_capacity(count.min(BC_BUFFER_SIZE));
-    let mut action_buf = [0u8; 5];
+    let mut action_buf = [0u8; 6];
     let mut input_bytes = vec![0u8; expected_dim * 4];
 
     for _ in 0..count {
@@ -1694,6 +1887,7 @@ pub(crate) fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
                 action_buf[2],
                 action_buf[3],
                 action_buf[4],
+                action_buf[5],
             ),
         });
     }

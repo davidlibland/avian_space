@@ -179,7 +179,7 @@ pub enum ScoreHit {
 #[derive(Component, Clone, Default)]
 pub struct ShipHostility(pub HashMap<String, f32>);
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Personality {
     #[default]
     Trader, // Likes to trade, traveling from planet to planet
@@ -265,12 +265,12 @@ pub struct Ship {
     pub credits: i128,
     // A map indicating inclusion in factions
     pub enemies: HashMap<String, f32>,
-    // An optional target for the ship.
-    // Traders will tend to target planets,
-    // Miners will tend to target asteroids,
-    // Fighters will tend to target ships
+    /// Navigation target — where the ship is heading (planet, asteroid, pickup).
     #[serde(skip)]
-    pub target: Option<Target>,
+    pub nav_target: Option<Target>,
+    /// Weapons target — what the ship is aiming at (ship, asteroid).
+    #[serde(skip)]
+    pub weapons_target: Option<Target>,
     #[serde(skip)]
     pub weapon_systems: WeaponSystems,
 }
@@ -289,7 +289,8 @@ impl Ship {
             health: data.max_health,
             cargo: HashMap::new(),
             credits: 100000,
-            target: None,
+            nav_target: None,
+            weapons_target: None,
             weapon_systems: WeaponSystems::default(),
             enemies: HashMap::new(),
         }
@@ -800,7 +801,7 @@ fn score_hits(
                     };
 
                     let on_target = source_ship
-                        .and_then(|s| s.target.as_ref())
+                        .and_then(|s| s.weapons_target.as_ref())
                         .map(|t| t.get_entity() == *target)
                         .unwrap_or(false);
 

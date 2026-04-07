@@ -80,15 +80,16 @@ pub const CORE_BLOCK_START: usize = SLOT_IS_PRESENT + 1; // 5
 /// Offsets within the core block (absolute, for reading from flat obs).
 pub const SLOT_REL_POS: usize = CORE_BLOCK_START;         // 5  (2 floats)
 pub const SLOT_REL_VEL: usize = CORE_BLOCK_START + 2;     // 7  (2 floats)
-pub const SLOT_IS_CURRENT_TARGET: usize = CORE_BLOCK_START + 4; // 9
-pub const SLOT_PROXIMITY: usize = CORE_BLOCK_START + 5;   // 10
-pub const SLOT_PURSUIT_ANGLE: usize = CORE_BLOCK_START + 6;     // 11
-pub const SLOT_PURSUIT_INDICATOR: usize = CORE_BLOCK_START + 7; // 12
-pub const SLOT_FIRE_ANGLE: usize = CORE_BLOCK_START + 8;        // 13
-pub const SLOT_FIRE_INDICATOR: usize = CORE_BLOCK_START + 9;    // 14
-pub const SLOT_IN_RANGE: usize = CORE_BLOCK_START + 10;         // 15
+pub const SLOT_IS_NAV_TARGET: usize = CORE_BLOCK_START + 4;     // 9
+pub const SLOT_IS_WEAPONS_TARGET: usize = CORE_BLOCK_START + 5; // 10
+pub const SLOT_PROXIMITY: usize = CORE_BLOCK_START + 6;   // 11
+pub const SLOT_PURSUIT_ANGLE: usize = CORE_BLOCK_START + 7;     // 12
+pub const SLOT_PURSUIT_INDICATOR: usize = CORE_BLOCK_START + 8; // 13
+pub const SLOT_FIRE_ANGLE: usize = CORE_BLOCK_START + 9;        // 14
+pub const SLOT_FIRE_INDICATOR: usize = CORE_BLOCK_START + 10;   // 15
+pub const SLOT_IN_RANGE: usize = CORE_BLOCK_START + 11;         // 16
 /// Number of core features.
-pub const CORE_FEAT_SIZE: usize = 11; // rel_pos(2)+rel_vel(2)+is_current_target+proximity+pursuit_angle+pursuit_indicator+fire_angle+fire_indicator+in_range
+pub const CORE_FEAT_SIZE: usize = 12; // rel_pos(2)+rel_vel(2)+is_nav_target+is_weapons_target+proximity+pursuit_angle+pursuit_indicator+fire_angle+fire_indicator+in_range
 
 // ── Block 4: type-specific features ──────────────────────────────────────
 /// Offset of the type-specific block (value + entity-kind features).
@@ -217,8 +218,10 @@ pub struct EntitySlotData {
     pub kind: EntityKind,
     /// Value of this entity (e.g. cargo sale value for planets, pickup value, etc.)
     pub value: f32,
-    /// Whether this entity is the ship's current target.
-    pub is_current_target: bool,
+    /// Whether this entity is the ship's navigation target.
+    pub is_nav_target: bool,
+    /// Whether this entity is the ship's weapons target.
+    pub is_weapons_target: bool,
 }
 
 /// Projectile slot data (separate from entity slots).
@@ -329,13 +332,14 @@ pub fn select_secondary_weapon<'a>(ship: &'a Ship, target_is_ship: bool) -> Opti
 // Action-space helpers
 // ---------------------------------------------------------------------------
 
-/// Action space: (turn_idx, thrust_idx, fire_primary, fire_secondary, target_idx)
-/// - turn_idx:      0 = left, 1 = straight, 2 = right
-/// - thrust_idx:    0 = no thrust, 1 = thrust
-/// - fire_primary:  0 = no, 1 = yes
-/// - fire_secondary: 0 = no, 1 = yes  (which weapon fires is chosen deterministically)
-/// - target_idx:    index into entity slots (0..N_OBJECTS-1), or N_OBJECTS = "no target"
-pub type DiscreteAction = (u8, u8, u8, u8, u8);
+/// Action space: (turn, thrust, fire_primary, fire_secondary, nav_target_idx, weapons_target_idx)
+/// - turn_idx:           0 = left, 1 = straight, 2 = right
+/// - thrust_idx:         0 = no thrust, 1 = thrust
+/// - fire_primary:       0 = no, 1 = yes
+/// - fire_secondary:     0 = no, 1 = yes  (which weapon fires is chosen deterministically)
+/// - nav_target_idx:     index into entity slots (0..N_OBJECTS-1), or N_OBJECTS = "no target"
+/// - weapons_target_idx: index into entity slots (0..N_OBJECTS-1), or N_OBJECTS = "no target"
+pub type DiscreteAction = (u8, u8, u8, u8, u8, u8);
 
 /// Map a bearing angle (convention from `ai_ships::angle_to_controls`) to a
 /// discrete `(turn_idx, thrust_idx)` pair.
@@ -516,7 +520,7 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let target_is_ship = input
         .entity_slots
         .iter()
-        .any(|s| s.is_current_target && s.core.entity_type == 0);
+        .any(|s| s.is_weapons_target && s.core.entity_type == 0);
     let ammo_frac = select_secondary_weapon(input.ship, target_is_ship)
         .map(|(_, ammo)| (ammo as f32 / MAX_AMMO_REF).min(1.0))
         .unwrap_or(0.0);
@@ -602,7 +606,8 @@ fn encode_slot(
         .copy_from_slice(&entity_type_onehot(s.core.entity_type));
     buf[SLOT_REL_POS..SLOT_REL_POS + 2].copy_from_slice(&rel_pos);
     buf[SLOT_REL_VEL..SLOT_REL_VEL + 2].copy_from_slice(&rel_vel);
-    buf[SLOT_IS_CURRENT_TARGET] = if s.is_current_target { 1.0 } else { 0.0 };
+    buf[SLOT_IS_NAV_TARGET] = if s.is_nav_target { 1.0 } else { 0.0 };
+    buf[SLOT_IS_WEAPONS_TARGET] = if s.is_weapons_target { 1.0 } else { 0.0 };
 
     let dist = (rel_pos[0].powi(2) + rel_pos[1].powi(2)).sqrt();
     buf[SLOT_PROXIMITY] = PROXIMITY_SCALE / (dist + PROXIMITY_SCALE);

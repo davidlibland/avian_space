@@ -182,7 +182,11 @@ fn spawn_ai_ship_jumping_in(
 
     let bundle = ship_bundle(ship_type, asset_server, item_universe, edge_pos);
     let personality = bundle.get_personality();
-    let radius = item_universe.ships.get(ship_type).map(|s| s.radius).unwrap_or(20.0);
+    let radius = item_universe
+        .ships
+        .get(ship_type)
+        .map(|s| s.radius)
+        .unwrap_or(20.0);
     let (mass, inertia) = sensor_mass_for_ship(radius);
     commands
         .spawn((
@@ -251,7 +255,9 @@ fn jump_in_system(
         let speed = vel.0.length();
         let target = ship.data.max_speed;
         if speed <= target {
-            commands.entity(entity).remove::<(JumpingIn, Sensor, Mass, AngularInertia)>();
+            commands
+                .entity(entity)
+                .remove::<(JumpingIn, Sensor, Mass, AngularInertia)>();
             // Clamp to max_speed so MaxLinearSpeed constraint isn't violated.
             if speed > f32::EPSILON {
                 vel.0 = vel.0.normalize() * target;
@@ -359,7 +365,9 @@ fn manage_ship_population(
             let idx = rng.gen_range(0..candidates.len());
             let (e, ship) = candidates[idx];
             let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
-            commands.entity(e).insert((JumpingOut, Sensor, mass, inertia));
+            commands
+                .entity(e)
+                .insert((JumpingOut, Sensor, mass, inertia));
         }
     }
 }
@@ -394,7 +402,7 @@ pub struct RawAIAction {
 /// Compute the rule-based AI action for a ship given its current target.
 ///
 /// Returns `None` when the ship has no target or the target entity is missing
-/// (caller should clear `ship.target`). Returns `Some` with a coast action
+/// (caller should clear `ship.nav_target`). Returns `Some` with a coast action
 /// when a valid target exists but no firing solution is available.
 pub fn compute_ai_action(
     ship: &Ship,
@@ -406,7 +414,11 @@ pub fn compute_ai_action(
     all_velocities: &Query<&LinearVelocity>,
     item_universe: &ItemUniverse,
 ) -> Option<RawAIAction> {
-    let target = ship.target.as_ref()?;
+    let target = ship.nav_target.as_ref()?;
+    // Note: We just use the nav_target for weapons targeting as well,
+    // so the AI will shoot at whatever it's trying to approach
+    //(if it's a valid shoot target).  This is a bit simplistic but works
+    // decently in practice and keeps the AI behavior more consistent.
 
     let ship_dir = (transform.rotation * Vec3::Y).xy();
     let frame_angle = -ship_dir.y.atan2(ship_dir.x);
@@ -560,7 +572,7 @@ pub fn classic_ai_target_selection(
             continue;
         }
         // 1. Validate existing target: clear if entity gone or (for combat targets) out of range.
-        if let Some(ref tgt) = ship.target.clone() {
+        if let Some(ref tgt) = ship.nav_target.clone() {
             let target_entity = tgt.get_entity();
             let valid = match tgt {
                 Target::Planet(_) => all_positions.get(target_entity).is_ok(),
@@ -570,12 +582,12 @@ pub fn classic_ai_target_selection(
                     .unwrap_or(false),
             };
             if !valid {
-                ship.target = None;
+                ship.nav_target = None;
             }
         }
 
         // 2. If no target, pick one.
-        if ship.target.is_none() {
+        if ship.nav_target.is_none() {
             // Ships with cargo override personality and head to the best sell planet.
             // Traders sell immediately; Miners/Fighters wait until holds are ≥75% full.
             let cargo_used: u16 = ship.cargo.values().sum();
@@ -609,13 +621,13 @@ pub fn classic_ai_target_selection(
                         })
                         .max_by_key(|(_, value)| *value);
                     if let Some((planet_entity, _)) = best {
-                        ship.target = Some(Target::Planet(planet_entity));
+                        ship.nav_target = Some(Target::Planet(planet_entity));
                     }
                 }
             }
 
             // If still no target, use personality-based selection.
-            if ship.target.is_none() {
+            if ship.nav_target.is_none() {
                 let filter = SpatialQueryFilter::from_mask([
                     GameLayer::Planet,
                     GameLayer::Asteroid,
@@ -666,7 +678,7 @@ pub fn classic_ai_target_selection(
                     .map(|(e, _)| *e);
 
                 // All personalities grab nearby pickups first.
-                ship.target = if let Some(pickup) = nearest_pickup {
+                ship.nav_target = if let Some(pickup) = nearest_pickup {
                     Some(Target::Pickup(pickup))
                 } else {
                     match ai_ship.personality {
@@ -680,6 +692,13 @@ pub fn classic_ai_target_selection(
                     }
                 };
             }
+
+            // Sync weapons_target: shoot at nav_target when it's a ship or
+            // asteroid, otherwise clear (nothing to shoot at for planets/pickups).
+            ship.weapons_target = match &ship.nav_target {
+                Some(t @ Target::Ship(_)) | Some(t @ Target::Asteroid(_)) => Some(t.clone()),
+                _ => None,
+            };
         }
     }
 }
@@ -720,7 +739,7 @@ pub fn classic_ai_control(
         }
 
         // Act on the current target (assigned by classic_ai_target_selection).
-        if ship.target.is_none() {
+        if ship.nav_target.is_none() {
             continue;
         }
         match compute_ai_action(
@@ -749,7 +768,7 @@ pub fn classic_ai_control(
                 }
             }
             None => {
-                ship.target = None;
+                ship.nav_target = None;
             }
         }
     }
@@ -773,7 +792,7 @@ fn land_ship(
 ) {
     let mut rng = rand::thread_rng();
     for (ship_entity, mut ship, ship_pos, vel, ai_ship, rl_agent) in ships.iter_mut() {
-        match ship.target {
+        match ship.nav_target {
             Some(Target::Planet(planet_entity)) => {
                 // ── Landed ───────────────────────────────────────────────────
                 if vel.length() < LANDING_SPEED {
@@ -797,8 +816,7 @@ fn land_ship(
                         let cargo_held: u16 = ship.cargo.values().sum();
                         let cargo_cap = ship.data.cargo_space.max(1) as f32;
                         let cargo_frac = cargo_held as f32 / cargo_cap;
-                        let health_frac = ship.health as f32
-                            / ship.data.max_health.max(1) as f32;
+                        let health_frac = ship.health as f32 / ship.data.max_health.max(1) as f32;
 
                         let mut reward = 0.0_f32;
 
@@ -825,9 +843,10 @@ fn land_ship(
                                 // Can rearm: planet sells ammo for a weapon we carry.
                                 let can_rearm = planet_data
                                     .map(|pd| {
-                                        ship.weapon_systems.secondary.keys().any(|wt| {
-                                            pd.outfitter.contains(wt) && ship.credits > 0
-                                        })
+                                        ship.weapon_systems
+                                            .secondary
+                                            .keys()
+                                            .any(|wt| pd.outfitter.contains(wt) && ship.credits > 0)
                                     })
                                     .unwrap_or(false);
                                 if can_rearm {
@@ -847,13 +866,12 @@ fn land_ship(
                         }
 
                         // Targeting bonus.
-                        let targeting_mult =
-                            if matches!(ship.target, Some(Target::Planet(e)) if e == planet_entity)
-                            {
-                                LANDING_ON_TARGET_MULTIPLIER
-                            } else {
-                                LANDING_OFF_TARGET_MULTIPLIER
-                            };
+                        let targeting_mult = if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity)
+                        {
+                            LANDING_ON_TARGET_MULTIPLIER
+                        } else {
+                            LANDING_OFF_TARGET_MULTIPLIER
+                        };
                         reward *= targeting_mult;
 
                         if reward > 0.0 {
@@ -866,8 +884,8 @@ fn land_ship(
                     }
 
                     // Landed successfully, so clear the target
-                    if matches!(ship.target, Some(Target::Planet(e)) if e == planet_entity) {
-                        ship.target = None;
+                    if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
+                        ship.nav_target = None;
                     }
 
                     // Repair the ship:

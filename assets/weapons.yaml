@@ -2,7 +2,7 @@ laser:
     name: laser
     lifetime: 0.5
     speed: 500.0
-    cooldown: 1.0
+    cooldown: 3.0
     price: 100
     color: [1.0, 0.0, 0.0]
     damage: 5
@@ -10,7 +10,7 @@ proton_beam:
     name: proton_beam
     lifetime: 1.25
     speed: 400.0
-    cooldown: 1.0
+    cooldown: 4.0
     price: 250
     color: [0.2, 0.4, 1.0]
     damage: 10
@@ -18,7 +18,7 @@ ir_missile:
     name: ir_missile
     lifetime: 4.0
     speed: 220.0
-    cooldown: 3.0
+    cooldown: 9.0
     color: [1.0, 0.55, 0.0]
     damage: 40
     guided: true
@@ -31,7 +31,7 @@ space_mine:
     name: space_mine
     lifetime: 12.0
     speed: 40.0
-    cooldown: 2.0
+    cooldown: 15.0
     color: [0.8, 0.2, 0.2]
     damage: 80
     guided: true

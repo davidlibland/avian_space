@@ -55,6 +55,125 @@ const PPO_HUBER_DELTA: f32 = 1.0;
 /// allowing the value function to burn in before the policy starts changing.
 const PPO_VALUE_BURNIN_EV_THRESHOLD: f32 = 0.3;
 
+/// Maximum number of steps in the value replay buffer.
+const VALUE_REPLAY_CAPACITY: usize = 8192;
+/// Fraction of each value mini-batch drawn from the replay buffer (0.0–1.0).
+const VALUE_REPLAY_FRACTION: f32 = 0.25;
+/// Number of extra value-only mini-batches from replay after each PPO cycle.
+const VALUE_REPLAY_EXTRA_BATCHES: usize = 4;
+
+// ---------------------------------------------------------------------------
+// Value replay buffer (prioritised by TD error)
+// ---------------------------------------------------------------------------
+
+/// A single step stored in the value replay buffer.
+struct ReplayStep {
+    /// Flat self-features [SELF_INPUT_DIM].
+    self_feat: Vec<f32>,
+    /// Flat object-features [N_OBJECTS * OBJECT_INPUT_DIM].
+    obj_feat: Vec<f32>,
+    /// Flat projectile-features [N_PROJECTILE_SLOTS * PROJ_INPUT_DIM].
+    proj_feat: Vec<f32>,
+    /// Per-head return targets [N_REWARD_TYPES].
+    returns: [f32; N_REWARD_TYPES],
+    /// Priority score (max absolute per-head advantage).
+    priority: f32,
+}
+
+/// Fixed-capacity priority buffer. Lowest-priority steps are evicted first.
+struct ValueReplayBuffer {
+    steps: Vec<ReplayStep>,
+    capacity: usize,
+}
+
+impl ValueReplayBuffer {
+    fn new(capacity: usize) -> Self {
+        Self {
+            steps: Vec::with_capacity(capacity),
+            capacity,
+        }
+    }
+
+    /// Insert steps from a batch, keeping only the highest-priority ones.
+    fn insert_from_batch(
+        &mut self,
+        batch: &PpoBatch,
+        head_advantages: &[[f32; N_REWARD_TYPES]],
+        head_returns: &[[f32; N_REWARD_TYPES]],
+    ) {
+        for i in 0..batch.total_steps {
+            // Priority = max absolute advantage across all heads.
+            let priority: f32 = head_advantages[i]
+                .iter()
+                .map(|a| a.abs())
+                .fold(0.0_f32, f32::max);
+
+            if priority < 1e-8 {
+                continue; // skip trivial steps
+            }
+
+            let s_start = i * SELF_INPUT_DIM;
+            let o_start = i * N_OBJECTS * OBJECT_INPUT_DIM;
+            let p_start = i * model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM;
+
+            let step = ReplayStep {
+                self_feat: batch.self_flat[s_start..s_start + SELF_INPUT_DIM].to_vec(),
+                obj_feat: batch.obj_flat[o_start..o_start + N_OBJECTS * OBJECT_INPUT_DIM].to_vec(),
+                proj_feat: batch.proj_flat[p_start..p_start + model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM].to_vec(),
+                returns: head_returns[i],
+                priority,
+            };
+
+            if self.steps.len() < self.capacity {
+                self.steps.push(step);
+            } else {
+                // Replace the lowest-priority step if new one is better.
+                if let Some((min_idx, min_step)) = self
+                    .steps
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| a.priority.partial_cmp(&b.priority).unwrap())
+                {
+                    if priority > min_step.priority {
+                        self.steps[min_idx] = step;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sample a mini-batch of `n` steps (uniform random from the buffer).
+    fn sample(
+        &self,
+        n: usize,
+        rng: &mut impl rand::Rng,
+    ) -> Option<(Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>)> {
+        if self.steps.is_empty() || n == 0 {
+            return None;
+        }
+        let mut self_flat = Vec::with_capacity(n * SELF_INPUT_DIM);
+        let mut obj_flat = Vec::with_capacity(n * N_OBJECTS * OBJECT_INPUT_DIM);
+        let mut proj_flat = Vec::with_capacity(n * model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM);
+        let mut ret_flat = Vec::with_capacity(n * N_REWARD_TYPES);
+
+        use rand::Rng;
+        for _ in 0..n {
+            let idx = rng.gen_range(0..self.steps.len());
+            let step = &self.steps[idx];
+            self_flat.extend_from_slice(&step.self_feat);
+            obj_flat.extend_from_slice(&step.obj_feat);
+            proj_flat.extend_from_slice(&step.proj_feat);
+            ret_flat.extend_from_slice(&step.returns);
+        }
+
+        Some((self_flat, obj_flat, proj_flat, ret_flat))
+    }
+
+    fn len(&self) -> usize {
+        self.steps.len()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Batch data structures
 // ---------------------------------------------------------------------------
@@ -150,11 +269,12 @@ const ACTION_HEADS: [(usize, usize); 4] = [
 
 /// Compute per-sample log-probability and entropy for the factored action space.
 ///
-/// Returns `(log_probs [B], entropy [B])` where each is the sum across all 5 heads
-/// (4 action heads + 1 target head).
+/// Returns `(log_probs [B], entropy [B])` where each is the sum across all 6 heads
+/// (4 action heads + nav target head + weapons target head).
 pub fn compute_log_probs_and_entropy<B: Backend>(
-    action_logits: Tensor<B, 2>, // [B, POLICY_OUTPUT_DIM=9]
-    target_logits: Tensor<B, 2>, // [B, TARGET_OUTPUT_DIM=13]
+    action_logits: Tensor<B, 2>,      // [B, POLICY_OUTPUT_DIM=9]
+    nav_target_logits: Tensor<B, 2>,  // [B, TARGET_OUTPUT_DIM=13]
+    wep_target_logits: Tensor<B, 2>,  // [B, TARGET_OUTPUT_DIM=13]
     actions: &[DiscreteAction],
     device: &B::Device,
 ) -> (Tensor<B, 1>, Tensor<B, 1>) {
@@ -168,7 +288,8 @@ pub fn compute_log_probs_and_entropy<B: Backend>(
         let log_p = log_softmax(logits.clone(), 1); // [B, C]
         // Gather log-prob at taken action: build [B, 1] index tensor, gather, squeeze.
         let idx_tensor = Tensor::<B, 2, Int>::from_data(TensorData::new(indices, [b, 1]), device);
-        let gathered: Tensor<B, 1> = log_p.clone().gather(1, idx_tensor).squeeze_dim::<1>(1); // [B]
+        let gathered: Tensor<B, 1> = log_p.clone().gather(1, idx_tensor).squeeze_dim::<1>(1)
+            .clamp(-20.0, 0.0); // prevent -inf from masked actions
 
         // Entropy: -sum(p * log_p, dim=1)
         let p = burn::tensor::activation::softmax(logits, 1);
@@ -198,10 +319,16 @@ pub fn compute_log_probs_and_entropy<B: Backend>(
         accumulate_head(head_logits, indices);
     }
 
-    // Target head
+    // Nav target head
     {
         let indices: Vec<i64> = actions.iter().map(|a| a.4 as i64).collect();
-        accumulate_head(target_logits, indices);
+        accumulate_head(nav_target_logits, indices);
+    }
+
+    // Weapons target head
+    {
+        let indices: Vec<i64> = actions.iter().map(|a| a.5 as i64).collect();
+        accumulate_head(wep_target_logits, indices);
     }
 
     (total_log_prob.unwrap(), total_entropy.unwrap())
@@ -283,7 +410,7 @@ fn save_rl_buffer(segments: &[Segment], path: &str) {
             // Personality index.
             f.write_all(&[personality_index(&seg.personality) as u8])?;
             for t in &seg.transitions {
-                f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3, t.action.4])?;
+                f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3, t.action.4, t.action.5])?;
                 for &r in &t.rewards {
                     f.write_all(&r.to_le_bytes())?;
                 }
@@ -345,7 +472,7 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
             .unwrap_or(crate::ship::Personality::Fighter);
 
         let mut transitions = Vec::with_capacity(n_trans);
-        let mut action_buf = [0u8; 5];
+        let mut action_buf = [0u8; 6];
         let mut f32_buf = [0u8; 4];
         let mut done_buf = [0u8; 1];
         let mut obs_bytes = vec![0u8; OBS_DIM * 4];
@@ -376,6 +503,7 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
                     action_buf[2],
                     action_buf[3],
                     action_buf[4],
+                    action_buf[5],
                 ),
                 rewards,
                 done,
@@ -490,6 +618,7 @@ pub fn spawn_ppo_training_thread(
             Vec::new()
         };
         let mut rng = thread_rng();
+        let mut value_replay = ValueReplayBuffer::new(VALUE_REPLAY_CAPACITY);
 
         // TensorBoard writer — logs go to the experiment run directory.
         let tb_dir = format!("{}/tb", experiment.run_dir);
@@ -616,6 +745,166 @@ pub fn spawn_ppo_training_thread(
             let batch = flatten_segments(&segments);
             let total_steps = batch.total_steps;
 
+            // ── Phase 3b: Target selection + entity slot stats ─────────────
+            // Nav target: [personality][ship, asteroid, planet, pickup, none]
+            // Wep target: [personality][ship_engage, ship_hostile, ship_neutral, asteroid, none]
+            // Slot counts: [personality][ship, asteroid, planet, pickup] mean count
+            const N_NAV_TYPES: usize = 5;
+            const NAV_TYPE_NAMES: [&str; N_NAV_TYPES] =
+                ["ship", "asteroid", "planet", "pickup", "none"];
+            const N_WEP_TYPES: usize = 5;
+            const WEP_TYPE_NAMES: [&str; N_WEP_TYPES] =
+                ["ship_engage", "ship_hostile", "ship_neutral", "asteroid", "none"];
+            const N_SLOT_TYPES: usize = 4;
+            const SLOT_TYPE_NAMES_LOG: [&str; N_SLOT_TYPES] =
+                ["ship", "asteroid", "planet", "pickup"];
+
+            let mut nav_target_counts = [[0u32; N_NAV_TYPES]; N_PERSONALITIES];
+            let mut wep_target_counts = [[0u32; N_WEP_TYPES]; N_PERSONALITIES];
+            let mut slot_type_sums = [[0.0_f32; N_SLOT_TYPES]; N_PERSONALITIES];
+            let mut pers_step_counts = [0u32; N_PERSONALITIES];
+            {
+                use crate::rl_obs::{SLOT_IS_PRESENT, SLOT_TYPE_ONEHOT, SLOT_TYPE_SPECIFIC};
+
+                // Build step → personality mapping.
+                let mut step_personality = vec![0usize; total_steps];
+                for (seg_idx, seg) in batch.segment_infos.iter().enumerate() {
+                    let pi = batch.personalities[seg_idx];
+                    for t in seg.start_idx..seg.end_idx {
+                        step_personality[t] = pi;
+                    }
+                }
+
+                // Helper: read entity type (0=ship,1=ast,2=planet,3=pickup) from obj_flat.
+                let read_entity_type = |step: usize, slot: usize| -> usize {
+                    let base = step * model::N_OBJECTS * model::OBJECT_INPUT_DIM
+                        + slot * model::OBJECT_INPUT_DIM;
+                    for t in 0..4 {
+                        if base + SLOT_TYPE_ONEHOT + t < batch.obj_flat.len()
+                            && batch.obj_flat[base + SLOT_TYPE_ONEHOT + t] > 0.5
+                        {
+                            return t;
+                        }
+                    }
+                    4 // unknown/empty
+                };
+
+                let is_slot_present = |step: usize, slot: usize| -> bool {
+                    let idx = step * model::N_OBJECTS * model::OBJECT_INPUT_DIM
+                        + slot * model::OBJECT_INPUT_DIM
+                        + SLOT_IS_PRESENT;
+                    idx < batch.obj_flat.len() && batch.obj_flat[idx] > 0.5
+                };
+
+                // For ships: read is_hostile and should_engage from type-specific block.
+                let read_ship_hostility = |step: usize, slot: usize| -> (bool, bool) {
+                    let base = step * model::N_OBJECTS * model::OBJECT_INPUT_DIM
+                        + slot * model::OBJECT_INPUT_DIM;
+                    let is_hostile_idx = base + SLOT_TYPE_SPECIFIC + 4;
+                    let should_engage_idx = base + SLOT_TYPE_SPECIFIC + 5;
+                    let is_hostile = is_hostile_idx < batch.obj_flat.len()
+                        && batch.obj_flat[is_hostile_idx] > 0.5;
+                    let should_engage = should_engage_idx < batch.obj_flat.len()
+                        && batch.obj_flat[should_engage_idx] > 0.5;
+                    (is_hostile, should_engage)
+                };
+
+                for (step, action) in batch.actions.iter().enumerate() {
+                    let pi = step_personality[step];
+                    pers_step_counts[pi] += 1;
+
+                    // Nav target.
+                    let nav_idx = action.4 as usize;
+                    if nav_idx >= model::N_OBJECTS {
+                        nav_target_counts[pi][4] += 1;
+                    } else {
+                        nav_target_counts[pi][read_entity_type(step, nav_idx).min(3)] += 1;
+                    }
+
+                    // Weapons target.
+                    let wep_idx = action.5 as usize;
+                    if wep_idx >= model::N_OBJECTS {
+                        wep_target_counts[pi][4] += 1;
+                    } else {
+                        let etype = read_entity_type(step, wep_idx);
+                        match etype {
+                            0 => {
+                                // Ship — break down by hostility.
+                                let (is_hostile, should_engage) =
+                                    read_ship_hostility(step, wep_idx);
+                                if should_engage {
+                                    wep_target_counts[pi][0] += 1; // engage
+                                } else if is_hostile {
+                                    wep_target_counts[pi][1] += 1; // hostile
+                                } else {
+                                    wep_target_counts[pi][2] += 1; // neutral
+                                }
+                            }
+                            1 => wep_target_counts[pi][3] += 1, // asteroid
+                            _ => wep_target_counts[pi][4] += 1,  // planet/pickup/empty → none
+                        }
+                    }
+
+                    // Entity slot counts: how many of each type are present.
+                    for slot in 0..model::N_OBJECTS {
+                        if is_slot_present(step, slot) {
+                            let etype = read_entity_type(step, slot);
+                            if etype < N_SLOT_TYPES {
+                                slot_type_sums[pi][etype] += 1.0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Trader-specific diagnostics: nav target cargo value and planet visibility.
+            let mut trader_nav_cargo_value_sum = 0.0_f32;
+            let mut trader_nav_cargo_value_count = 0u32;
+            let mut trader_planet_count_sum = 0.0_f32;
+            let mut trader_steps = 0u32;
+            {
+                use crate::rl_obs::{SLOT_IS_PRESENT, SLOT_TYPE_ONEHOT, SLOT_VALUE};
+                let trader_pi = 2usize; // Trader personality index
+                for (seg_idx, seg) in batch.segment_infos.iter().enumerate() {
+                    if batch.personalities[seg_idx] != trader_pi {
+                        continue;
+                    }
+                    for step in seg.start_idx..seg.end_idx {
+                        trader_steps += 1;
+                        // Count visible planets.
+                        let mut n_planets = 0u32;
+                        for slot in 0..model::N_OBJECTS {
+                            let base = step * model::N_OBJECTS * model::OBJECT_INPUT_DIM
+                                + slot * model::OBJECT_INPUT_DIM;
+                            let present = base + SLOT_IS_PRESENT < batch.obj_flat.len()
+                                && batch.obj_flat[base + SLOT_IS_PRESENT] > 0.5;
+                            let is_planet = base + SLOT_TYPE_ONEHOT + 2 < batch.obj_flat.len()
+                                && batch.obj_flat[base + SLOT_TYPE_ONEHOT + 2] > 0.5;
+                            if present && is_planet {
+                                n_planets += 1;
+                            }
+                        }
+                        trader_planet_count_sum += n_planets as f32;
+
+                        // Read the nav target's cargo value if it's a planet.
+                        let nav_idx = batch.actions[step].4 as usize;
+                        if nav_idx < model::N_OBJECTS {
+                            let base = step * model::N_OBJECTS * model::OBJECT_INPUT_DIM
+                                + nav_idx * model::OBJECT_INPUT_DIM;
+                            let is_planet = base + SLOT_TYPE_ONEHOT + 2 < batch.obj_flat.len()
+                                && batch.obj_flat[base + SLOT_TYPE_ONEHOT + 2] > 0.5;
+                            if is_planet {
+                                let val_idx = base + SLOT_VALUE;
+                                if val_idx < batch.obj_flat.len() {
+                                    trader_nav_cargo_value_sum += batch.obj_flat[val_idx];
+                                    trader_nav_cargo_value_count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // ── Phase 4: PPO epochs ───────────────────────────────────────
             let mut epoch_policy_loss = 0.0_f32;
             let mut epoch_value_loss = 0.0_f32;
@@ -715,6 +1004,15 @@ pub fn spawn_ppo_training_thread(
                     }
                 }
 
+                // Insert surprising steps into the value replay buffer (first epoch only).
+                if epoch == 0 {
+                    value_replay.insert_from_batch(
+                        &batch,
+                        &gae_result.head_advantages,
+                        &gae_result.head_returns,
+                    );
+                }
+
                 // Skip policy updates until value function is accurate enough.
                 let skip_policy = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
 
@@ -771,11 +1069,12 @@ pub fn spawn_ppo_training_thread(
                     if !skip_policy && epoch < PPO_POLICY_EPOCHS {
                         let policy_grads = {
                             let net = inner.policy_net.as_ref().unwrap();
-                            let (action_logits, target_logits) =
+                            let (action_logits, nav_target_logits, wep_target_logits) =
                                 net.forward(self_t.clone(), obj_t.clone(), proj_t.clone());
                             let (new_lp, entropy) = compute_log_probs_and_entropy(
                                 action_logits,
-                                target_logits,
+                                nav_target_logits,
+                                wep_target_logits,
                                 &mb_actions,
                                 &device,
                             );
@@ -807,7 +1106,7 @@ pub fn spawn_ppo_training_thread(
                     // ── Value update (multi-head) ─────────────────────────
                     let value_grads = {
                         let vnet = inner.value_net.as_ref().unwrap();
-                        let (value_out, _) = vnet.forward(self_t, obj_t, proj_t);
+                        let (value_out, _, _) = vnet.forward(self_t, obj_t, proj_t);
                         // value_out: [B, N_REWARD_TYPES]
                         let targets = Tensor::<TrainBackend, 2>::from_data(
                             TensorData::new(mb_ret_flat, [mb, N_REWARD_TYPES]),
@@ -824,6 +1123,49 @@ pub fn spawn_ppo_training_thread(
                     inner.value_net = Some(inner.value_optim.step(PPO_VALUE_LR, vnet, value_grads));
 
                     total_mini_batches += 1;
+                }
+            }
+
+            // ── Phase 5b: Extra value training from replay buffer ────────
+            if value_replay.len() > 0 {
+                let replay_mb_size =
+                    (PPO_MINI_BATCH_SIZE as f32 * VALUE_REPLAY_FRACTION) as usize;
+                for _ in 0..VALUE_REPLAY_EXTRA_BATCHES {
+                    if let Some((r_self, r_obj, r_proj, r_ret)) =
+                        value_replay.sample(replay_mb_size.max(1), &mut rng)
+                    {
+                        let mb = replay_mb_size.max(1);
+                        let self_t = Tensor::<TrainBackend, 2>::from_data(
+                            TensorData::new(r_self, [mb, SELF_INPUT_DIM]),
+                            &device,
+                        );
+                        let obj_t = Tensor::<TrainBackend, 3>::from_data(
+                            TensorData::new(r_obj, [mb, N_OBJECTS, OBJECT_INPUT_DIM]),
+                            &device,
+                        );
+                        let proj_t = Tensor::<TrainBackend, 3>::from_data(
+                            TensorData::new(
+                                r_proj,
+                                [mb, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM],
+                            ),
+                            &device,
+                        );
+                        let value_grads = {
+                            let vnet = inner.value_net.as_ref().unwrap();
+                            let (value_out, _, _) = vnet.forward(self_t, obj_t, proj_t);
+                            let targets = Tensor::<TrainBackend, 2>::from_data(
+                                TensorData::new(r_ret, [mb, N_REWARD_TYPES]),
+                                &device,
+                            );
+                            let vloss =
+                                value_fn::huber_value_loss(value_out, targets, PPO_HUBER_DELTA);
+                            let raw = vloss.backward();
+                            GradientsParams::from_grads(raw, vnet)
+                        };
+                        let vnet = inner.value_net.take().unwrap();
+                        inner.value_net =
+                            Some(inner.value_optim.step(PPO_VALUE_LR, vnet, value_grads));
+                    }
                 }
             }
 
@@ -894,6 +1236,56 @@ pub fn spawn_ppo_training_thread(
                     update_cycle,
                 );
             }
+            // Target selection and slot stats per personality.
+            for pi in 0..N_PERSONALITIES {
+                let pn = PERSONALITY_NAMES[pi];
+                let nav_total = nav_target_counts[pi].iter().sum::<u32>().max(1) as f32;
+                for tt in 0..N_NAV_TYPES {
+                    writer.add_scalar(
+                        &format!("nav_target_type/{pn}/{}", NAV_TYPE_NAMES[tt]),
+                        nav_target_counts[pi][tt] as f32 / nav_total,
+                        update_cycle,
+                    );
+                }
+                let wep_total = wep_target_counts[pi].iter().sum::<u32>().max(1) as f32;
+                for tt in 0..N_WEP_TYPES {
+                    writer.add_scalar(
+                        &format!("wep_target_type/{pn}/{}", WEP_TYPE_NAMES[tt]),
+                        wep_target_counts[pi][tt] as f32 / wep_total,
+                        update_cycle,
+                    );
+                }
+                let n_steps = pers_step_counts[pi].max(1) as f32;
+                for tt in 0..N_SLOT_TYPES {
+                    writer.add_scalar(
+                        &format!("slot_counts/{pn}/{}", SLOT_TYPE_NAMES_LOG[tt]),
+                        slot_type_sums[pi][tt] / n_steps,
+                        update_cycle,
+                    );
+                }
+            }
+
+            // Trader diagnostics.
+            if trader_steps > 0 {
+                writer.add_scalar(
+                    "trader_diag/mean_visible_planets",
+                    trader_planet_count_sum / trader_steps as f32,
+                    update_cycle,
+                );
+                writer.add_scalar(
+                    "trader_diag/nav_planet_frac",
+                    trader_nav_cargo_value_count as f32 / trader_steps as f32,
+                    update_cycle,
+                );
+                if trader_nav_cargo_value_count > 0 {
+                    writer.add_scalar(
+                        "trader_diag/mean_nav_cargo_value",
+                        trader_nav_cargo_value_sum / trader_nav_cargo_value_count as f32,
+                        update_cycle,
+                    );
+                }
+            }
+
             let policy_skipped = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
             writer.add_scalar(
                 "train/value_burnin",
@@ -912,6 +1304,11 @@ pub fn spawn_ppo_training_thread(
             writer.add_scalar("throughput/wait_secs", wait_secs, update_cycle);
             writer.add_scalar("throughput/cycle_secs", cycle_secs, update_cycle);
             writer.add_scalar("throughput/segments", n_segments as f32, update_cycle);
+            writer.add_scalar(
+                "throughput/value_replay_size",
+                value_replay.len() as f32,
+                update_cycle,
+            );
             // Data generation rate: steps collected per second of wall time spent waiting.
             let data_steps_per_sec = if wait_secs > 0.01 {
                 total_steps as f32 / wait_secs

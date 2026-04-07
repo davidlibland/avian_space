@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 
 /// Number of distinct reward channels tracked separately.
-pub const N_REWARD_TYPES: usize = 6;
+pub const N_REWARD_TYPES: usize = 8;
 
 /// Index for planet-landing rewards.
 pub const REWARD_LANDING: usize = 0;
@@ -21,18 +21,30 @@ pub const REWARD_WEAPON_HIT: usize = 2;
 pub const REWARD_PICKUP: usize = 3;
 /// Index for per-step health rewards.
 pub const REWARD_HEALTH: usize = 4;
-/// Index for per-step goal-target rewards (targeting the right entity).
-pub const REWARD_GOAL_TARGET: usize = 5;
+/// Index for per-step nav-target rewards (correct navigation target for personality).
+pub const REWARD_NAV_TARGET: usize = 5;
+/// Index for per-step weapons-target rewards (targeting hostile/engaged entities).
+pub const REWARD_WEAPONS_TARGET: usize = 6;
+/// Index for per-step movement/position rewards (proximity + approach + velocity matching).
+pub const REWARD_MOVEMENT: usize = 7;
 
 /// Human-readable names for TensorBoard logging, indexed by reward type.
-pub const REWARD_TYPE_NAMES: [&str; N_REWARD_TYPES] =
-    ["landing", "cargo_sold", "weapon_hit", "pickup", "health", "goal_target"];
+pub const REWARD_TYPE_NAMES: [&str; N_REWARD_TYPES] = [
+    "landing",
+    "cargo_sold",
+    "weapon_hit",
+    "pickup",
+    "health",
+    "nav_target",
+    "weapons_target",
+    "movement",
+];
 
 /// Per-type weights applied when summing head rewards into the total reward
 /// used for the policy advantage.  Tune these to control the relative
 /// importance of each reward channel.
-/// Indexed by: [LANDING, CARGO_SOLD, WEAPON_HIT, PICKUP, HEALTH, GOAL_TARGET].
-pub const REWARD_TYPE_WEIGHTS: [f32; N_REWARD_TYPES] = [1.0, 1.0, 1.0, 1.0, 0.1, 0.1];
+/// Indexed by: [LANDING, CARGO_SOLD, WEAPON_HIT, PICKUP, HEALTH, NAV_TARGET, WEAPONS_TARGET, MOVEMENT].
+pub const REWARD_TYPE_WEIGHTS: [f32; N_REWARD_TYPES] = [1.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 0.1];
 
 // ---------------------------------------------------------------------------
 // Combat: hit on a ship
@@ -119,9 +131,53 @@ pub const HEALTH_STEP_FIGHTER: f32 = 0.03;
 pub const HEALTH_STEP_MINER_TRADER: f32 = 0.05;
 
 // ---------------------------------------------------------------------------
-// Per-step goal-target reward
+// Per-step nav-target reward
 // ---------------------------------------------------------------------------
 
-/// Per-step weight for the goal-target reward.
-/// Gated by `health_frac >= 0.3` and `distressed <= 0.5`, scaled by both.
-pub const GOAL_TARGET_STEP_WEIGHT: f32 = 0.05;
+/// Trader: nav-target is planet → scaled by cargo_sale_value or commodity_margin.
+pub const NAV_TARGET_TRADER_PLANET: f32 = 0.05;
+/// Miner: nav-target is asteroid/pickup (when cargo space available).
+pub const NAV_TARGET_MINER_RESOURCE: f32 = 0.05;
+/// Miner: nav-target is planet (when cargo hold is full), scaled by cargo_frac.
+pub const NAV_TARGET_MINER_PLANET: f32 = 0.05;
+/// Fighter: same gating as old goal_target.
+pub const NAV_TARGET_FIGHTER: f32 = 0.05;
+
+// ---------------------------------------------------------------------------
+// Per-step weapons-target reward
+// ---------------------------------------------------------------------------
+
+/// Fighter: weapons-target is hostile or should_engage.
+pub const WEAPONS_TARGET_FIGHTER: f32 = 0.05;
+/// Miner/Trader: weapons-target is hostile (defensive only).
+pub const WEAPONS_TARGET_DEFENSIVE: f32 = 0.05;
+
+// ---------------------------------------------------------------------------
+// Per-step movement/position reward (dense shaping toward nav target)
+// ---------------------------------------------------------------------------
+
+/// Proximity reward: `LENGTH_SCALE / (distance + LENGTH_SCALE)`.
+pub const MOVEMENT_LENGTH_SCALE: f32 = 200.0;
+/// Radius within which the approach penalty fades to zero (allows turning/braking).
+pub const MOVEMENT_THRESHOLD_DIST: f32 = 300.0;
+/// Velocity-matching reward scale: `VEL_SCALE / (rel_vel + VEL_SCALE)`.
+pub const MOVEMENT_VEL_SCALE: f32 = 50.0;
+/// Overall per-step weight for the movement reward.
+pub const MOVEMENT_STEP_WEIGHT: f32 = 0.05;
+
+// ---------------------------------------------------------------------------
+// Braking reward (approaching a planet nav-target)
+// ---------------------------------------------------------------------------
+
+/// Distance threshold within which braking rewards activate.
+pub const BRAKING_THRESHOLD_DIST: f32 = 500.0;
+/// Reward for being below LANDING_SPEED when approaching a planet.
+pub const BRAKING_SLOW_REWARD: f32 = 0.05;
+/// Max reward for facing retrograde (scales linearly from 0 at forward to max at fully retrograde).
+pub const BRAKING_RETROGRADE_REWARD: f32 = 0.03;
+/// Bonus for thrusting while nearly retrograde (within ~30° of fully retrograde).
+pub const BRAKING_THRUST_REWARD: f32 = 0.02;
+/// Cosine threshold for "nearly retrograde" (cos(150°) ≈ -0.87).
+pub const BRAKING_RETROGRADE_COS_THRESH: f32 = -0.87;
+/// Overall per-step weight for the braking reward.
+pub const BRAKING_STEP_WEIGHT: f32 = 0.05;

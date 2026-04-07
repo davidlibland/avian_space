@@ -161,7 +161,8 @@ fn from_save_restores_all_fields() {
 fn from_save_target_is_none() {
     // Entity handles must never be persisted.
     let state = PlayerGameState::from_save(sample_save(), &basic_item_universe());
-    assert!(state.player_ship.target.is_none());
+    assert!(state.player_ship.nav_target.is_none());
+    assert!(state.player_ship.weapons_target.is_none());
 }
 
 // ── to_save / from_save round-trip ────────────────────────────────────────

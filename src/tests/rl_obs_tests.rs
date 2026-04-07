@@ -57,10 +57,11 @@ fn test_observation_shape_constant() {
         },
         kind: EntityKind::Ship(ShipSlotData::default()),
         value: 1.0,
-        is_current_target: false,
+        is_nav_target: false,
+        is_weapons_target: false,
     };
     let mut target_slot = slot.clone();
-    target_slot.is_current_target = true;
+    target_slot.is_nav_target = true;
     let some_slots = vec![slot.clone(), target_slot];
     let obs1 = encode_observation(&ObsInput {
         personality: &ship.data.personality,
@@ -178,8 +179,8 @@ fn test_action_bc_roundtrip() {
     ];
     for &(thrust, turn) in cases {
         let (thrust_idx, turn_idx) = controls_to_discrete(thrust, turn);
-        let action: DiscreteAction = (turn_idx, thrust_idx, 0, 0, 0);
-        let (turn_out, thrust_out, _, _, _) = action;
+        let action: DiscreteAction = (turn_idx, thrust_idx, 0, 0, 0, 0);
+        let (turn_out, thrust_out, _, _, _, _) = action;
         let (t_back, r_back) = discrete_to_controls(thrust_out, turn_out);
         assert_eq!(t_back, thrust, "thrust mismatch for input ({thrust}, {turn}): got {t_back}");
         assert_eq!(r_back, turn, "turn mismatch for input ({thrust}, {turn}): got {r_back}");
@@ -285,7 +286,8 @@ fn test_target_pursuit_angle_ahead() {
         },
         kind: EntityKind::Asteroid(AsteroidSlotData { size: 10.0, value: 1.0, collision_indicator: 0.0 }),
         value: 1.0,
-        is_current_target: true,
+        is_nav_target: true,
+        is_weapons_target: false,
     };
     let obs = encode_observation(&ObsInput {
         personality: &ship.data.personality,
@@ -352,7 +354,8 @@ fn test_slot_block_extraction() {
             distressed: 0.0,
         }),
         value: 0.0,
-        is_current_target: true,
+        is_nav_target: true,
+        is_weapons_target: false,
     };
 
     let obs = encode_observation(&ObsInput {
@@ -387,7 +390,8 @@ fn test_slot_block_extraction() {
     assert_eq!(obs[s + SLOT_REL_POS + 1], 0.0, "rel_pos_y");
     assert_eq!(obs[s + SLOT_REL_VEL], 10.0, "rel_vel_x");
     assert_eq!(obs[s + SLOT_REL_VEL + 1], 5.0, "rel_vel_y");
-    assert_eq!(obs[s + SLOT_IS_CURRENT_TARGET], 1.0, "is_current_target");
+    assert_eq!(obs[s + SLOT_IS_NAV_TARGET], 1.0, "is_nav_target");
+    assert_eq!(obs[s + SLOT_IS_WEAPONS_TARGET], 0.0, "is_weapons_target");
     // Proximity: 500 / (400 + 500) = 0.5556
     let prox = obs[s + SLOT_PROXIMITY];
     assert!((prox - 500.0 / 900.0).abs() < 1e-4, "proximity={prox}");
@@ -446,7 +450,8 @@ fn test_planet_slot_block_extraction() {
             commodity_margin: -100.0,
         }),
         value: 500.0,
-        is_current_target: false,
+        is_nav_target: false,
+        is_weapons_target: false,
     };
 
     let obs = encode_observation(&ObsInput {

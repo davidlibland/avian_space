@@ -71,18 +71,17 @@ fn self_state(personality: &Personality, health_frac: f32) -> Vec<f32> {
     ]
 }
 
-/// Build a single entity slot (SLOT_SIZE=25 floats).
+/// Build a single entity slot (SLOT_SIZE floats).
 fn make_slot(
     entity_type: u8,
     rel_pos: [f32; 2],
     rel_vel: [f32; 2],
-    is_current_target: bool,
+    is_nav_target: bool,
+    is_weapons_target: bool,
     type_specific: &[f32],
     value: f32,
 ) -> Vec<f32> {
     let mut slot = Vec::with_capacity(SLOT_SIZE);
-    // is_present
-    slot.push(1.0);
     // type_onehot
     let onehot = match entity_type {
         0 => [1.0, 0.0, 0.0, 0.0], // Ship
@@ -92,9 +91,16 @@ fn make_slot(
         _ => [0.0; 4],
     };
     slot.extend_from_slice(&onehot);
+    // is_present
+    slot.push(1.0);
+    // core features
     slot.extend_from_slice(&rel_pos);
     slot.extend_from_slice(&rel_vel);
-    slot.push(if is_current_target { 1.0 } else { 0.0 });
+    slot.push(if is_nav_target { 1.0 } else { 0.0 });
+    slot.push(if is_weapons_target { 1.0 } else { 0.0 });
+    // proximity
+    let dist = (rel_pos[0].powi(2) + rel_pos[1].powi(2)).sqrt();
+    slot.push(500.0 / (dist + 500.0));
     // pursuit_angle, pursuit_indicator (compute simple approximation)
     let angle = rel_pos[1].atan2(rel_pos[0]);
     slot.push(angle);
@@ -108,7 +114,6 @@ fn make_slot(
     slot.push(angle);
     slot.push(indicator);
     // in_range
-    let dist = (rel_pos[0].powi(2) + rel_pos[1].powi(2)).sqrt();
     slot.push(if dist < 800.0 { 1.0 } else { 0.0 });
     // value
     slot.push(value);
@@ -140,13 +145,13 @@ fn build_obs(self_state: &[f32], slots: &[Vec<f32>]) -> Vec<f32> {
 }
 
 /// Run inference on a single observation, returning (action, target_idx).
-fn infer_one(net: &InferenceNet, obs: &[f32]) -> (DiscreteAction, Vec<f32>, Vec<f32>) {
+fn infer_one(net: &InferenceNet, obs: &[f32]) -> (DiscreteAction, Vec<f32>, Vec<f32>, Vec<f32>) {
     let (s, o) = model::split_obs(obs);
     let proj = vec![0.0_f32; model::PROJECTILES_FLAT_DIM];
-    let (action_logits, target_logits) =
+    let (action_logits, nav_target_logits, wep_target_logits) =
         net.run_inference(s.to_vec(), o.to_vec(), proj, 1);
-    let action = model::logits_to_discrete_action(&action_logits, &target_logits);
-    (action, action_logits, target_logits)
+    let action = model::logits_to_discrete_action(&action_logits, &nav_target_logits, &wep_target_logits);
+    (action, action_logits, nav_target_logits, wep_target_logits)
 }
 
 /// Slot indices for each bucket.
@@ -182,7 +187,8 @@ fn test_fighter_targets_hostile_ship() {
         0,                                // Ship
         [500.0, 0.0],                     // directly ahead
         [0.0, 0.0],                       // stationary
-        false,                            // not current target
+        false,                            // not nav target
+        false,                            // not weapons target
         &hostile_ship_type_specific[..9], // truncate to TYPE_SPECIFIC_SIZE
         0.0,                              // ships don't have value
     );
@@ -193,10 +199,10 @@ fn test_fighter_targets_hostile_ship() {
     slots[HOSTILE_SHIP_SLOTS.start] = hostile_ship;
 
     let obs = build_obs(&self_feat, &slots);
-    let (action, _action_logits, target_logits) = infer_one(&net, &obs);
+    let (action, _action_logits, nav_target_logits, _wep_target_logits) = infer_one(&net, &obs);
 
     let target_idx = action.4 as usize;
-    println!("Target logits: {:?}", target_logits);
+    println!("Nav target logits: {:?}", nav_target_logits);
     println!("Chosen target_idx: {target_idx}");
     println!(
         "Action: turn={}, thrust={}, fire_primary={}, fire_secondary={}",
@@ -221,7 +227,8 @@ fn test_miner_targets_asteroid() {
         1,                // Asteroid
         [300.0, 100.0],   // nearby
         [0.0, 0.0],       // stationary
-        false,
+        false,            // not nav target
+        false,            // not weapons target
         &[20.0, 50.0],    // size=20, value=50
         50.0,
     );
@@ -230,10 +237,10 @@ fn test_miner_targets_asteroid() {
     slots[ASTEROID_SLOTS.start] = asteroid;
 
     let obs = build_obs(&self_feat, &slots);
-    let (action, _action_logits, target_logits) = infer_one(&net, &obs);
+    let (action, _action_logits, nav_target_logits, _wep_target_logits) = infer_one(&net, &obs);
 
     let target_idx = action.4 as usize;
-    println!("Target logits: {:?}", target_logits);
+    println!("Nav target logits: {:?}", nav_target_logits);
     println!("Chosen target_idx: {target_idx}");
 
     assert_eq!(
@@ -255,7 +262,8 @@ fn test_trader_targets_planet() {
         2,                       // Planet
         [800.0, 0.0],            // ahead
         [0.0, 0.0],              // stationary
-        false,
+        false,                   // not nav target
+        false,                   // not weapons target
         &[500.0, 0.0, -100.0],  // cargo_sale_value=500, has_ammo=0, commodity_margin=-100
         500.0,
     );
@@ -264,10 +272,10 @@ fn test_trader_targets_planet() {
     slots[PLANET_SLOTS.start] = planet;
 
     let obs = build_obs(&self_feat, &slots);
-    let (action, _action_logits, target_logits) = infer_one(&net, &obs);
+    let (action, _action_logits, nav_target_logits, _wep_target_logits) = infer_one(&net, &obs);
 
     let target_idx = action.4 as usize;
-    println!("Target logits: {:?}", target_logits);
+    println!("Nav target logits: {:?}", nav_target_logits);
     println!("Chosen target_idx: {target_idx}");
 
     assert_eq!(
@@ -316,13 +324,14 @@ fn test_bc_confusion_matrix() {
             obj_flat.extend_from_slice(o);
         }
         let proj_flat = vec![0.0_f32; bs * model::PROJECTILES_FLAT_DIM];
-        let (action_logits, target_logits) =
+        let (action_logits, nav_target_logits, wep_target_logits) =
             net.run_inference(self_flat, obj_flat, proj_flat, bs);
 
         for (i, t) in chunk.iter().enumerate() {
             let al = &action_logits[i * POLICY_OUTPUT_DIM..(i + 1) * POLICY_OUTPUT_DIM];
-            let tl = &target_logits[i * TARGET_OUTPUT_DIM..(i + 1) * TARGET_OUTPUT_DIM];
-            let pred = model::logits_to_discrete_action(al, tl);
+            let ntl = &nav_target_logits[i * TARGET_OUTPUT_DIM..(i + 1) * TARGET_OUTPUT_DIM];
+            let wtl = &wep_target_logits[i * TARGET_OUTPUT_DIM..(i + 1) * TARGET_OUTPUT_DIM];
+            let pred = model::logits_to_discrete_action(al, ntl, wtl);
             let label = t.action;
 
             turn_cm[pred.0 as usize][label.0 as usize] += 1;
@@ -352,12 +361,18 @@ fn test_bc_confusion_matrix() {
     let fs_acc = accuracy_2d(&fire_secondary_cm);
     let target_acc = accuracy_dyn(&target_cm);
 
-    println!("\n=== Accuracy Summary ===");
-    println!("Turn:           {turn_acc:.1}%");
-    println!("Thrust:         {thrust_acc:.1}%");
-    println!("Fire Primary:   {fp_acc:.1}%");
-    println!("Fire Secondary: {fs_acc:.1}%");
-    println!("Target:         {target_acc:.1}%");
+    let turn_bal = balanced_accuracy_2d(&turn_cm);
+    let thrust_bal = balanced_accuracy_2d(&thrust_cm);
+    let fp_bal = balanced_accuracy_2d(&fire_primary_cm);
+    let fs_bal = balanced_accuracy_2d(&fire_secondary_cm);
+    let target_bal = balanced_accuracy_dyn(&target_cm);
+
+    println!("\n=== Accuracy Summary (overall / balanced) ===");
+    println!("Turn:           {turn_acc:5.1}% / {turn_bal:5.1}%   {}", per_class_recall_2d(&turn_cm, &["left", "straight", "right"]));
+    println!("Thrust:         {thrust_acc:5.1}% / {thrust_bal:5.1}%   {}", per_class_recall_2d(&thrust_cm, &["off", "on"]));
+    println!("Fire Primary:   {fp_acc:5.1}% / {fp_bal:5.1}%   {}", per_class_recall_2d(&fire_primary_cm, &["no", "yes"]));
+    println!("Fire Secondary: {fs_acc:5.1}% / {fs_bal:5.1}%   {}", per_class_recall_2d(&fire_secondary_cm, &["no", "yes"]));
+    println!("Target:         {target_acc:5.1}% / {target_bal:5.1}%");
 
     // Sanity check: accuracy should be above chance.
     assert!(
@@ -448,15 +463,59 @@ fn accuracy_dyn(cm: &[Vec<u32>]) -> f64 {
     100.0 * correct as f64 / total as f64
 }
 
+/// Balanced accuracy: mean of per-class recall (ignores classes with zero support).
+fn balanced_accuracy_2d<const N: usize>(cm: &[[u32; N]; N]) -> f64 {
+    let mut sum_recall = 0.0;
+    let mut n_classes = 0;
+    for j in 0..N {
+        let class_total: u32 = (0..N).map(|i| cm[i][j]).sum();
+        if class_total > 0 {
+            sum_recall += cm[j][j] as f64 / class_total as f64;
+            n_classes += 1;
+        }
+    }
+    if n_classes == 0 { 0.0 } else { 100.0 * sum_recall / n_classes as f64 }
+}
+
+fn balanced_accuracy_dyn(cm: &[Vec<u32>]) -> f64 {
+    let n = cm.len();
+    let mut sum_recall = 0.0;
+    let mut n_classes = 0;
+    for j in 0..n {
+        let class_total: u32 = (0..n).map(|i| cm[i][j]).sum();
+        if class_total > 0 {
+            sum_recall += cm[j][j] as f64 / class_total as f64;
+            n_classes += 1;
+        }
+    }
+    if n_classes == 0 { 0.0 } else { 100.0 * sum_recall / n_classes as f64 }
+}
+
+/// Per-class recall for a fixed-size confusion matrix.
+fn per_class_recall_2d<const N: usize>(cm: &[[u32; N]; N], class_names: &[&str]) -> String {
+    let mut parts = Vec::new();
+    for j in 0..N {
+        let class_total: u32 = (0..N).map(|i| cm[i][j]).sum();
+        let recall = if class_total > 0 {
+            100.0 * cm[j][j] as f64 / class_total as f64
+        } else {
+            0.0
+        };
+        let name = class_names.get(j).unwrap_or(&"?");
+        parts.push(format!("{name}={recall:.0}%"));
+    }
+    parts.join(", ")
+}
+
 // ---------------------------------------------------------------------------
 // BC target-selection data quality diagnostics
 // ---------------------------------------------------------------------------
 
-/// Find which slot (if any) has `is_current_target=1` in the observation.
-fn find_is_current_target_slot(obs: &[f32]) -> Option<usize> {
+/// Find which slot (if any) has `is_nav_target=1` in the observation.
+fn find_is_nav_target_slot(obs: &[f32]) -> Option<usize> {
     for i in 0..N_ENTITY_SLOTS {
         let slot_start = SELF_SIZE + i * SLOT_SIZE;
-        if obs[slot_start + SLOT_IS_CURRENT_TARGET] > 0.5 {
+        if obs[slot_start + SLOT_IS_NAV_TARGET] > 0.5 {
             return Some(i);
         }
     }
@@ -467,11 +526,11 @@ fn find_is_current_target_slot(obs: &[f32]) -> Option<usize> {
 ///
 /// Specifically, verifies that there exist transitions where:
 /// 1. The output target label points to an entity that is NOT already marked
-///    `is_current_target` in the input features (i.e. the AI chose a NEW target).
+///    `is_nav_target` in the input features (i.e. the AI chose a NEW target).
 /// 2. The output target label is "no target" while an entity IS marked
-///    `is_current_target` in the input (i.e. the AI dropped its target).
+///    `is_nav_target` in the input (i.e. the AI dropped its target).
 ///
-/// If neither case exists, the model can only learn to echo the `is_current_target`
+/// If neither case exists, the model can only learn to echo the `is_nav_target`
 /// flag rather than learning to actually select targets.
 #[test]
 #[ignore]
@@ -483,10 +542,10 @@ fn test_bc_buffer_has_nontrivial_target_data() {
     let no_target_label = N_OBJECTS as u8; // "no target" index
 
     let mut total = 0usize;
-    let mut target_matches_is_current = 0usize; // label == is_current_target slot
-    let mut target_is_new = 0usize;             // label != is_current_target slot (new target chosen)
-    let mut target_dropped = 0usize;            // label = "no target" but is_current_target exists
-    let mut no_target_no_current = 0usize;      // label = "no target" and no is_current_target
+    let mut target_matches_is_current = 0usize; // label == is_nav_target slot
+    let mut target_is_new = 0usize;             // label != is_nav_target slot (new target chosen)
+    let mut target_dropped = 0usize;            // label = "no target" but is_nav_target exists
+    let mut no_target_no_current = 0usize;      // label = "no target" and no is_nav_target
     let mut label_is_none = 0usize;
     let mut label_is_entity = 0usize;
     let mut has_current_target = 0usize;
@@ -494,7 +553,7 @@ fn test_bc_buffer_has_nontrivial_target_data() {
     for t in buffer.iter() {
         total += 1;
         let label_target = t.action.4;
-        let current_target_slot = find_is_current_target_slot(&t.obs);
+        let current_target_slot = find_is_nav_target_slot(&t.obs);
 
         if current_target_slot.is_some() {
             has_current_target += 1;
@@ -518,13 +577,13 @@ fn test_bc_buffer_has_nontrivial_target_data() {
     }
 
     println!("Total transitions:                     {total}");
-    println!("  Has is_current_target in input:       {has_current_target}");
+    println!("  Has is_nav_target in input:       {has_current_target}");
     println!("  Label is entity:                      {label_is_entity}");
-    println!("    ...and matches is_current_target:   {target_matches_is_current}");
+    println!("    ...and matches is_nav_target:   {target_matches_is_current}");
     println!("    ...and is NEW target (non-trivial): {target_is_new}");
     println!("  Label is 'no target':                 {label_is_none}");
-    println!("    ...while is_current_target exists:  {target_dropped}");
-    println!("    ...and no is_current_target:        {no_target_no_current}");
+    println!("    ...while is_nav_target exists:  {target_dropped}");
+    println!("    ...and no is_nav_target:        {no_target_no_current}");
     println!();
 
     let pct_new = if total > 0 {
@@ -543,19 +602,19 @@ fn test_bc_buffer_has_nontrivial_target_data() {
     assert!(
         target_is_new > 0,
         "No transitions where the BC label selects a NEW target \
-         (different from is_current_target). The model cannot learn \
+         (different from is_nav_target). The model cannot learn \
          target selection from this data."
     );
     assert!(
         target_dropped > 0 || label_is_none == 0,
         "No transitions where the BC label drops the target while \
-         is_current_target is set. If 'no target' labels exist, \
+         is_nav_target is set. If 'no target' labels exist, \
          some should involve dropping an existing target."
     );
 }
 
 /// Complementary test: verify that transitions exist where there IS no
-/// `is_current_target` in the input but the label picks a target.
+/// `is_nav_target` in the input but the label picks a target.
 /// This is the "first target acquisition" case.
 #[test]
 #[ignore]
@@ -567,7 +626,7 @@ fn test_bc_buffer_has_target_acquisition_data() {
     let mut no_current_total = 0usize;
 
     for t in buffer.iter() {
-        let current_target_slot = find_is_current_target_slot(&t.obs);
+        let current_target_slot = find_is_nav_target_slot(&t.obs);
         if current_target_slot.is_none() {
             no_current_total += 1;
             if t.action.4 != no_target_label {
@@ -577,7 +636,7 @@ fn test_bc_buffer_has_target_acquisition_data() {
     }
 
     println!("\n=== Target Acquisition Data ===");
-    println!("Transitions with no is_current_target: {no_current_total}");
+    println!("Transitions with no is_nav_target: {no_current_total}");
     println!("  ...where label picks a target:       {no_current_but_label_picks}");
 
     assert!(

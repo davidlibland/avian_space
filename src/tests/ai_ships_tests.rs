@@ -80,10 +80,10 @@ fn test_discrete_action_ordering_roundtrip() {
     ] {
         // store_obs_actions: controls → DiscreteAction
         let (thrust_idx, turn_idx) = controls_to_discrete(thrust, turn);
-        let action: (u8, u8, u8, u8) = (turn_idx, thrust_idx, 0, 0);
+        let action: (u8, u8, u8, u8, u8, u8) = (turn_idx, thrust_idx, 0, 0, 0, 0);
 
         // repeat_actions: DiscreteAction → controls
-        let (decoded_turn_idx, decoded_thrust_idx, _, _) = action;
+        let (decoded_turn_idx, decoded_thrust_idx, _, _, _, _) = action;
         let (rt, rr) = discrete_to_controls(decoded_thrust_idx, decoded_turn_idx);
 
         let expected_thrust = if thrust > 0.5 { 1.0_f32 } else { 0.0 };
@@ -144,7 +144,7 @@ fn test_compute_ai_action_target_entity_missing() {
     let (pos_q, vel_q) = state.get(&world);
 
     let mut ship = Ship::default();
-    ship.target = Some(Target::Asteroid(ghost));
+    ship.nav_target = Some(Target::Asteroid(ghost));
 
     let result = compute_ai_action(
         &ship,
@@ -175,7 +175,7 @@ fn test_compute_ai_action_forward_asteroid() {
     let (pos_q, vel_q) = state.get(&world);
 
     let mut ship = Ship::default();
-    ship.target = Some(Target::Asteroid(target));
+    ship.nav_target = Some(Target::Asteroid(target));
 
     let result = compute_ai_action(
         &ship,
@@ -219,7 +219,7 @@ fn test_compute_ai_action_planet_braking() {
     ship.data.max_speed = 200.0;
     ship.data.torque = 10.0;
     ship.data.angular_drag = 1.0;
-    ship.target = Some(Target::Planet(planet));
+    ship.nav_target = Some(Target::Planet(planet));
 
     // Moving at 500 m/s toward the planet — braking distance >> 50 units.
     // Ship faces +Y (default) and vel is +Y, so the ship is flying prograde.
@@ -265,7 +265,7 @@ fn test_compute_ai_action_planet_approach() {
     ship.data.max_speed = 200.0;
     ship.data.torque = 10.0;
     ship.data.angular_drag = 1.0;
-    ship.target = Some(Target::Planet(planet));
+    ship.nav_target = Some(Target::Planet(planet));
 
     let result = compute_ai_action(
         &ship,
@@ -301,7 +301,7 @@ fn test_compute_ai_action_planet_prepare_zone() {
     let planet = world
         .spawn((Position(Vec2::new(0.0, 500.0)), LinearVelocity(Vec2::ZERO)))
         .id();
-    ship.target = Some(Target::Planet(planet));
+    ship.nav_target = Some(Target::Planet(planet));
 
     let mut state: SystemState<(Query<&Position>, Query<&LinearVelocity>)> =
         SystemState::new(&mut world);

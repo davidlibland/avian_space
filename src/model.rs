@@ -256,10 +256,15 @@ pub struct RLNet<B: Backend> {
     norm: LayerNorm<B>,
     output: Linear<B>,
 
-    // ── Target-selection pointer head ──────────────────────────────────────
-    target_q_proj: Linear<B>,
-    target_k_proj: Linear<B>,
-    target_no_tgt: Linear<B>,
+    // ── Navigation-target pointer head ─────────────────────────────────────
+    nav_target_q_proj: Linear<B>,
+    nav_target_k_proj: Linear<B>,
+    nav_target_no_tgt: Linear<B>,
+
+    // ── Weapons-target pointer head ──────────────────────────────────────
+    wep_target_q_proj: Linear<B>,
+    wep_target_k_proj: Linear<B>,
+    wep_target_no_tgt: Linear<B>,
 }
 
 impl<B: Backend> RLNet<B> {
@@ -326,10 +331,15 @@ impl<B: Backend> RLNet<B> {
             norm: LayerNormConfig::new(hidden_dim).init(device),
             output: lin_zero(hidden_dim, output_dim),
 
-            // Target head
-            target_q_proj: lin_xavier(hidden_dim, hidden_dim),
-            target_k_proj: lin_xavier(hidden_dim, hidden_dim),
-            target_no_tgt: lin_zero(hidden_dim, 1),
+            // Navigation-target pointer head
+            nav_target_q_proj: lin_xavier(hidden_dim, hidden_dim),
+            nav_target_k_proj: lin_xavier(hidden_dim, hidden_dim),
+            nav_target_no_tgt: lin_zero(hidden_dim, 1),
+
+            // Weapons-target pointer head
+            wep_target_q_proj: lin_xavier(hidden_dim, hidden_dim),
+            wep_target_k_proj: lin_xavier(hidden_dim, hidden_dim),
+            wep_target_no_tgt: lin_zero(hidden_dim, 1),
         }
     }
 
@@ -345,7 +355,7 @@ impl<B: Backend> RLNet<B> {
         self_feat: Tensor<B, 2>,
         obj_feat: Tensor<B, 3>,
         proj_feat: Tensor<B, 3>,
-    ) -> (Tensor<B, 2>, Tensor<B, 2>) {
+    ) -> (Tensor<B, 2>, Tensor<B, 2>, Tensor<B, 2>) {
         let h = self.hidden_dim;
         let (type_onehot, is_present, core_feat, type_feat) = split_obj_feat(obj_feat);
 
@@ -372,42 +382,36 @@ impl<B: Backend> RLNet<B> {
         // Projectile presence mask: first float of each projectile slot.
         let proj_present: Tensor<B, 2> = proj_feat.clone().narrow(2, 0, 1).squeeze_dim::<2>(2);
 
-        // ── 3. Entity←Projectile cross-attention (residual, masked) ──────────
-        // Only ships (type 0) and asteroids (type 1) attend to projectiles.
-        // Planets (type 2) and pickups (type 3) are unchanged.
-        let ship_or_asteroid_mask: Tensor<B, 2> = {
-            // type_onehot [B, N, 4]: columns 0=ship, 1=asteroid
-            let ship_col: Tensor<B, 2> = type_onehot.clone().narrow(2, 0, 1).squeeze_dim::<2>(2);
-            let ast_col: Tensor<B, 2> = type_onehot.clone().narrow(2, 1, 1).squeeze_dim::<2>(2);
-            (ship_col + ast_col).clamp(0.0, 1.0)
-        };
-
-        let cross_q = self.cross_q_proj.forward(self.cross_norm.forward(ent_enc.clone()));
-        let cross_k = self.cross_k_proj.forward(proj_enc.clone());
-        let cross_v = self.cross_v_proj.forward(proj_enc.clone());
-
-        // Single-head cross-attention: entities query projectiles
+        // ── 3. Projectile←Entity cross-attention (residual, masked) ──────────
+        // Projectiles attend to entities to enrich their representations with
+        // context about nearby ships/asteroids.  Entity embeddings stay clean.
         let scale = (h as f64).sqrt() as f32;
+
+        let cross_q = self.cross_q_proj.forward(self.cross_norm.forward(proj_enc.clone()));
+        let cross_k = self.cross_k_proj.forward(ent_enc.clone());
+        let cross_v = self.cross_v_proj.forward(ent_enc.clone());
+
+        // Single-head cross-attention: projectiles query entities
         let scores = cross_q
             .matmul(cross_k.swap_dims(1, 2))
-            .div_scalar(scale); // [B, N, Np]
+            .div_scalar(scale); // [B, Np, N]
 
-        // Mask out absent projectiles
-        let proj_mask_3d = proj_present
+        // Mask out absent entities
+        let ent_mask_3d = is_present
             .clone()
             .unsqueeze_dim::<3>(1)
-            .repeat_dim(1, n_ents); // [B, N, Np]
+            .repeat_dim(1, K_PROJECTILES); // [B, Np, N]
         let neg_inf_cross =
-            Tensor::<B, 3>::full([batch_size, n_ents, K_PROJECTILES], -1e9, &scores.device());
-        let scores = scores.clone() * proj_mask_3d.clone()
-            + neg_inf_cross * (proj_mask_3d.ones_like() - proj_mask_3d);
+            Tensor::<B, 3>::full([batch_size, K_PROJECTILES, n_ents], -1e9, &scores.device());
+        let scores = scores.clone() * ent_mask_3d.clone()
+            + neg_inf_cross * (ent_mask_3d.ones_like() - ent_mask_3d);
 
-        let cross_weights = softmax(scores, 2); // [B, N, Np]
-        let cross_out = cross_weights.matmul(cross_v); // [B, N, H]
+        let cross_weights = softmax(scores, 2); // [B, Np, N]
+        let cross_out = cross_weights.matmul(cross_v); // [B, Np, H]
 
-        // Apply residual only to ships and asteroids
-        let gate = ship_or_asteroid_mask.unsqueeze_dim::<3>(2); // [B, N, 1]
-        let ent_enc = ent_enc + cross_out * gate; // [B, N, H]
+        // Apply residual only to present projectiles
+        let proj_gate = proj_present.clone().unsqueeze_dim::<3>(2); // [B, Np, 1]
+        let proj_enc = proj_enc + cross_out * proj_gate; // [B, Np, H]
 
         // ── 4. Self encoder ──────────────────────────────────────────────────
         let self_enc = silu(self.self_embed.forward(self_feat));
@@ -439,23 +443,44 @@ impl<B: Backend> RLNet<B> {
         let x = silu(x);
         let action_logits = self.output.forward(x.clone()); // [B, output_dim]
 
-        // ── 9. Target head (pointer from decoded state to entity embeddings) ─
-        let tq = self.target_q_proj.forward(x.clone()).unsqueeze_dim::<3>(1); // [B, 1, H]
-        let tk = self.target_k_proj.forward(ent_enc).swap_dims(1, 2); // [B, H, N]
-        let entity_logits = tq.matmul(tk).div_scalar(scale).squeeze_dim(1); // [B, N]
-
-        let no_tgt_logit = self.target_no_tgt.forward(x); // [B, 1]
-        let target_logits = Tensor::cat(vec![entity_logits, no_tgt_logit], 1); // [B, N+1]
-
-        // Mask empty entity slots to -inf.
+        // ── 9. Pointer heads ─────────────────────────────────────────────────
+        // Shared masking for empty entity slots.
         let device = is_present.device();
         let ones = Tensor::<B, 2>::ones([batch_size, 1], &device);
-        let mask = Tensor::cat(vec![is_present, ones], 1);
+        let mask = Tensor::cat(vec![is_present, ones], 1); // [B, N+1]
         let neg_inf = Tensor::<B, 2>::full([batch_size, N_OBJECTS + 1], -1e9, &device);
-        let target_logits =
-            target_logits.clone() * mask.clone() + neg_inf * (mask.ones_like() - mask);
 
-        (action_logits, target_logits)
+        // Helper: compute masked pointer logits from Q/K projections + no-target bias.
+        let pointer_head = |q_proj: &Linear<B>,
+                            k_proj: &Linear<B>,
+                            no_tgt: &Linear<B>,
+                            x_ref: &Tensor<B, 2>,
+                            ent_ref: &Tensor<B, 3>|
+         -> Tensor<B, 2> {
+            let tq = q_proj.forward(x_ref.clone()).unsqueeze_dim::<3>(1); // [B,1,H]
+            let tk = k_proj.forward(ent_ref.clone()).swap_dims(1, 2); // [B,H,N]
+            let entity_logits = tq.matmul(tk).div_scalar(scale).squeeze_dim(1); // [B,N]
+            let no_tgt_logit = no_tgt.forward(x_ref.clone()); // [B,1]
+            let logits = Tensor::cat(vec![entity_logits, no_tgt_logit], 1); // [B,N+1]
+            logits.clone() * mask.clone() + neg_inf.clone() * (mask.ones_like() - mask.clone())
+        };
+
+        let nav_target_logits = pointer_head(
+            &self.nav_target_q_proj,
+            &self.nav_target_k_proj,
+            &self.nav_target_no_tgt,
+            &x,
+            &ent_enc,
+        );
+        let wep_target_logits = pointer_head(
+            &self.wep_target_q_proj,
+            &self.wep_target_k_proj,
+            &self.wep_target_no_tgt,
+            &x,
+            &ent_enc,
+        );
+
+        (action_logits, nav_target_logits, wep_target_logits)
     }
 }
 
@@ -488,14 +513,14 @@ impl InferenceNet {
     /// * `obj_flat`: flattened `[batch_size × N_OBJECTS × OBJECT_INPUT_DIM]`
     /// * `proj_flat`: flattened `[batch_size × K_PROJECTILES × PROJ_INPUT_DIM]`
     ///
-    /// Returns `(action_logits, target_logits)`.
+    /// Returns `(action_logits, nav_target_logits, weapons_target_logits)`.
     pub fn run_inference(
         &self,
         self_flat: Vec<f32>,
         obj_flat: Vec<f32>,
         proj_flat: Vec<f32>,
         batch_size: usize,
-    ) -> (Vec<f32>, Vec<f32>) {
+    ) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
         let self_input = Tensor::<InferBackend, 2>::from_data(
             TensorData::new(self_flat, [batch_size, SELF_INPUT_DIM]),
             &self.device,
@@ -508,16 +533,20 @@ impl InferenceNet {
             TensorData::new(proj_flat, [batch_size, K_PROJECTILES, PROJ_INPUT_DIM]),
             &self.device,
         );
-        let (action, target) = self.net.forward(self_input, obj_input, proj_input);
+        let (action, nav_tgt, wep_tgt) = self.net.forward(self_input, obj_input, proj_input);
         let action_logits = action
             .into_data()
             .into_vec::<f32>()
             .expect("action logit extraction failed");
-        let target_logits = target
+        let nav_target_logits = nav_tgt
             .into_data()
             .into_vec::<f32>()
-            .expect("target logit extraction failed");
-        (action_logits, target_logits)
+            .expect("nav target logit extraction failed");
+        let wep_target_logits = wep_tgt
+            .into_data()
+            .into_vec::<f32>()
+            .expect("weapons target logit extraction failed");
+        (action_logits, nav_target_logits, wep_target_logits)
     }
 
     /// Serialize the current weights to bytes (compatible with [`Self::load_bytes`]).
@@ -606,24 +635,21 @@ pub fn split_obs(obs: &[f32]) -> (&[f32], &[f32]) {
 
 /// Convert policy logits and target logits to a `DiscreteAction` via greedy
 /// argmax over each factored head.
-///
-/// Action logit layout: `turn(3) | thrust(2) | fire_primary(2) | fire_secondary(2)`
-/// Target logits: `[N_OBJECTS + 1]` (one per entity slot + "no target")
-pub fn logits_to_discrete_action(action_logits: &[f32], target_logits: &[f32]) -> DiscreteAction {
+pub fn logits_to_discrete_action(
+    action_logits: &[f32],
+    nav_target_logits: &[f32],
+    wep_target_logits: &[f32],
+) -> DiscreteAction {
     debug_assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM);
-    debug_assert_eq!(target_logits.len(), TARGET_OUTPUT_DIM);
+    debug_assert_eq!(nav_target_logits.len(), TARGET_OUTPUT_DIM);
+    debug_assert_eq!(wep_target_logits.len(), TARGET_OUTPUT_DIM);
     let turn_idx = argmax(&action_logits[0..3]) as u8;
     let thrust_idx = argmax(&action_logits[3..5]) as u8;
     let fire_primary = argmax(&action_logits[5..7]) as u8;
     let fire_secondary = argmax(&action_logits[7..9]) as u8;
-    let target_idx = argmax(target_logits) as u8;
-    (
-        turn_idx,
-        thrust_idx,
-        fire_primary,
-        fire_secondary,
-        target_idx,
-    )
+    let nav_target_idx = argmax(nav_target_logits) as u8;
+    let wep_target_idx = argmax(wep_target_logits) as u8;
+    (turn_idx, thrust_idx, fire_primary, fire_secondary, nav_target_idx, wep_target_idx)
 }
 
 /// Sample an action stochastically from the policy logits.
@@ -632,11 +658,13 @@ pub fn logits_to_discrete_action(action_logits: &[f32], target_logits: &[f32]) -
 /// log-probabilities for the sampled action.
 pub fn sample_discrete_action(
     action_logits: &[f32],
-    target_logits: &[f32],
+    nav_target_logits: &[f32],
+    wep_target_logits: &[f32],
     rng: &mut impl rand::Rng,
 ) -> (DiscreteAction, f32) {
     debug_assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM);
-    debug_assert_eq!(target_logits.len(), TARGET_OUTPUT_DIM);
+    debug_assert_eq!(nav_target_logits.len(), TARGET_OUTPUT_DIM);
+    debug_assert_eq!(wep_target_logits.len(), TARGET_OUTPUT_DIM);
 
     let mut total_log_prob: f32 = 0.0;
 
@@ -644,14 +672,16 @@ pub fn sample_discrete_action(
     let thrust_idx = sample_categorical(&action_logits[3..5], rng, &mut total_log_prob);
     let fire_primary = sample_categorical(&action_logits[5..7], rng, &mut total_log_prob);
     let fire_secondary = sample_categorical(&action_logits[7..9], rng, &mut total_log_prob);
-    let target_idx = sample_categorical(target_logits, rng, &mut total_log_prob);
+    let nav_target_idx = sample_categorical(nav_target_logits, rng, &mut total_log_prob);
+    let wep_target_idx = sample_categorical(wep_target_logits, rng, &mut total_log_prob);
 
     let action = (
         turn_idx as u8,
         thrust_idx as u8,
         fire_primary as u8,
         fire_secondary as u8,
-        target_idx as u8,
+        nav_target_idx as u8,
+        wep_target_idx as u8,
     );
     (action, total_log_prob)
 }
@@ -678,7 +708,8 @@ fn sample_categorical(logits: &[f32], rng: &mut impl rand::Rng, log_prob_acc: &m
         }
     }
 
-    *log_prob_acc += logits[sampled] - log_sum_exp;
+    // Clamp to prevent -inf log-probs from masked/near-zero probability actions.
+    *log_prob_acc += (logits[sampled] - log_sum_exp).max(-20.0);
     sampled
 }
 

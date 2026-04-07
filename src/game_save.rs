@@ -96,7 +96,8 @@ impl PlayerGameState {
             health: save.health,
             cargo: save.cargo.clone(),
             credits: save.credits,
-            target: None,
+            nav_target: None,
+            weapons_target: None,
             weapon_systems: Default::default(),
             enemies: save.enemies.clone(),
         };

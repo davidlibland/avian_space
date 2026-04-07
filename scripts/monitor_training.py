@@ -20,8 +20,8 @@ import numpy as np
 from tbparse import SummaryReader
 
 PERSONALITIES = ["fighter", "miner", "trader"]
-REWARD_TYPES = ["health", "weapon_hit", "landing", "cargo_sold", "pickup", "goal_target"]
-REWARD_WEIGHTS = [1.0, 1.0, 1.0, 1.0, 0.1, 0.1]  # keep in sync with consts.rs
+REWARD_TYPES = ["health", "weapon_hit", "landing", "cargo_sold", "pickup", "nav_target", "weapons_target", "movement"]
+REWARD_WEIGHTS = [1.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 0.1]  # keep in sync with consts.rs
 
 
 def find_latest_tb_dir(base: str = "experiments") -> str:
@@ -126,15 +126,68 @@ def main():
             print(f"  {label:25s}  [{', '.join(f'{v:.4f}' for v in last5)}]")
 
     # ── Per-head value diagnostics ────────────────────────────────────────
-    print_section("VALUE HEAD EXPLAINED VARIANCE (last 5)")
+    print_section("VALUE HEAD DIAGNOSTICS (last 5)")
+    header_ev = f"{'':>16} {'expl_var':>40}  {'mean_abs_td':>40}"
+    print(header_ev)
+    print("-" * len(header_ev))
     for rtype in REWARD_TYPES:
-        vals = get(df, f"value_head/{rtype}/explained_variance")
-        if len(vals) >= 5:
-            last5 = vals[-5:]
-            print(f"  {rtype:>12}: [{', '.join(f'{v:.3f}' for v in last5)}]")
+        ev_vals = get(df, f"value_head/{rtype}/explained_variance")
+        td_vals = get(df, f"value_head/{rtype}/mean_abs_td_error")
+        ev_str = f"[{', '.join(f'{v:.3f}' for v in ev_vals[-5:])}]" if len(ev_vals) >= 5 else "n/a"
+        td_str = f"[{', '.join(f'{v:.4f}' for v in td_vals[-5:])}]" if len(td_vals) >= 5 else "n/a"
+        print(f"  {rtype:>14}: {ev_str:>40}  {td_str:>40}")
     vals = get(df, "train/explained_variance")
     if len(vals) >= 5:
-        print(f"  {'TOTAL':>12}: [{', '.join(f'{v:.3f}' for v in vals[-5:])}]")
+        print(f"  {'TOTAL':>14}: [{', '.join(f'{v:.3f}' for v in vals[-5:])}]")
+
+    # ── Raw reward totals per cycle (recent) ──────────────────────────────
+    print_section("RAW REWARD TOTAL PER CYCLE (last 10 avg)")
+    header_raw = f"{'':>12}" + "".join(f"{r:>12}" for r in REWARD_TYPES)
+    print(header_raw)
+    print("-" * len(header_raw))
+    for pers in PERSONALITIES:
+        row = []
+        for rtype in REWARD_TYPES:
+            vals = get(df, f"reward_total/{pers}/{rtype}")
+            row.append(float(np.mean(vals[-10:])) if len(vals) >= 10 else 0.0)
+        cells = "".join(f"{v:12.2f}" for v in row)
+        print(f"{pers:>12}{cells}")
+
+    # ── Target selection matrices ───────────────────────────────────────
+    def print_target_matrix(title, prefix, type_names):
+        has_data = any(
+            len(get(df, f"{prefix}/{PERSONALITIES[0]}/{tt}")) > 0
+            for tt in type_names
+        )
+        if not has_data:
+            return
+        print_section(title)
+        header = f"{'':>12}" + "".join(f"{t:>14}" for t in type_names)
+        print(header)
+        print("-" * len(header))
+        for pers in PERSONALITIES:
+            row = []
+            for tt in type_names:
+                vals = get(df, f"{prefix}/{pers}/{tt}")
+                row.append(float(np.mean(vals[-5:])) if len(vals) >= 5 else 0.0)
+            cells = "".join(f"{v:14.3f}" for v in row)
+            print(f"{pers:>12}{cells}")
+
+    print_target_matrix(
+        "NAV TARGET SELECTION (fraction, last 5 avg)",
+        "nav_target_type",
+        ["ship", "asteroid", "planet", "pickup", "none"],
+    )
+    print_target_matrix(
+        "WEAPONS TARGET SELECTION (fraction, last 5 avg)",
+        "wep_target_type",
+        ["ship_engage", "ship_hostile", "ship_neutral", "asteroid", "none"],
+    )
+    print_target_matrix(
+        "MEAN ENTITY SLOT COUNTS (per step, last 5 avg)",
+        "slot_counts",
+        ["ship", "asteroid", "planet", "pickup"],
+    )
 
     # ── Warnings ──────────────────────────────────────────────────────────
     print_section("DIAGNOSTICS")

@@ -70,8 +70,8 @@ sol:
       number: 40
       radius: 1500.
   ships:
-    min: 25
-    max: 40
+    min: 15
+    max: 20
     types:
       fed_patrol: 3.0
       fed_destroyer: 1.0

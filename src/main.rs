@@ -427,7 +427,7 @@ fn keyboard_input(
         let mut entities: Vec<Entity> = enemy_ships_query.iter().map(|(e, _)| e).collect();
         entities.sort();
         if !entities.is_empty() {
-            let current = match &player_ship.target {
+            let current = match &player_ship.weapons_target {
                 Some(Target::Ship(e)) => Some(*e),
                 _ => None,
             };
@@ -439,7 +439,7 @@ fn keyboard_input(
                     .map(|idx| entities[(idx + 1) % entities.len()])
                     .unwrap_or(entities[0]),
             };
-            player_ship.target = Some(Target::Ship(next));
+            player_ship.weapons_target = Some(Target::Ship(next));
         }
     }
 
@@ -451,7 +451,7 @@ fn keyboard_input(
             .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
             .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
         if let Some((entity, _)) = nearest {
-            player_ship.target = Some(Target::Ship(entity));
+            player_ship.weapons_target = Some(Target::Ship(entity));
         }
     }
 
@@ -499,7 +499,7 @@ fn keyboard_input(
             weapons_writer.write(FireCommand {
                 ship: player_entity,
                 weapon_type: selected.clone(),
-                target: player_ship.target.clone().map(|t| t.get_entity()), // guided missiles auto-acquire the nearest enemy
+                target: player_ship.weapons_target.clone().map(|t| t.get_entity()), // guided missiles auto-acquire the nearest enemy
             });
         }
     }

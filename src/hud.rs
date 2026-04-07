@@ -255,7 +255,7 @@ fn update_radar_dots(
     let half = RADAR_SIZE / 2.0;
 
     // Targeted entity for blink effect
-    let targeted_entity: Option<Entity> = match &player_ship.target {
+    let targeted_entity: Option<Entity> = match &player_ship.weapons_target {
         Some(Target::Ship(e)) => Some(*e),
         Some(Target::Planet(e)) => Some(*e),
         _ => None,
@@ -326,7 +326,7 @@ fn update_radar_dots(
             let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
 
             let targets_player =
-                matches!(&ship.target, Some(Target::Ship(e)) if *e == player_entity);
+                matches!(&ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
             let color = if targets_player {
                 Color::srgb(1.0, 0.15, 0.15) // red: hostile
             } else {
@@ -462,11 +462,11 @@ fn update_target_display(
     let Ok(mut text) = text_query.single_mut() else {
         return;
     };
-    **text = match &player_ship.target {
+    **text = match &player_ship.weapons_target {
         Some(Target::Ship(entity)) => {
             if let Ok(target_ship) = ships_query.get(*entity) {
                 let is_hostile =
-                    matches!(&target_ship.target, Some(Target::Ship(e)) if *e == player_entity);
+                    matches!(&target_ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
                 if is_hostile {
                     format!("Target: {} [HOSTILE]", target_ship.ship_type)
                 } else {
