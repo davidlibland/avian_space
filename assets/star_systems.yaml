@@ -84,6 +84,8 @@ sol:
       rebel_fighter: 3.0        # occasional Rebel scout near the border
       rebel_gunboat: 2.0
       rebel_frigate: 1.0
+      pirate_corvette: 0.5
+      pirate_missile_boat: 0.5
 
 kepler_22:
   map_position: [-520.0, 60.0]

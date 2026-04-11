@@ -181,3 +181,17 @@ pub const BRAKING_THRUST_REWARD: f32 = 0.02;
 pub const BRAKING_RETROGRADE_COS_THRESH: f32 = -0.87;
 /// Overall per-step weight for the braking reward.
 pub const BRAKING_STEP_WEIGHT: f32 = 0.05;
+
+// ---------------------------------------------------------------------------
+// Weapons engagement shaping (incentivise aiming/pursuit toward nav target)
+// ---------------------------------------------------------------------------
+
+/// Reward when weapons_target matches nav_target (or nav_target is not a
+/// combatable entity, so any weapons_target is valid).
+pub const WEAPONS_FOCUS_REWARD: f32 = 0.02;
+/// Pursuit indicator reward when navigating toward a pickup.
+pub const PICKUP_PURSUIT_WEIGHT: f32 = 0.03;
+/// Pursuit indicator reward when navigating toward a ship/asteroid (out of range).
+pub const COMBAT_PURSUIT_WEIGHT: f32 = 0.03;
+/// Fire indicator reward when navigating toward a ship/asteroid (in range).
+pub const COMBAT_FIRE_WEIGHT: f32 = 0.05;

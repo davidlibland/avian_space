@@ -78,7 +78,7 @@ const BC_SAVE_INTERVAL: usize = 1_000;
 /// Higher values keep the compute busy between data-drain pauses.
 const BC_STEPS_PER_DRAIN: usize = 10;
 
-const OVERRIDE_TRADER_NAV_TARGET: bool = true;
+const OVERRIDE_TRADER_NAV_TARGET: bool = false;
 
 // ---------------------------------------------------------------------------
 // Types sent to the trainer thread
@@ -150,6 +150,24 @@ pub enum AIPlayMode {
 /// 4 Hz decision-step timer.
 #[derive(Resource)]
 struct RLStepTimer(Timer);
+
+/// Engagement shaping ramp: linearly increases from 0 to 1 over RAMP_DURATION
+/// seconds of game time, preventing sudden reward distribution changes.
+#[derive(Resource)]
+struct EngagementRamp {
+    elapsed: f32,
+}
+
+/// Duration (in game-time seconds) over which engagement rewards ramp from 0→1.
+/// TODO: Remove this ramp once training has stabilised with the new engagement
+/// rewards. Set `engagement_ramp` to a constant 1.0 and delete this resource.
+const ENGAGEMENT_RAMP_DURATION: f32 = 7200.0; // 2 hours of game time
+
+impl EngagementRamp {
+    fn factor(&self) -> f32 {
+        (self.elapsed / ENGAGEMENT_RAMP_DURATION).clamp(0.0, 1.0)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Events
@@ -315,6 +333,7 @@ impl Plugin for RLCollectionPlugin {
                 RL_STEP_PERIOD,
                 TimerMode::Repeating,
             )))
+            .insert_resource(EngagementRamp { elapsed: 0.0 })
             .add_message::<RLReward>()
             .add_message::<RLShipDied>()
             .add_message::<RLShipJumped>()
@@ -358,6 +377,7 @@ fn accumulate_rewards(mut reward_events: MessageReader<RLReward>, mut agents: Qu
 fn rl_step(
     time: Res<Time>,
     mut timer: ResMut<RLStepTimer>,
+    mut engagement_ramp: ResMut<EngagementRamp>,
     mut agents: Query<(
         Entity,
         &mut RLAgent,
@@ -404,6 +424,9 @@ fn rl_step(
     if !timer.0.tick(time.delta()).just_finished() {
         return;
     }
+    // Tick the engagement ramp (accumulates game time).
+    engagement_ramp.elapsed += RL_STEP_PERIOD;
+    let eng_ramp = engagement_ramp.factor();
 
     // ── Sub-function 1: build observations for all agents ──────────────────
     let obs_data: Vec<(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)> = build_all_observations(
@@ -465,6 +488,7 @@ fn rl_step(
         rl_sender,
         bc_sender,
         mode,
+        eng_ramp,
     );
 }
 
@@ -1277,9 +1301,152 @@ fn compute_weapons_target_reward(personality: &Personality, obs: &[f32]) -> f32 
     0.0
 }
 
-/// Store the previous (obs, action, reward) transition for each agent, update
-/// agent state with the new observation and action, and flush full segments.
+/// Compute the planet approach + velocity matching + braking reward.
 ///
+/// All inputs are in the ego-centric frame (from the observation vector).
+/// - `rp`: rel_pos (ego frame, points from ship toward target)
+/// - `rv`: rel_vel (ego frame, = target_vel − ship_vel)
+/// - `vel_cos`, `vel_sin`: ship velocity direction in ego frame (from self-state)
+/// - `ship_speed`: ship speed (from self-state speed_frac × max_speed, or abs value)
+fn compute_planet_approach_reward(
+    rp: [f32; 2],
+    rv: [f32; 2],
+    dist: f32,
+    vel_cos: f32,
+    vel_sin: f32,
+    ship_speed: f32,
+    is_thrusting: bool,
+) -> f32 {
+    use crate::consts::*;
+    let mut r = 0.0_f32;
+
+    // Closing speed: rate at which distance decreases.
+    // d(dist)/dt = dot(rv, rp) / dist, so closing = −dot(rv, rp) / dist.
+    let approach_cos = if dist > 1e-3 {
+        let closing = -(rv[0] * rp[0] + rv[1] * rp[1]) / dist;
+        // Normalise to [-1, 1] by dividing by ship speed.
+        (closing / (ship_speed + 1e-3)).clamp(-1.0, 1.0)
+    } else {
+        0.0
+    };
+
+    // Approach reward: incentivises closing on planet outside threshold.
+    let approach = 1.0
+        + if dist > MOVEMENT_THRESHOLD_DIST {
+            (approach_cos - 1.0) / 2.0 * (1.0 - (MOVEMENT_THRESHOLD_DIST / dist).min(1.0))
+        } else {
+            0.0
+        };
+    // Velocity matching: incentivises matching planet speed within threshold.
+    let rel_speed = (rv[0] * rv[0] + rv[1] * rv[1]).sqrt();
+    let vel_match = if dist < MOVEMENT_THRESHOLD_DIST {
+        let frac = (MOVEMENT_THRESHOLD_DIST - dist) / MOVEMENT_THRESHOLD_DIST;
+        MOVEMENT_VEL_SCALE / (rel_speed + MOVEMENT_VEL_SCALE) * frac
+    } else {
+        0.0
+    };
+    r += (approach + vel_match) * MOVEMENT_STEP_WEIGHT;
+
+    // Braking: retrograde facing + thrust when close and approaching.
+    if dist < BRAKING_THRESHOLD_DIST && approach_cos > 0.0 {
+        if ship_speed < 30.0 {
+            r += BRAKING_SLOW_REWARD * BRAKING_STEP_WEIGHT;
+        }
+        if ship_speed > 1.0 {
+            // In ego frame, ship heading is (0, 1). Ship velocity direction
+            // is (vel_sin, vel_cos). Retrograde = facing opposite to velocity:
+            // retro_cos = dot((0,1), -(vel_sin, vel_cos) / speed) = -vel_cos / speed
+            // But vel_cos is already cos(angle between heading and velocity),
+            // so retro_cos = -vel_cos when normalised.
+            let retro_cos = -vel_cos; // 1.0 = fully retrograde
+            let retro_frac = ((retro_cos + 1.0) / 2.0).clamp(0.0, 1.0);
+            r += BRAKING_RETROGRADE_REWARD * retro_frac * BRAKING_STEP_WEIGHT;
+            if retro_cos > BRAKING_RETROGRADE_COS_THRESH && is_thrusting {
+                r += BRAKING_THRUST_REWARD * BRAKING_STEP_WEIGHT;
+            }
+        }
+    }
+    r
+}
+
+/// Compute the full movement + engagement reward from the obs vector.
+///
+/// Purely obs-based — no ECS queries needed.
+fn compute_movement_reward(obs: &[f32], last_action: DiscreteAction, max_speed: f32, engagement_ramp: f32) -> f32 {
+    use crate::consts::*;
+    use rl_obs::*;
+
+    let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
+
+    // Find nav and weapons target slots.
+    let mut nav_slot: Option<usize> = None;
+    let mut wep_slot: Option<usize> = None;
+    for i in 0..model::N_OBJECTS {
+        let base = slot_base(i);
+        if obs[base + SLOT_IS_PRESENT] < 0.5 {
+            continue;
+        }
+        if obs[base + SLOT_IS_NAV_TARGET] > 0.5 {
+            nav_slot = Some(i);
+        }
+        if obs[base + SLOT_IS_WEAPONS_TARGET] > 0.5 {
+            wep_slot = Some(i);
+        }
+    }
+
+    let Some(ni) = nav_slot else { return 0.0 };
+    let nb = slot_base(ni);
+
+    let is_planet = obs[nb + SLOT_TYPE_ONEHOT + 2] > 0.5;
+    let is_ship = obs[nb + SLOT_TYPE_ONEHOT] > 0.5;
+    let is_asteroid = obs[nb + SLOT_TYPE_ONEHOT + 1] > 0.5;
+    let is_pickup = obs[nb + SLOT_TYPE_ONEHOT + 3] > 0.5;
+    let is_combatable = is_ship || is_asteroid;
+    let pursuit_ind = obs[nb + SLOT_PURSUIT_INDICATOR];
+    let fire_ind = obs[nb + SLOT_FIRE_INDICATOR];
+    let in_range = obs[nb + SLOT_IN_RANGE] > 0.5;
+    let nav_and_wep_match = wep_slot == nav_slot;
+
+    let rp = [obs[nb + SLOT_REL_POS], obs[nb + SLOT_REL_POS + 1]];
+    let rv = [obs[nb + SLOT_REL_VEL], obs[nb + SLOT_REL_VEL + 1]];
+    let dist = (rp[0] * rp[0] + rp[1] * rp[1]).sqrt();
+
+    let mut reward = 0.0_f32;
+
+    // 1. Weapons focus (ramped).
+    if !is_combatable || nav_and_wep_match {
+        reward += WEAPONS_FOCUS_REWARD * engagement_ramp;
+    }
+
+    // 2. Proximity: always applies.
+    reward += MOVEMENT_LENGTH_SCALE / (dist + MOVEMENT_LENGTH_SCALE) * MOVEMENT_STEP_WEIGHT;
+
+    // 3. Planet: approach + vel_match + braking.
+    if is_planet {
+        let vel_cos = obs[2];
+        let vel_sin = obs[3];
+        let speed_frac = obs[1];
+        let ship_speed = speed_frac * max_speed;
+        reward += compute_planet_approach_reward(rp, rv, dist, vel_cos, vel_sin, ship_speed, last_action.1 == 1);
+    }
+
+    // 4. Pickup: pursuit indicator (ramped).
+    if is_pickup {
+        reward += pursuit_ind * PICKUP_PURSUIT_WEIGHT * engagement_ramp;
+    }
+
+    // 5. Ship/asteroid: pursuit or fire indicator (ramped, only when nav=weapons).
+    if is_combatable && nav_and_wep_match {
+        if in_range {
+            reward += fire_ind * COMBAT_FIRE_WEIGHT * engagement_ramp;
+        } else {
+            reward += pursuit_ind * COMBAT_PURSUIT_WEIGHT * engagement_ramp;
+        }
+    }
+
+    reward
+}
+
 /// `model_actions` — when `Some`, contains one `(DiscreteAction, log_prob)` per
 /// entry in `decisions` (same order). Used as the executed action in `RLControl`
 /// mode. In `BehavioralCloning` mode (or when `None`) the rule-based action
@@ -1306,6 +1473,7 @@ fn store_obs_actions(
     rl_sender: &RLSender,
     bc_sender: &BCSender,
     mode: &AIPlayMode,
+    engagement_ramp: f32,
 ) {
     for (idx, (entity, obs, proj_obs, slot_targets)) in decisions.iter().enumerate() {
         let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _, self_distressed, _)) =
@@ -1429,82 +1597,15 @@ fn store_obs_actions(
             rewards[crate::consts::REWARD_WEAPONS_TARGET] +=
                 compute_weapons_target_reward(&agent.personality, obs);
 
-            // Movement reward: dense shaping toward nav target.
+            // Movement + engagement reward.
             if good_nav_target {
-                use crate::consts::*;
-                if let Some(ref nav_tgt) = ship.nav_target {
-                    let nav_entity = nav_tgt.get_entity();
-                    if let Ok(tgt_pos) = all_positions.get(nav_entity) {
-                        let dist = (tgt_pos.0 - pos.0).length();
-                        // Proximity: scale / (dist + scale)
-                        let proximity = MOVEMENT_LENGTH_SCALE / (dist + MOVEMENT_LENGTH_SCALE);
-                        // 0 <= proximity <= 1, approaches 1 as dist → 0.
-                        // Approach: reward if moving towards target beyond threshold
-                        let to_target = (tgt_pos.0 - pos.0).normalize_or_zero();
-                        let approach_cos = vel.0.dot(to_target) / (vel.0.length() + 1e-8); // positive = approaching
-                        let approach = 1.0
-                            + if dist > MOVEMENT_THRESHOLD_DIST {
-                                (approach_cos - 1.0) / 2.0
-                                    * (1.0 - (MOVEMENT_THRESHOLD_DIST / dist).min(1.0))
-                            } else {
-                                0.0
-                            }; // 0 <= approach <= 1, flat at 1 within threshold, outside of the threshold 
-                        // approaches 1 as approach_cos → 1, or distance approaches threshold.
-                        // Velocity matching within threshold radius.
-                        let vel_match = if dist < MOVEMENT_THRESHOLD_DIST {
-                            let tgt_vel = all_velocities
-                                .get(nav_entity)
-                                .map(|v| v.0)
-                                .unwrap_or(Vec2::ZERO);
-                            let rel_vel = (vel.0 - tgt_vel).length();
-                            let frac = (MOVEMENT_THRESHOLD_DIST - dist) / MOVEMENT_THRESHOLD_DIST;
-                            MOVEMENT_VEL_SCALE / (rel_vel + MOVEMENT_VEL_SCALE) * frac
-                        } else {
-                            0.0
-                        }; // 0 <= vel_match <= 1, only applies within threshold, 
-                        // approaches MOVEMENT_VEL_SCALE as relative velocity approaches 0 and dist → 0.
-                        rewards[REWARD_MOVEMENT] +=
-                            (proximity + approach + vel_match) * MOVEMENT_STEP_WEIGHT;
-
-                        // Braking reward: when nav target is a planet, approaching,
-                        // and within braking distance.
-                        if matches!(nav_tgt, Target::Planet(_))
-                            && dist < BRAKING_THRESHOLD_DIST
-                            && approach_cos > 0.0
-                        // moving toward planet
-                        {
-                            let speed = vel.0.length();
-                            let mut brake_r = 0.0_f32;
-
-                            // A) Already slow enough to land.
-                            if speed < 30.0 {
-                                // LANDING_SPEED
-                                brake_r += BRAKING_SLOW_REWARD;
-                            }
-
-                            // B) Facing retrograde (opposite to velocity).
-                            if speed > 1.0 {
-                                let ship_dir = (transform.rotation * Vec3::Y).xy();
-                                let vel_dir = vel.0 / speed;
-                                let retro_cos = ship_dir.dot(-vel_dir); // 1.0 = fully retrograde
-                                // Scale linearly: 0 when forward, max when fully retrograde.
-                                let retro_frac = ((retro_cos + 1.0) / 2.0).clamp(0.0, 1.0);
-                                brake_r += BRAKING_RETROGRADE_REWARD * retro_frac;
-
-                                // Bonus for thrusting while nearly retrograde.
-                                if retro_cos > BRAKING_RETROGRADE_COS_THRESH && last_action.1 == 1
-                                // thrust is on
-                                {
-                                    brake_r += BRAKING_THRUST_REWARD;
-                                }
-                            }
-
-                            rewards[REWARD_MOVEMENT] += brake_r * BRAKING_STEP_WEIGHT;
-                        }
-                    }
-                }
+                rewards[crate::consts::REWARD_MOVEMENT] += compute_movement_reward(
+                    obs,
+                    last_action,
+                    max_speed.0,
+                    engagement_ramp,
+                );
             }
-
             let transition = Transition {
                 obs: last_obs,
                 proj_obs: last_proj.clone(),
