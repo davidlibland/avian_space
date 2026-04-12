@@ -9,7 +9,10 @@
 //! [`logits_to_discrete_action`] (greedy argmax; stochastic sampling is
 //! added at training time).
 
-use std::sync::{Arc, Mutex};
+use std::{
+    f32::consts::E,
+    sync::{Arc, Mutex},
+};
 
 use bevy::prelude::Resource;
 use burn::{
@@ -19,7 +22,7 @@ use burn::{
     optim::{Adam, AdamConfig, adaptor::OptimizerAdaptor},
     prelude::*,
     tensor::{
-        Tensor, TensorData,
+        Distribution, Tensor, TensorData,
         activation::{silu, softmax},
         backend::AutodiffBackend,
     },
@@ -28,8 +31,9 @@ use burn::{
 use crate::rl_obs::{
     self, CORE_BLOCK_START, CORE_FEAT_SIZE, DiscreteAction, K_ASTEROIDS, K_FRIENDLY_SHIPS,
     K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, K_PROJECTILES, N_ENTITY_SLOTS, N_ENTITY_TYPES, OBS_DIM,
-    PROJ_SLOT_SIZE, SELF_SIZE, SLOT_IS_PRESENT, SLOT_SIZE, SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE,
-    TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
+    PROJ_SLOT_SIZE, SELF_SIZE, SHIP_IS_HOSTILE, SHIP_SHOULD_ENGAGE, SLOT_IS_PRESENT, SLOT_SIZE,
+    SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_IDX_ASTEROID, TYPE_IDX_SHIP,
+    TYPE_ONEHOT_SIZE,
 };
 
 // ---------------------------------------------------------------------------
@@ -69,6 +73,9 @@ pub const VALUE_OUTPUT_DIM: usize = crate::consts::N_REWARD_TYPES;
 /// Default hidden dimension for all network layers.
 pub const HIDDEN_DIM: usize = 64;
 
+// Whether to use skip connections:
+pub const USE_SKIP: bool = false;
+
 // ---------------------------------------------------------------------------
 // Backend aliases
 // ---------------------------------------------------------------------------
@@ -106,7 +113,8 @@ impl<B: Backend> NetBlock<B> {
         let residual = x.clone();
         let out = self.norm.forward(x);
         let out = self.fc.forward(out);
-        residual + silu(out)
+        let out = silu(out);
+        if USE_SKIP { residual + out } else { out }
     }
 }
 
@@ -224,6 +232,7 @@ pub struct RLNet<B: Backend> {
     type_embed_b: Param<Tensor<B, 2>>,
     eblock1: Block<B>,
     eblock2: Block<B>,
+    enc_norm: LayerNorm<B>,
 
     // ── Projectile encoder ────────────────────────────────────────────────
     proj_embed: Linear<B>,
@@ -260,11 +269,6 @@ pub struct RLNet<B: Backend> {
     nav_target_q_proj: Linear<B>,
     nav_target_k_proj: Linear<B>,
     nav_target_no_tgt: Linear<B>,
-
-    // ── Weapons-target pointer head ──────────────────────────────────────
-    wep_target_q_proj: Linear<B>,
-    wep_target_k_proj: Linear<B>,
-    wep_target_no_tgt: Linear<B>,
 }
 
 impl<B: Backend> RLNet<B> {
@@ -299,6 +303,7 @@ impl<B: Backend> RLNet<B> {
             type_embed_b: Param::from_tensor(type_b),
             eblock1: Block::new(device, hidden_dim),
             eblock2: Block::new(device, hidden_dim),
+            enc_norm: LayerNormConfig::new(hidden_dim).init(device),
 
             // Projectile encoder
             proj_embed: lin(PROJ_INPUT_DIM, hidden_dim),
@@ -335,11 +340,6 @@ impl<B: Backend> RLNet<B> {
             nav_target_q_proj: lin_xavier(hidden_dim, hidden_dim),
             nav_target_k_proj: lin_xavier(hidden_dim, hidden_dim),
             nav_target_no_tgt: lin_zero(hidden_dim, 1),
-
-            // Weapons-target pointer head
-            wep_target_q_proj: lin_xavier(hidden_dim, hidden_dim),
-            wep_target_k_proj: lin_xavier(hidden_dim, hidden_dim),
-            wep_target_no_tgt: lin_zero(hidden_dim, 1),
         }
     }
 
@@ -367,13 +367,16 @@ impl<B: Backend> RLNet<B> {
         let w_blended = type_onehot.clone().matmul(w_flat.unsqueeze());
         let [batch_size, n_ents, _] = w_blended.dims();
         let w_blended = w_blended.reshape([batch_size, n_ents, h, ts]);
-        let b_blended = type_onehot.clone().matmul(self.type_embed_b.val().unsqueeze());
-        let type_feat_col = type_feat.unsqueeze_dim::<4>(3);
+        let b_blended = type_onehot
+            .clone()
+            .matmul(self.type_embed_b.val().unsqueeze());
+        let type_feat_col = type_feat.clone().unsqueeze_dim::<4>(3);
         let type_enc = w_blended.matmul(type_feat_col).squeeze_dim(3) + b_blended;
 
         let ent_enc = core_enc + type_enc;
         let ent_enc = self.eblock1.forward(ent_enc); // residual inside
         let ent_enc = self.eblock2.forward(ent_enc); // [B, N, H]
+        let ent_enc = self.enc_norm.forward(ent_enc);
 
         // ── 2. Projectile embedding ──────────────────────────────────────────
         let proj_enc = silu(self.proj_embed.forward(proj_feat.clone()));
@@ -387,14 +390,14 @@ impl<B: Backend> RLNet<B> {
         // context about nearby ships/asteroids.  Entity embeddings stay clean.
         let scale = (h as f64).sqrt() as f32;
 
-        let cross_q = self.cross_q_proj.forward(self.cross_norm.forward(proj_enc.clone()));
+        let cross_q = self
+            .cross_q_proj
+            .forward(self.cross_norm.forward(proj_enc.clone()));
         let cross_k = self.cross_k_proj.forward(ent_enc.clone());
         let cross_v = self.cross_v_proj.forward(ent_enc.clone());
 
         // Single-head cross-attention: projectiles query entities
-        let scores = cross_q
-            .matmul(cross_k.swap_dims(1, 2))
-            .div_scalar(scale); // [B, Np, N]
+        let scores = cross_q.matmul(cross_k.swap_dims(1, 2)).div_scalar(scale); // [B, Np, N]
 
         // Mask out absent entities
         let ent_mask_3d = is_present
@@ -411,7 +414,11 @@ impl<B: Backend> RLNet<B> {
 
         // Apply residual only to present projectiles
         let proj_gate = proj_present.clone().unsqueeze_dim::<3>(2); // [B, Np, 1]
-        let proj_enc = proj_enc + cross_out * proj_gate; // [B, Np, H]
+        let proj_enc = if USE_SKIP {
+            proj_enc + cross_out * proj_gate
+        } else {
+            cross_out * proj_gate
+        }; // [B, Np, H]
 
         // ── 4. Self encoder ──────────────────────────────────────────────────
         let self_enc = silu(self.self_embed.forward(self_feat));
@@ -422,15 +429,15 @@ impl<B: Backend> RLNet<B> {
         let ent_q = self.ent_q_proj.forward(sq);
         let ent_k = self.ent_k_proj.forward(ent_enc.clone());
         let ent_v = self.ent_v_proj.forward(ent_enc.clone());
-        let ent_attn = multi_head_attention(ent_q, ent_k, ent_v, None, N_HEADS)
+        let ent_attn = multi_head_attention(ent_q, ent_k, ent_v, Some(is_present.clone()), N_HEADS)
             .squeeze_dim(1); // [B, H]
 
         // ── 6. Self←Projectile multi-head attention ──────────────────────────
         let pq = self.pq_proj.forward(self_enc.clone().unsqueeze_dim::<3>(1));
         let pk = self.pk_proj.forward(proj_enc.clone());
         let pv = self.pv_proj.forward(proj_enc);
-        let proj_attn = multi_head_attention(pq, pk, pv, Some(proj_present), N_HEADS)
-            .squeeze_dim(1); // [B, H]
+        let proj_attn =
+            multi_head_attention(pq, pk, pv, Some(proj_present), N_HEADS).squeeze_dim(1); // [B, H]
 
         // ── 7. Merge ─────────────────────────────────────────────────────────
         let merged = Tensor::cat(vec![ent_attn, proj_attn, self_enc], 1); // [B, 3H]
@@ -472,16 +479,60 @@ impl<B: Backend> RLNet<B> {
             &x,
             &ent_enc,
         );
-        let wep_target_logits = pointer_head(
-            &self.wep_target_q_proj,
-            &self.wep_target_k_proj,
-            &self.wep_target_no_tgt,
-            &x,
-            &ent_enc,
-        );
 
-        (action_logits, nav_target_logits, wep_target_logits)
+        // Build weapons-target by masking nav_target_logits to only allow targeting
+        // hostile/engaged ships or asteroids.  This way the same pointer head can be
+        // used for both nav and weapons targets, and the policy can learn to point at a
+        // target without needing to also learn to classify it as a valid weapons target.
+        let is_asteroid = type_onehot
+            .clone()
+            .narrow(2, TYPE_IDX_ASTEROID, 1)
+            .squeeze_dim(2); // [B,N]
+        let is_ship = type_onehot
+            .clone()
+            .narrow(2, TYPE_IDX_SHIP, 1)
+            .squeeze_dim(2); // [B,N]
+        // type_feat starts at TYPE_BLOCK_START; type-specific fields start 1 past that.
+        let type_specific_offset = 1;
+        let is_hostile = type_feat
+            .clone()
+            .narrow(2, type_specific_offset + SHIP_IS_HOSTILE, 1)
+            .squeeze_dim(2); // [B,N]
+        let should_engage = type_feat
+            .clone()
+            .narrow(2, type_specific_offset + SHIP_SHOULD_ENGAGE, 1)
+            .squeeze_dim(2); // [B,N]
+        let valid_weapons_entity =
+            (is_asteroid + (is_ship * (is_hostile + should_engage)).clamp(0.0, 1.0)); // [B,N]
+        // Allow "no target" option (append 1.0 for the N+1th slot)
+        let valid_weapons_target = Tensor::cat(
+            vec![valid_weapons_entity, Tensor::<B, 2>::ones([batch_size, 1], &device)],
+            1,
+        ); // [B, N+1]
+        let weapons_target_logits = nav_target_logits.clone() * valid_weapons_target.clone()
+            + neg_inf.clone() * (valid_weapons_target.ones_like() - valid_weapons_target);
+
+        (action_logits, nav_target_logits, weapons_target_logits)
     }
+}
+
+fn sample_gumbel_like<B: Backend, const D: usize>(reference: &Tensor<B, D>) -> Tensor<B, D> {
+    let eps = 1e-20;
+    let u = Tensor::random_like(reference, Distribution::Default);
+    // Clamp away from 0 and 1 to avoid -inf in either log.
+    -(-(u.clamp(eps, 1.0 - eps).log())).log()
+}
+
+fn coupled_gumbel_sample<B: Backend>(
+    logits_a: Tensor<B, 2>,
+    logits_b: Tensor<B, 2>,
+) -> (Tensor<B, 2, Int>, Tensor<B, 2, Int>) {
+    // We use the gumbler-max trick to sample from the categorical distribution defined by the logits,
+    // while ensuring that the same noise is applied to both sets of logits to maintain coupling.
+    let noise = sample_gumbel_like(&logits_a);
+    let a = (logits_a + noise.clone()).argmax(1);
+    let b = (logits_b + noise).argmax(1);
+    (a, b)
 }
 
 // ---------------------------------------------------------------------------
@@ -649,7 +700,14 @@ pub fn logits_to_discrete_action(
     let fire_secondary = argmax(&action_logits[7..9]) as u8;
     let nav_target_idx = argmax(nav_target_logits) as u8;
     let wep_target_idx = argmax(wep_target_logits) as u8;
-    (turn_idx, thrust_idx, fire_primary, fire_secondary, nav_target_idx, wep_target_idx)
+    (
+        turn_idx,
+        thrust_idx,
+        fire_primary,
+        fire_secondary,
+        nav_target_idx,
+        wep_target_idx,
+    )
 }
 
 /// Sample an action stochastically from the policy logits.

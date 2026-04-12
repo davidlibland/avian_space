@@ -404,6 +404,102 @@ fn test_rlnet_target_logits_masked() {
     );
 }
 
+// ── sample_gumbel_like & coupled_gumbel_sample ──────────────────────────
+
+#[test]
+fn test_sample_gumbel_like_shape() {
+    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    let reference = Tensor::<InferBackend, 2>::zeros([4, 8], &device);
+    let g = sample_gumbel_like(&reference);
+    assert_eq!(g.shape().dims, [4, 8]);
+}
+
+#[test]
+fn test_sample_gumbel_like_finite() {
+    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    let reference = Tensor::<InferBackend, 2>::zeros([10, 20], &device);
+    let g = sample_gumbel_like(&reference);
+    let vals: Vec<f32> = g.into_data().into_vec().unwrap();
+    for (i, &v) in vals.iter().enumerate() {
+        assert!(v.is_finite(), "gumbel sample[{i}] is not finite: {v}");
+    }
+}
+
+#[test]
+fn test_sample_gumbel_like_not_constant() {
+    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    let reference = Tensor::<InferBackend, 2>::zeros([1, 100], &device);
+    let g = sample_gumbel_like(&reference);
+    let vals: Vec<f32> = g.into_data().into_vec().unwrap();
+    // At least some values should differ from the first.
+    let distinct = vals.iter().filter(|&&v| (v - vals[0]).abs() > 1e-6).count();
+    assert!(distinct > 0, "all gumbel samples are identical — RNG broken?");
+}
+
+#[test]
+fn test_coupled_gumbel_sample_identical_logits() {
+    // When logits_a == logits_b the same noise is added, so argmax must match.
+    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    let logits = Tensor::<InferBackend, 2>::zeros([32, 10], &device);
+    let (a, b) = coupled_gumbel_sample(logits.clone(), logits);
+    let va: Vec<i64> = a.into_data().into_vec().unwrap();
+    let vb: Vec<i64> = b.into_data().into_vec().unwrap();
+    assert_eq!(va, vb, "identical logits must produce identical samples");
+}
+
+#[test]
+fn test_coupled_gumbel_sample_output_shapes() {
+    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    let logits_a = Tensor::<InferBackend, 2>::zeros([5, 8], &device);
+    let logits_b = Tensor::<InferBackend, 2>::zeros([5, 8], &device);
+    let (a, b) = coupled_gumbel_sample(logits_a, logits_b);
+    assert_eq!(a.shape().dims, [5, 1], "argmax output should be [batch, 1]");
+    assert_eq!(b.shape().dims, [5, 1]);
+}
+
+#[test]
+fn test_coupled_gumbel_sample_in_range() {
+    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    let num_classes = 7;
+    let logits_a = Tensor::<InferBackend, 2>::random(
+        [20, num_classes],
+        Distribution::Default,
+        &device,
+    );
+    let logits_b = Tensor::<InferBackend, 2>::random(
+        [20, num_classes],
+        Distribution::Default,
+        &device,
+    );
+    let (a, b) = coupled_gumbel_sample(logits_a, logits_b);
+    let va: Vec<i64> = a.into_data().into_vec().unwrap();
+    let vb: Vec<i64> = b.into_data().into_vec().unwrap();
+    for (i, (&ai, &bi)) in va.iter().zip(vb.iter()).enumerate() {
+        assert!(ai >= 0 && ai < num_classes as i64, "a[{i}]={ai} out of range");
+        assert!(bi >= 0 && bi < num_classes as i64, "b[{i}]={bi} out of range");
+    }
+}
+
+#[test]
+fn test_coupled_gumbel_sample_dominated_logit() {
+    // One logit much larger → should almost always be selected for both.
+    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    let mut data = vec![0.0_f32; 5];
+    data[2] = 100.0; // dominant
+    let logits = Tensor::<InferBackend, 2>::from_data(
+        TensorData::new(data, [1, 5]),
+        &device,
+    );
+    // Run many times and check the dominant index wins.
+    for _ in 0..50 {
+        let (a, b) = coupled_gumbel_sample(logits.clone(), logits.clone());
+        let va: Vec<i64> = a.into_data().into_vec().unwrap();
+        let vb: Vec<i64> = b.into_data().into_vec().unwrap();
+        assert_eq!(va[0], 2, "dominant logit should win for a");
+        assert_eq!(vb[0], 2, "dominant logit should win for b");
+    }
+}
+
 // ── InferenceNet end-to-end ──────────────────────────────────────────────
 
 #[test]

@@ -101,7 +101,17 @@ pub const SLOT_TYPE_SPECIFIC: usize = TYPE_BLOCK_START + 1; // 17
 /// Number of entity-kind feature floats (padded to max across all types).
 pub const TYPE_SPECIFIC_SIZE: usize = 10;
 /// Total size of block 4 (value + type_specific).
-pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 10
+pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 11
+
+// ── Ship type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ─────
+pub const SHIP_IS_HOSTILE: usize = 4;
+pub const SHIP_SHOULD_ENGAGE: usize = 5;
+
+// ── Type one-hot indices ─────────────────────────────────────────────────
+pub const TYPE_IDX_SHIP: usize = 0;
+pub const TYPE_IDX_ASTEROID: usize = 1;
+pub const TYPE_IDX_PLANET: usize = 2;
+pub const TYPE_IDX_PICKUP: usize = 3;
 
 /// Floats per entity slot (sum of all blocks).
 pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE; // = 26
@@ -636,8 +646,8 @@ fn encode_slot(
             ts[1] = ship.health;
             ts[2] = ship.max_speed;
             ts[3] = ship.torque;
-            ts[4] = ship.is_hostile;
-            ts[5] = ship.should_engage;
+            ts[SHIP_IS_HOSTILE] = ship.is_hostile;
+            ts[SHIP_SHOULD_ENGAGE] = ship.should_engage;
             let p = personality_onehot(&ship.personality);
             ts[6..9].copy_from_slice(&p);
             ts[9] = ship.distressed;
