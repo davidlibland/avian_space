@@ -17,7 +17,13 @@ const ASTEROID_MAX_VELOCITY: f32 = ASTEROID_VELOCITY * 10.;
 /// How long (seconds) it takes a respawned asteroid to grow to full size.
 const ASTEROID_GROW_DURATION: f32 = 4.0;
 /// How often (seconds) we check if asteroid fields need repopulation.
-const ASTEROID_RESPAWN_INTERVAL: f32 = 8.0;
+const ASTEROID_RESPAWN_INTERVAL: f32 = 1.0;
+/// How long (seconds) an asteroid takes to fade away.
+const ASTEROID_FADE_DURATION: f32 = 1.0;
+/// Fade if distance-from-field-center < this fraction of field radius.
+const ASTEROID_FADE_INNER_FRAC: f32 = 0.15;
+/// Fade if distance-from-field-center > this fraction of field radius.
+const ASTEROID_FADE_OUTER_FRAC: f32 = 3.0;
 
 pub fn asteroid_plugin(app: &mut App) {
     app.add_message::<ShatterAsteroid>()
@@ -29,8 +35,22 @@ pub fn asteroid_plugin(app: &mut App) {
         .add_systems(Update, handle_shatter.run_if(in_state(PlayState::Flying)))
         .add_systems(
             Update,
-            (grow_asteroids, respawn_asteroids).run_if(in_state(PlayState::Flying)),
+            (
+                grow_asteroids,
+                respawn_asteroids,
+                fade_asteroids,
+                check_asteroid_bounds,
+                asteroid_planet_collisions,
+            )
+                .run_if(in_state(PlayState::Flying)),
         );
+}
+
+/// Marks an asteroid that is fading out of existence (shrinking, then despawn).
+/// Will not drop pickups or spawn children.
+#[derive(Component)]
+pub struct FadingAsteroid {
+    pub progress: f32,
 }
 
 /// Marks an asteroid that is still materialising from nothing.
@@ -193,6 +213,7 @@ pub fn spawn_asteroid(
                     GameLayer::Ship,
                     GameLayer::Weapon,
                     GameLayer::Asteroid,
+                    GameLayer::Planet,
                     GameLayer::Radar,
                 ],
             ),
@@ -227,6 +248,7 @@ pub fn build_asteroid_field(
                 number: field_data.number,
                 commodities: field_data.commodities.clone(),
             },
+            RigidBody::Static,
             Transform::from_xyz(field_data.location.x, field_data.location.y, 0.0),
         ))
         .id();
@@ -408,6 +430,7 @@ pub fn spawn_growing_asteroid(
                     GameLayer::Ship,
                     GameLayer::Weapon,
                     GameLayer::Asteroid,
+                    GameLayer::Planet,
                     GameLayer::Radar,
                 ],
             ),
@@ -446,7 +469,9 @@ fn grow_asteroids(
 
         if growing.progress >= 1.0 {
             // Fully grown: remove Sensor so it participates in physics.
-            commands.entity(entity).remove::<GrowingAsteroid>().remove::<Sensor>();
+            if let Ok(mut entity_cmd) = commands.get_entity(entity) {
+                entity_cmd.try_remove::<GrowingAsteroid>().try_remove::<Sensor>();
+            }
         }
     }
 }
@@ -461,7 +486,7 @@ fn respawn_asteroids(
     time: Res<Time>,
     item_universe: Res<ItemUniverse>,
     fields: Query<(Entity, &AsteroidField, &Transform)>,
-    asteroids: Query<&Asteroid>,
+    asteroids: Query<&Asteroid, Without<FadingAsteroid>>,
 ) {
     if !timer.0.tick(time.delta()).just_finished() {
         return;
@@ -476,32 +501,36 @@ fn respawn_asteroids(
             continue;
         }
         let colors = commodity_colors(&field.commodities, &item_universe);
-        // Spawn one new asteroid per tick to avoid frame spikes.
         let field_pos = field_transform.translation.xy();
-        let r = rng.gen_range((field.radius * 0.5)..(field.radius * 1.5));
-        let theta = rng.gen_range(0.0..(2.0 * std::f32::consts::PI));
-        let (s, c) = theta.sin_cos();
-        let pos = field_pos + Vec2::new(r * c, r * s);
-        let size: f32 = rng.gen_range(15f32..30f32);
-        let v = (field.radius / r).sqrt() * ASTEROID_VELOCITY;
-        let vel = Vec2::new(-s * v, c * v) + random_velocity(ASTEROID_VELOCITY * 0.3);
-        let vel = if rng.gen_bool(0.5) { vel } else { -vel };
-        spawn_growing_asteroid(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            field_entity,
-            size,
-            pos,
-            vel,
-            &colors,
-        );
+        for _ in 0..(target - live_count) {
+            let r = rng.gen_range((field.radius * 0.5)..(field.radius * 1.5));
+            let theta = rng.gen_range(0.0..(2.0 * std::f32::consts::PI));
+            let (s, c) = theta.sin_cos();
+            let pos = field_pos + Vec2::new(r * c, r * s);
+            let size: f32 = rng.gen_range(15f32..30f32);
+            let v = (field.radius / r).sqrt() * ASTEROID_VELOCITY;
+            let vel = Vec2::new(-s * v, c * v) + random_velocity(ASTEROID_VELOCITY * 0.3);
+            let vel = if rng.gen_bool(0.5) { vel } else { -vel };
+            spawn_growing_asteroid(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                field_entity,
+                size,
+                pos,
+                vel,
+                &colors,
+            );
+        }
     }
 }
 
 // Apply gravity towards the center of the asteroid field
 pub fn asteroid_field_gravity(
-    asteroids: Query<(Entity, &Asteroid, &Transform, &ComputedMass), With<RigidBody>>,
+    asteroids: Query<
+        (Entity, &Asteroid, &Transform, &ComputedMass),
+        (With<RigidBody>, Without<FadingAsteroid>),
+    >,
     fields: Query<(&AsteroidField, &Transform)>,
     mut forces: Query<Forces>,
 ) {
@@ -517,5 +546,107 @@ pub fn asteroid_field_gravity(
         let force_strength = mass.value() * gmass / offset.length().squared();
 
         force.apply_force(offset.normalize() * force_strength);
+    }
+}
+
+fn start_fade(commands: &mut Commands, entity: Entity, size: f32) {
+    // Sensor disables collider mass contribution; provide explicit mass to avoid NaN warnings.
+    let mass_value = 0.5 * PI * size * size;
+    let inertia_value = 0.5 * mass_value * size * size;
+    if let Ok(mut entity_cmd) = commands.get_entity(entity) {
+        entity_cmd.try_insert((
+            FadingAsteroid { progress: 0.0 },
+            Sensor,
+            Mass(mass_value),
+            AngularInertia(inertia_value),
+        ));
+    }
+}
+
+/// Start fading any asteroid that's drifted too close to or too far from its field center.
+fn check_asteroid_bounds(
+    mut commands: Commands,
+    asteroids: Query<(Entity, &Asteroid, &Transform), (Without<FadingAsteroid>, Without<GrowingAsteroid>)>,
+    fields: Query<&Transform, With<AsteroidField>>,
+    field_data: Query<&AsteroidField>,
+) {
+    for (entity, asteroid, transform) in asteroids.iter() {
+        let Ok(field_transform) = fields.get(asteroid.field) else {
+            continue;
+        };
+        let Ok(field) = field_data.get(asteroid.field) else {
+            continue;
+        };
+        let dist = (transform.translation.xy() - field_transform.translation.xy()).length();
+        let inner = field.radius * ASTEROID_FADE_INNER_FRAC;
+        let outer = field.radius * ASTEROID_FADE_OUTER_FRAC;
+        if dist < inner || dist > outer {
+            start_fade(&mut commands, entity, asteroid.size);
+        }
+    }
+}
+
+/// Silently shatter asteroids that collide with planets — splits like a normal
+/// shatter but emits no pickups or explosion.
+fn asteroid_planet_collisions(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut collision_starts: MessageReader<CollisionStart>,
+    mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
+    asteroid_marker: Query<(), (With<Asteroid>, Without<FadingAsteroid>)>,
+    asteroid_data: Query<(&Asteroid, &Transform, &LinearVelocity)>,
+    fields: Query<&AsteroidField>,
+    item_universe: Res<ItemUniverse>,
+    planets: Query<(), With<crate::planets::Planet>>,
+) {
+    for event in collision_starts.read() {
+        let (a, b) = (event.collider1, event.collider2);
+        let asteroid_entity = if asteroid_marker.contains(a) && planets.contains(b) {
+            Some(a)
+        } else if asteroid_marker.contains(b) && planets.contains(a) {
+            Some(b)
+        } else {
+            None
+        };
+        if let Some(entity) = asteroid_entity {
+            let colors = asteroid_data
+                .get(entity)
+                .ok()
+                .and_then(|(a, _, _)| fields.get(a.field).ok())
+                .map(|f| commodity_colors(&f.commodities, &item_universe))
+                .unwrap_or_default();
+            if let Ok((asteroid, transform, _)) = asteroid_data.get(entity) {
+                explosion_writer.write(crate::explosions::TriggerExplosion {
+                    location: transform.translation.xy(),
+                    size: asteroid.size,
+                });
+            }
+            shatter_asteroid(
+                &mut commands,
+                &mut meshes,
+                &mut materials,
+                &entity,
+                &asteroid_data,
+                &colors,
+            );
+        }
+    }
+}
+
+/// Advance FadingAsteroid progress; shrink and despawn when done.
+fn fade_asteroids(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut fading: Query<(Entity, &mut FadingAsteroid, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut fade, mut transform) in fading.iter_mut() {
+        fade.progress = (fade.progress + dt / ASTEROID_FADE_DURATION).min(1.0);
+        let scale = (1.0 - fade.progress).max(0.0);
+        transform.scale = Vec3::splat(scale);
+        if fade.progress >= 1.0 {
+            safe_despawn(&mut commands, entity);
+        }
     }
 }

@@ -3,6 +3,7 @@ use std::f32::consts::PI;
 // Some AI for the ships
 use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
+use crate::optimal_control::{pursuit_controls_ego, x_stop};
 use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_collection::{RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
@@ -28,39 +29,6 @@ const JUMP_OUT_ACCEL: f32 = 2500.0;
 const JUMP_IN_RADIUS: f32 = 6000.0;
 /// How often (seconds) to check whether ship population needs adjusting.
 const POPULATION_CHECK_INTERVAL: f32 = 5.0;
-
-/// Distance needed to stop from `speed` using the ship's thrust PD controller,
-/// assuming the ship is already retrograde-aligned.
-///
-/// The PD force when braking (forward = retrograde, so forward_speed = −v) is:
-///   a(v) = (kp·(max_speed + v) + kd·v).clamp(0, thrust)
-///         = (kp·max_speed + (kp+kd)·v).clamp(0, thrust)
-///
-/// Stopping distance = ∫₀^v  v / a(v) dv
-fn braking_distance(speed: f32, thrust: f32, kp: f32, kd: f32, max_speed: f32) -> f32 {
-    let pd_base = kp * max_speed; // a(v) at v = 0
-    let pd_slope = kp + kd; // da/dv
-    // Speed below which PD force is below its thrust ceiling:
-    let v_crossover = (thrust - pd_base) / pd_slope;
-
-    if v_crossover <= 0.0 {
-        // PD force always saturates → constant deceleration at `thrust`
-        speed * speed / (2.0 * thrust)
-    } else if speed <= v_crossover {
-        // Entirely in the soft-PD regime: a(v) = pd_base + pd_slope·v
-        pd_soft_distance(speed, pd_slope, pd_base)
-    } else {
-        // Constant-thrust phase (speed → v_crossover) + soft-PD phase (v_crossover → 0)
-        let d_hard = (speed * speed - v_crossover * v_crossover) / (2.0 * thrust);
-        let d_soft = pd_soft_distance(v_crossover, pd_slope, pd_base);
-        d_hard + d_soft
-    }
-}
-
-/// ∫₀^v  x / (pd_base + pd_slope·x) dx  (exact closed form)
-fn pd_soft_distance(v: f32, pd_slope: f32, pd_base: f32) -> f32 {
-    v / pd_slope - (pd_base / (pd_slope * pd_slope)) * (1.0 + pd_slope * v / pd_base).ln()
-}
 
 #[derive(Component)]
 pub struct AIShip {
@@ -130,6 +98,8 @@ fn spawn_ai_ship_at(
 ) {
     let bundle = ship_bundle(ship_type, asset_server, item_universe, pos);
     let personality = bundle.get_personality();
+    let mut rng = rand::thread_rng();
+    let angle = rng.gen_range(0.0..std::f32::consts::TAU);
     commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
@@ -139,6 +109,7 @@ fn spawn_ai_ship_at(
             RLAgent::new(personality),
             bundle,
         ))
+        .insert(Transform::from_xyz(pos.x, pos.y, 0.0).with_rotation(Quat::from_rotation_z(angle)))
         .with_child((
             Collider::circle(DETECTION_RADIUS),
             Sensor,
@@ -367,7 +338,7 @@ fn manage_ship_population(
             let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
             commands
                 .entity(e)
-                .insert((JumpingOut, Sensor, mass, inertia));
+                .insert((JumpingOut, Sensor, mass, inertia, AngularVelocity(0.0)));
         }
     }
 }
@@ -378,16 +349,34 @@ fn manage_ship_population(
 
 /// Maps a local-frame bearing angle (from `angle_to_hit`) to (turn, thrust) commands.
 /// Positive angle = target is to the left; negative = to the right.
-fn angle_to_controls(angle: f32) -> (f32, f32) {
-    if angle > PI / 3. {
-        (-1.0, 0.0)
-    } else if angle > 0.0 {
-        (-0.5, 1.0)
-    } else if angle > -PI / 3. {
-        (0.5, 1.0)
+fn angle_to_controls(
+    target_angle: f32,
+    angular_velocity: f32,
+    torque: f32,
+    damping: f32,
+) -> (f32, f32) {
+    let stop_angle = x_stop(angular_velocity, torque, damping); // angle at which max braking would stop rotation
+    let turn = if -PI / 16. < target_angle && target_angle < PI / 16. {
+        0.0 // small angle → let damping handle it
+    } else if target_angle > 0.0 {
+        if stop_angle < target_angle {
+            -1.0 // max left torque
+        } else {
+            1.0 // max right torque
+        }
     } else {
-        (1.0, 0.0)
-    }
+        if stop_angle > target_angle {
+            1.0 // max right torque
+        } else {
+            -1.0 // max left torque
+        }
+    };
+    let thrust = if target_angle > -PI / 3. && target_angle < PI / 3. {
+        1.0
+    } else {
+        0.0
+    };
+    return (turn, thrust);
 }
 
 /// The action chosen by the rule-based AI for a single decision step.
@@ -408,17 +397,15 @@ pub fn compute_ai_action(
     ship: &Ship,
     pos: Vec2,
     vel: Vec2,
+    ang_vel: f32,
     max_speed: f32,
     transform: &Transform,
     all_positions: &Query<&Position>,
     all_velocities: &Query<&LinearVelocity>,
     item_universe: &ItemUniverse,
+    rng: &mut impl rand::Rng,
 ) -> Option<RawAIAction> {
     let target = ship.nav_target.as_ref()?;
-    // Note: We just use the nav_target for weapons targeting as well,
-    // so the AI will shoot at whatever it's trying to approach
-    //(if it's a valid shoot target).  This is a bit simplistic but works
-    // decently in practice and keeps the AI behavior more consistent.
 
     let ship_dir = (transform.rotation * Vec3::Y).xy();
     let frame_angle = -ship_dir.y.atan2(ship_dir.x);
@@ -436,14 +423,73 @@ pub fn compute_ai_action(
             let offset = target_pos.0 - pos;
             let local_offset = rotate_r(offset);
             let local_rel_vel = rotate_r(target_vel - vel);
-            let local_target_vel = rotate_r(target_vel);
 
-            let (turn, thrust) =
-                if let Some(hit_angle) = angle_to_hit(max_speed, &local_offset, &local_rel_vel) {
-                    angle_to_controls(hit_angle)
+            // Compute firing cutoff and aim-speed from this ship's unguided
+            // weapons. Guided weapons don't need the ship to aim, so they're
+            // excluded. Using medians keeps both values anchored to a typical
+            // weapon rather than an outlier long-range piece.
+            fn median_sorted(mut xs: Vec<f32>) -> Option<f32> {
+                if xs.is_empty() {
+                    return None;
+                }
+                xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                let mid = xs.len() / 2;
+                Some(if xs.len() % 2 == 0 {
+                    0.5 * (xs[mid - 1] + xs[mid])
                 } else {
-                    (0.0, 0.0) // no solution → coast
+                    xs[mid]
+                })
+            }
+            let unguided: Vec<&crate::weapons::Weapon> = ship
+                .weapon_systems
+                .iter_all()
+                .filter_map(|(wt, _)| item_universe.weapons.get(wt))
+                .filter(|w| !w.guided)
+                .collect();
+            let median_range =
+                median_sorted(unguided.iter().map(|w| w.range()).collect()).unwrap_or(0.0);
+            let median_speed =
+                median_sorted(unguided.iter().map(|w| w.speed).collect()).unwrap_or(max_speed);
+            // 75% of median range: nudge the ship a bit closer before
+            // committing to coast+aim.
+            let firing_cutoff = 0.75 * median_range;
+            let in_firing_range = local_offset.length() < firing_cutoff;
+
+            // If within firing range: coast (no thrust) and aim using the
+            // ballistic lead angle computed at the typical projectile speed.
+            // Otherwise: pursue using the PD controller.
+            let (turn, thrust) = if in_firing_range {
+                let turn = if let Some(hit_angle) =
+                    angle_to_hit(median_speed, &local_offset, &local_rel_vel)
+                {
+                    angle_to_controls(hit_angle, ang_vel, ship.data.torque, ship.data.angular_drag)
+                        .0
+                } else {
+                    0.0
                 };
+                (turn, 0.0)
+            } else {
+                // Out-of-range pursuit: modest damping so the ship stays
+                // near the target long enough to fire, but isn't forced to
+                // match its velocity precisely.
+                const PURSUIT_DAMPING: f32 = 0.4;
+                let (turn, thrust_prob) = pursuit_controls_ego(
+                    local_offset,
+                    local_rel_vel,
+                    ang_vel,
+                    ship.data.torque,
+                    ship.data.angular_drag,
+                    ship.data.thrust,
+                    ship.data.max_speed,
+                    PURSUIT_DAMPING,
+                );
+                let thrust = if rng.r#gen::<f32>() < thrust_prob {
+                    1.0
+                } else {
+                    0.0
+                };
+                (turn, thrust)
+            };
 
             let mut weapons_to_fire = Vec::new();
             for (weapon_type, _) in ship.weapon_systems.iter_all() {
@@ -451,7 +497,7 @@ pub fn compute_ai_action(
                     continue;
                 };
                 if local_offset.length() < weapon.range() {
-                    let fire_angle = angle_to_hit(weapon.speed, &local_offset, &local_target_vel);
+                    let fire_angle = angle_to_hit(weapon.speed, &local_offset, &local_rel_vel);
                     if weapon.guided || angle_indicator(fire_angle) > 0.5 {
                         weapons_to_fire.push((weapon_type.clone(), Some(*target_e)));
                     }
@@ -468,13 +514,31 @@ pub fn compute_ai_action(
 
         Target::Pickup(target_e) => {
             let target_pos = all_positions.get(*target_e).ok()?;
+            let target_vel = all_velocities
+                .get(*target_e)
+                .map(|v| v.0)
+                .unwrap_or(Vec2::ZERO);
+
             let local_offset = rotate_r(target_pos.0 - pos);
-            let (turn, thrust) =
-                if let Some(angle) = angle_to_hit(max_speed, &local_offset, &Vec2::ZERO) {
-                    angle_to_controls(angle)
-                } else {
-                    (0.0, 0.0)
-                };
+            let local_rel_vel = rotate_r(target_vel - vel);
+            // Pickups: fly through at speed — just need proximity, not a stop.
+            const PICKUP_DAMPING: f32 = 0.2;
+            let (turn, thrust_prob) = pursuit_controls_ego(
+                local_offset,
+                local_rel_vel,
+                ang_vel,
+                ship.data.torque,
+                ship.data.angular_drag,
+                ship.data.thrust,
+                ship.data.max_speed,
+                PICKUP_DAMPING,
+            );
+            // PWM-style firing: expected thrust ≈ requested acceleration.
+            let thrust = if rng.r#gen::<f32>() < thrust_prob {
+                1.0
+            } else {
+                0.0
+            };
             Some(RawAIAction {
                 thrust,
                 turn,
@@ -485,63 +549,37 @@ pub fn compute_ai_action(
 
         Target::Planet(target_e) => {
             let target_pos = all_positions.get(*target_e).ok()?;
-            let offset = target_pos.0 - pos;
-            let dist = offset.length();
-            let speed = vel.length();
+            let target_vel = all_velocities
+                .get(*target_e)
+                .map(|v| v.0)
+                .unwrap_or(Vec2::ZERO);
 
-            let d = &ship.data;
-            let stop_dist =
-                braking_distance(speed, d.thrust, d.thrust_kp, d.thrust_kd, d.max_speed);
-            let turn_margin = speed * PI * d.angular_drag / d.torque;
-            // Core braking zone: must be decelerating.
-            let brake_dist = stop_dist + turn_margin;
-            // Outer prepare zone: start the retrograde turn early so the ship
-            // is already aligned by the time it reaches the braking zone.
-            let prepare_dist = brake_dist + turn_margin;
-
-            if dist < prepare_dist && speed > f32::EPSILON {
-                // Retrograde bearing in ego frame — reuses the same angle
-                // convention as navigation so angle_to_controls works directly.
-                let retro_ego = rotate_r(-vel);
-                let retro_angle = retro_ego.y.atan2(retro_ego.x);
-
-                if dist < brake_dist {
-                    // Braking zone: turn toward retrograde AND thrust when
-                    // reasonably aligned (angle_to_controls gives thrust=1
-                    // when within ±60° of the target bearing).
-                    let (turn, thrust) = angle_to_controls(retro_angle);
-                    Some(RawAIAction {
-                        thrust,
-                        turn,
-                        reverse: 0.0,
-                        weapons_to_fire: vec![],
-                    })
-                } else {
-                    // Prepare zone: turn toward retrograde, no thrust yet.
-                    let (turn, _) = angle_to_controls(retro_angle);
-                    Some(RawAIAction {
-                        thrust: 0.0,
-                        turn,
-                        reverse: 0.0,
-                        weapons_to_fire: vec![],
-                    })
-                }
+            let local_offset = rotate_r(target_pos.0 - pos);
+            let local_rel_vel = rotate_r(target_vel - vel);
+            // Planet landing: full critical damping — must stop on target.
+            const LANDING_DAMPING: f32 = 1.0;
+            let (turn, thrust_prob) = pursuit_controls_ego(
+                local_offset,
+                local_rel_vel,
+                ang_vel,
+                ship.data.torque,
+                ship.data.angular_drag,
+                ship.data.thrust,
+                ship.data.max_speed,
+                LANDING_DAMPING,
+            );
+            // PWM-style firing: expected thrust ≈ requested acceleration.
+            let thrust = if rng.r#gen::<f32>() < thrust_prob {
+                1.0
             } else {
-                // Far from planet (or nearly stopped): approach normally.
-                let local_offset = rotate_r(offset);
-                let (turn, thrust) =
-                    if let Some(angle) = angle_to_hit(max_speed, &local_offset, &Vec2::ZERO) {
-                        angle_to_controls(angle)
-                    } else {
-                        (0.0, 0.0)
-                    };
-                Some(RawAIAction {
-                    thrust,
-                    turn,
-                    reverse: 0.0,
-                    weapons_to_fire: vec![],
-                })
-            }
+                0.0
+            };
+            Some(RawAIAction {
+                thrust,
+                turn,
+                reverse: 0.0,
+                weapons_to_fire: vec![],
+            })
         }
     }
 }
@@ -657,15 +695,15 @@ pub fn classic_ai_target_selection(
                 let nearest_pickup = hits
                     .iter()
                     .find(|(e, _)| pickup_marker.get(*e).is_ok())
-                    .map(|(e, _)| *e);
+                    .copied();
                 let nearest_asteroid = hits
                     .iter()
                     .find(|(e, _)| asteroid_marker.get(*e).is_ok())
-                    .map(|(e, _)| *e);
+                    .copied();
                 let nearest_planet = hits
                     .iter()
                     .find(|(e, _)| planet_marker.get(*e).is_ok())
-                    .map(|(e, _)| *e);
+                    .copied();
                 let nearest_ship = hits
                     .iter()
                     .find(|(e, _)| {
@@ -675,21 +713,30 @@ pub fn classic_ai_target_selection(
                                 .map(|f| ship.should_engage(f))
                                 .unwrap_or(false)
                     })
-                    .map(|(e, _)| *e);
+                    .copied();
 
-                // All personalities grab nearby pickups first.
-                ship.nav_target = if let Some(pickup) = nearest_pickup {
-                    Some(Target::Pickup(pickup))
-                } else {
-                    match ai_ship.personality {
-                        Personality::Miner => nearest_asteroid
-                            .map(Target::Asteroid)
-                            .or_else(|| nearest_planet.map(Target::Planet)),
-                        Personality::Fighter => nearest_ship
-                            .map(Target::Ship)
-                            .or_else(|| nearest_planet.map(Target::Planet)),
-                        Personality::Trader => nearest_planet.map(Target::Planet),
+                // Pickup only preempts the natural target if it's closer.
+                let pickup_closer_than = |natural: Option<(Entity, f32)>| -> Option<Target> {
+                    match (nearest_pickup, natural) {
+                        (Some((p, pd)), Some((_, nd))) if pd < nd => Some(Target::Pickup(p)),
+                        (Some((p, _)), None) => Some(Target::Pickup(p)),
+                        _ => None,
                     }
+                };
+
+                ship.nav_target = match ai_ship.personality {
+                    Personality::Miner => {
+                        // Miners grab any nearby pickup first.
+                        nearest_pickup
+                            .map(|(e, _)| Target::Pickup(e))
+                            .or_else(|| nearest_asteroid.map(|(e, _)| Target::Asteroid(e)))
+                            .or_else(|| nearest_planet.map(|(e, _)| Target::Planet(e)))
+                    }
+                    Personality::Fighter => pickup_closer_than(nearest_ship)
+                        .or_else(|| nearest_ship.map(|(e, _)| Target::Ship(e)))
+                        .or_else(|| nearest_planet.map(|(e, _)| Target::Planet(e))),
+                    Personality::Trader => pickup_closer_than(nearest_planet)
+                        .or_else(|| nearest_planet.map(|(e, _)| Target::Planet(e))),
                 };
             }
 
@@ -718,6 +765,7 @@ pub fn classic_ai_control(
             Entity,
             &Position,
             &LinearVelocity,
+            &AngularVelocity,
             &MaxLinearSpeed,
             &Transform,
             &mut Ship,
@@ -730,8 +778,17 @@ pub fn classic_ai_control(
     velocities: Query<&LinearVelocity>,
     item_universe: Res<ItemUniverse>,
 ) {
-    for (entity, position, ship_vel, max_speed, ship_transform, mut ship, _ai_ship, rl_agent) in
-        &mut ships
+    for (
+        entity,
+        position,
+        ship_vel,
+        ang_vel,
+        max_speed,
+        ship_transform,
+        mut ship,
+        _ai_ship,
+        rl_agent,
+    ) in &mut ships
     {
         // RLAgent ships are driven by rl_step + repeat_actions in both modes.
         if rl_agent.is_some() {
@@ -746,11 +803,13 @@ pub fn classic_ai_control(
             &*ship,
             position.0,
             ship_vel.0,
+            ang_vel.0,
             max_speed.0,
             ship_transform,
             &all_positions,
             &velocities,
             &item_universe,
+            &mut rand::thread_rng(),
         ) {
             Some(action) => {
                 ship_writer.write(ShipCommand {
@@ -883,6 +942,18 @@ fn land_ship(
                         }
                     }
 
+                    // Snapshot health fraction BEFORE repair — used for
+                    // health-gated bonuses fired at landing / cargo_sold.
+                    let h_frac_at_landing =
+                        ship.health as f32 / ship.data.max_health.max(1) as f32;
+                    if rl_agent.is_some() {
+                        rl_reward_writer.write(RLReward {
+                            entity: ship_entity,
+                            reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
+                            reward_type: crate::consts::REWARD_HEALTH_GATED,
+                        });
+                    }
+
                     // Landed successfully, so clear the target
                     if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
                         ship.nav_target = None;
@@ -921,6 +992,12 @@ fn land_ship(
                                 reward: credit_frac * personality_weight,
                                 reward_type: crate::consts::REWARD_CARGO_SOLD,
                             });
+                            // Health bonus uses pre-repair health (captured above).
+                            rl_reward_writer.write(RLReward {
+                                entity: ship_entity,
+                                reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
+                                reward_type: crate::consts::REWARD_HEALTH_GATED,
+                            });
                         }
 
                         // Traders buy the commodity with the best discount here.
@@ -947,7 +1024,7 @@ fn land_ship(
                     // Fighters: if no hostile ships are visible, jump out.
                     let jump_out_bundle = {
                         let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
-                        (JumpingOut, Sensor, mass, inertia)
+                        (JumpingOut, Sensor, mass, inertia, AngularVelocity(0.0))
                     };
                     if matches!(ai_ship.personality, Personality::Fighter) {
                         let has_hostile =
@@ -957,12 +1034,12 @@ fn land_ship(
                                     && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
                             });
                         if !has_hostile {
-                            commands.entity(ship_entity).insert(jump_out_bundle);
+                            commands.entity(ship_entity).try_insert(jump_out_bundle);
                         }
                     } else {
                         let choose_to_jump = rng.gen_bool(0.1);
                         if choose_to_jump {
-                            commands.entity(ship_entity).insert(jump_out_bundle);
+                            commands.entity(ship_entity).try_insert(jump_out_bundle);
                         }
                     }
                 }

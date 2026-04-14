@@ -28,7 +28,7 @@ import numpy as np
 from tbparse import SummaryReader
 
 PERSONALITIES = ["fighter", "miner", "trader"]
-REWARD_TYPES = ["health", "weapon_hit", "landing", "cargo_sold", "pickup", "nav_target", "weapons_target", "movement"]
+REWARD_TYPES = ["landing", "cargo_sold", "ship_hit", "asteroid_hit", "pickup", "health_gated", "health_raw", "damage"]
 
 
 def find_latest_tb_dir(base: str = "experiments") -> str:

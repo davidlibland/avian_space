@@ -59,7 +59,10 @@ fn spawn_planets(
             Planet(planet_name.clone()),
             RigidBody::Static,
             Collider::circle(r),
-            CollisionLayers::new(GameLayer::Planet, [GameLayer::Ship, GameLayer::Radar]),
+            CollisionLayers::new(
+                GameLayer::Planet,
+                [GameLayer::Ship, GameLayer::Asteroid, GameLayer::Radar],
+            ),
             CollisionEventsEnabled,
             Sensor,
             Mesh2d(meshes.add(Circle::new(r))),

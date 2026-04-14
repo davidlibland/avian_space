@@ -18,8 +18,7 @@ import numpy as np
 from tbparse import SummaryReader
 
 PERSONALITIES = ["fighter", "miner", "trader"]
-REWARD_TYPES = ["health", "weapon_hit", "landing", "cargo_sold", "pickup",
-                "nav_target", "weapons_target", "movement"]
+REWARD_TYPES = ["landing", "cargo_sold", "ship_hit", "asteroid_hit", "pickup", "health_gated", "health_raw", "damage"]
 
 
 def find_latest_run(base="experiments"):
@@ -99,7 +98,7 @@ def snapshot(tb_dir):
         lines.append("")
 
     # Effective reward per step
-    weights = dict(zip(REWARD_TYPES, [1.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 0.1]))
+    weights = dict(zip(REWARD_TYPES, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0]))
     lines.append("**Effective reward/step (last 20):**")
     lines.append("")
     for pers in PERSONALITIES:

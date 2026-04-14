@@ -11,7 +11,6 @@
 
 use bevy::prelude::*;
 use std::fs;
-use std::path::Path;
 
 const EXPERIMENTS_DIR: &str = "experiments";
 
@@ -80,15 +79,6 @@ impl ExperimentSetup {
         format!("{}/rl_buffer.bin", self.run_dir)
     }
 
-    /// Path for the serialised combat-hit statistics.
-    pub fn combat_stats_checkpoint_path(&self) -> String {
-        format!("{}/combat_stats.bin", self.run_dir)
-    }
-
-    /// Returns true if a checkpoint file is present on disk.
-    pub fn checkpoint_exists(&self) -> bool {
-        Path::new(&format!("{}.bin", self.policy_checkpoint_path())).exists()
-    }
 }
 
 // ---------------------------------------------------------------------------

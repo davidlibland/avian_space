@@ -88,8 +88,12 @@ pub const SLOT_PURSUIT_INDICATOR: usize = CORE_BLOCK_START + 8; // 13
 pub const SLOT_FIRE_ANGLE: usize = CORE_BLOCK_START + 9;        // 14
 pub const SLOT_FIRE_INDICATOR: usize = CORE_BLOCK_START + 10;   // 15
 pub const SLOT_IN_RANGE: usize = CORE_BLOCK_START + 11;         // 16
+// PD-based pursuit features (from `optimal_control::pursuit_features_ego`).
+pub const SLOT_PD_TARGET_ANGLE: usize = CORE_BLOCK_START + 12;  // 17
+pub const SLOT_PD_ALIGNMENT: usize = CORE_BLOCK_START + 13;     // 18
+pub const SLOT_PD_THRUST_PROB: usize = CORE_BLOCK_START + 14;   // 19
 /// Number of core features.
-pub const CORE_FEAT_SIZE: usize = 12; // rel_pos(2)+rel_vel(2)+is_nav_target+is_weapons_target+proximity+pursuit_angle+pursuit_indicator+fire_angle+fire_indicator+in_range
+pub const CORE_FEAT_SIZE: usize = 15; // 12 prior + 3 PD features (target_angle, alignment, thrust_prob)
 
 // ── Block 4: type-specific features ──────────────────────────────────────
 /// Offset of the type-specific block (value + entity-kind features).
@@ -116,8 +120,26 @@ pub const TYPE_IDX_PICKUP: usize = 3;
 /// Floats per entity slot (sum of all blocks).
 pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE; // = 26
 
+// ── Self-state block offsets ─────────────────────────────────────────────
+// Offsets within the self-state block. Must be kept contiguous; `SELF_SIZE`
+// below is derived from the final offset + its size.
+pub const SELF_HEALTH_FRAC: usize = 0;
+pub const SELF_SPEED_FRAC: usize = 1;
+pub const SELF_VEL_COS: usize = 2;
+pub const SELF_VEL_SIN: usize = 3;
+pub const SELF_ANG_VEL: usize = 4;
+pub const SELF_CARGO_FRAC: usize = 5;
+pub const SELF_AMMO_FRAC: usize = 6;
+pub const SELF_CREDITS_NORM: usize = 7;
+pub const SELF_DISTRESSED: usize = 8;
+pub const SELF_PERSONALITY: usize = 9;
+pub const SELF_PERSONALITY_SIZE: usize = 3;
+/// Normalised `stop_angle` from `optimal_control::control_features`: how far
+/// the ship would rotate under max braking before stopping, divided by π.
+pub const SELF_STOP_ANGLE: usize = SELF_PERSONALITY + SELF_PERSONALITY_SIZE; // 12
+
 /// Floats for the self-state block.
-pub const SELF_SIZE: usize = 12; // health, speed, vel_cos, vel_sin, ang_vel, cargo, ammo, credits, distressed, personality(3)
+pub const SELF_SIZE: usize = SELF_STOP_ANGLE + 1; // 13
 
 // ── Projectile slot layout ─────────────────────────────────────────────
 //
@@ -351,23 +373,6 @@ pub fn select_secondary_weapon<'a>(ship: &'a Ship, target_is_ship: bool) -> Opti
 /// - weapons_target_idx: index into entity slots (0..N_OBJECTS-1), or N_OBJECTS = "no target"
 pub type DiscreteAction = (u8, u8, u8, u8, u8, u8);
 
-/// Map a bearing angle (convention from `ai_ships::angle_to_controls`) to a
-/// discrete `(turn_idx, thrust_idx)` pair.
-///
-/// Positive angle = target is to the left; negative = to the right.
-pub fn angle_to_discrete(angle: f32) -> (u8, u8) {
-    const PI_THIRD: f32 = PI / 3.0;
-    if angle > PI_THIRD {
-        (0, 0) // turn left, no thrust
-    } else if angle > 0.0 {
-        (0, 1) // turn left, thrust
-    } else if angle > -PI_THIRD {
-        (2, 1) // turn right, thrust
-    } else {
-        (2, 0) // turn right, no thrust
-    }
-}
-
 /// Convert discrete indices to continuous `(thrust, turn)` floats suitable for
 /// `ShipCommand`.  Note: the parameter order here is `(thrust_idx, turn_idx)`
 /// which is the **opposite** of the `DiscreteAction` tuple order `(turn, thrust, ...)`.
@@ -404,8 +409,9 @@ pub fn controls_to_discrete(thrust: f32, turn: f32) -> (u8, u8) {
 ///
 /// * `proj_vel`  – speed of the projectile or ship.
 /// * `obj_pos`   – target position in ego frame.
-/// * `obj_vel`   – for **navigation** pass `(target_vel − ship_vel)` (relative);
-///                 for **firing** pass target's absolute velocity in ego frame.
+/// * `obj_vel`   – target velocity relative to the ship (`target_vel − ship_vel`)
+///                 in ego frame, for both navigation and firing (projectiles
+///                 inherit the ship's velocity).
 ///
 /// The angle convention matches `angle_to_hit` in `utils.rs`:
 /// 0 = directly ahead, positive = left, negative = right, range `(−π, π]`.
@@ -508,7 +514,7 @@ pub fn collision_indicator(rel_pos: [f32; 2], rel_vel: [f32; 2], target_radius: 
 pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let mut obs = Vec::with_capacity(OBS_DIM);
 
-    // -- Self state (10 floats) -----------------------------------------------
+    // -- Self state -----------------------------------------------------------
     let health_frac = input.ship.health as f32 / input.ship.data.max_health.max(1) as f32;
 
     let vel = input.velocity;
@@ -537,24 +543,34 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
 
     let personality = personality_onehot(input.personality);
 
-    obs.push(health_frac.clamp(0.0, 1.0));
-    obs.push(speed_frac.clamp(0.0, 2.0)); // allow brief over-speed
-    obs.push(vel_cos);
-    obs.push(vel_sin);
-    obs.push((input.angular_velocity / MAX_ANG_SPEED).clamp(-1.0, 1.0));
-    obs.push(cargo_frac.clamp(0.0, 1.0));
-    obs.push(ammo_frac);
+    let ctrl = crate::optimal_control::control_features(
+        input.angular_velocity,
+        input.ship.data.torque,
+        input.ship.data.angular_drag,
+    );
+
+    let mut self_buf = [0.0_f32; SELF_SIZE];
+    self_buf[SELF_HEALTH_FRAC] = health_frac.clamp(0.0, 1.0);
+    self_buf[SELF_SPEED_FRAC] = speed_frac.clamp(0.0, 2.0); // allow brief over-speed
+    self_buf[SELF_VEL_COS] = vel_cos;
+    self_buf[SELF_VEL_SIN] = vel_sin;
+    self_buf[SELF_ANG_VEL] = (input.angular_velocity / MAX_ANG_SPEED).clamp(-1.0, 1.0);
+    self_buf[SELF_CARGO_FRAC] = cargo_frac.clamp(0.0, 1.0);
+    self_buf[SELF_AMMO_FRAC] = ammo_frac;
     // Credits normalised per ship type: scale / (credits + scale).
     let c = input.ship.credits as f32;
     let s = input.credit_scale;
-    obs.push(s / (c + s));
-    obs.push(input.distressed);
-    obs.extend_from_slice(&personality);
+    self_buf[SELF_CREDITS_NORM] = s / (c + s);
+    self_buf[SELF_DISTRESSED] = input.distressed;
+    self_buf[SELF_PERSONALITY..SELF_PERSONALITY + SELF_PERSONALITY_SIZE]
+        .copy_from_slice(&personality);
+    // stop_angle is unbounded in principle; normalise by π and clamp.
+    self_buf[SELF_STOP_ANGLE] = (ctrl.stop_angle / PI).clamp(-2.0, 2.0);
+    obs.extend_from_slice(&self_buf);
     debug_assert_eq!(obs.len(), SELF_SIZE);
 
     // Context for angle computations.
     let max_speed = input.ship.data.max_speed.max(f32::EPSILON);
-    let ego_vel = rotate_to_ego(input.velocity, sin_a, cos_a);
 
     // -- Entity slots ---------------------------------------------------------
     debug_assert!(
@@ -565,16 +581,16 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     for slot in &input.entity_slots {
         encode_slot(
             Some(slot),
+            input,
             max_speed,
             input.primary_weapon_speed,
             input.primary_weapon_range,
-            ego_vel,
             &mut obs,
         );
     }
     // Pad remaining slots with zeros.
     for _ in input.entity_slots.len()..N_ENTITY_SLOTS {
-        encode_slot(None, max_speed, 0.0, 0.0, ego_vel, &mut obs);
+        encode_slot(None, input, max_speed, 0.0, 0.0, &mut obs);
     }
 
     debug_assert_eq!(
@@ -594,10 +610,10 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
 /// Encode a single entity slot (SLOT_SIZE floats). `None` → all zeros.
 fn encode_slot(
     slot: Option<&EntitySlotData>,
+    input: &ObsInput<'_>,
     max_speed: f32,
     weapon_speed: f32,
     weapon_range: f32,
-    ego_vel: [f32; 2],
     obs: &mut Vec<f32>,
 ) {
     let Some(s) = slot else {
@@ -626,8 +642,7 @@ fn encode_slot(
     buf[SLOT_PURSUIT_ANGLE] = pursuit.unwrap_or(0.0);
     buf[SLOT_PURSUIT_INDICATOR] = aim_indicator(pursuit);
 
-    let abs_vel = [rel_vel[0] + ego_vel[0], rel_vel[1] + ego_vel[1]];
-    let fire = intercept_angle(weapon_speed, rel_pos, abs_vel);
+    let fire = intercept_angle(weapon_speed, rel_pos, rel_vel);
     buf[SLOT_FIRE_ANGLE] = fire.unwrap_or(0.0);
     buf[SLOT_FIRE_INDICATOR] = aim_indicator(fire);
     buf[SLOT_IN_RANGE] = if weapon_range > 0.0 && dist <= weapon_range {
@@ -635,6 +650,27 @@ fn encode_slot(
     } else {
         0.0
     };
+
+    // PD-based pursuit features. Damping factor is chosen per entity type to
+    // match the rule-based controller's tuning in `ai_ships::compute_ai_action`.
+    let damping = match s.core.entity_type as usize {
+        TYPE_IDX_PLANET => 1.0,  // landing: critical damping
+        TYPE_IDX_PICKUP => 0.2,  // fly-through
+        _ => 0.4,                // ship/asteroid pursuit
+    };
+    let feat = crate::optimal_control::pursuit_features_ego(
+        bevy::math::Vec2::new(rel_pos[0], rel_pos[1]),
+        bevy::math::Vec2::new(rel_vel[0], rel_vel[1]),
+        input.angular_velocity,
+        input.ship.data.torque,
+        input.ship.data.angular_drag,
+        input.ship.data.thrust,
+        input.ship.data.max_speed,
+        damping,
+    );
+    buf[SLOT_PD_TARGET_ANGLE] = feat.target_angle;
+    buf[SLOT_PD_ALIGNMENT] = feat.alignment;
+    buf[SLOT_PD_THRUST_PROB] = feat.thrust_prob;
 
     buf[SLOT_VALUE] = s.value;
 

@@ -170,7 +170,7 @@ pub struct BuyShip {
 #[derive(Event, Message)]
 pub enum ScoreHit {
     OnShip { source: Entity, target: Entity },
-    OnAsteroid { source: Entity, target: Entity },
+    OnAsteroid { source: Entity },
 }
 
 /// Stores the ship's hostility map as a standalone component so other systems
@@ -593,7 +593,7 @@ fn ship_movement(
     time: Res<Time>,
     mut query: Query<
         (&mut LinearVelocity, &mut AngularVelocity, &Transform, &Ship),
-        With<RigidBody>,
+        (With<RigidBody>, Without<Sensor>),
     >,
 ) {
     for cmd in reader.read() {
@@ -641,7 +641,8 @@ fn apply_damage(
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
     mut pickup_writer: MessageWriter<crate::pickups::PickupDrop>,
     mut rl_died_writer: MessageWriter<RLShipDied>,
-    mut model_mode: Res<crate::ModelMode>,
+    mut rl_reward_writer: MessageWriter<RLReward>,
+    model_mode: Res<crate::ModelMode>,
 ) {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -649,8 +650,24 @@ fn apply_damage(
         let Ok((mut ship, transform, mut distressed)) = ships.get_mut(event.entity) else {
             continue;
         };
+        // Health fraction BEFORE damage — used to scale the damage penalty.
+        let h_frac_before = ship.health as f32 / ship.data.max_health.max(1) as f32;
         ship.health = (ship.health - event.damage as i32).max(0);
         distressed.level = 1.0;
+
+        // RL damage penalty: -k · damage · (1 - h/h_max)_before.
+        // At full health the penalty is 0 (combat is free); at low health it
+        // approaches the full damage magnitude (strong pressure to disengage).
+        if rl_agents.contains(event.entity) {
+            let dmg_frac = event.damage as f32 / ship.data.max_health.max(1) as f32;
+            let penalty =
+                -crate::consts::HEALTH_DAMAGE_PENALTY * dmg_frac * (1.0 - h_frac_before);
+            rl_reward_writer.write(RLReward {
+                entity: event.entity,
+                reward: penalty,
+                reward_type: crate::consts::REWARD_DAMAGE,
+            });
+        }
         if ship.health == 0 {
             let location = transform.translation.xy();
             if player_ships.contains(event.entity) {
@@ -832,8 +849,16 @@ fn score_hits(
                     rl_reward_writer.write(RLReward {
                         entity: *source,
                         reward: r * personality_scale,
-                        reward_type: crate::consts::REWARD_WEAPON_HIT,
+                        reward_type: crate::consts::REWARD_SHIP_HIT,
                     });
+                    if let Some(ss) = ships.get(*source).ok() {
+                        let h_frac = ss.health as f32 / ss.data.max_health.max(1) as f32;
+                        rl_reward_writer.write(RLReward {
+                            entity: *source,
+                            reward: HEALTH_BONUS_PER_EVENT * h_frac,
+                            reward_type: crate::consts::REWARD_HEALTH_GATED,
+                        });
+                    }
                 }
             }
             ScoreHit::OnAsteroid { source, .. } => {
@@ -845,8 +870,16 @@ fn score_hits(
                     rl_reward_writer.write(RLReward {
                         entity: *source,
                         reward,
-                        reward_type: crate::consts::REWARD_WEAPON_HIT,
+                        reward_type: crate::consts::REWARD_ASTEROID_HIT,
                     });
+                    if let Some(ss) = ships.get(*source).ok() {
+                        let h_frac = ss.health as f32 / ss.data.max_health.max(1) as f32;
+                        rl_reward_writer.write(RLReward {
+                            entity: *source,
+                            reward: HEALTH_BONUS_PER_EVENT * h_frac,
+                            reward_type: crate::consts::REWARD_HEALTH_GATED,
+                        });
+                    }
                 }
             }
         }

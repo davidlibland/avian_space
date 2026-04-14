@@ -15,36 +15,62 @@ pub const N_REWARD_TYPES: usize = 8;
 pub const REWARD_LANDING: usize = 0;
 /// Index for cargo-sold rewards.
 pub const REWARD_CARGO_SOLD: usize = 1;
-/// Index for weapon-hit rewards (ship + asteroid).
-pub const REWARD_WEAPON_HIT: usize = 2;
+/// Index for ship-hit (combat) rewards.
+pub const REWARD_SHIP_HIT: usize = 2;
+/// Index for asteroid-hit (mining) rewards.
+pub const REWARD_ASTEROID_HIT: usize = 3;
 /// Index for pickup-collection rewards.
-pub const REWARD_PICKUP: usize = 3;
-/// Index for per-step health rewards.
-pub const REWARD_HEALTH: usize = 4;
-/// Index for per-step nav-target rewards (correct navigation target for personality).
-pub const REWARD_NAV_TARGET: usize = 5;
-/// Index for per-step weapons-target rewards (targeting hostile/engaged entities).
-pub const REWARD_WEAPONS_TARGET: usize = 6;
-/// Index for per-step movement/position rewards (proximity + approach + velocity matching).
-pub const REWARD_MOVEMENT: usize = 7;
+pub const REWARD_PICKUP: usize = 4;
+/// Index for gated health-at-event rewards.  Fired at the same moments as the
+/// event rewards above (landing, cargo_sold, ship_hit, asteroid_hit, pickup),
+/// scaled by the firing ship's current `health / max_health`.
+pub const REWARD_HEALTH_GATED: usize = 5;
+/// Diagnostic channel: per-step `h_t / h_max` written every decision step.
+/// Weight = 0.0 so it does NOT influence the policy advantage.  The value
+/// head trained on this channel predicts expected discounted future health —
+/// used for monitoring survival behaviour, not policy updates.
+pub const REWARD_HEALTH_RAW: usize = 6;
+/// Index for damage-taken penalties.  Fired on each `DamageShip` event with
+/// reward = `-HEALTH_DAMAGE_PENALTY · damage_frac · (1 - h/h_max)`.
+/// At full health the penalty is 0 (combat is free); at low health it
+/// approaches the full magnitude (strong pressure to disengage / retreat).
+pub const REWARD_DAMAGE: usize = 7;
 
 /// Human-readable names for TensorBoard logging, indexed by reward type.
 pub const REWARD_TYPE_NAMES: [&str; N_REWARD_TYPES] = [
     "landing",
     "cargo_sold",
-    "weapon_hit",
+    "ship_hit",
+    "asteroid_hit",
     "pickup",
-    "health",
-    "nav_target",
-    "weapons_target",
-    "movement",
+    "health_gated",
+    "health_raw",
+    "damage",
 ];
 
 /// Per-type weights applied when summing head rewards into the total reward
-/// used for the policy advantage.  Tune these to control the relative
-/// importance of each reward channel.
-/// Indexed by: [LANDING, CARGO_SOLD, WEAPON_HIT, PICKUP, HEALTH, NAV_TARGET, WEAPONS_TARGET, MOVEMENT].
-pub const REWARD_TYPE_WEIGHTS: [f32; N_REWARD_TYPES] = [1.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 0.1];
+/// used for the policy advantage.
+pub const REWARD_TYPE_WEIGHTS: [f32; N_REWARD_TYPES] = [
+    1.0, // landing
+    1.0, // cargo_sold
+    1.0, // ship_hit
+    1.0, // asteroid_hit
+    1.0, // pickup
+    1.0, // health_gated (event-gated)
+    0.0, // health_raw (diagnostic only — zero advantage contribution)
+    1.0, // damage
+];
+
+/// Scalar applied to the health bonus written alongside each event reward.
+/// Interpretation: at full health, each event emits a `HEALTH_BONUS_PER_EVENT`
+/// addition to the health channel; at zero health, zero.
+pub const HEALTH_BONUS_PER_EVENT: f32 = 0.3;
+
+/// Scalar applied to the damage-taken penalty.
+/// Penalty = `-HEALTH_DAMAGE_PENALTY · (damage / max_health) · (1 - h/h_max)`.
+/// Tuned so a full-health-to-zero run of damage (impossible in one hit) would
+/// peak at roughly the same magnitude as a single event bonus.
+pub const HEALTH_DAMAGE_PENALTY: f32 = 0.3;
 
 // ---------------------------------------------------------------------------
 // Combat: hit on a ship
@@ -121,77 +147,3 @@ pub const PICKUP_REWARD_MINER: f32 = 0.8;
 /// Reward for collecting a pickup (Trader).
 pub const PICKUP_REWARD_TRADER: f32 = 0.1;
 
-// ---------------------------------------------------------------------------
-// Per-step health reward
-// ---------------------------------------------------------------------------
-
-/// Per-step health fraction weight (Fighter). Multiplied by `health / max_health`.
-pub const HEALTH_STEP_FIGHTER: f32 = 0.03;
-/// Per-step health fraction weight (Miner / Trader). Multiplied by `health / max_health`.
-pub const HEALTH_STEP_MINER_TRADER: f32 = 0.05;
-
-// ---------------------------------------------------------------------------
-// Per-step nav-target reward
-// ---------------------------------------------------------------------------
-
-/// Trader: nav-target is planet → scaled by cargo_sale_value or commodity_margin.
-pub const NAV_TARGET_TRADER_PLANET: f32 = 0.05;
-/// Miner: nav-target is asteroid/pickup (when cargo space available).
-pub const NAV_TARGET_MINER_RESOURCE: f32 = 0.05;
-/// Miner: nav-target is planet (when cargo hold is full), scaled by cargo_frac.
-pub const NAV_TARGET_MINER_PLANET: f32 = 0.05;
-/// Fighter: same gating as old goal_target.
-pub const NAV_TARGET_FIGHTER: f32 = 0.05;
-
-// ---------------------------------------------------------------------------
-// Per-step weapons-target reward
-// ---------------------------------------------------------------------------
-
-/// Fighter: weapons-target is hostile or should_engage.
-pub const WEAPONS_TARGET_FIGHTER: f32 = 0.05;
-/// Miner/Trader: weapons-target is hostile (defensive only).
-pub const WEAPONS_TARGET_DEFENSIVE: f32 = 0.05;
-
-// ---------------------------------------------------------------------------
-// Per-step movement/position reward (dense shaping toward nav target)
-// ---------------------------------------------------------------------------
-
-/// Proximity reward: `LENGTH_SCALE / (distance + LENGTH_SCALE)`.
-pub const MOVEMENT_LENGTH_SCALE: f32 = 200.0;
-/// Radius within which the approach penalty fades to zero (allows turning/braking).
-pub const MOVEMENT_THRESHOLD_DIST: f32 = 300.0;
-/// Velocity-matching reward scale: `VEL_SCALE / (rel_vel + VEL_SCALE)`.
-pub const MOVEMENT_VEL_SCALE: f32 = 50.0;
-/// Overall per-step weight for the movement reward.
-pub const MOVEMENT_STEP_WEIGHT: f32 = 0.05;
-
-// ---------------------------------------------------------------------------
-// Braking reward (approaching a planet nav-target)
-// ---------------------------------------------------------------------------
-
-/// Distance threshold within which braking rewards activate.
-pub const BRAKING_THRESHOLD_DIST: f32 = 500.0;
-/// Reward for being below LANDING_SPEED when approaching a planet.
-pub const BRAKING_SLOW_REWARD: f32 = 0.05;
-/// Max reward for facing retrograde (scales linearly from 0 at forward to max at fully retrograde).
-pub const BRAKING_RETROGRADE_REWARD: f32 = 0.03;
-/// Bonus for thrusting while nearly retrograde (within ~30° of fully retrograde).
-pub const BRAKING_THRUST_REWARD: f32 = 0.02;
-/// Cosine threshold for "nearly retrograde" (cos(150°) ≈ -0.87).
-pub const BRAKING_RETROGRADE_COS_THRESH: f32 = -0.87;
-/// Overall per-step weight for the braking reward.
-pub const BRAKING_STEP_WEIGHT: f32 = 0.05;
-
-// ---------------------------------------------------------------------------
-// Weapons engagement shaping (incentivise aiming/pursuit toward nav target)
-// ---------------------------------------------------------------------------
-
-/// Reward when weapons_target matches nav_target (or nav_target is not a
-/// combatable entity, so any weapons_target is valid).
-pub const WEAPONS_FOCUS_REWARD: f32 = 0.02;
-/// Pursuit indicator reward when navigating toward a pickup.
-pub const PICKUP_PURSUIT_WEIGHT: f32 = 0.03;
-/// Pursuit indicator reward when navigating toward a ship/asteroid (out of range).
-pub const COMBAT_PURSUIT_WEIGHT: f32 = 0.03;
-/// Fire indicator reward when navigating toward a ship/asteroid (in range).
-pub const COMBAT_FIRE_WEIGHT: f32 = 0.05;

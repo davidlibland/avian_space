@@ -158,8 +158,6 @@ fn infer_one(net: &InferenceNet, obs: &[f32]) -> (DiscreteAction, Vec<f32>, Vec<
 const PLANET_SLOTS: std::ops::Range<usize> = 0..2;
 const ASTEROID_SLOTS: std::ops::Range<usize> = 2..5;
 const HOSTILE_SHIP_SLOTS: std::ops::Range<usize> = 5..8;
-const FRIENDLY_SHIP_SLOTS: std::ops::Range<usize> = 8..10;
-const PICKUP_SLOTS: std::ops::Range<usize> = 10..12;
 
 // ---------------------------------------------------------------------------
 // Hand-crafted scenario tests

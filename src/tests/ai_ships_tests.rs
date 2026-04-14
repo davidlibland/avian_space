@@ -3,7 +3,6 @@ use crate::item_universe::ItemUniverse;
 use crate::rl_obs::{controls_to_discrete, discrete_to_controls};
 use avian2d::prelude::{LinearVelocity, Position};
 use bevy::ecs::system::SystemState;
-use bevy::prelude::*;
 use std::collections::HashMap;
 
 fn empty_item_universe() -> ItemUniverse {
@@ -29,39 +28,85 @@ fn empty_item_universe() -> ItemUniverse {
 // ── Pure-function tests ──────────────────────────────────────────────────
 
 #[test]
-fn test_angle_to_controls_all_branches() {
-    // Large left (> PI/3) → hard left, no thrust
-    let (turn, thrust) = angle_to_controls(PI / 2.0);
+fn test_angle_to_controls_bang_bang_at_rest() {
+    // At rest (ang_vel = 0) the stop angle is 0, so any non-zero target angle
+    // triggers max torque in the direction of the target.
+    let (torque, damping) = (1.0_f32, 1.0_f32);
+
+    // Large left (> PI/3) → max left torque, no thrust (outside forward cone)
+    let (turn, thrust) = angle_to_controls(PI / 2.0, 0.0, torque, damping);
     assert_eq!(turn, -1.0);
     assert_eq!(thrust, 0.0);
 
-    // Small left (0 < angle ≤ PI/3) → gentle left, thrust
-    let (turn, thrust) = angle_to_controls(0.5);
-    assert_eq!(turn, -0.5);
+    // Small left (within PI/3) → max left torque + thrust (inside cone)
+    let (turn, thrust) = angle_to_controls(0.5, 0.0, torque, damping);
+    assert_eq!(turn, -1.0);
     assert_eq!(thrust, 1.0);
 
-    // Small right (-PI/3 ≤ angle < 0) → gentle right, thrust
-    let (turn, thrust) = angle_to_controls(-0.5);
-    assert_eq!(turn, 0.5);
+    // Small right → max right torque + thrust
+    let (turn, thrust) = angle_to_controls(-0.5, 0.0, torque, damping);
+    assert_eq!(turn, 1.0);
     assert_eq!(thrust, 1.0);
 
-    // Large right (< -PI/3) → hard right, no thrust
-    let (turn, thrust) = angle_to_controls(-PI / 2.0);
+    // Large right (< -PI/3) → max right torque, no thrust
+    let (turn, thrust) = angle_to_controls(-PI / 2.0, 0.0, torque, damping);
     assert_eq!(turn, 1.0);
     assert_eq!(thrust, 0.0);
 }
 
 #[test]
-fn test_braking_distance_properties() {
-    let (thrust, kp, kd, max_speed) = (100.0, 1.0, 2.0, 200.0_f32);
+fn test_angle_to_controls_deadband() {
+    // Inside ±PI/16 the controller should return turn = 0.0 and let damping
+    // handle residual motion.
+    let (torque, damping) = (1.0_f32, 1.0_f32);
+    let (turn, _) = angle_to_controls(PI / 32.0, 0.0, torque, damping);
+    assert_eq!(turn, 0.0, "small positive angle inside deadband should coast");
+
+    let (turn, _) = angle_to_controls(-PI / 32.0, 0.0, torque, damping);
+    assert_eq!(turn, 0.0, "small negative angle inside deadband should coast");
+}
+
+#[test]
+fn test_angle_to_controls_coasts_when_overshoot_predicted() {
+    // Already rotating fast toward the target: if braking now would still
+    // overshoot (stop_angle >= target_angle), the controller should coast
+    // instead of adding more torque in the same direction.
+    // Pick target_angle outside the ±PI/16 deadband (~0.196).
+    let torque = 1.0_f32;
+    let damping = 0.1_f32; // low damping → long stopping distance
+    let target_angle = 0.3_f32;
+    // With these params, x_stop(0, 1.0, 1.0, 0.1) ≈ 0.47 > target, so overshoot.
+    let ang_vel = 1.0_f32;
+
+    let (turn, _thrust) = angle_to_controls(target_angle, ang_vel, torque, damping);
+    assert_eq!(
+        turn, 1.0,
+        "should coast when max braking would still overshoot the target"
+    );
+}
+
+#[test]
+fn test_angle_to_controls_brakes_when_undershoot_predicted() {
+    // Rotating slowly toward a positive target: max braking would stop short
+    // of the target (stop_angle < target_angle), so apply max torque toward it.
+    let (torque, damping) = (1.0_f32, 1.0_f32);
+    // Tiny ang_vel → stop_angle ≈ 0, well below target_angle = 0.5.
+    let (turn, _) = angle_to_controls(0.5, 0.01, torque, damping);
+    assert_eq!(turn, -1.0, "should apply max torque toward positive target");
+}
+
+#[test]
+fn test_x_stop_properties() {
+    use crate::optimal_control::x_stop;
+    let (a, gamma) = (100.0_f32, 1.0_f32);
 
     // Zero speed → zero stopping distance
-    assert_eq!(braking_distance(0.0, thrust, kp, kd, max_speed), 0.0);
+    assert_eq!(x_stop(0.0, a, gamma), 0.0);
 
-    // Monotonically increasing with speed
-    let d1 = braking_distance(50.0, thrust, kp, kd, max_speed);
-    let d2 = braking_distance(100.0, thrust, kp, kd, max_speed);
-    let d3 = braking_distance(200.0, thrust, kp, kd, max_speed);
+    // Stopping distance magnitude grows monotonically with speed.
+    let d1 = x_stop(50.0, a, gamma).abs();
+    let d2 = x_stop(100.0, a, gamma).abs();
+    let d3 = x_stop(200.0, a, gamma).abs();
     assert!(d1 > 0.0);
     assert!(d2 > d1);
     assert!(d3 > d2);
@@ -124,11 +169,13 @@ fn test_compute_ai_action_no_target() {
         &ship,
         Vec2::ZERO,
         Vec2::ZERO,
+        0.0,
         200.0,
         &Transform::default(),
         &pos_q,
         &vel_q,
         &empty_item_universe(),
+        &mut rand::thread_rng(),
     );
     assert!(result.is_none(), "no target → should return None");
 }
@@ -150,11 +197,13 @@ fn test_compute_ai_action_target_entity_missing() {
         &ship,
         Vec2::ZERO,
         Vec2::ZERO,
+        0.0,
         200.0,
         &Transform::default(),
         &pos_q,
         &vel_q,
         &empty_item_universe(),
+        &mut rand::thread_rng(),
     );
     assert!(
         result.is_none(),
@@ -175,28 +224,46 @@ fn test_compute_ai_action_forward_asteroid() {
     let (pos_q, vel_q) = state.get(&world);
 
     let mut ship = Ship::default();
+    ship.data.thrust = 100.0;
+    ship.data.max_speed = 200.0;
+    ship.data.torque = 10.0;
+    ship.data.angular_drag = 3.0;
     ship.nav_target = Some(Target::Asteroid(target));
 
-    let result = compute_ai_action(
-        &ship,
-        Vec2::ZERO,
-        Vec2::ZERO,
-        200.0,
-        &Transform::default(),
-        &pos_q,
-        &vel_q,
-        &empty_item_universe(),
-    );
-    let action = result.expect("valid forward target should produce an action");
+    // With no weapons the ship is out of firing range, so the PD pursuit
+    // branch runs. For a stationary forward target at 500 units with
+    // thrust=100, max_speed=200, desired acceleration saturates → thrust
+    // fires every tick.
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0xBEEF);
+    let mut fires = 0;
+    let trials = 50;
+    for _ in 0..trials {
+        let action = compute_ai_action(
+            &ship,
+            Vec2::ZERO,
+            Vec2::ZERO,
+            0.0,
+            200.0,
+            &Transform::default(),
+            &pos_q,
+            &vel_q,
+            &empty_item_universe(),
+            &mut rng,
+        )
+        .expect("valid forward target should produce an action");
+        assert_eq!(action.reverse, 0.0, "should not brake toward an asteroid");
+        assert!(
+            action.weapons_to_fire.is_empty(),
+            "default ship has no weapons"
+        );
+        if action.thrust > 0.5 {
+            fires += 1;
+        }
+    }
     assert!(
-        action.thrust > 0.5,
-        "should thrust toward forward target, got {}",
-        action.thrust
-    );
-    assert_eq!(action.reverse, 0.0, "should not brake toward an asteroid");
-    assert!(
-        action.weapons_to_fire.is_empty(),
-        "default ship has no weapons"
+        fires > trials / 2,
+        "expected mostly-saturating thrust, got {fires}/{trials}"
     );
 }
 
@@ -230,11 +297,13 @@ fn test_compute_ai_action_planet_braking() {
         &ship,
         Vec2::ZERO,
         vel,
+        0.0,
         200.0,
         &Transform::default(),
         &pos_q,
         &vel_q,
         &empty_item_universe(),
+        &mut rand::thread_rng(),
     );
     let action = result.expect("close planet should produce braking action");
     assert_eq!(action.reverse, 0.0, "should use turn+thrust, not reverse");
@@ -248,8 +317,14 @@ fn test_compute_ai_action_planet_braking() {
 
 #[test]
 fn test_compute_ai_action_planet_approach() {
+    // Stationary ship, far planet (5000 units) straight ahead. With the PD
+    // controller tuned to `k_x = thrust / max_speed²`, the desired acceleration
+    // is small compared to max thrust, so PWM thrust fires only probabilistically.
+    // We verify: (a) action produced, (b) turn is zero (already aligned), and
+    // (c) thrust fires at least sometimes across many trials.
+    use rand::SeedableRng;
+
     let mut world = World::new();
-    // Planet far away — 5000 units
     let planet = world
         .spawn((Position(Vec2::new(0.0, 5000.0)), LinearVelocity(Vec2::ZERO)))
         .id();
@@ -267,69 +342,125 @@ fn test_compute_ai_action_planet_approach() {
     ship.data.angular_drag = 1.0;
     ship.nav_target = Some(Target::Planet(planet));
 
-    let result = compute_ai_action(
-        &ship,
-        Vec2::ZERO,
-        Vec2::ZERO, // stationary, so braking_distance = 0
-        200.0,
-        &Transform::default(),
-        &pos_q,
-        &vel_q,
-        &empty_item_universe(),
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0xABCD);
+    let mut fires = 0;
+    let trials = 200;
+    for _ in 0..trials {
+        let action = compute_ai_action(
+            &ship,
+            Vec2::ZERO,
+            Vec2::ZERO,
+            0.0,
+            200.0,
+            &Transform::default(),
+            &pos_q,
+            &vel_q,
+            &empty_item_universe(),
+            &mut rng,
+        )
+        .expect("far planet should produce approach action");
+        assert_eq!(action.reverse, 0.0, "should not brake when far away");
+        assert_eq!(action.turn, 0.0, "already aligned → turn deadband");
+        if action.thrust > 0.5 {
+            fires += 1;
+        }
+    }
+    // With K_X_CONST=400 and D=5000, the PD requests ~50×a_max → clamps to
+    // thrust_prob=1.0, so thrust should fire every tick.
+    assert_eq!(
+        fires, trials,
+        "far target with saturated PD → thrust every tick, got {fires}/{trials}"
     );
-    let action = result.expect("far planet should produce approach action");
-    assert_eq!(action.reverse, 0.0, "should not brake when far away");
-    assert!(action.thrust > 0.5, "should thrust toward far planet");
 }
 
 #[test]
-fn test_compute_ai_action_planet_prepare_zone() {
+fn test_compute_ai_action_planet_pd_brakes_when_overshooting() {
+    // Ship close to target and moving fast toward it: PD wants negative
+    // acceleration (brake), so `direction` points backward, `target_angle ≈ π`
+    // (or ±π via the branch-cut fix). The controller should command a turn
+    // and should NOT thrust (cosine weighting zeros it out when facing away).
     let mut world = World::new();
-    let mut ship = Ship::default();
-    ship.data.thrust = 100.0;
-    ship.data.thrust_kp = 5.0;
-    ship.data.thrust_kd = 1.0;
-    ship.data.max_speed = 200.0;
-    ship.data.torque = 10.0;
-    ship.data.angular_drag = 3.0;
-
-    // Ship moving at 200 m/s toward a planet.
-    // braking_distance(200, 100, 5, 1, 200) ≈ 200
-    // turn_margin = 200 * PI * 3 / 10 ≈ 188
-    // brake_dist ≈ 388, prepare_dist ≈ 576
-    // Place planet at 500 units — inside prepare zone but outside brake zone.
     let planet = world
-        .spawn((Position(Vec2::new(0.0, 500.0)), LinearVelocity(Vec2::ZERO)))
+        .spawn((Position(Vec2::new(0.0, 50.0)), LinearVelocity(Vec2::ZERO)))
         .id();
-    ship.nav_target = Some(Target::Planet(planet));
 
     let mut state: SystemState<(Query<&Position>, Query<&LinearVelocity>)> =
         SystemState::new(&mut world);
     let (pos_q, vel_q) = state.get(&world);
 
-    let vel = Vec2::new(0.0, 200.0);
-    let result = compute_ai_action(
+    let mut ship = Ship::default();
+    ship.data.thrust = 100.0;
+    ship.data.max_speed = 200.0;
+    ship.data.torque = 10.0;
+    ship.data.angular_drag = 1.0;
+    ship.nav_target = Some(Target::Planet(planet));
+
+    // Fast flight toward target: PD says "brake", direction flips to −x.
+    let vel = Vec2::new(0.0, 500.0);
+    let action = compute_ai_action(
         &ship,
         Vec2::ZERO,
         vel,
+        0.0,
         200.0,
-        &Transform::default(), // faces +y = same as velocity
+        &Transform::default(),
         &pos_q,
         &vel_q,
         &empty_item_universe(),
-    );
-    let action = result.expect("prepare zone should produce action");
-    assert_eq!(action.reverse, 0.0, "should use turn+thrust, not reverse");
-    assert_eq!(
-        action.thrust, 0.0,
-        "should NOT thrust while in prepare zone (turning, not braking)"
-    );
-    // Ship faces +Y, velocity is +Y, retrograde is -Y → should be turning
+        &mut rand::thread_rng(),
+    )
+    .expect("close + fast → braking action");
+    assert_eq!(action.thrust, 0.0, "facing forward but PD wants to brake → no thrust");
     assert!(
         action.turn.abs() > 0.5,
-        "should be turning toward retrograde in prepare zone, got turn={}",
+        "should be turning toward retrograde, got turn={}",
         action.turn
     );
+}
+
+#[test]
+fn test_compute_ai_action_planet_pd_moderate_approach() {
+    // Ship moving at modest speed toward a planet just beyond the PD's
+    // saturation distance. With k_x ≈ 1, the desired acceleration stays below
+    // a_max, so `thrust_prob` is proportional (not saturating). Expect: turn
+    // in deadband (already aligned) and thrust fires some-but-not-all ticks.
+    use rand::SeedableRng;
+
+    let mut world = World::new();
+    let planet = world
+        .spawn((Position(Vec2::new(0.0, 500.0)), LinearVelocity(Vec2::ZERO)))
+        .id();
+    let mut state: SystemState<(Query<&Position>, Query<&LinearVelocity>)> =
+        SystemState::new(&mut world);
+    let (pos_q, vel_q) = state.get(&world);
+
+    let mut ship = Ship::default();
+    ship.data.thrust = 100.0;
+    ship.data.max_speed = 200.0;
+    ship.data.torque = 10.0;
+    ship.data.angular_drag = 3.0;
+    ship.nav_target = Some(Target::Planet(planet));
+
+    // Moving at 200 toward the planet: a = k_x·500 − k_v·200 = 500 − 400 = 100.
+    // Exactly at a_max → thrust_prob ≈ 1.0. Use a slightly slower ship so
+    // we're in the sub-saturation regime.
+    let vel = Vec2::new(0.0, 150.0);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0xFEED);
+    let action = compute_ai_action(
+        &ship,
+        Vec2::ZERO,
+        vel,
+        0.0,
+        200.0,
+        &Transform::default(),
+        &pos_q,
+        &vel_q,
+        &empty_item_universe(),
+        &mut rng,
+    )
+    .expect("valid PD action");
+    assert_eq!(action.turn, 0.0, "already aligned → turn deadband");
+    assert!(matches!(action.thrust, 0.0 | 1.0), "binary thrust output");
 }
 
 // ── Jump mechanic tests ──────────────────────────────────────────────────

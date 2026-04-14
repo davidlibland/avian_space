@@ -15,26 +15,6 @@ fn sample_save() -> PilotSave {
     }
 }
 
-fn empty_item_universe() -> ItemUniverse {
-    ItemUniverse {
-        weapons: HashMap::new(),
-        ships: HashMap::new(),
-        star_systems: HashMap::new(),
-        outfitter_items: HashMap::new(),
-        commodities: HashMap::new(),
-        global_average_price: HashMap::new(),
-        system_commodity_best_planet_to_sell: HashMap::new(),
-        system_planet_best_commodity_to_buy: HashMap::new(),
-        planet_best_margin: HashMap::new(),
-        planet_has_ammo_for: HashMap::new(),
-        asteroid_field_expected_value: HashMap::new(),
-        ship_credit_scale: HashMap::new(),
-        starting_system: "sol".to_string(),
-        starting_ship: "shuttle".to_string(),
-        enemies: HashMap::new(),
-    }
-}
-
 fn basic_item_universe() -> ItemUniverse {
     use crate::item_universe::StarSystem;
     use crate::ship::{Personality, ShipData};

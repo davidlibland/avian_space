@@ -128,27 +128,6 @@ fn test_action_to_ship_command() {
 }
 
 #[test]
-fn test_angle_to_discrete() {
-    use std::f32::consts::PI;
-
-    let (turn, thrust) = angle_to_discrete(PI / 2.0);
-    assert_eq!(turn, 0);
-    assert_eq!(thrust, 0);
-
-    let (turn, thrust) = angle_to_discrete(0.1);
-    assert_eq!(turn, 0);
-    assert_eq!(thrust, 1);
-
-    let (turn, thrust) = angle_to_discrete(-0.1);
-    assert_eq!(turn, 2);
-    assert_eq!(thrust, 1);
-
-    let (turn, thrust) = angle_to_discrete(-PI / 2.0);
-    assert_eq!(turn, 2);
-    assert_eq!(thrust, 0);
-}
-
-#[test]
 fn test_controls_to_discrete_roundtrip() {
     for thrust_idx in 0u8..=1 {
         for turn_idx in [0u8, 1, 2] {

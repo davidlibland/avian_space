@@ -35,14 +35,19 @@ use crate::value_fn;
 const PPO_GAMMA: f32 = 0.99;
 const PPO_LAMBDA: f32 = 0.95;
 const PPO_CLIP_EPS: f32 = 0.1;
-const PPO_ENTROPY_COEFF: f32 = 0.05;
+const PPO_ENTROPY_COEFF: f32 = 0.01;
+/// Coefficient on the behavioural-cloning auxiliary loss during PPO.
+/// The BC loss keeps the policy close to the rule-based expert and is added
+/// to the policy loss with this weight.
+const PPO_BC_COEFF: f32 = 0.03;
 const PPO_POLICY_LR: f64 = 3e-4;
 const PPO_VALUE_LR: f64 = 1e-3;
 /// Number of epochs for policy updates (fewer to limit policy drift).
 const PPO_POLICY_EPOCHS: usize = 2;
+
 /// Number of epochs for value function updates (more for better regression).
-const PPO_VALUE_EPOCHS: usize = 4;
-const PPO_MINI_BATCH_SIZE: usize = 256;
+const PPO_VALUE_EPOCHS: usize = 2;
+const PPO_MINI_BATCH_SIZE: usize = 512;
 /// Minimum segments before first update (~2048 steps at 128 steps/seg).
 const PPO_MIN_SEGMENTS: usize = 16;
 /// Maximum segments consumed per update cycle. Excess segments stay in the
@@ -119,7 +124,9 @@ impl ValueReplayBuffer {
             let step = ReplayStep {
                 self_feat: batch.self_flat[s_start..s_start + SELF_INPUT_DIM].to_vec(),
                 obj_feat: batch.obj_flat[o_start..o_start + N_OBJECTS * OBJECT_INPUT_DIM].to_vec(),
-                proj_feat: batch.proj_flat[p_start..p_start + model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM].to_vec(),
+                proj_feat: batch.proj_flat
+                    [p_start..p_start + model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM]
+                    .to_vec(),
                 returns: head_returns[i],
                 priority,
             };
@@ -153,10 +160,10 @@ impl ValueReplayBuffer {
         }
         let mut self_flat = Vec::with_capacity(n * SELF_INPUT_DIM);
         let mut obj_flat = Vec::with_capacity(n * N_OBJECTS * OBJECT_INPUT_DIM);
-        let mut proj_flat = Vec::with_capacity(n * model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM);
+        let mut proj_flat =
+            Vec::with_capacity(n * model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM);
         let mut ret_flat = Vec::with_capacity(n * N_REWARD_TYPES);
 
-        use rand::Rng;
         for _ in 0..n {
             let idx = rng.gen_range(0..self.steps.len());
             let step = &self.steps[idx];
@@ -184,6 +191,9 @@ pub struct PpoBatch {
     pub obj_flat: Vec<f32>,
     pub proj_flat: Vec<f32>,
     pub actions: Vec<DiscreteAction>,
+    /// Rule-based (expert) actions paired with each observation, used as BC
+    /// labels for the in-PPO BC auxiliary loss.
+    pub rule_based_actions: Vec<DiscreteAction>,
     /// Per-step per-head rewards, length = total_steps.
     pub rewards: Vec<[f32; N_REWARD_TYPES]>,
     pub dones: Vec<bool>,
@@ -213,6 +223,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
     let mut obj_flat = Vec::with_capacity(total_steps * N_OBJECTS * OBJECT_INPUT_DIM);
     let mut proj_flat = Vec::with_capacity(total_steps * model::PROJECTILES_FLAT_DIM);
     let mut actions = Vec::with_capacity(total_steps);
+    let mut rule_based_actions = Vec::with_capacity(total_steps);
     let mut rewards = Vec::with_capacity(total_steps);
     let mut dones = Vec::with_capacity(total_steps);
     let mut old_log_probs = Vec::with_capacity(total_steps);
@@ -228,6 +239,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
             obj_flat.extend_from_slice(o);
             proj_flat.extend_from_slice(&t.proj_obs);
             actions.push(t.action);
+            rule_based_actions.push(t.rule_based_action);
             rewards.push(t.rewards);
             dones.push(t.done);
             old_log_probs.push(t.log_prob);
@@ -246,6 +258,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
         obj_flat,
         proj_flat,
         actions,
+        rule_based_actions,
         rewards,
         dones,
         old_log_probs,
@@ -272,9 +285,9 @@ const ACTION_HEADS: [(usize, usize); 4] = [
 /// Returns `(log_probs [B], entropy [B])` where each is the sum across all 6 heads
 /// (4 action heads + nav target head + weapons target head).
 pub fn compute_log_probs_and_entropy<B: Backend>(
-    action_logits: Tensor<B, 2>,      // [B, POLICY_OUTPUT_DIM=9]
-    nav_target_logits: Tensor<B, 2>,  // [B, TARGET_OUTPUT_DIM=13]
-    wep_target_logits: Tensor<B, 2>,  // [B, TARGET_OUTPUT_DIM=13]
+    action_logits: Tensor<B, 2>,     // [B, POLICY_OUTPUT_DIM=9]
+    nav_target_logits: Tensor<B, 2>, // [B, TARGET_OUTPUT_DIM=13]
+    wep_target_logits: Tensor<B, 2>, // [B, TARGET_OUTPUT_DIM=13]
     actions: &[DiscreteAction],
     device: &B::Device,
 ) -> (Tensor<B, 1>, Tensor<B, 1>) {
@@ -288,7 +301,10 @@ pub fn compute_log_probs_and_entropy<B: Backend>(
         let log_p = log_softmax(logits.clone(), 1); // [B, C]
         // Gather log-prob at taken action: build [B, 1] index tensor, gather, squeeze.
         let idx_tensor = Tensor::<B, 2, Int>::from_data(TensorData::new(indices, [b, 1]), device);
-        let gathered: Tensor<B, 1> = log_p.clone().gather(1, idx_tensor).squeeze_dim::<1>(1)
+        let gathered: Tensor<B, 1> = log_p
+            .clone()
+            .gather(1, idx_tensor)
+            .squeeze_dim::<1>(1)
             .clamp(-20.0, 0.0); // prevent -inf from masked actions
 
         // Entropy: -sum(p * log_p, dim=1)
@@ -410,7 +426,9 @@ fn save_rl_buffer(segments: &[Segment], path: &str) {
             // Personality index.
             f.write_all(&[personality_index(&seg.personality) as u8])?;
             for t in &seg.transitions {
-                f.write_all(&[t.action.0, t.action.1, t.action.2, t.action.3, t.action.4, t.action.5])?;
+                f.write_all(&[
+                    t.action.0, t.action.1, t.action.2, t.action.3, t.action.4, t.action.5,
+                ])?;
                 for &r in &t.rewards {
                     f.write_all(&r.to_le_bytes())?;
                 }
@@ -494,17 +512,21 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
                 .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
                 .collect();
 
+            let action = (
+                action_buf[0],
+                action_buf[1],
+                action_buf[2],
+                action_buf[3],
+                action_buf[4],
+                action_buf[5],
+            );
             transitions.push(crate::rl_collection::Transition {
                 obs,
                 proj_obs: vec![0.0; model::PROJECTILES_FLAT_DIM],
-                action: (
-                    action_buf[0],
-                    action_buf[1],
-                    action_buf[2],
-                    action_buf[3],
-                    action_buf[4],
-                    action_buf[5],
-                ),
+                action,
+                // Legacy checkpoints predate the inline BC label — fall back
+                // to the executed action (identical under BC training).
+                rule_based_action: action,
                 rewards,
                 done,
                 log_prob,
@@ -512,9 +534,7 @@ fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
         }
 
         segments.push(Segment {
-            entity_id: 0,
             personality,
-            initial_hidden: vec![],
             transitions,
             bootstrap_value,
         });
@@ -619,6 +639,11 @@ pub fn spawn_ppo_training_thread(
         };
         let mut rng = thread_rng();
         let mut value_replay = ValueReplayBuffer::new(VALUE_REPLAY_CAPACITY);
+
+        // Loss fn reused for the BC auxiliary loss (labels come from each
+        // transition's stored `rule_based_action`, computed inline with PPO).
+        let bc_loss_fn =
+            burn::nn::loss::CrossEntropyLossConfig::new().init::<TrainBackend>(&device);
 
         // TensorBoard writer — logs go to the experiment run directory.
         let tb_dir = format!("{}/tb", experiment.run_dir);
@@ -753,8 +778,13 @@ pub fn spawn_ppo_training_thread(
             const NAV_TYPE_NAMES: [&str; N_NAV_TYPES] =
                 ["ship", "asteroid", "planet", "pickup", "none"];
             const N_WEP_TYPES: usize = 5;
-            const WEP_TYPE_NAMES: [&str; N_WEP_TYPES] =
-                ["ship_engage", "ship_hostile", "ship_neutral", "asteroid", "none"];
+            const WEP_TYPE_NAMES: [&str; N_WEP_TYPES] = [
+                "ship_engage",
+                "ship_hostile",
+                "ship_neutral",
+                "asteroid",
+                "none",
+            ];
             const N_SLOT_TYPES: usize = 4;
             const SLOT_TYPE_NAMES_LOG: [&str; N_SLOT_TYPES] =
                 ["ship", "asteroid", "planet", "pickup"];
@@ -764,7 +794,10 @@ pub fn spawn_ppo_training_thread(
             let mut slot_type_sums = [[0.0_f32; N_SLOT_TYPES]; N_PERSONALITIES];
             let mut pers_step_counts = [0u32; N_PERSONALITIES];
             {
-                use crate::rl_obs::{SLOT_IS_PRESENT, SLOT_TYPE_ONEHOT, SLOT_TYPE_SPECIFIC};
+                use crate::rl_obs::{
+                    SHIP_IS_HOSTILE, SHIP_SHOULD_ENGAGE, SLOT_IS_PRESENT, SLOT_TYPE_ONEHOT,
+                    SLOT_TYPE_SPECIFIC,
+                };
 
                 // Build step → personality mapping.
                 let mut step_personality = vec![0usize; total_steps];
@@ -800,8 +833,8 @@ pub fn spawn_ppo_training_thread(
                 let read_ship_hostility = |step: usize, slot: usize| -> (bool, bool) {
                     let base = step * model::N_OBJECTS * model::OBJECT_INPUT_DIM
                         + slot * model::OBJECT_INPUT_DIM;
-                    let is_hostile_idx = base + SLOT_TYPE_SPECIFIC + 4;
-                    let should_engage_idx = base + SLOT_TYPE_SPECIFIC + 5;
+                    let is_hostile_idx = base + SLOT_TYPE_SPECIFIC + SHIP_IS_HOSTILE;
+                    let should_engage_idx = base + SLOT_TYPE_SPECIFIC + SHIP_SHOULD_ENGAGE;
                     let is_hostile = is_hostile_idx < batch.obj_flat.len()
                         && batch.obj_flat[is_hostile_idx] > 0.5;
                     let should_engage = should_engage_idx < batch.obj_flat.len()
@@ -841,7 +874,7 @@ pub fn spawn_ppo_training_thread(
                                 }
                             }
                             1 => wep_target_counts[pi][3] += 1, // asteroid
-                            _ => wep_target_counts[pi][4] += 1,  // planet/pickup/empty → none
+                            _ => wep_target_counts[pi][4] += 1, // planet/pickup/empty → none
                         }
                     }
 
@@ -909,15 +942,53 @@ pub fn spawn_ppo_training_thread(
             let mut epoch_policy_loss = 0.0_f32;
             let mut epoch_value_loss = 0.0_f32;
             let mut epoch_entropy = 0.0_f32;
+            // Per-head mean(max(softmax)) — diagnostic for detecting bimodal /
+            // uniform policies.  Order: turn, thrust, fp, fs, nav, wep.
+            let mut epoch_head_max_prob = [0.0_f32; 6];
+            // Fraction of steps where the policy's sampled action equals the
+            // BC expert's action, per head.  Disagreement → PPO/BC conflict.
+            let mut epoch_head_agreement = [0.0_f32; 6];
+            let mut policy_epochs_run = 0usize;
+            let mut policy_mbs_total = 0usize;
             let mut epoch_frac_clipped = 0.0_f32;
             let mut epoch_mean_ratio = 0.0_f32;
+            let mut epoch_bc_loss = 0.0_f32;
+            let mut epoch_bc_batches = 0_usize;
             let mut total_mini_batches = 0_usize;
             // First-epoch stats for logging.
             let mut first_epoch_adv_mean = 0.0_f32;
             let mut first_epoch_adv_std = 0.0_f32;
+            let mut first_epoch_pers_adv_mean = [0.0_f32; N_PERSONALITIES];
+            let mut first_epoch_pers_adv_std = [0.0_f32; N_PERSONALITIES];
             let mut first_epoch_explained_var = 0.0_f32;
             let mut first_epoch_head_ev = [0.0_f32; N_REWARD_TYPES];
             let mut first_epoch_head_td = [0.0_f32; N_REWARD_TYPES];
+
+            // Upload the whole batch once, then slice on-GPU per mini-batch
+            // via `Tensor::select(0, idx_tensor)`.  Saves ~180
+            // `Tensor::from_data` calls per cycle.
+            let all_self = Tensor::<TrainBackend, 2>::from_data(
+                TensorData::new(batch.self_flat.clone(), [total_steps, SELF_INPUT_DIM]),
+                &device,
+            );
+            let all_obj = Tensor::<TrainBackend, 3>::from_data(
+                TensorData::new(
+                    batch.obj_flat.clone(),
+                    [total_steps, N_OBJECTS, OBJECT_INPUT_DIM],
+                ),
+                &device,
+            );
+            let all_proj = Tensor::<TrainBackend, 3>::from_data(
+                TensorData::new(
+                    batch.proj_flat.clone(),
+                    [
+                        total_steps,
+                        model::N_PROJECTILE_SLOTS,
+                        model::PROJ_INPUT_DIM,
+                    ],
+                ),
+                &device,
+            );
 
             for epoch in 0..PPO_VALUE_EPOCHS {
                 // 5a. Fresh multi-head value estimates (detached).
@@ -940,26 +1011,60 @@ pub fn spawn_ppo_training_thread(
                     PPO_LAMBDA,
                 );
 
-                // 5c. Normalize total advantages for policy.
                 let n = total_steps as f32;
-                let adv_mean: f32 = gae_result.total_advantages.iter().sum::<f32>() / n;
-                let adv_var: f32 = gae_result
-                    .total_advantages
-                    .iter()
-                    .map(|a| (a - adv_mean).powi(2))
-                    .sum::<f32>()
-                    / n;
-                let adv_std = adv_var.sqrt();
+
+                // 5c. Normalize total advantages for policy — per-personality so
+                // large-scale personalities (e.g. Miner) don't drown out
+                // small-scale ones (e.g. Fighter).
+                // Map each step to its segment's personality index.
+                let mut step_personality = vec![0usize; total_steps];
+                for (si, info) in batch.segment_infos.iter().enumerate() {
+                    for k in info.start_idx..info.end_idx {
+                        step_personality[k] = batch.personalities[si];
+                    }
+                }
+                let mut per_pers_mean = [0.0_f32; N_PERSONALITIES];
+                let mut per_pers_std = [1.0_f32; N_PERSONALITIES];
+                let mut per_pers_count = [0usize; N_PERSONALITIES];
+                for p in 0..N_PERSONALITIES {
+                    let vals: Vec<f32> = gae_result
+                        .total_advantages
+                        .iter()
+                        .zip(&step_personality)
+                        .filter_map(|(a, &pp)| (pp == p).then_some(*a))
+                        .collect();
+                    per_pers_count[p] = vals.len();
+                    if vals.is_empty() {
+                        continue;
+                    }
+                    let m = vals.iter().sum::<f32>() / vals.len() as f32;
+                    let v = vals.iter().map(|a| (a - m).powi(2)).sum::<f32>() / vals.len() as f32;
+                    per_pers_mean[p] = m;
+                    per_pers_std[p] = v.sqrt();
+                }
                 let norm_advantages: Vec<f32> = gae_result
                     .total_advantages
                     .iter()
-                    .map(|a| (a - adv_mean) / (adv_std + 1e-8))
+                    .zip(&step_personality)
+                    .map(|(a, &p)| (a - per_pers_mean[p]) / (per_pers_std[p] + 1e-8))
                     .collect();
+                // Aggregate stats for logging (weighted by per-pers count).
+                let total_count: f32 = per_pers_count.iter().sum::<usize>().max(1) as f32;
+                let adv_mean: f32 = (0..N_PERSONALITIES)
+                    .map(|p| per_pers_mean[p] * per_pers_count[p] as f32)
+                    .sum::<f32>()
+                    / total_count;
+                let adv_std: f32 = (0..N_PERSONALITIES)
+                    .map(|p| per_pers_std[p] * per_pers_count[p] as f32)
+                    .sum::<f32>()
+                    / total_count;
 
                 // First-epoch diagnostics: explained variance (total + per-head).
                 if epoch == 0 {
                     first_epoch_adv_mean = adv_mean;
                     first_epoch_adv_std = adv_std;
+                    first_epoch_pers_adv_mean = per_pers_mean;
+                    first_epoch_pers_adv_std = per_pers_std;
                     // Total explained variance.
                     let ret_mean: f32 = gae_result.total_returns.iter().sum::<f32>() / n;
                     let var_ret: f32 = gae_result
@@ -1016,61 +1121,112 @@ pub fn spawn_ppo_training_thread(
                 // Skip policy updates until value function is accurate enough.
                 let skip_policy = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
 
+                // Returns change per epoch (value estimates refresh) — upload once here.
+                let all_returns_flat: Vec<f32> = gae_result
+                    .head_returns
+                    .iter()
+                    .flat_map(|r| r.iter().copied())
+                    .collect();
+                let all_returns = Tensor::<TrainBackend, 2>::from_data(
+                    TensorData::new(all_returns_flat, [total_steps, N_REWARD_TYPES]),
+                    &device,
+                );
+
                 // 5d. Shuffle indices for mini-batching.
                 let mut indices: Vec<usize> = (0..total_steps).collect();
                 indices.shuffle(&mut rng);
+
+                // Accumulators for per-head diagnostics across policy mini-batches.
+                // Sync once at the end of the epoch to avoid per-mb GPU stalls.
+                let mut head_max_prob_sum: Vec<Option<Tensor<TrainBackend, 1>>> =
+                    (0..6).map(|_| None).collect();
+                let mut policy_mbs_this_epoch = 0usize;
 
                 // 5e. Mini-batch updates.
                 for mb_indices in indices.chunks(PPO_MINI_BATCH_SIZE) {
                     let mb = mb_indices.len();
 
-                    let mut mb_self = Vec::with_capacity(mb * SELF_INPUT_DIM);
-                    let mut mb_obj = Vec::with_capacity(mb * N_OBJECTS * OBJECT_INPUT_DIM);
+                    // Small CPU-side gathers (actions, scalars) — unchanged.
                     let mut mb_actions = Vec::with_capacity(mb);
                     let mut mb_old_lp = Vec::with_capacity(mb);
                     let mut mb_adv = Vec::with_capacity(mb);
-                    let mut mb_proj =
-                        Vec::with_capacity(mb * model::PROJECTILES_FLAT_DIM);
-                    // Per-head returns flattened to [mb * N_REWARD_TYPES] for the tensor.
-                    let mut mb_ret_flat = Vec::with_capacity(mb * N_REWARD_TYPES);
-
+                    let mut mb_rule_actions = Vec::with_capacity(mb);
                     for &i in mb_indices {
-                        let s_start = i * SELF_INPUT_DIM;
-                        mb_self
-                            .extend_from_slice(&batch.self_flat[s_start..s_start + SELF_INPUT_DIM]);
-                        let o_start = i * N_OBJECTS * OBJECT_INPUT_DIM;
-                        mb_obj.extend_from_slice(
-                            &batch.obj_flat[o_start..o_start + N_OBJECTS * OBJECT_INPUT_DIM],
-                        );
-                        let p_start = i * model::PROJECTILES_FLAT_DIM;
-                        mb_proj.extend_from_slice(
-                            &batch.proj_flat[p_start..p_start + model::PROJECTILES_FLAT_DIM],
-                        );
                         mb_actions.push(batch.actions[i]);
+                        mb_rule_actions.push(batch.rule_based_actions[i]);
                         mb_old_lp.push(batch.old_log_probs[i]);
                         mb_adv.push(norm_advantages[i]);
-                        mb_ret_flat.extend_from_slice(&gae_result.head_returns[i]);
                     }
 
-                    let self_t = Tensor::<TrainBackend, 2>::from_data(
-                        TensorData::new(mb_self, [mb, SELF_INPUT_DIM]),
+                    // Upload indices once; gather the per-mini-batch tensors on GPU.
+                    let idx_data: Vec<i64> = mb_indices.iter().map(|&i| i as i64).collect();
+                    let idx_t = Tensor::<TrainBackend, 1, Int>::from_data(
+                        TensorData::new(idx_data, [mb]),
                         &device,
                     );
-                    let obj_t = Tensor::<TrainBackend, 3>::from_data(
-                        TensorData::new(mb_obj, [mb, N_OBJECTS, OBJECT_INPUT_DIM]),
-                        &device,
-                    );
-                    let proj_t = Tensor::<TrainBackend, 3>::from_data(
-                        TensorData::new(mb_proj, [mb, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
-                        &device,
-                    );
+                    let self_t = all_self.clone().select(0, idx_t.clone());
+                    let obj_t = all_obj.clone().select(0, idx_t.clone());
+                    let proj_t = all_proj.clone().select(0, idx_t.clone());
+                    let targets = all_returns.clone().select(0, idx_t);
 
                     // ── Policy update (skipped during burn-in or after policy epochs) ──
                     if !skip_policy && epoch < PPO_POLICY_EPOCHS {
-                        let policy_grads = {
+                        let (policy_grads, (policy_loss_s, entropy_s, bc_loss_s, diag)) = {
                             let net = inner.policy_net.as_ref().unwrap();
+                            // Single forward — reused for PPO ratio/entropy AND
+                            // the BC auxiliary loss.
                             let (action_logits, nav_target_logits, wep_target_logits) =
                                 net.forward(self_t.clone(), obj_t.clone(), proj_t.clone());
+
+                            // Per-head max(softmax).mean() — detached, accumulated
+                            // on GPU across mini-batches to diagnose bimodal vs
+                            // uniform policies.  Order: turn, thrust, fp, fs, nav, wep.
+                            {
+                                use burn::tensor::activation::softmax;
+                                let slices: [(Tensor<TrainBackend, 2>, usize); 6] = [
+                                    (action_logits.clone().narrow(1, 0, 3), 0), // turn (3c)
+                                    (action_logits.clone().narrow(1, 3, 2), 1), // thrust (2c)
+                                    (action_logits.clone().narrow(1, 5, 2), 2), // fire_primary (2c)
+                                    (action_logits.clone().narrow(1, 7, 2), 3), // fire_secondary (2c)
+                                    (nav_target_logits.clone(), 4),             // nav (13c)
+                                    (wep_target_logits.clone(), 5),             // wep (13c)
+                                ];
+                                for (logit, h) in slices.iter() {
+                                    let mp: Tensor<TrainBackend, 1> = softmax(logit.clone(), 1)
+                                        .max_dim(1)
+                                        .mean();
+                                    head_max_prob_sum[*h] = Some(match head_max_prob_sum[*h].take() {
+                                        Some(acc) => acc + mp,
+                                        None => mp,
+                                    });
+                                }
+                            }
+                            // Per-head agreement with BC expert (CPU-side, free).
+                            let mut agree = [0u32; 6];
+                            for (a, r) in mb_actions.iter().zip(mb_rule_actions.iter()) {
+                                agree[0] += (a.0 == r.0) as u32;
+                                agree[1] += (a.1 == r.1) as u32;
+                                agree[2] += (a.2 == r.2) as u32;
+                                agree[3] += (a.3 == r.3) as u32;
+                                agree[4] += (a.4 == r.4) as u32;
+                                agree[5] += (a.5 == r.5) as u32;
+                            }
+                            let n = mb_actions.len().max(1) as f32;
+                            for h in 0..6 {
+                                epoch_head_agreement[h] += agree[h] as f32 / n;
+                            }
+                            policy_mbs_this_epoch += 1;
+
+                            // BC aux loss against expert labels, using the same logits.
+                            let bc_loss = crate::rl_collection::compute_bc_loss_from_logits(
+                                action_logits.clone(),
+                                nav_target_logits.clone(),
+                                wep_target_logits.clone(),
+                                &mb_rule_actions,
+                                &bc_loss_fn,
+                                &device,
+                            );
+
                             let (new_lp, entropy) = compute_log_probs_and_entropy(
                                 action_logits,
                                 nav_target_logits,
@@ -1087,17 +1243,27 @@ pub fn spawn_ppo_training_thread(
                                 &device,
                             );
                             let entropy_bonus = -(entropy.mean());
-                            let total_policy_loss =
-                                policy_loss.clone() + entropy_bonus.clone() * PPO_ENTROPY_COEFF;
+                            let total_policy_loss = policy_loss.clone()
+                                + entropy_bonus.clone() * PPO_ENTROPY_COEFF
+                                + bc_loss.clone() * PPO_BC_COEFF;
 
-                            epoch_policy_loss += f32::from(policy_loss.clone().into_scalar());
-                            epoch_entropy += f32::from((-entropy_bonus.clone()).into_scalar());
-                            epoch_frac_clipped += diag.frac_clipped;
-                            epoch_mean_ratio += diag.mean_ratio;
-
+                            // Backward first (schedules gradient computation).
                             let raw = total_policy_loss.backward();
-                            GradientsParams::from_grads(raw, net)
+                            let grads = GradientsParams::from_grads(raw, net);
+                            // Now sync scalars for logging.  Doing this after
+                            // backward means each scalar forces at most one
+                            // GPU→CPU stall, not one per tensor op.
+                            let policy_loss_s = f32::from(policy_loss.into_scalar());
+                            let entropy_s = f32::from((-entropy_bonus).into_scalar());
+                            let bc_loss_s = f32::from(bc_loss.into_scalar());
+                            (grads, (policy_loss_s, entropy_s, bc_loss_s, diag))
                         };
+                        epoch_policy_loss += policy_loss_s;
+                        epoch_entropy += entropy_s;
+                        epoch_frac_clipped += diag.frac_clipped;
+                        epoch_mean_ratio += diag.mean_ratio;
+                        epoch_bc_loss += bc_loss_s;
+                        epoch_bc_batches += 1;
                         let net = inner.policy_net.take().unwrap();
                         inner.policy_net =
                             Some(inner.policy_optim.step(PPO_POLICY_LR, net, policy_grads));
@@ -1108,10 +1274,6 @@ pub fn spawn_ppo_training_thread(
                         let vnet = inner.value_net.as_ref().unwrap();
                         let (value_out, _, _) = vnet.forward(self_t, obj_t, proj_t);
                         // value_out: [B, N_REWARD_TYPES]
-                        let targets = Tensor::<TrainBackend, 2>::from_data(
-                            TensorData::new(mb_ret_flat, [mb, N_REWARD_TYPES]),
-                            &device,
-                        );
                         let vloss = value_fn::huber_value_loss(value_out, targets, PPO_HUBER_DELTA);
 
                         epoch_value_loss += f32::from(vloss.clone().into_scalar());
@@ -1124,12 +1286,23 @@ pub fn spawn_ppo_training_thread(
 
                     total_mini_batches += 1;
                 }
+
+                // End-of-epoch sync for per-head max_prob accumulator.
+                if policy_mbs_this_epoch > 0 {
+                    for h in 0..6 {
+                        if let Some(acc) = head_max_prob_sum[h].take() {
+                            let mp = f32::from(acc.into_scalar()) / policy_mbs_this_epoch as f32;
+                            epoch_head_max_prob[h] += mp;
+                        }
+                    }
+                    policy_epochs_run += 1;
+                    policy_mbs_total += policy_mbs_this_epoch;
+                }
             }
 
             // ── Phase 5b: Extra value training from replay buffer ────────
             if value_replay.len() > 0 {
-                let replay_mb_size =
-                    (PPO_MINI_BATCH_SIZE as f32 * VALUE_REPLAY_FRACTION) as usize;
+                let replay_mb_size = (PPO_MINI_BATCH_SIZE as f32 * VALUE_REPLAY_FRACTION) as usize;
                 for _ in 0..VALUE_REPLAY_EXTRA_BATCHES {
                     if let Some((r_self, r_obj, r_proj, r_ret)) =
                         value_replay.sample(replay_mb_size.max(1), &mut rng)
@@ -1213,9 +1386,44 @@ pub fn spawn_ppo_training_thread(
             writer.add_scalar("train/entropy", avg_ent, update_cycle);
             writer.add_scalar("train/frac_clipped", avg_clip, update_cycle);
             writer.add_scalar("train/mean_ratio", avg_ratio, update_cycle);
+            if epoch_bc_batches > 0 {
+                let avg_bc = epoch_bc_loss / epoch_bc_batches as f32;
+                writer.add_scalar("train/bc_loss", avg_bc, update_cycle);
+            }
+            // Per-head policy diagnostics: max(softmax).mean() and BC agreement.
+            // max_prob ≈ 1/K uniform, ≈0.5 bimodal, →1.0 concentrated.
+            // agreement ≈ 1/K random, →1.0 policy matches BC expert.
+            if policy_epochs_run > 0 && policy_mbs_total > 0 {
+                let head_names = ["turn", "thrust", "fire_primary", "fire_secondary", "nav", "wep"];
+                for h in 0..6 {
+                    writer.add_scalar(
+                        &format!("policy/max_prob/{}", head_names[h]),
+                        epoch_head_max_prob[h] / policy_epochs_run as f32,
+                        update_cycle,
+                    );
+                    writer.add_scalar(
+                        &format!("policy/bc_agreement/{}", head_names[h]),
+                        epoch_head_agreement[h] / policy_mbs_total as f32,
+                        update_cycle,
+                    );
+                }
+            }
             // Advantage statistics.
             writer.add_scalar("train/advantage_mean", first_epoch_adv_mean, update_cycle);
             writer.add_scalar("train/advantage_std", first_epoch_adv_std, update_cycle);
+            for pi in 0..N_PERSONALITIES {
+                let pn = PERSONALITY_NAMES[pi];
+                writer.add_scalar(
+                    &format!("advantage_per_personality/{pn}/mean_raw"),
+                    first_epoch_pers_adv_mean[pi],
+                    update_cycle,
+                );
+                writer.add_scalar(
+                    &format!("advantage_per_personality/{pn}/std_raw"),
+                    first_epoch_pers_adv_std[pi],
+                    update_cycle,
+                );
+            }
             // Overall explained variance.
             writer.add_scalar(
                 "train/explained_variance",

@@ -1,9 +1,7 @@
 use super::*;
 use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, EntityKind, EntitySlotData, ObsInput, PlanetSlotData,
-    ShipSlotData, CORE_BLOCK_START, CORE_FEAT_SIZE, N_ENTITY_SLOTS, OBS_DIM, SLOT_IS_PRESENT,
-    SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
-    SLOT_IS_NAV_TARGET, SLOT_IS_WEAPONS_TARGET,
+    ShipSlotData, CORE_BLOCK_START, CORE_FEAT_SIZE, OBS_DIM, SLOT_IS_PRESENT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
 };
 use crate::ship::{Personality, Ship, ShipData};
 use std::collections::HashMap;
@@ -404,99 +402,110 @@ fn test_rlnet_target_logits_masked() {
     );
 }
 
-// ── sample_gumbel_like & coupled_gumbel_sample ──────────────────────────
-
-#[test]
-fn test_sample_gumbel_like_shape() {
-    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
-    let reference = Tensor::<InferBackend, 2>::zeros([4, 8], &device);
-    let g = sample_gumbel_like(&reference);
-    assert_eq!(g.shape().dims, [4, 8]);
-}
-
-#[test]
-fn test_sample_gumbel_like_finite() {
-    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
-    let reference = Tensor::<InferBackend, 2>::zeros([10, 20], &device);
-    let g = sample_gumbel_like(&reference);
-    let vals: Vec<f32> = g.into_data().into_vec().unwrap();
-    for (i, &v) in vals.iter().enumerate() {
-        assert!(v.is_finite(), "gumbel sample[{i}] is not finite: {v}");
-    }
-}
-
-#[test]
-fn test_sample_gumbel_like_not_constant() {
-    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
-    let reference = Tensor::<InferBackend, 2>::zeros([1, 100], &device);
-    let g = sample_gumbel_like(&reference);
-    let vals: Vec<f32> = g.into_data().into_vec().unwrap();
-    // At least some values should differ from the first.
-    let distinct = vals.iter().filter(|&&v| (v - vals[0]).abs() > 1e-6).count();
-    assert!(distinct > 0, "all gumbel samples are identical — RNG broken?");
-}
+// ── coupled_gumbel_sample ───────────────────────────────────────────────
 
 #[test]
 fn test_coupled_gumbel_sample_identical_logits() {
     // When logits_a == logits_b the same noise is added, so argmax must match.
-    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
-    let logits = Tensor::<InferBackend, 2>::zeros([32, 10], &device);
-    let (a, b) = coupled_gumbel_sample(logits.clone(), logits);
-    let va: Vec<i64> = a.into_data().into_vec().unwrap();
-    let vb: Vec<i64> = b.into_data().into_vec().unwrap();
-    assert_eq!(va, vb, "identical logits must produce identical samples");
-}
-
-#[test]
-fn test_coupled_gumbel_sample_output_shapes() {
-    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
-    let logits_a = Tensor::<InferBackend, 2>::zeros([5, 8], &device);
-    let logits_b = Tensor::<InferBackend, 2>::zeros([5, 8], &device);
-    let (a, b) = coupled_gumbel_sample(logits_a, logits_b);
-    assert_eq!(a.shape().dims, [5, 1], "argmax output should be [batch, 1]");
-    assert_eq!(b.shape().dims, [5, 1]);
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0xC0FFEE);
+    let logits = vec![0.1_f32, -0.3, 0.7, 0.0, -1.2, 0.5, 0.2, -0.4, 1.1, -0.1];
+    for _ in 0..100 {
+        let mut lp = 0.0;
+        let (a, b) = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp);
+        assert_eq!(a, b, "identical logits must produce identical samples");
+    }
 }
 
 #[test]
 fn test_coupled_gumbel_sample_in_range() {
-    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let num_classes = 7;
-    let logits_a = Tensor::<InferBackend, 2>::random(
-        [20, num_classes],
-        Distribution::Default,
-        &device,
-    );
-    let logits_b = Tensor::<InferBackend, 2>::random(
-        [20, num_classes],
-        Distribution::Default,
-        &device,
-    );
-    let (a, b) = coupled_gumbel_sample(logits_a, logits_b);
-    let va: Vec<i64> = a.into_data().into_vec().unwrap();
-    let vb: Vec<i64> = b.into_data().into_vec().unwrap();
-    for (i, (&ai, &bi)) in va.iter().zip(vb.iter()).enumerate() {
-        assert!(ai >= 0 && ai < num_classes as i64, "a[{i}]={ai} out of range");
-        assert!(bi >= 0 && bi < num_classes as i64, "b[{i}]={bi} out of range");
+    let logits_a: Vec<f32> = (0..num_classes).map(|i| (i as f32) * 0.1 - 0.3).collect();
+    let logits_b: Vec<f32> = (0..num_classes).map(|i| (i as f32) * -0.2 + 0.1).collect();
+    for _ in 0..50 {
+        let mut lp = 0.0;
+        let (a, b) = coupled_gumbel_sample(&logits_a, &logits_b, &mut rng, &mut lp);
+        assert!(a < num_classes, "a={a} out of range");
+        assert!(b < num_classes, "b={b} out of range");
     }
 }
 
 #[test]
 fn test_coupled_gumbel_sample_dominated_logit() {
-    // One logit much larger → should almost always be selected for both.
-    let device: <InferBackend as burn::prelude::Backend>::Device = Default::default();
-    let mut data = vec![0.0_f32; 5];
-    data[2] = 100.0; // dominant
-    let logits = Tensor::<InferBackend, 2>::from_data(
-        TensorData::new(data, [1, 5]),
-        &device,
-    );
-    // Run many times and check the dominant index wins.
+    // One logit much larger → it should always be selected for both heads.
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+    let mut logits = vec![0.0_f32; 5];
+    logits[2] = 100.0;
     for _ in 0..50 {
-        let (a, b) = coupled_gumbel_sample(logits.clone(), logits.clone());
-        let va: Vec<i64> = a.into_data().into_vec().unwrap();
-        let vb: Vec<i64> = b.into_data().into_vec().unwrap();
-        assert_eq!(va[0], 2, "dominant logit should win for a");
-        assert_eq!(vb[0], 2, "dominant logit should win for b");
+        let mut lp = 0.0;
+        let (a, b) = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp);
+        assert_eq!(a, 2, "dominant logit should win for a");
+        assert_eq!(b, 2, "dominant logit should win for b");
+    }
+}
+
+#[test]
+fn test_coupled_gumbel_sample_log_prob_accumulates() {
+    // For equal logits, log-prob per head is -ln(K); sum is -2 ln(K).
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(123);
+    let k = 8;
+    let logits = vec![0.0_f32; k];
+    let mut lp = 0.0;
+    let _ = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp);
+    let expected = -2.0 * (k as f32).ln();
+    assert!((lp - expected).abs() < 1e-5, "lp={lp} expected={expected}");
+}
+
+#[test]
+fn test_coupled_gumbel_sample_distribution() {
+    // Seeded empirical-distribution check: the marginal over `a` should
+    // match softmax(logits_a), and likewise for `b` — the shared Gumbel
+    // noise must not bias either marginal.
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0xBEEF_CAFE);
+
+    let logits_a = vec![0.0_f32, 1.0, -0.5, 2.0];
+    let logits_b = vec![1.5_f32, -1.0, 0.5, 0.2];
+    let k = logits_a.len();
+
+    fn softmax(logits: &[f32]) -> Vec<f32> {
+        let m = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let exps: Vec<f32> = logits.iter().map(|l| (l - m).exp()).collect();
+        let s: f32 = exps.iter().sum();
+        exps.into_iter().map(|e| e / s).collect()
+    }
+    let expected_a = softmax(&logits_a);
+    let expected_b = softmax(&logits_b);
+
+    let n = 200_000;
+    let mut count_a = vec![0u32; k];
+    let mut count_b = vec![0u32; k];
+    for _ in 0..n {
+        let mut lp = 0.0;
+        let (a, b) = coupled_gumbel_sample(&logits_a, &logits_b, &mut rng, &mut lp);
+        count_a[a] += 1;
+        count_b[b] += 1;
+    }
+
+    // Tolerance ~0.01 easily covers sampling noise at n=200k for these probs.
+    let tol = 0.01_f32;
+    for i in 0..k {
+        let freq_a = count_a[i] as f32 / n as f32;
+        let freq_b = count_b[i] as f32 / n as f32;
+        assert!(
+            (freq_a - expected_a[i]).abs() < tol,
+            "a[{i}]: freq={freq_a}, expected={}",
+            expected_a[i]
+        );
+        assert!(
+            (freq_b - expected_b[i]).abs() < tol,
+            "b[{i}]: freq={freq_b}, expected={}",
+            expected_b[i]
+        );
     }
 }
 

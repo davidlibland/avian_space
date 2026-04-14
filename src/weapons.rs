@@ -39,12 +39,9 @@ pub struct Projectile {
 }
 
 /// Marks a projectile as a tracer — tracked by the RL observation system
-/// across its full lifetime. The `slot` field is the index into the ship's
-/// `TracerSlots` array (0..K_OWN_PROJECTILES-1).
+/// across its full lifetime.
 #[derive(Component)]
-pub struct Tracer {
-    pub slot: u8,
-}
+pub struct Tracer;
 
 /// Per-ship resource tracking which tracer slots are in use.
 /// Each slot is `None` (free) or `Some(projectile_entity)`.
@@ -65,10 +62,7 @@ impl TracerSlots {
 
     /// Find the next free slot. Returns `None` if all slots are occupied.
     pub fn next_free_slot(&self) -> Option<u8> {
-        self.slots
-            .iter()
-            .position(|s| s.is_none())
-            .map(|i| i as u8)
+        self.slots.iter().position(|s| s.is_none()).map(|i| i as u8)
     }
 
     /// Assign a projectile to a slot.
@@ -251,12 +245,18 @@ impl WeaponSystem {
 pub fn weapon_fire(
     mut reader: MessageReader<FireCommand>,
     mut commands: Commands,
-    mut ships: Query<(&Transform, &mut Ship, Option<&mut TracerSlots>)>,
+    mut ships: Query<(
+        &Transform,
+        &mut Ship,
+        &LinearVelocity,
+        Option<&mut TracerSlots>,
+    )>,
     item_universe: Res<ItemUniverse>,
     asset_server: Res<AssetServer>,
 ) {
     for cmd in reader.read() {
-        let Ok((ship_transform, mut ship, tracer_slots)) = ships.get_mut(cmd.ship) else {
+        let Ok((ship_transform, mut ship, linear_velocity, tracer_slots)) = ships.get_mut(cmd.ship)
+        else {
             continue;
         };
         let Some(specific) = ship.weapon_systems.find_weapon(&cmd.weapon_type) else {
@@ -276,7 +276,7 @@ pub fn weapon_fire(
         };
         let forward = ship_transform.rotation * Vec3::Y;
         let tip = ship_transform.translation + forward * 20.0;
-        let vel = forward.truncate() * weapon.speed;
+        let vel = forward.truncate() * weapon.speed + linear_velocity.0;
         let [r, g, b] = weapon.color;
         let sprite = if let Some(path) = &weapon.sprite_path {
             Sprite::from_image(asset_server.load(path.clone()))
@@ -297,8 +297,13 @@ pub fn weapon_fire(
             Collider::circle(10.),
             CollisionLayers::new(GameLayer::Weapon, [GameLayer::Asteroid, GameLayer::Ship]),
             RigidBody::Dynamic,
+            // Swept CCD prevents fast projectiles from tunneling through ships
+            // at the 50ms headless training timestep (laser travels 25 units/step
+            // vs 9-unit corvette radius).
+            SweptCcd::LINEAR,
             LinearVelocity(vel),
-            Transform::from_translation(tip.xy().extend(-0.3)).with_rotation(ship_transform.rotation),
+            Transform::from_translation(tip.xy().extend(-0.3))
+                .with_rotation(ship_transform.rotation),
             sprite,
         ));
         // Decrease the ammo:
@@ -320,7 +325,7 @@ pub fn weapon_fire(
             if ts.should_trace(&cmd.weapon_type, &weapon_names) {
                 if let Some(slot) = ts.next_free_slot() {
                     let proj_entity = entity_cmd.id();
-                    entity_cmd.insert(Tracer { slot });
+                    entity_cmd.insert(Tracer);
                     ts.assign(slot, proj_entity);
                 }
             }

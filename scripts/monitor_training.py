@@ -20,8 +20,8 @@ import numpy as np
 from tbparse import SummaryReader
 
 PERSONALITIES = ["fighter", "miner", "trader"]
-REWARD_TYPES = ["health", "weapon_hit", "landing", "cargo_sold", "pickup", "nav_target", "weapons_target", "movement"]
-REWARD_WEIGHTS = [1.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 0.1]  # keep in sync with consts.rs
+REWARD_TYPES = ["landing", "cargo_sold", "ship_hit", "asteroid_hit", "pickup", "health_gated", "health_raw", "damage"]
+REWARD_WEIGHTS = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0]  # keep in sync with consts.rs
 
 
 def find_latest_tb_dir(base: str = "experiments") -> str:
@@ -40,6 +40,38 @@ def get(df, tag):
     return df[df["tag"] == tag]["value"].values
 
 
+def mean_se(vals, k=10):
+    """Return (mean, standard_error_of_mean) over the last k samples.
+
+    Returns (nan, nan) if fewer than 2 samples available.
+    """
+    if len(vals) < 2:
+        return float("nan"), float("nan")
+    window = vals[-k:] if len(vals) >= k else vals
+    n = len(window)
+    m = float(np.mean(window))
+    sd = float(np.std(window, ddof=1)) if n > 1 else 0.0
+    return m, sd / np.sqrt(n)
+
+
+def windowed_z(vals, frac=0.25):
+    """Compare last `frac` of `vals` against first `frac`. Returns
+    (delta, pooled_se, z, n_each). z is `delta / pooled_se`.
+    """
+    if len(vals) < 8:
+        return None
+    q = max(2, len(vals) // int(1 / frac))
+    early = np.array(vals[:q])
+    late = np.array(vals[-q:])
+    m_e, m_l = float(np.mean(early)), float(np.mean(late))
+    se_e = float(np.std(early, ddof=1)) / np.sqrt(len(early)) if len(early) > 1 else 0.0
+    se_l = float(np.std(late, ddof=1)) / np.sqrt(len(late)) if len(late) > 1 else 0.0
+    pooled_se = float(np.sqrt(se_e ** 2 + se_l ** 2))
+    delta = m_l - m_e
+    z = delta / pooled_se if pooled_se > 0 else 0.0
+    return delta, pooled_se, z, len(early)
+
+
 def print_section(title):
     print(f"\n{'=' * 70}")
     print(f"  {title}")
@@ -47,10 +79,22 @@ def print_section(title):
 
 
 def main():
-    tb_dir = sys.argv[1] if len(sys.argv) > 1 else find_latest_tb_dir()
+    # Support: monitor_training.py [tb_dir] [--as-of "YYYY-MM-DD HH:MM"]
+    args = sys.argv[1:]
+    as_of = None
+    if "--as-of" in args:
+        i = args.index("--as-of")
+        as_of = args[i + 1]
+        args = args[:i] + args[i + 2:]
+    tb_dir = args[0] if args else find_latest_tb_dir()
     print(f"Reading: {tb_dir}")
-    reader = SummaryReader(tb_dir)
+    reader = SummaryReader(tb_dir, extra_columns={"wall_time"})
     df = reader.scalars
+    if as_of is not None:
+        import datetime as _dt
+        cutoff = _dt.datetime.strptime(as_of, "%Y-%m-%d %H:%M").timestamp()
+        df = df[df["wall_time"] <= cutoff].reset_index(drop=True)
+        print(f"Filtered to wall_time <= {as_of} ({len(df)} scalar events).")
     n = len(get(df, "reward/mean_per_step"))
     print(f"Total update cycles: {n}")
 
@@ -95,23 +139,27 @@ def main():
         cells = "".join(f"{v:12.5f}" for v in row_vals)
         print(f"{pers:>12}{cells}  {total:8.5f}")
 
-    # ── Reward evolution ──────────────────────────────────────────────────
-    print_section("REWARD TREND (first quarter → last quarter, % change)")
+    # ── Reward evolution: z-scored first-quarter vs last-quarter ──────────
+    print_section("REWARD TREND (last-quarter vs first-quarter, |z|>2 = significant)")
+    print("  Δ = late_mean - early_mean. z = Δ / pooled_se. Flagged: ↑ z>2, ↓ z<-2, ~ otherwise.")
     for pers in PERSONALITIES:
-        changes = []
+        signif, mild = [], []
         for rtype in REWARD_TYPES:
             vals = get(df, f"reward_per_step/{pers}/{rtype}")
-            if len(vals) >= 8:
-                q = len(vals) // 4
-                early = np.mean(vals[:q])
-                late = np.mean(vals[-q:])
-                pct = (late - early) / (abs(early) + 1e-8) * 100
-                changes.append(f"{rtype}={pct:+.0f}%")
-        if changes:
-            print(f"  {pers:>10}: {', '.join(changes)}")
+            r = windowed_z(vals)
+            if r is None:
+                continue
+            delta, _se, z, _n = r
+            tag = "↑" if z > 2 else "↓" if z < -2 else "~"
+            entry = f"{rtype}{tag}{delta:+.2g}(z={z:+.1f})"
+            (signif if abs(z) > 2 else mild).append(entry)
+        if signif:
+            print(f"  {pers:>10}  significant: {', '.join(signif)}")
+        if mild:
+            print(f"  {pers:>10}  noise:       {', '.join(mild)}")
 
-    # ── Training health ───────────────────────────────────────────────────
-    print_section("TRAINING HEALTH (last 5 cycles)")
+    # ── Training health (last-10 mean ± stderr; also raw last-5) ──────────
+    print_section("TRAINING HEALTH (mean±se over last 10, raw last 5)")
     for tag, label in [
         ("train/policy_loss", "Policy loss"),
         ("train/value_loss", "Value loss"),
@@ -122,8 +170,44 @@ def main():
     ]:
         vals = get(df, tag)
         if len(vals) >= 5:
+            m, se = mean_se(vals, 10)
             last5 = vals[-5:]
-            print(f"  {label:25s}  [{', '.join(f'{v:.4f}' for v in last5)}]")
+            print(
+                f"  {label:25s}  {m:.4f}±{se:.4f}  "
+                f"[{', '.join(f'{v:.4f}' for v in last5)}]"
+            )
+
+    # ── Policy concentration + BC agreement ──────────────────────────────
+    # max_prob: mean of max(softmax) per action head, averaged over last cycles.
+    #   ≈ 1/K uniform (entropy bonus dominant); ≈ 0.5 bimodal (PPO/BC conflict);
+    #   → 1.0 concentrated (policy converged).
+    # bc_agreement: fraction of steps where sampled action == BC expert action.
+    #   ≈ 1/K random; → 1.0 policy tracks expert.
+    head_names = ["turn", "thrust", "fire_primary", "fire_secondary", "nav", "wep"]
+    head_k = [3, 2, 2, 2, 13, 13]  # num classes per head (for "uniform" baseline)
+    if any(len(get(df, f"policy/max_prob/{h}")) > 0 for h in head_names):
+        print_section("POLICY CONCENTRATION & BC AGREEMENT (last-10 mean±se)")
+        print(f"  {'head':>16}  {'max_prob':>16}  {'bc_agreement':>16}   (interp per head)")
+        for h, k in zip(head_names, head_k):
+            mp = get(df, f"policy/max_prob/{h}")
+            ag = get(df, f"policy/bc_agreement/{h}")
+            if len(mp) < 2 or len(ag) < 2:
+                continue
+            m_mp, se_mp = mean_se(mp, 10)
+            m_ag, se_ag = mean_se(ag, 10)
+            # Flag interpretation per head.
+            uniform = 1.0 / k
+            flag = ""
+            if m_mp < uniform + 0.1:
+                flag = " ⚠ near-uniform"
+            elif 0.35 < m_mp < 0.65 and k > 2:
+                flag = " ⚠ bimodal-ish"
+            elif m_mp > 0.85:
+                flag = " concentrated"
+            print(
+                f"  {h:>16}  {m_mp:.3f}±{se_mp:.3f}        {m_ag:.3f}±{se_ag:.3f}"
+                f"   (uniform={uniform:.2f}){flag}"
+            )
 
     # ── Per-head value diagnostics ────────────────────────────────────────
     print_section("VALUE HEAD DIAGNOSTICS (last 5)")

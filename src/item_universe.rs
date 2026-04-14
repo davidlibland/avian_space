@@ -183,15 +183,6 @@ impl ItemUniverse {
     /// weapon type that appears in the ship's base_weapons.
     fn compute_planet_ammo(&mut self) {
         use std::collections::HashSet;
-        // Collect all secondary weapon types from outfitter items.
-        let secondary_types: HashSet<&str> = self
-            .outfitter_items
-            .iter()
-            .filter_map(|(_, item)| match item {
-                OutfitterItem::SecondaryWeapon { weapon_type, .. } => Some(weapon_type.as_str()),
-                _ => None,
-            })
-            .collect();
 
         for system in self.star_systems.values() {
             for (planet_name, planet) in &system.planets {

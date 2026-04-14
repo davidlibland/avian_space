@@ -16,6 +16,7 @@ mod ai_ships;
 mod consts;
 mod gae;
 mod model;
+mod optimal_control;
 mod pickups;
 mod ppo;
 mod rl_collection;
@@ -139,7 +140,11 @@ fn parse_args() -> AppArgs {
             _ => {}
         }
     }
-    AppArgs { mode, fresh, headless }
+    AppArgs {
+        mode,
+        fresh,
+        headless,
+    }
 }
 
 #[derive(Resource)]
@@ -162,7 +167,7 @@ fn main() {
         use bevy::app::ScheduleRunnerPlugin;
         use bevy::time::TimeUpdateStrategy;
         use bevy::window::WindowPlugin;
-        use bevy::winit::WinitPlugin;
+        
         // DefaultPlugins with no window and no exit-on-close, plus a headless
         // schedule runner.  The render pipeline still initialises (to satisfy
         // asset-type registrations) but draws nothing because there is no
@@ -257,10 +262,7 @@ fn main() {
 
     if headless {
         // No player → only collision_system (no keyboard_input / accelerate_for_jump).
-        app.add_systems(
-            Update,
-            collision_system.run_if(in_state(PlayState::Flying)),
-        );
+        app.add_systems(Update, collision_system.run_if(in_state(PlayState::Flying)));
     } else {
         app.add_systems(
             Update,
@@ -343,9 +345,12 @@ fn accelerate_for_jump(
         let r = ship.data.radius;
         let mass_val = density * std::f32::consts::PI * r * r;
         let inertia_val = 0.5 * mass_val * r * r;
-        commands
-            .entity(entity)
-            .insert((Sensor, Mass(mass_val), AngularInertia(inertia_val)));
+        commands.entity(entity).insert((
+            Sensor,
+            Mass(mass_val),
+            AngularInertia(inertia_val),
+            AngularVelocity(0.0),
+        ));
     }
 
     let forward = (transform.rotation * Vec3::Y).xy();
@@ -559,7 +564,6 @@ fn collision_system(
             if let Ok(projectile) = weapons.get(weapon_entity) {
                 score_hit_writer.write(ScoreHit::OnAsteroid {
                     source: projectile.owner,
-                    target: asteroid_entity,
                 });
             }
         }

@@ -30,6 +30,7 @@ use avian2d::prelude::*;
 use bevy::prelude::*;
 use burn::nn::loss::CrossEntropyLossConfig;
 use burn::optim::{GradientsParams, Optimizer};
+use burn::tensor::backend::Backend;
 use burn::tensor::{Int, TensorData};
 use rand::Rng;
 
@@ -38,7 +39,7 @@ use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::asteroids::{Asteroid, AsteroidField};
 use crate::item_universe::ItemUniverse;
 use crate::model::{
-    self, HIDDEN_DIM, InferenceNet, N_OBJECTS, OBJECT_INPUT_DIM, POLICY_OUTPUT_DIM, RLInner,
+    self, InferenceNet, N_OBJECTS, OBJECT_INPUT_DIM, RLInner,
     RLResource, SELF_INPUT_DIM, TrainBackend, split_obs, training_net_to_bytes,
 };
 use crate::pickups::Pickup;
@@ -46,11 +47,11 @@ use crate::planets::Planet;
 use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, DETECTION_RADIUS, DiscreteAction, EntityKind,
     EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_OTHER_PROJECTILES, K_PICKUPS,
-    K_PLANETS, ObsInput, PickupSlotData, PlanetSlotData, ProjectileSlotData, SELF_SIZE, SLOT_SIZE,
+    K_PLANETS, ObsInput, PickupSlotData, PlanetSlotData, ProjectileSlotData,
     ShipSlotData,
 };
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target};
-use crate::weapons::{FireCommand, GuidedMissile, Projectile, Tracer, TracerSlots};
+use crate::weapons::{FireCommand, GuidedMissile, Projectile, TracerSlots};
 use crate::{GameLayer, PlayState};
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,10 @@ pub struct Transition {
     /// Flat projectile features `[K_PROJECTILES × PROJ_SLOT_SIZE]`.
     pub proj_obs: Vec<f32>,
     pub action: DiscreteAction,
+    /// Rule-based (expert) action at the same `obs`, used as the BC label
+    /// for the in-PPO BC auxiliary loss.  Computed every step regardless of
+    /// whether the executed `action` came from the policy or the rule-based AI.
+    pub rule_based_action: DiscreteAction,
     /// Per-reward-type rewards, indexed by `consts::REWARD_*`.
     pub rewards: [f32; crate::consts::N_REWARD_TYPES],
     /// True when the ship died at this step (terminal state).
@@ -102,11 +107,7 @@ pub struct Transition {
 
 /// A fixed-length segment of transitions, ready for PPO / recurrent-PPO training.
 pub struct Segment {
-    /// Entity bits — stable ID for logging and debugging.
-    pub entity_id: u64,
     pub personality: Personality,
-    /// LSTM/GRU hidden state at the start of this segment (zeros on first segment).
-    pub initial_hidden: Vec<f32>,
     pub transitions: Vec<Transition>,
     /// None when the last transition is terminal; `Some([V_1(s_T), ..])` when truncated.
     pub bootstrap_value: Option<[f32; crate::consts::N_REWARD_TYPES]>,
@@ -151,24 +152,6 @@ pub enum AIPlayMode {
 #[derive(Resource)]
 struct RLStepTimer(Timer);
 
-/// Engagement shaping ramp: linearly increases from 0 to 1 over RAMP_DURATION
-/// seconds of game time, preventing sudden reward distribution changes.
-#[derive(Resource)]
-struct EngagementRamp {
-    elapsed: f32,
-}
-
-/// Duration (in game-time seconds) over which engagement rewards ramp from 0→1.
-/// TODO: Remove this ramp once training has stabilised with the new engagement
-/// rewards. Set `engagement_ramp` to a constant 1.0 and delete this resource.
-const ENGAGEMENT_RAMP_DURATION: f32 = 7200.0; // 2 hours of game time
-
-impl EngagementRamp {
-    fn factor(&self) -> f32 {
-        (self.elapsed / ENGAGEMENT_RAMP_DURATION).clamp(0.0, 1.0)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
@@ -189,10 +172,7 @@ pub struct RLReward {
 /// despawned, carrying the current segment so it can be flushed with done=true.
 #[derive(Event, Message)]
 pub struct RLShipDied {
-    pub entity: Entity,
-    pub entity_id: u64,
     pub personality: Personality,
-    pub initial_hidden: Vec<f32>,
     pub transitions: Vec<Transition>,
 }
 
@@ -200,10 +180,7 @@ pub struct RLShipDied {
 /// The segment is flushed as a truncated (non-terminal) trajectory.
 #[derive(Event, Message)]
 pub struct RLShipJumped {
-    pub entity: Entity,
-    pub entity_id: u64,
     pub personality: Personality,
-    pub initial_hidden: Vec<f32>,
     pub transitions: Vec<Transition>,
 }
 
@@ -215,22 +192,22 @@ pub struct RLShipJumped {
 #[derive(Component)]
 pub struct RLAgent {
     pub personality: Personality,
-    /// Placeholder LSTM/GRU hidden state (zeros until a model is integrated).
-    pub hidden_state: Vec<f32>,
     /// Observation from the previous decision step.
     pub last_obs: Option<Vec<f32>>,
     /// Projectile observation from the previous decision step.
     pub last_proj_obs: Option<Vec<f32>>,
     /// Action chosen at the previous decision step.
     pub last_action: Option<DiscreteAction>,
+    /// Rule-based (expert) action at the previous decision step — used as the
+    /// BC label regardless of whether the executed action came from the policy
+    /// or the rule-based AI.
+    pub last_rule_based_action: Option<DiscreteAction>,
     /// Log-probability of the action under the policy at sampling time.
     pub last_log_prob: f32,
     /// Per-type accumulated rewards since the last decision step.
     pub accumulated_rewards: [f32; crate::consts::N_REWARD_TYPES],
     /// Transitions collected since the last segment flush.
     pub segment_buffer: Vec<Transition>,
-    /// Hidden state at the start of the current segment (for BPTT).
-    pub segment_initial_hidden: Vec<f32>,
     /// Number of decision steps since the last segment flush.
     pub steps_since_flush: usize,
     /// Maps each observation entity slot to the `Target` it represents.
@@ -243,14 +220,13 @@ impl RLAgent {
     pub fn new(personality: Personality) -> Self {
         Self {
             personality,
-            hidden_state: vec![0.0; 64], // placeholder size
             last_obs: None,
             last_proj_obs: None,
             last_action: None,
+            last_rule_based_action: None,
             last_log_prob: 0.0,
             accumulated_rewards: [0.0; crate::consts::N_REWARD_TYPES],
             segment_buffer: Vec::with_capacity(RL_SEGMENT_LEN),
-            segment_initial_hidden: vec![0.0; 64],
             steps_since_flush: 0,
             slot_targets: vec![None; model::N_OBJECTS],
         }
@@ -292,6 +268,8 @@ impl Plugin for RLCollectionPlugin {
             }
             crate::AppMode::RLTraining => {
                 crate::ppo::spawn_ppo_training_thread(rl_rx, inference_net_arc, experiment);
+                // BC labels now travel inline with each `Transition`, so the
+                // separate BC channel is unused during RL training.
                 drop(bc_rx);
             }
             crate::AppMode::Inference => {
@@ -333,7 +311,6 @@ impl Plugin for RLCollectionPlugin {
                 RL_STEP_PERIOD,
                 TimerMode::Repeating,
             )))
-            .insert_resource(EngagementRamp { elapsed: 0.0 })
             .add_message::<RLReward>()
             .add_message::<RLShipDied>()
             .add_message::<RLShipJumped>()
@@ -377,7 +354,6 @@ fn accumulate_rewards(mut reward_events: MessageReader<RLReward>, mut agents: Qu
 fn rl_step(
     time: Res<Time>,
     mut timer: ResMut<RLStepTimer>,
-    mut engagement_ramp: ResMut<EngagementRamp>,
     mut agents: Query<(
         Entity,
         &mut RLAgent,
@@ -424,10 +400,6 @@ fn rl_step(
     if !timer.0.tick(time.delta()).just_finished() {
         return;
     }
-    // Tick the engagement ramp (accumulates game time).
-    engagement_ramp.elapsed += RL_STEP_PERIOD;
-    let eng_ramp = engagement_ramp.factor();
-
     // ── Sub-function 1: build observations for all agents ──────────────────
     let obs_data: Vec<(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)> = build_all_observations(
         &agents,
@@ -488,7 +460,6 @@ fn rl_step(
         rl_sender,
         bc_sender,
         mode,
-        eng_ramp,
     );
 }
 
@@ -550,9 +521,7 @@ fn handle_rl_ship_died(mut events: MessageReader<RLShipDied>, rl_sender: Res<RLS
             last.done = true;
         }
         let segment = Segment {
-            entity_id: ev.entity_id,
             personality: ev.personality.clone(),
-            initial_hidden: ev.initial_hidden.clone(),
             transitions,
             bootstrap_value: None, // terminal — no bootstrapping needed
         };
@@ -571,9 +540,7 @@ fn handle_rl_ship_jumped(mut events: MessageReader<RLShipJumped>, rl_sender: Res
             continue;
         }
         let segment = Segment {
-            entity_id: ev.entity_id,
             personality: ev.personality.clone(),
-            initial_hidden: ev.initial_hidden.clone(),
             transitions: ev.transitions.clone(),
             bootstrap_value: None,
         };
@@ -628,9 +595,9 @@ fn build_all_observations(
         pos,
         vel,
         ang_vel,
-        max_speed,
+        _max_speed,
         transform,
-        self_hostility,
+        _self_hostility,
         self_distressed,
         self_tracer_slots,
     ) in agents.iter()
@@ -971,7 +938,7 @@ fn build_all_observations(
             K_FRIENDLY_SHIPS,
             Target::Ship,
         );
-        let n_pickups = push_up_to(&mut nearby_pickups, &pickups, K_PICKUPS, Target::Pickup);
+        push_up_to(&mut nearby_pickups, &pickups, K_PICKUPS, Target::Pickup);
 
         // Phase 2: fill remaining slots with personality-preferred entities.
         // Each call continues from where phase 1 left off (skip already-added).
@@ -1149,13 +1116,15 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
     // Read slot features from the flat observation.
     let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
     let is_present = |i: usize| obs[slot_base(i) + SLOT_IS_PRESENT] > 0.5;
+    let is_nav_target = |i: usize| obs[slot_base(i) + SLOT_IS_NAV_TARGET] > 0.5;
     let type_onehot =
         |i: usize| &obs[slot_base(i) + SLOT_TYPE_ONEHOT..slot_base(i) + SLOT_TYPE_ONEHOT + 4];
     let is_ship = |i: usize| type_onehot(i)[0] > 0.5;
     let is_asteroid = |i: usize| type_onehot(i)[1] > 0.5;
     let is_planet = |i: usize| type_onehot(i)[2] > 0.5;
     let is_pickup = |i: usize| type_onehot(i)[3] > 0.5;
-    let should_engage = |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + 5] > 0.5;
+    let should_engage =
+        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_SHOULD_ENGAGE] > 0.5;
     let value = |i: usize| obs[slot_base(i) + SLOT_VALUE];
 
     // Helper: find the first present slot matching a predicate.
@@ -1177,275 +1146,40 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
         }
     }
 
-    // 2. All personalities: nearest pickup first.
-    if let Some(idx) = first_matching(&|i| is_pickup(i)) {
-        return idx;
+    // 2. Sticky: keep the current target if it is still present in the
+    // observation (i.e. within detection range) AND still valid for this
+    // personality's task.  This prevents churn when multiple candidate
+    // targets are in range.
+    let current = (0..n).find(|&i| is_present(i) && is_nav_target(i));
+    if let Some(i) = current {
+        let still_valid = match personality {
+            Personality::Miner => is_pickup(i) || is_asteroid(i) || is_planet(i),
+            Personality::Fighter => {
+                (is_ship(i) && should_engage(i)) || is_pickup(i) || is_planet(i)
+            }
+            Personality::Trader => is_planet(i) || is_pickup(i),
+        };
+        if still_valid {
+            return i as u8;
+        }
     }
 
     // 3. Personality-based fallback.
     match personality {
-        Personality::Miner => first_matching(&|i| is_asteroid(i))
+        Personality::Miner => first_matching(&|i| is_pickup(i))
+            .or_else(|| first_matching(&|i| is_asteroid(i)))
             .or_else(|| first_matching(&|i| is_planet(i)))
             .unwrap_or(no_target),
         Personality::Fighter => first_matching(&|i| is_ship(i) && should_engage(i))
+            .or_else(|| first_matching(&|i| is_pickup(i)))
             .or_else(|| first_matching(&|i| is_planet(i)))
             .unwrap_or(no_target),
-        Personality::Trader => first_matching(&|i| is_planet(i)).unwrap_or(no_target),
+        Personality::Trader => first_matching(&|i| is_planet(i))
+            .or_else(|| first_matching(&|i| is_pickup(i)))
+            .unwrap_or(no_target),
     }
 }
 
-/// Compute the per-step nav-target reward from the flat observation vector.
-///
-/// Rewards ships for having the correct navigation target for their personality,
-/// gated by health and distress level.
-fn compute_nav_target_reward(personality: &Personality, obs: &[f32]) -> (f32, bool) {
-    use crate::consts::*;
-    use rl_obs::*;
-
-    let health_frac = obs[0];
-    let cargo_frac = obs[5];
-    let distressed = obs[8]; // distressed level (index 8 in self-state)
-
-    if health_frac < 0.3 || distressed > 0.5 {
-        return (0.0, false); // too damaged/distressed to get nav reward
-    }
-
-    let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
-    let n = model::N_OBJECTS;
-
-    for i in 0..n {
-        let base = slot_base(i);
-        if obs[base + SLOT_IS_PRESENT] < 0.5 {
-            continue;
-        }
-        if obs[base + SLOT_IS_NAV_TARGET] < 0.5 {
-            continue;
-        }
-
-        let is_asteroid = obs[base + SLOT_TYPE_ONEHOT + 1] > 0.5;
-        let is_planet = obs[base + SLOT_TYPE_ONEHOT + 2] > 0.5;
-        let is_pickup = obs[base + SLOT_TYPE_ONEHOT + 3] > 0.5;
-        let is_ship = obs[base + SLOT_TYPE_ONEHOT] > 0.5;
-
-        let (raw, is_good) = match personality {
-            Personality::Trader => {
-                if is_planet {
-                    (NAV_TARGET_TRADER_PLANET, true)
-                } else {
-                    (0.0, false)
-                }
-            }
-            Personality::Miner => {
-                if cargo_frac < 0.95 && (is_asteroid || is_pickup) {
-                    (NAV_TARGET_MINER_RESOURCE, true)
-                } else if cargo_frac >= 0.5 && is_planet {
-                    (NAV_TARGET_MINER_PLANET * cargo_frac, true)
-                } else {
-                    (0.0, false)
-                }
-            }
-            Personality::Fighter => {
-                if is_ship || is_asteroid {
-                    (NAV_TARGET_FIGHTER, true)
-                } else {
-                    (0.0, false)
-                }
-            }
-        };
-        return (raw, is_good);
-    }
-    (0.0, false)
-}
-
-/// Compute the per-step weapons-target reward from the flat observation vector.
-///
-/// Fighters: rewarded for targeting anything hostile or should_engage.
-/// Miners/Traders: rewarded for targeting anything hostile (defensive only).
-fn compute_weapons_target_reward(personality: &Personality, obs: &[f32]) -> f32 {
-    use crate::consts::*;
-    use rl_obs::*;
-
-    let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
-    let n = model::N_OBJECTS;
-
-    for i in 0..n {
-        let base = slot_base(i);
-        if obs[base + SLOT_IS_PRESENT] < 0.5 {
-            continue;
-        }
-        if obs[base + SLOT_IS_WEAPONS_TARGET] < 0.5 {
-            continue;
-        }
-
-        let is_hostile = obs[base + SLOT_TYPE_SPECIFIC + 4] > 0.5;
-        let should_engage = obs[base + SLOT_TYPE_SPECIFIC + 5] > 0.5;
-
-        let raw = match personality {
-            Personality::Fighter => {
-                if is_hostile || should_engage {
-                    WEAPONS_TARGET_FIGHTER
-                } else {
-                    0.0
-                }
-            }
-            Personality::Miner | Personality::Trader => {
-                if is_hostile {
-                    WEAPONS_TARGET_DEFENSIVE
-                } else {
-                    0.0
-                }
-            }
-        };
-        return raw;
-    }
-    0.0
-}
-
-/// Compute the planet approach + velocity matching + braking reward.
-///
-/// All inputs are in the ego-centric frame (from the observation vector).
-/// - `rp`: rel_pos (ego frame, points from ship toward target)
-/// - `rv`: rel_vel (ego frame, = target_vel − ship_vel)
-/// - `vel_cos`, `vel_sin`: ship velocity direction in ego frame (from self-state)
-/// - `ship_speed`: ship speed (from self-state speed_frac × max_speed, or abs value)
-fn compute_planet_approach_reward(
-    rp: [f32; 2],
-    rv: [f32; 2],
-    dist: f32,
-    vel_cos: f32,
-    vel_sin: f32,
-    ship_speed: f32,
-    is_thrusting: bool,
-) -> f32 {
-    use crate::consts::*;
-    let mut r = 0.0_f32;
-
-    // Closing speed: rate at which distance decreases.
-    // d(dist)/dt = dot(rv, rp) / dist, so closing = −dot(rv, rp) / dist.
-    let approach_cos = if dist > 1e-3 {
-        let closing = -(rv[0] * rp[0] + rv[1] * rp[1]) / dist;
-        // Normalise to [-1, 1] by dividing by ship speed.
-        (closing / (ship_speed + 1e-3)).clamp(-1.0, 1.0)
-    } else {
-        0.0
-    };
-
-    // Approach reward: incentivises closing on planet outside threshold.
-    let approach = 1.0
-        + if dist > MOVEMENT_THRESHOLD_DIST {
-            (approach_cos - 1.0) / 2.0 * (1.0 - (MOVEMENT_THRESHOLD_DIST / dist).min(1.0))
-        } else {
-            0.0
-        };
-    // Velocity matching: incentivises matching planet speed within threshold.
-    let rel_speed = (rv[0] * rv[0] + rv[1] * rv[1]).sqrt();
-    let vel_match = if dist < MOVEMENT_THRESHOLD_DIST {
-        let frac = (MOVEMENT_THRESHOLD_DIST - dist) / MOVEMENT_THRESHOLD_DIST;
-        MOVEMENT_VEL_SCALE / (rel_speed + MOVEMENT_VEL_SCALE) * frac
-    } else {
-        0.0
-    };
-    r += (approach + vel_match) * MOVEMENT_STEP_WEIGHT;
-
-    // Braking: retrograde facing + thrust when close and approaching.
-    if dist < BRAKING_THRESHOLD_DIST && approach_cos > 0.0 {
-        if ship_speed < 30.0 {
-            r += BRAKING_SLOW_REWARD * BRAKING_STEP_WEIGHT;
-        }
-        if ship_speed > 1.0 {
-            // In ego frame, ship heading is (0, 1). Ship velocity direction
-            // is (vel_sin, vel_cos). Retrograde = facing opposite to velocity:
-            // retro_cos = dot((0,1), -(vel_sin, vel_cos) / speed) = -vel_cos / speed
-            // But vel_cos is already cos(angle between heading and velocity),
-            // so retro_cos = -vel_cos when normalised.
-            let retro_cos = -vel_cos; // 1.0 = fully retrograde
-            let retro_frac = ((retro_cos + 1.0) / 2.0).clamp(0.0, 1.0);
-            r += BRAKING_RETROGRADE_REWARD * retro_frac * BRAKING_STEP_WEIGHT;
-            if retro_cos > BRAKING_RETROGRADE_COS_THRESH && is_thrusting {
-                r += BRAKING_THRUST_REWARD * BRAKING_STEP_WEIGHT;
-            }
-        }
-    }
-    r
-}
-
-/// Compute the full movement + engagement reward from the obs vector.
-///
-/// Purely obs-based — no ECS queries needed.
-fn compute_movement_reward(obs: &[f32], last_action: DiscreteAction, max_speed: f32, engagement_ramp: f32) -> f32 {
-    use crate::consts::*;
-    use rl_obs::*;
-
-    let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
-
-    // Find nav and weapons target slots.
-    let mut nav_slot: Option<usize> = None;
-    let mut wep_slot: Option<usize> = None;
-    for i in 0..model::N_OBJECTS {
-        let base = slot_base(i);
-        if obs[base + SLOT_IS_PRESENT] < 0.5 {
-            continue;
-        }
-        if obs[base + SLOT_IS_NAV_TARGET] > 0.5 {
-            nav_slot = Some(i);
-        }
-        if obs[base + SLOT_IS_WEAPONS_TARGET] > 0.5 {
-            wep_slot = Some(i);
-        }
-    }
-
-    let Some(ni) = nav_slot else { return 0.0 };
-    let nb = slot_base(ni);
-
-    let is_planet = obs[nb + SLOT_TYPE_ONEHOT + 2] > 0.5;
-    let is_ship = obs[nb + SLOT_TYPE_ONEHOT] > 0.5;
-    let is_asteroid = obs[nb + SLOT_TYPE_ONEHOT + 1] > 0.5;
-    let is_pickup = obs[nb + SLOT_TYPE_ONEHOT + 3] > 0.5;
-    let is_combatable = is_ship || is_asteroid;
-    let pursuit_ind = obs[nb + SLOT_PURSUIT_INDICATOR];
-    let fire_ind = obs[nb + SLOT_FIRE_INDICATOR];
-    let in_range = obs[nb + SLOT_IN_RANGE] > 0.5;
-    let nav_and_wep_match = wep_slot == nav_slot;
-
-    let rp = [obs[nb + SLOT_REL_POS], obs[nb + SLOT_REL_POS + 1]];
-    let rv = [obs[nb + SLOT_REL_VEL], obs[nb + SLOT_REL_VEL + 1]];
-    let dist = (rp[0] * rp[0] + rp[1] * rp[1]).sqrt();
-
-    let mut reward = 0.0_f32;
-
-    // 1. Weapons focus (ramped).
-    if !is_combatable || nav_and_wep_match {
-        reward += WEAPONS_FOCUS_REWARD * engagement_ramp;
-    }
-
-    // 2. Proximity: always applies.
-    reward += MOVEMENT_LENGTH_SCALE / (dist + MOVEMENT_LENGTH_SCALE) * MOVEMENT_STEP_WEIGHT;
-
-    // 3. Planet: approach + vel_match + braking.
-    if is_planet {
-        let vel_cos = obs[2];
-        let vel_sin = obs[3];
-        let speed_frac = obs[1];
-        let ship_speed = speed_frac * max_speed;
-        reward += compute_planet_approach_reward(rp, rv, dist, vel_cos, vel_sin, ship_speed, last_action.1 == 1);
-    }
-
-    // 4. Pickup: pursuit indicator (ramped).
-    if is_pickup {
-        reward += pursuit_ind * PICKUP_PURSUIT_WEIGHT * engagement_ramp;
-    }
-
-    // 5. Ship/asteroid: pursuit or fire indicator (ramped, only when nav=weapons).
-    if is_combatable && nav_and_wep_match {
-        if in_range {
-            reward += fire_ind * COMBAT_FIRE_WEIGHT * engagement_ramp;
-        } else {
-            reward += pursuit_ind * COMBAT_PURSUIT_WEIGHT * engagement_ramp;
-        }
-    }
-
-    reward
-}
 
 /// `model_actions` — when `Some`, contains one `(DiscreteAction, log_prob)` per
 /// entry in `decisions` (same order). Used as the executed action in `RLControl`
@@ -1473,11 +1207,21 @@ fn store_obs_actions(
     rl_sender: &RLSender,
     bc_sender: &BCSender,
     mode: &AIPlayMode,
-    engagement_ramp: f32,
 ) {
     for (idx, (entity, obs, proj_obs, slot_targets)) in decisions.iter().enumerate() {
-        let Ok((_, mut agent, mut ship, pos, vel, _, max_speed, transform, _, self_distressed, _)) =
-            agents.get_mut(*entity)
+        let Ok((
+            _,
+            mut agent,
+            mut ship,
+            pos,
+            vel,
+            ang_vel,
+            max_speed,
+            transform,
+            _,
+            _self_distressed,
+            _,
+        )) = agents.get_mut(*entity)
         else {
             continue;
         };
@@ -1485,18 +1229,37 @@ fn store_obs_actions(
         // Choose target first so compute_ai_action can act on it.
         let has_cargo = ship.cargo.values().sum::<u16>() > 0;
         let target_idx = choose_target_slot(&agent.personality, has_cargo, obs);
-        if (target_idx as usize) < model::N_OBJECTS {
+        let wep_target_idx: u8 = if (target_idx as usize) < model::N_OBJECTS {
             let tgt = slot_targets[target_idx as usize].clone();
-            // Weapons target = nav target when it's something we'd shoot at.
-            ship.weapons_target = match &tgt {
-                Some(Target::Ship(_)) | Some(Target::Asteroid(_)) => tgt.clone(),
-                _ => None,
+            // Weapons target = nav target when it's an asteroid or a
+            // hostile/should-engage ship; otherwise the nearest such ship (slots
+            // are ordered nearest-first), else None.
+            use rl_obs::*;
+            let slot_base = |i: usize| SELF_SIZE + i * SLOT_SIZE;
+            let engageable = |i: usize| {
+                obs[slot_base(i) + SLOT_IS_PRESENT] > 0.5
+                    && obs[slot_base(i) + SLOT_TYPE_ONEHOT] > 0.5
+                    && (obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_IS_HOSTILE] > 0.5
+                        || obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_SHOULD_ENGAGE] > 0.5)
             };
+            let (wep_tgt, wep_idx) = match &tgt {
+                Some(Target::Asteroid(_)) => (tgt.clone(), target_idx),
+                Some(Target::Ship(_)) if engageable(target_idx as usize) => {
+                    (tgt.clone(), target_idx)
+                }
+                _ => match (0..model::N_OBJECTS).find(|&i| engageable(i)) {
+                    Some(i) => (slot_targets[i].clone(), i as u8),
+                    None => (None, model::N_OBJECTS as u8),
+                },
+            };
+            ship.weapons_target = wep_tgt;
             ship.nav_target = tgt;
+            wep_idx
         } else {
             ship.nav_target = None;
             ship.weapons_target = None;
-        }
+            model::N_OBJECTS as u8
+        };
 
         // Compute the rule-based action — used as BC label and as the
         // fallback when no model action is available.
@@ -1504,11 +1267,13 @@ fn store_obs_actions(
             &*ship,
             pos.0,
             vel.0,
+            ang_vel.0,
             max_speed.0,
             transform,
             all_positions,
             all_velocities,
             item_universe,
+            &mut rand::thread_rng(),
         ) {
             let (thrust_idx, turn_idx) = rl_obs::controls_to_discrete(raw.thrust, raw.turn);
             let fire_primary: u8 = if raw
@@ -1535,10 +1300,10 @@ fn store_obs_actions(
                 fire_primary,
                 fire_secondary,
                 target_idx,
-                target_idx, // rule-based: weapons target = nav target
+                wep_target_idx,
             )
         } else {
-            (1, 1, 0, 0, target_idx, target_idx)
+            (1, 1, 0, 0, target_idx, wep_target_idx)
         };
 
         // In RLControl mode use the model's action; otherwise use rule-based.
@@ -1582,34 +1347,22 @@ fn store_obs_actions(
         // at t-1, rewards accumulated between t-1 and t).
         let last_proj = agent.last_proj_obs.clone().unwrap_or_default();
         if let (Some(last_obs), Some(last_action)) = (agent.last_obs.clone(), agent.last_action) {
-            // Build per-type reward array from accumulated events + health signal.
+            // Build per-type reward array from accumulated events.  Health is
+            // not a per-step signal — it's emitted by the event writers,
+            // scaled by the firing ship's `health/max_health` at event time.
+            // Separately, `REWARD_HEALTH_RAW` is written per step with weight
+            // 0.0 so its value head learns to predict expected future health
+            // without influencing the policy.
             let mut rewards = agent.accumulated_rewards;
-            let health_reward = ship.health as f32 / ship.data.max_health.max(1) as f32;
-            let personality_health_weight = match agent.personality {
-                Personality::Fighter => crate::consts::HEALTH_STEP_FIGHTER,
-                Personality::Miner | Personality::Trader => crate::consts::HEALTH_STEP_MINER_TRADER,
-            };
-            rewards[crate::consts::REWARD_HEALTH] += health_reward * personality_health_weight;
-            let (nav_target_reward, good_nav_target) =
-                compute_nav_target_reward(&agent.personality, obs);
-            rewards[crate::consts::REWARD_NAV_TARGET] += nav_target_reward;
-
-            rewards[crate::consts::REWARD_WEAPONS_TARGET] +=
-                compute_weapons_target_reward(&agent.personality, obs);
-
-            // Movement + engagement reward.
-            if good_nav_target {
-                rewards[crate::consts::REWARD_MOVEMENT] += compute_movement_reward(
-                    obs,
-                    last_action,
-                    max_speed.0,
-                    engagement_ramp,
-                );
-            }
+            rewards[crate::consts::REWARD_HEALTH_RAW] =
+                ship.health as f32 / ship.data.max_health.max(1) as f32;
             let transition = Transition {
                 obs: last_obs,
                 proj_obs: last_proj.clone(),
                 action: last_action,
+                rule_based_action: agent
+                    .last_rule_based_action
+                    .unwrap_or(last_action),
                 rewards,
                 done: false,
                 log_prob: agent.last_log_prob,
@@ -1618,17 +1371,17 @@ fn store_obs_actions(
             agent.accumulated_rewards = [0.0; crate::consts::N_REWARD_TYPES];
             agent.steps_since_flush += 1;
 
-            // Also send BC data.  Pre-process obs → model_input here so the
-            // training thread pays zero per-sample transform cost per step.
-            // NOTE: use `transition.action` (= last_action, the rule-based action
-            // computed at step t-1 for obs[t-1]), NOT `accurate_action` (which is
-            // the rule-based action for the CURRENT step t).  Pairing obs[t-1]
-            // with action[t] would create a systematic off-by-one mismatch.
-            if *mode == AIPlayMode::BehavioralCloning {
+            // Also send BC data.  The BC label is the rule-based action at the
+            // same step as `last_obs` — available in every mode because we stash
+            // it into `last_rule_based_action` whenever a decision is made.
+            // In BC mode this equals `transition.action`; in RL mode it differs
+            // (transition.action is the policy's action) — BC still trains
+            // against the expert label.
+            if let Some(rule_action) = agent.last_rule_based_action {
                 let bc = BCTransition {
                     obs: transition.obs.clone(),
                     proj_obs: transition.proj_obs.clone(),
-                    action: transition.action,
+                    action: rule_action,
                 };
                 let _ = bc_sender.0.try_send(bc);
             }
@@ -1636,14 +1389,11 @@ fn store_obs_actions(
             // Flush if segment is full.
             if agent.steps_since_flush >= RL_SEGMENT_LEN {
                 let segment = Segment {
-                    entity_id: entity.to_bits(),
                     personality: agent.personality.clone(),
-                    initial_hidden: agent.segment_initial_hidden.clone(),
                     transitions: agent.segment_buffer.drain(..).collect(),
                     bootstrap_value: Some([0.0; crate::consts::N_REWARD_TYPES]),
                 };
                 let _ = rl_sender.0.try_send(segment);
-                agent.segment_initial_hidden = agent.hidden_state.clone();
                 agent.steps_since_flush = 0;
             }
         }
@@ -1652,8 +1402,121 @@ fn store_obs_actions(
         agent.last_obs = Some(obs.clone());
         agent.last_proj_obs = Some(proj_obs.clone());
         agent.last_action = Some(executed_action);
+        agent.last_rule_based_action = Some(rule_based_action);
         agent.last_log_prob = action_log_prob;
     }
+}
+
+// ---------------------------------------------------------------------------
+// BC loss computation (shared by the BC trainer and PPO's BC auxiliary loss)
+// ---------------------------------------------------------------------------
+
+/// Compute the weighted BC cross-entropy loss from pre-computed logits and a
+/// slice of expert (rule-based) action labels.  Use this when you already did
+/// a forward pass for another purpose (e.g. PPO) and want to avoid a second
+/// forward.
+///
+/// Each head's loss is weighted inversely by `log(num_classes)` so the
+/// gradient contribution from each head is roughly equal at initialisation.
+///
+/// Returns only the differentiable total-loss tensor — the caller is
+/// responsible for syncing (`.into_scalar()`) once per cycle for logging
+/// rather than once per mini-batch, to avoid stalling the GPU pipeline.
+pub fn compute_bc_loss_from_logits(
+    action_logits: burn::tensor::Tensor<TrainBackend, 2>,
+    nav_target_logits: burn::tensor::Tensor<TrainBackend, 2>,
+    wep_target_logits: burn::tensor::Tensor<TrainBackend, 2>,
+    rule_based_actions: &[DiscreteAction],
+    loss_fn: &burn::nn::loss::CrossEntropyLoss<TrainBackend>,
+    device: &<TrainBackend as Backend>::Device,
+) -> burn::tensor::Tensor<TrainBackend, 1> {
+    let b = rule_based_actions.len();
+
+    let action_labels_flat: Vec<i64> = rule_based_actions
+        .iter()
+        .flat_map(|a| [a.0 as i64, a.1 as i64, a.2 as i64, a.3 as i64])
+        .collect();
+    let action_labels = burn::tensor::Tensor::<TrainBackend, 2, Int>::from_data(
+        TensorData::new(action_labels_flat, [b, 4]),
+        device,
+    );
+    let turn_t = action_labels.clone().narrow(1, 0, 1).reshape([b]);
+    let thrust_t = action_labels.clone().narrow(1, 1, 1).reshape([b]);
+    let fp_t = action_labels.clone().narrow(1, 2, 1).reshape([b]);
+    let fs_t = action_labels.narrow(1, 3, 1).reshape([b]);
+
+    let nav_target_labels: Vec<i64> = rule_based_actions.iter().map(|a| a.4 as i64).collect();
+    let nav_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
+        TensorData::new(nav_target_labels, [b]),
+        device,
+    );
+    let wep_target_labels: Vec<i64> = rule_based_actions.iter().map(|a| a.5 as i64).collect();
+    let wep_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
+        TensorData::new(wep_target_labels, [b]),
+        device,
+    );
+
+    let w3 = 1.0 / (3.0_f32).ln();
+    let w2 = 1.0 / (2.0_f32).ln();
+    let wt = 1.0 / (model::TARGET_OUTPUT_DIM as f32).ln();
+
+    let turn_loss = loss_fn.forward(action_logits.clone().narrow(1, 0, 3), turn_t) * w3;
+    let thrust_loss = loss_fn.forward(action_logits.clone().narrow(1, 3, 2), thrust_t) * w2;
+    let fp_loss = loss_fn.forward(action_logits.clone().narrow(1, 5, 2), fp_t) * w2;
+    let fs_loss = loss_fn.forward(action_logits.narrow(1, 7, 2), fs_t) * w2;
+    let nav_tgt_loss = loss_fn.forward(nav_target_logits, nav_target_t) * wt;
+    let wep_tgt_loss = loss_fn.forward(wep_target_logits, wep_target_t) * wt;
+
+    turn_loss + thrust_loss + fp_loss + fs_loss + nav_tgt_loss + wep_tgt_loss
+}
+
+/// Compute the weighted BC cross-entropy loss over a batch of `BCTransition`s.
+/// Runs its own forward pass through the net — use `compute_bc_loss_from_logits`
+/// instead if you already have the logits in hand.
+pub fn compute_bc_loss(
+    net: &model::RLNet<TrainBackend>,
+    batch: &[&BCTransition],
+    loss_fn: &burn::nn::loss::CrossEntropyLoss<TrainBackend>,
+    device: &<TrainBackend as Backend>::Device,
+) -> burn::tensor::Tensor<TrainBackend, 1> {
+    let b = batch.len();
+    let mut self_flat = Vec::with_capacity(b * SELF_INPUT_DIM);
+    let mut obj_flat = Vec::with_capacity(b * N_OBJECTS * OBJECT_INPUT_DIM);
+    let mut proj_flat = Vec::with_capacity(b * model::PROJECTILES_FLAT_DIM);
+    for t in batch {
+        let (s, o) = split_obs(&t.obs);
+        self_flat.extend_from_slice(s);
+        obj_flat.extend_from_slice(o);
+        proj_flat.extend_from_slice(&t.proj_obs);
+    }
+    let self_input = burn::tensor::Tensor::<TrainBackend, 2>::from_data(
+        TensorData::new(self_flat, [b, SELF_INPUT_DIM]),
+        device,
+    );
+    let obj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
+        TensorData::new(obj_flat, [b, N_OBJECTS, OBJECT_INPUT_DIM]),
+        device,
+    );
+    let proj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
+        TensorData::new(
+            proj_flat,
+            [b, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM],
+        ),
+        device,
+    );
+
+    let (action_logits, nav_target_logits, wep_target_logits) =
+        net.forward(self_input, obj_input, proj_input);
+
+    let rule_based: Vec<DiscreteAction> = batch.iter().map(|t| t.action).collect();
+    compute_bc_loss_from_logits(
+        action_logits,
+        nav_target_logits,
+        wep_target_logits,
+        &rule_based,
+        loss_fn,
+        device,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1774,109 +1637,17 @@ fn spawn_bc_training_thread(
                     .map(|_| &buffer[rng.gen_range(0..n)])
                     .collect();
 
-                let mut self_flat = Vec::with_capacity(BC_BATCH_SIZE * SELF_INPUT_DIM);
-                let mut obj_flat = Vec::with_capacity(BC_BATCH_SIZE * N_OBJECTS * OBJECT_INPUT_DIM);
-                let mut proj_flat = Vec::with_capacity(BC_BATCH_SIZE * model::PROJECTILES_FLAT_DIM);
-                for t in &batch {
-                    let (s, o) = split_obs(&t.obs);
-                    self_flat.extend_from_slice(s);
-                    obj_flat.extend_from_slice(o);
-                    proj_flat.extend_from_slice(&t.proj_obs);
-                }
-                let self_input = burn::tensor::Tensor::<TrainBackend, 2>::from_data(
-                    TensorData::new(self_flat, [BC_BATCH_SIZE, SELF_INPUT_DIM]),
-                    &device,
-                );
-                let obj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
-                    TensorData::new(obj_flat, [BC_BATCH_SIZE, N_OBJECTS, OBJECT_INPUT_DIM]),
-                    &device,
-                );
-                let proj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
-                    TensorData::new(
-                        proj_flat,
-                        [
-                            BC_BATCH_SIZE,
-                            model::N_PROJECTILE_SLOTS,
-                            model::PROJ_INPUT_DIM,
-                        ],
-                    ),
-                    &device,
-                );
-
-                // Build one [B, 4] label tensor and slice per head — four
-                // Vec builds collapsed into one.
-                // Action labels: [B, 4] for turn/thrust/fire_primary/fire_secondary.
-                let action_labels_flat: Vec<i64> = batch
-                    .iter()
-                    .flat_map(|t| {
-                        [
-                            t.action.0 as i64,
-                            t.action.1 as i64,
-                            t.action.2 as i64,
-                            t.action.3 as i64,
-                        ]
-                    })
-                    .collect();
-                let action_labels = burn::tensor::Tensor::<TrainBackend, 2, Int>::from_data(
-                    TensorData::new(action_labels_flat, [BC_BATCH_SIZE, 4]),
-                    &device,
-                );
-                let turn_t = action_labels
-                    .clone()
-                    .narrow(1, 0, 1)
-                    .reshape([BC_BATCH_SIZE]);
-                let thrust_t = action_labels
-                    .clone()
-                    .narrow(1, 1, 1)
-                    .reshape([BC_BATCH_SIZE]);
-                let fp_t = action_labels
-                    .clone()
-                    .narrow(1, 2, 1)
-                    .reshape([BC_BATCH_SIZE]);
-                let fs_t = action_labels.narrow(1, 3, 1).reshape([BC_BATCH_SIZE]);
-
-                // Target labels: nav and weapons target indices.
-                let nav_target_labels: Vec<i64> = batch.iter().map(|t| t.action.4 as i64).collect();
-                let nav_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
-                    TensorData::new(nav_target_labels, [BC_BATCH_SIZE]),
-                    &device,
-                );
-                let wep_target_labels: Vec<i64> = batch.iter().map(|t| t.action.5 as i64).collect();
-                let wep_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
-                    TensorData::new(wep_target_labels, [BC_BATCH_SIZE]),
-                    &device,
-                );
-
-                // ── Forward + loss ────────���─────────────────────────────────���
+                // ── Forward + loss ─────────────────────────────────────────
+                // Only sync the scalar loss every 100 steps to avoid a GPU
+                // pipeline stall on every gradient step.
+                let log_this_step = step % 100 == 0;
                 let grads = {
                     let net = inner.policy_net.as_ref().unwrap();
-                    let (action_logits, nav_target_logits, wep_target_logits) =
-                        net.forward(self_input, obj_input, proj_input);
-
-                    // Weight each head's loss inversely by log(num_classes) so
-                    // the gradient contribution from each head is roughly equal
-                    // at initialisation.  Without this, the 13-class target heads
-                    // dominate and the 2/3-class action heads barely learn.
-                    let w3 = 1.0 / (3.0_f32).ln(); // turn (3 classes)
-                    let w2 = 1.0 / (2.0_f32).ln(); // thrust/fire (2 classes)
-                    let wt = 1.0 / (model::TARGET_OUTPUT_DIM as f32).ln(); // target (13 classes)
-
-                    let turn_loss =
-                        loss_fn.forward(action_logits.clone().narrow(1, 0, 3), turn_t) * w3;
-                    let thrust_loss =
-                        loss_fn.forward(action_logits.clone().narrow(1, 3, 2), thrust_t) * w2;
-                    let fp_loss = loss_fn.forward(action_logits.clone().narrow(1, 5, 2), fp_t) * w2;
-                    let fs_loss = loss_fn.forward(action_logits.narrow(1, 7, 2), fs_t) * w2;
-                    let nav_tgt_loss = loss_fn.forward(nav_target_logits, nav_target_t) * wt;
-                    let wep_tgt_loss = loss_fn.forward(wep_target_logits, wep_target_t) * wt;
-                    let total_loss =
-                        turn_loss + thrust_loss + fp_loss + fs_loss + nav_tgt_loss + wep_tgt_loss;
-
-                    if step % 100 == 0 {
-                        let v = total_loss.clone().into_scalar();
+                    let total_loss = compute_bc_loss(net, &batch, &loss_fn, &device);
+                    if log_this_step {
+                        let v = f32::from(total_loss.clone().into_scalar());
                         println!("[bc] step={step:>6}  loss={v:.4}  buffer={}", buffer.len());
                     }
-
                     let raw = total_loss.backward();
                     GradientsParams::from_grads(raw, net)
                 };
@@ -2000,24 +1771,18 @@ pub(crate) fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
 // ---------------------------------------------------------------------------
 
 /// Build the `RLShipDied` event data from an `RLAgent` component before despawn.
-pub fn build_rl_ship_died(entity: Entity, agent: &RLAgent) -> RLShipDied {
+pub fn build_rl_ship_died(_entity: Entity, agent: &RLAgent) -> RLShipDied {
     RLShipDied {
-        entity,
-        entity_id: entity.to_bits(),
         personality: agent.personality.clone(),
-        initial_hidden: agent.segment_initial_hidden.clone(),
         transitions: agent.segment_buffer.clone(),
     }
 }
 
 /// Build the `RLShipJumped` event data from an `RLAgent` component before a
 /// voluntary jump-out.  The trajectory is flushed as truncated (non-terminal).
-pub fn build_rl_ship_jumped(entity: Entity, agent: &RLAgent) -> RLShipJumped {
+pub fn build_rl_ship_jumped(_entity: Entity, agent: &RLAgent) -> RLShipJumped {
     RLShipJumped {
-        entity,
-        entity_id: entity.to_bits(),
         personality: agent.personality.clone(),
-        initial_hidden: agent.segment_initial_hidden.clone(),
         transitions: agent.segment_buffer.clone(),
     }
 }

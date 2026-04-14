@@ -116,6 +116,12 @@ fn collect_pickups(
                     reward: weight,
                     reward_type: crate::consts::REWARD_PICKUP,
                 });
+                rl_reward_writer.write(RLReward {
+                    entity: ship_entity,
+                    reward: crate::consts::HEALTH_BONUS_PER_EVENT
+                        * (ship.health as f32 / ship.data.max_health.max(1) as f32),
+                    reward_type: crate::consts::REWARD_HEALTH_GATED,
+                });
             }
         }
 

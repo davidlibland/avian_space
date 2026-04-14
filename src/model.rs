@@ -6,13 +6,10 @@
 //!
 //! Observations are split into these two tensors via [`split_obs`].
 //! Policy logits → [`DiscreteAction`] conversion is handled by
-//! [`logits_to_discrete_action`] (greedy argmax; stochastic sampling is
-//! added at training time).
+//! [`sample_discrete_action`] during rollout (stochastic, with coupled
+//! Gumbel sampling across the nav/weapon target heads).
 
-use std::{
-    f32::consts::E,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use bevy::prelude::Resource;
 use burn::{
@@ -22,15 +19,14 @@ use burn::{
     optim::{Adam, AdamConfig, adaptor::OptimizerAdaptor},
     prelude::*,
     tensor::{
-        Distribution, Tensor, TensorData,
+        Tensor, TensorData,
         activation::{silu, softmax},
         backend::AutodiffBackend,
     },
 };
 
 use crate::rl_obs::{
-    self, CORE_BLOCK_START, CORE_FEAT_SIZE, DiscreteAction, K_ASTEROIDS, K_FRIENDLY_SHIPS,
-    K_HOSTILE_SHIPS, K_PICKUPS, K_PLANETS, K_PROJECTILES, N_ENTITY_SLOTS, N_ENTITY_TYPES, OBS_DIM,
+    CORE_BLOCK_START, CORE_FEAT_SIZE, DiscreteAction, K_PROJECTILES, N_ENTITY_SLOTS, N_ENTITY_TYPES, OBS_DIM,
     PROJ_SLOT_SIZE, SELF_SIZE, SHIP_IS_HOSTILE, SHIP_SHOULD_ENGAGE, SLOT_IS_PRESENT, SLOT_SIZE,
     SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_IDX_ASTEROID, TYPE_IDX_SHIP,
     TYPE_ONEHOT_SIZE,
@@ -237,6 +233,7 @@ pub struct RLNet<B: Backend> {
     // ── Projectile encoder ────────────────────────────────────────────────
     proj_embed: Linear<B>,
     proj_block: Block<B>,
+    proj_enc_norm: LayerNorm<B>,
 
     // ── Entity←Projectile cross-attention (single-head, residual) ─────────
     cross_q_proj: Linear<B>,
@@ -247,6 +244,7 @@ pub struct RLNet<B: Backend> {
     // ── Self encoder ──────────────────────────────────────────────────────
     self_embed: Linear<B>,
     self_fc2: Linear<B>,
+    self_enc_norm: LayerNorm<B>,
 
     // ── Self←Entity multi-head attention ───────────────────────────────────
     ent_q_proj: Linear<B>,
@@ -260,6 +258,7 @@ pub struct RLNet<B: Backend> {
 
     // ── Merge + Decoder ──────────────────────────────────────────────────
     merge_proj: Linear<B>,
+    merge_norm: LayerNorm<B>,
     dblock1: Block<B>,
     dblock2: Block<B>,
     norm: LayerNorm<B>,
@@ -308,6 +307,7 @@ impl<B: Backend> RLNet<B> {
             // Projectile encoder
             proj_embed: lin(PROJ_INPUT_DIM, hidden_dim),
             proj_block: Block::new(device, hidden_dim),
+            proj_enc_norm: LayerNormConfig::new(hidden_dim).init(device),
 
             // Entity←Projectile cross-attention
             cross_q_proj: lin_xavier(hidden_dim, hidden_dim),
@@ -318,6 +318,7 @@ impl<B: Backend> RLNet<B> {
             // Self encoder
             self_embed: lin(SELF_INPUT_DIM, hidden_dim),
             self_fc2: lin(hidden_dim, hidden_dim),
+            self_enc_norm: LayerNormConfig::new(hidden_dim).init(device),
 
             // Self←Entity multi-head attention
             ent_q_proj: lin_xavier(hidden_dim, hidden_dim),
@@ -331,6 +332,7 @@ impl<B: Backend> RLNet<B> {
 
             // Merge + Decoder
             merge_proj: lin(hidden_dim * 3, hidden_dim),
+            merge_norm: LayerNormConfig::new(hidden_dim).init(device),
             dblock1: Block::new(device, hidden_dim),
             dblock2: Block::new(device, hidden_dim),
             norm: LayerNormConfig::new(hidden_dim).init(device),
@@ -419,10 +421,12 @@ impl<B: Backend> RLNet<B> {
         } else {
             cross_out * proj_gate
         }; // [B, Np, H]
+        let proj_enc = self.proj_enc_norm.forward(proj_enc);
 
         // ── 4. Self encoder ──────────────────────────────────────────────────
         let self_enc = silu(self.self_embed.forward(self_feat));
         let self_enc = silu(self.self_fc2.forward(self_enc)); // [B, H]
+        let self_enc = self.self_enc_norm.forward(self_enc);
 
         // ── 5. Self←Entity multi-head attention ──────────────────────────────
         let sq = self_enc.clone().unsqueeze_dim::<3>(1); // [B, 1, H]
@@ -441,7 +445,7 @@ impl<B: Backend> RLNet<B> {
 
         // ── 7. Merge ─────────────────────────────────────────────────────────
         let merged = Tensor::cat(vec![ent_attn, proj_attn, self_enc], 1); // [B, 3H]
-        let x = silu(self.merge_proj.forward(merged)); // [B, H]
+        let x = silu(self.merge_norm.forward(self.merge_proj.forward(merged))); // [B, H]
 
         // ── 8. Decoder → action logits ───────────────────────────────────────
         let x = self.dblock1.forward(x);
@@ -502,8 +506,11 @@ impl<B: Backend> RLNet<B> {
             .clone()
             .narrow(2, type_specific_offset + SHIP_SHOULD_ENGAGE, 1)
             .squeeze_dim(2); // [B,N]
-        let valid_weapons_entity =
-            (is_asteroid + (is_ship * (is_hostile + should_engage)).clamp(0.0, 1.0)); // [B,N]
+        // is_hostile / should_engage take values in {-1, 1}; clamp each to {0, 1}
+        // before OR-ing so that a ship engageable by either side qualifies.
+        let valid_weapons_entity = is_asteroid
+            + is_ship
+                * (is_hostile.clamp(0.0, 1.0) + should_engage.clamp(0.0, 1.0)).clamp(0.0, 1.0); // [B,N]
         // Allow "no target" option (append 1.0 for the N+1th slot)
         let valid_weapons_target = Tensor::cat(
             vec![valid_weapons_entity, Tensor::<B, 2>::ones([batch_size, 1], &device)],
@@ -516,23 +523,46 @@ impl<B: Backend> RLNet<B> {
     }
 }
 
-fn sample_gumbel_like<B: Backend, const D: usize>(reference: &Tensor<B, D>) -> Tensor<B, D> {
-    let eps = 1e-20;
-    let u = Tensor::random_like(reference, Distribution::Default);
-    // Clamp away from 0 and 1 to avoid -inf in either log.
-    -(-(u.clamp(eps, 1.0 - eps).log())).log()
+/// CPU-side coupled categorical sampler using the Gumbel-max trick with
+/// shared noise across both logit vectors.
+///
+/// Returns `(idx_a, idx_b)` and accumulates the log-probabilities of the
+/// selected indices under each categorical into `log_prob_acc`.
+fn coupled_gumbel_sample(
+    logits_a: &[f32],
+    logits_b: &[f32],
+    rng: &mut impl rand::Rng,
+    log_prob_acc: &mut f32,
+) -> (usize, usize) {
+    debug_assert_eq!(logits_a.len(), logits_b.len());
+    let eps = 1e-20_f32;
+
+    let mut best_a = (f32::NEG_INFINITY, 0usize);
+    let mut best_b = (f32::NEG_INFINITY, 0usize);
+    for i in 0..logits_a.len() {
+        let u: f32 = rng.r#gen::<f32>().clamp(eps, 1.0 - eps);
+        let g = -(-u.ln()).ln();
+        let va = logits_a[i] + g;
+        let vb = logits_b[i] + g;
+        if va > best_a.0 {
+            best_a = (va, i);
+        }
+        if vb > best_b.0 {
+            best_b = (vb, i);
+        }
+    }
+
+    let lse_a = log_sum_exp(logits_a);
+    let lse_b = log_sum_exp(logits_b);
+    *log_prob_acc += (logits_a[best_a.1] - lse_a).max(-20.0);
+    *log_prob_acc += (logits_b[best_b.1] - lse_b).max(-20.0);
+    (best_a.1, best_b.1)
 }
 
-fn coupled_gumbel_sample<B: Backend>(
-    logits_a: Tensor<B, 2>,
-    logits_b: Tensor<B, 2>,
-) -> (Tensor<B, 2, Int>, Tensor<B, 2, Int>) {
-    // We use the gumbler-max trick to sample from the categorical distribution defined by the logits,
-    // while ensuring that the same noise is applied to both sets of logits to maintain coupling.
-    let noise = sample_gumbel_like(&logits_a);
-    let a = (logits_a + noise.clone()).argmax(1);
-    let b = (logits_b + noise).argmax(1);
-    (a, b)
+fn log_sum_exp(logits: &[f32]) -> f32 {
+    let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let exp_sum: f32 = logits.iter().map(|l| (l - max_logit).exp()).sum();
+    max_logit + exp_sum.ln()
 }
 
 // ---------------------------------------------------------------------------
@@ -686,6 +716,10 @@ pub fn split_obs(obs: &[f32]) -> (&[f32], &[f32]) {
 
 /// Convert policy logits and target logits to a `DiscreteAction` via greedy
 /// argmax over each factored head.
+///
+/// Test-only: used by scenario tests and behaviour-cloning confusion-matrix
+/// evaluation. Production rollout uses stochastic sampling.
+#[cfg(test)]
 pub fn logits_to_discrete_action(
     action_logits: &[f32],
     nav_target_logits: &[f32],
@@ -730,8 +764,12 @@ pub fn sample_discrete_action(
     let thrust_idx = sample_categorical(&action_logits[3..5], rng, &mut total_log_prob);
     let fire_primary = sample_categorical(&action_logits[5..7], rng, &mut total_log_prob);
     let fire_secondary = sample_categorical(&action_logits[7..9], rng, &mut total_log_prob);
-    let nav_target_idx = sample_categorical(nav_target_logits, rng, &mut total_log_prob);
-    let wep_target_idx = sample_categorical(wep_target_logits, rng, &mut total_log_prob);
+    let (nav_target_idx, wep_target_idx) = coupled_gumbel_sample(
+        nav_target_logits,
+        wep_target_logits,
+        rng,
+        &mut total_log_prob,
+    );
 
     let action = (
         turn_idx as u8,
@@ -771,6 +809,7 @@ fn sample_categorical(logits: &[f32], rng: &mut impl rand::Rng, log_prob_acc: &m
     sampled
 }
 
+#[cfg(test)]
 fn argmax(vals: &[f32]) -> usize {
     vals.iter()
         .enumerate()
@@ -782,15 +821,6 @@ fn argmax(vals: &[f32]) -> usize {
 // ---------------------------------------------------------------------------
 // Save / load
 // ---------------------------------------------------------------------------
-
-/// Save the inference network weights to `path` (`.bin` extension appended by burn).
-pub fn save_inference_net(net: &InferenceNet, path: &str) {
-    use burn::record::{BinFileRecorder, FullPrecisionSettings};
-    let recorder = BinFileRecorder::<FullPrecisionSettings>::default();
-    if let Err(e) = net.net.clone().save_file(path, &recorder) {
-        eprintln!("[model] Failed to save policy net to {path}: {e}");
-    }
-}
 
 /// Load inference network weights from `path`, returning `None` on failure.
 pub fn load_inference_net(path: &str) -> Option<InferenceNet> {
