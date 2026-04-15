@@ -247,11 +247,10 @@ fn jump_ui(
                     }
 
                     if is_visited {
-                        let display = sys_name.replace('_', " ");
                         painter.text(
                             Pos2::new(pos.x, pos.y + NODE_R + 5.0),
                             Align2::CENTER_TOP,
-                            &display,
+                            &sys.display_name,
                             FontId::proportional(11.0),
                             if is_current {
                                 Color32::from_rgb(140, 210, 255)

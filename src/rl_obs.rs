@@ -103,13 +103,23 @@ pub const SLOT_VALUE: usize = TYPE_BLOCK_START; // 16
 /// Offset of entity-kind features (after value).
 pub const SLOT_TYPE_SPECIFIC: usize = TYPE_BLOCK_START + 1; // 17
 /// Number of entity-kind feature floats (padded to max across all types).
-pub const TYPE_SPECIFIC_SIZE: usize = 10;
+pub const TYPE_SPECIFIC_SIZE: usize = 15;
 /// Total size of block 4 (value + type_specific).
-pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 11
+pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 16
 
 // ── Ship type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ─────
 pub const SHIP_IS_HOSTILE: usize = 4;
 pub const SHIP_SHOULD_ENGAGE: usize = 5;
+/// Ship's current `health / max_health`.
+pub const SHIP_HEALTH_FRAC: usize = 10;
+/// Ship's primary-weapon range (world units) — helps assess threat reach.
+pub const SHIP_WEAPON_RANGE: usize = 11;
+/// 1.0 if this ship's weapons_target is the observing ship, else 0.0.
+pub const SHIP_IS_TARGETING_ME: usize = 12;
+/// Ship's thrust (forward force, raw) — affects agility along with torque.
+pub const SHIP_THRUST: usize = 13;
+/// Ship's primary shots-per-second (1 / effective_cooldown).
+pub const SHIP_PRIMARY_FIRE_RATE: usize = 14;
 
 // ── Planet type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ───
 pub const PLANET_CARGO_PROFIT_VALUE: usize = 0;
@@ -145,8 +155,57 @@ pub const SELF_PERSONALITY_SIZE: usize = 3;
 /// the ship would rotate under max braking before stopping, divided by π.
 pub const SELF_STOP_ANGLE: usize = SELF_PERSONALITY + SELF_PERSONALITY_SIZE; // 12
 
+// ── Own ship class stats (absolute, so the agent knows its own "class") ──
+// These are the raw counterparts of the HEALTH_FRAC / SPEED_FRAC features —
+// the agent can infer relative matchup strength against other ships whose
+// equivalent raw stats are exposed in their entity slot.
+pub const SELF_MAX_HEALTH: usize = SELF_STOP_ANGLE + 1; // 13
+pub const SELF_MAX_SPEED: usize = SELF_MAX_HEALTH + 1; // 14
+pub const SELF_THRUST: usize = SELF_MAX_SPEED + 1; // 15
+pub const SELF_TORQUE: usize = SELF_THRUST + 1; // 16
+pub const SELF_PRIMARY_RANGE: usize = SELF_TORQUE + 1; // 17
+pub const SELF_PRIMARY_SPEED: usize = SELF_PRIMARY_RANGE + 1; // 18
+
+// ── Weapon stats (self) ──────────────────────────────────────────────────
+/// Primary weapon cooldown fraction remaining (1.0 = just fired, 0.0 = ready).
+pub const SELF_PRIMARY_COOLDOWN: usize = SELF_PRIMARY_SPEED + 1; // 19
+/// Secondary weapon cooldown fraction remaining.
+pub const SELF_SECONDARY_COOLDOWN: usize = SELF_PRIMARY_COOLDOWN + 1; // 20
+/// Primary weapon damage normalised by `WEAPON_DAMAGE_REF`.
+pub const SELF_PRIMARY_DAMAGE: usize = SELF_SECONDARY_COOLDOWN + 1; // 21
+/// Secondary weapon range normalised by `WEAPON_RANGE_REF`.
+pub const SELF_SECONDARY_RANGE: usize = SELF_PRIMARY_DAMAGE + 1; // 22
+/// Secondary weapon damage normalised by `WEAPON_DAMAGE_REF`.
+pub const SELF_SECONDARY_DAMAGE: usize = SELF_SECONDARY_RANGE + 1; // 23
+/// Secondary weapon speed normalised by `WEAPON_SPEED_REF`.
+pub const SELF_SECONDARY_SPEED: usize = SELF_SECONDARY_DAMAGE + 1; // 24
+/// Primary shots-per-second (= 1 / effective_cooldown_seconds). Already
+/// accounts for multi-barrel ships (effective cooldown = base / number).
+pub const SELF_PRIMARY_FIRE_RATE: usize = SELF_SECONDARY_SPEED + 1; // 25
+/// Secondary shots-per-second.
+pub const SELF_SECONDARY_FIRE_RATE: usize = SELF_PRIMARY_FIRE_RATE + 1; // 26
+
+// ── Current target type one-hots (self) ──────────────────────────────────
+// 5-wide one-hot: ship, asteroid, planet, pickup, none.
+pub const TARGET_TYPE_SIZE: usize = 5;
+pub const TARGET_TYPE_IDX_SHIP: usize = 0;
+pub const TARGET_TYPE_IDX_ASTEROID: usize = 1;
+pub const TARGET_TYPE_IDX_PLANET: usize = 2;
+pub const TARGET_TYPE_IDX_PICKUP: usize = 3;
+pub const TARGET_TYPE_IDX_NONE: usize = 4;
+
+pub const SELF_NAV_TARGET_TYPE: usize = SELF_SECONDARY_SPEED + 1; // 19
+pub const SELF_WEP_TARGET_TYPE: usize = SELF_NAV_TARGET_TYPE + TARGET_TYPE_SIZE; // 24
+
 /// Floats for the self-state block.
-pub const SELF_SIZE: usize = SELF_STOP_ANGLE + 1; // 13
+pub const SELF_SIZE: usize = SELF_WEP_TARGET_TYPE + TARGET_TYPE_SIZE; // 29
+
+/// Reference damage for weapon-damage normalisation (≈ max single-hit damage).
+pub const WEAPON_DAMAGE_REF: f32 = 50.0;
+/// Reference range for weapon-range normalisation (world units).
+pub const WEAPON_RANGE_REF: f32 = 800.0;
+/// Reference speed for weapon-speed normalisation (world units / s).
+pub const WEAPON_SPEED_REF: f32 = 500.0;
 
 // ── Projectile slot layout ─────────────────────────────────────────────
 //
@@ -165,7 +224,10 @@ pub const SELF_SIZE: usize = SELF_STOP_ANGLE + 1; // 13
 //   collision_ind (1 float)  — 0→1 indicator of collision likelihood
 
 /// Floats per projectile slot.
-pub const PROJ_SLOT_SIZE: usize = 12;
+/// Layout: is_present + rel_pos(2) + rel_vel(2) + proximity + is_ours +
+/// is_guided + speed_frac + damage_norm + lifetime_frac + collision_ind +
+/// is_tracking_me = 13.
+pub const PROJ_SLOT_SIZE: usize = 13;
 
 /// Reference damage for normalisation.
 const PROJ_DAMAGE_REF: f32 = 50.0;
@@ -199,6 +261,15 @@ pub struct ShipSlotData {
     pub personality: Personality,
     /// Distressed level (1.0 = just hit, decays toward 0).
     pub distressed: f32,
+    /// Primary-weapon range (world units), 0.0 if unknown/unarmed.
+    pub primary_weapon_range: f32,
+    /// 1.0 if this ship's weapons_target is the observing ship, else 0.0.
+    pub is_targeting_me: f32,
+    /// Forward thrust (raw); affects agility.
+    pub thrust: f32,
+    /// Primary-weapon shots-per-second (1 / effective_cooldown_seconds), 0 if
+    /// unarmed or cooldown unknown.
+    pub primary_fire_rate: f32,
 }
 
 /// Planet-specific features.
@@ -288,6 +359,9 @@ pub struct ProjectileSlotData {
     pub lifetime_max: f32,
     /// Radius of the target (ship or asteroid) for collision prediction.
     pub target_radius: f32,
+    /// 1.0 if this is a guided missile whose target is the observing ship,
+    /// else 0.0.  Huge signal for evasion.
+    pub is_tracking_me: f32,
 }
 
 /// All pre-processed inputs needed by `encode_observation`.
@@ -314,6 +388,26 @@ pub struct ObsInput<'a> {
     /// Range of the ship's primary weapon (m), used to compute the in-range flag.
     /// 0.0 if the ship has no primary weapon.
     pub primary_weapon_range: f32,
+    /// Primary weapon damage (raw); 0.0 if unarmed.
+    pub primary_weapon_damage: f32,
+    /// Primary weapon cooldown fraction remaining in [0, 1] (1.0 = just fired).
+    pub primary_cooldown_frac: f32,
+    /// Secondary weapon range / damage / speed / cooldown.
+    /// 0.0 if the ship has no secondary weapon.
+    pub secondary_weapon_range: f32,
+    pub secondary_weapon_damage: f32,
+    pub secondary_weapon_speed: f32,
+    pub secondary_cooldown_frac: f32,
+    /// Primary shots-per-second = 1 / effective_cooldown_seconds.
+    pub primary_fire_rate: f32,
+    /// Secondary shots-per-second.
+    pub secondary_fire_rate: f32,
+    /// Current nav-target entity type (0..=3 for ship/asteroid/planet/pickup,
+    /// or 4 for none).  Duplicates information from entity_slots but provides
+    /// a direct shortcut to the policy.
+    pub nav_target_type: u8,
+    /// Current weapons-target entity type (same encoding as `nav_target_type`).
+    pub weapons_target_type: u8,
     /// Per-ship-type credit scale for normalising the credit observation.
     pub credit_scale: f32,
     /// Current distressed level (1.0 = just hit, decays toward 0).
@@ -473,39 +567,41 @@ fn aim_indicator(angle: Option<f32>) -> f32 {
     }
 }
 
-/// Collision likelihood indicator for a projectile heading toward a target.
+/// Collision-course indicator for an approaching entity.
 ///
-/// Models the projectile as a point moving along `rel_vel` from `rel_pos`
-/// (both in the target's frame). Returns a 0→1 value: 1.0 when the closest
-/// approach distance is 0, decaying smoothly as miss distance grows relative
-/// to `target_radius`.
+/// Given the entity's relative position and velocity in the observer's ego
+/// frame, computes the closest future approach distance `d`, then returns
+/// `2 r / (d + r)` where `r = combined_radius` (sum of both entities' radii).
 ///
-/// Returns 0.0 when the projectile is moving away or will never approach.
-pub fn collision_indicator(rel_pos: [f32; 2], rel_vel: [f32; 2], target_radius: f32) -> f32 {
+/// Value interpretation:
+/// - `= 2.0` direct hit (closest approach distance = 0)
+/// - `= 1.0` grazing (closest approach = combined_radius)
+/// - `→ 0.0` as entities miss by many radii
+/// - `= 0.0` when the entity is receding with a closest-approach-in-the-past,
+///   unless it's still close (in which case `d = current distance`)
+pub fn collision_indicator(rel_pos: [f32; 2], rel_vel: [f32; 2], combined_radius: f32) -> f32 {
     let [px, py] = rel_pos;
     let [vx, vy] = rel_vel;
-
-    // Velocity squared (how fast the projectile closes).
+    let r = combined_radius.max(1.0);
+    let current_dist_sq = px * px + py * py;
     let v_sq = vx * vx + vy * vy;
+
     if v_sq < f32::EPSILON {
-        return 0.0; // stationary → no collision
+        // Stationary — use current distance.
+        let d = current_dist_sq.sqrt();
+        return 2.0 * r / (d + r);
     }
 
-    // Time of closest approach: t = -dot(pos, vel) / |vel|²
     let t_closest = -(px * vx + py * vy) / v_sq;
-    if t_closest < 0.0 {
-        return 0.0; // closest approach is in the past
-    }
-
-    // Closest approach distance squared.
-    let cx = px + t_closest * vx;
-    let cy = py + t_closest * vy;
-    let miss_sq = cx * cx + cy * cy;
-
-    // Smooth indicator: 1 at miss=0, decays as miss grows relative to radius.
-    let r = target_radius.max(1.0);
-    let scale_sq = r * r;
-    scale_sq / (miss_sq + scale_sq)
+    let d = if t_closest < 0.0 {
+        // Closest point in the past — entity is receding; future closest is now.
+        current_dist_sq.sqrt()
+    } else {
+        let cx = px + t_closest * vx;
+        let cy = py + t_closest * vy;
+        (cx * cx + cy * cy).sqrt()
+    };
+    2.0 * r / (d + r)
 }
 
 // ---------------------------------------------------------------------------
@@ -577,6 +673,37 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
         .copy_from_slice(&personality);
     // stop_angle is unbounded in principle; normalise by π and clamp.
     self_buf[SELF_STOP_ANGLE] = (ctrl.stop_angle / PI).clamp(-2.0, 2.0);
+
+    // Own ship class stats (raw values — matches what we expose about other
+    // ships' slots so the net can compare matchups).
+    self_buf[SELF_MAX_HEALTH] = input.ship.data.max_health as f32;
+    self_buf[SELF_MAX_SPEED] = input.ship.data.max_speed;
+    self_buf[SELF_THRUST] = input.ship.data.thrust;
+    self_buf[SELF_TORQUE] = input.ship.data.torque;
+    self_buf[SELF_PRIMARY_RANGE] =
+        (input.primary_weapon_range / WEAPON_RANGE_REF).clamp(0.0, 4.0);
+    self_buf[SELF_PRIMARY_SPEED] =
+        (input.primary_weapon_speed / WEAPON_SPEED_REF).clamp(0.0, 4.0);
+
+    // Weapon state + stats.
+    self_buf[SELF_PRIMARY_COOLDOWN] = input.primary_cooldown_frac.clamp(0.0, 1.0);
+    self_buf[SELF_SECONDARY_COOLDOWN] = input.secondary_cooldown_frac.clamp(0.0, 1.0);
+    self_buf[SELF_PRIMARY_DAMAGE] =
+        (input.primary_weapon_damage / WEAPON_DAMAGE_REF).clamp(0.0, 4.0);
+    self_buf[SELF_SECONDARY_RANGE] =
+        (input.secondary_weapon_range / WEAPON_RANGE_REF).clamp(0.0, 4.0);
+    self_buf[SELF_SECONDARY_DAMAGE] =
+        (input.secondary_weapon_damage / WEAPON_DAMAGE_REF).clamp(0.0, 4.0);
+    self_buf[SELF_SECONDARY_SPEED] =
+        (input.secondary_weapon_speed / WEAPON_SPEED_REF).clamp(0.0, 4.0);
+    self_buf[SELF_PRIMARY_FIRE_RATE] = input.primary_fire_rate;
+    self_buf[SELF_SECONDARY_FIRE_RATE] = input.secondary_fire_rate;
+
+    // Current target-type one-hots.
+    let nav_idx = (input.nav_target_type as usize).min(TARGET_TYPE_IDX_NONE);
+    let wep_idx = (input.weapons_target_type as usize).min(TARGET_TYPE_IDX_NONE);
+    self_buf[SELF_NAV_TARGET_TYPE + nav_idx] = 1.0;
+    self_buf[SELF_WEP_TARGET_TYPE + wep_idx] = 1.0;
     obs.extend_from_slice(&self_buf);
     debug_assert_eq!(obs.len(), SELF_SIZE);
 
@@ -698,6 +825,12 @@ fn encode_slot(
             let p = personality_onehot(&ship.personality);
             ts[6..9].copy_from_slice(&p);
             ts[9] = ship.distressed;
+            ts[SHIP_HEALTH_FRAC] = (ship.health / ship.max_health.max(1.0)).clamp(0.0, 1.0);
+            ts[SHIP_WEAPON_RANGE] =
+                (ship.primary_weapon_range / WEAPON_RANGE_REF).clamp(0.0, 2.0);
+            ts[SHIP_IS_TARGETING_ME] = ship.is_targeting_me;
+            ts[SHIP_THRUST] = ship.thrust;
+            ts[SHIP_PRIMARY_FIRE_RATE] = ship.primary_fire_rate;
         }
         EntityKind::Planet(planet) => {
             ts[0] = planet.cargo_profit_value;
@@ -775,6 +908,7 @@ fn encode_projectile_slot(
     obs.push(p.damage / PROJ_DAMAGE_REF);
     obs.push(lifetime_frac.clamp(0.0, 1.0));
     obs.push(col_ind);
+    obs.push(p.is_tracking_me);
 }
 
 fn entity_type_onehot(entity_type: u8) -> [f32; 4] {

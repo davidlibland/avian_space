@@ -55,7 +55,7 @@ pub fn planet_ui(
     let Some(planet) = current_system.planets.get(planet_name) else {
         return;
     };
-    egui::Window::new(format!("Docked on {}", planet_name)).show(ctx, |ui| {
+    egui::Window::new(format!("Docked on {}", planet.display_name)).show(ctx, |ui| {
         ui.label(&planet.description);
         ui.separator();
         ui.horizontal(|ui| {
@@ -100,7 +100,12 @@ pub fn planet_ui(
                             commodities.sort_by(|a, b| a.0.cmp(&b.0));
                             for (commodity, price) in commodities {
                                 let qty = *ship.cargo.get(&commodity).unwrap_or(&0);
-                                ui.label(&commodity);
+                                let commodity_display = item_universe
+                                    .commodities
+                                    .get(&commodity)
+                                    .map(|c| c.display_name.as_str())
+                                    .unwrap_or(&commodity);
+                                ui.label(commodity_display);
                                 ui.label(price.to_string());
                                 // Price indicator vs. global average
                                 if let Some(&avg) =
@@ -173,7 +178,12 @@ pub fn planet_ui(
                                     .find_weapon(&item)
                                     .map(|ws| (ws.number, ws.ammo_quantity))
                                     .unwrap_or((0, None));
-                                ui.label(&item);
+                                let item_display = item_universe
+                                    .outfitter_items
+                                    .get(&item)
+                                    .map(|i| i.display_name())
+                                    .unwrap_or(&item);
+                                ui.label(item_display);
                                 ui.label(price.to_string());
                                 ui.label(space.to_string());
                                 ui.label(owned.to_string());
@@ -232,9 +242,9 @@ pub fn planet_ui(
                                 let is_current = ship_type == player_ship_type;
                                 let can_afford = player_credits >= data.price;
                                 if is_current {
-                                    ui.strong(&ship_type);
+                                    ui.strong(&data.display_name);
                                 } else {
-                                    ui.label(&ship_type);
+                                    ui.label(&data.display_name);
                                 }
                                 ui.label(format!("${}", data.price));
                                 ui.label(format!("{}", data.max_speed as i32));

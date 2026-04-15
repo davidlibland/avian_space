@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::item_universe::ItemUniverse;
 use crate::planets::Planet;
 use crate::ship::Target;
 use crate::utils::safe_despawn;
@@ -429,6 +430,7 @@ fn update_cargo_credits(
 fn update_secondary_weapon(
     player_query: Query<&Ship, With<Player>>,
     mut text_query: Query<&mut Text, With<SecondaryWeaponText>>,
+    item_universe: Res<ItemUniverse>,
 ) {
     let Ok(ship) = player_query.single() else {
         return;
@@ -439,9 +441,14 @@ fn update_secondary_weapon(
     **text = match &ship.weapon_systems.selected_secondary {
         Some(name) => {
             if let Some(ws) = ship.weapon_systems.secondary.get(name) {
+                let display = item_universe
+                    .outfitter_items
+                    .get(name)
+                    .map(|i| i.display_name())
+                    .unwrap_or(name);
                 match ws.ammo_quantity {
-                    Some(qty) => format!("Sec: {} ({})", name, qty),
-                    None => format!("Sec: {}", name),
+                    Some(qty) => format!("Sec: {} ({})", display, qty),
+                    None => format!("Sec: {}", display),
                 }
             } else {
                 "Secondary: None".to_string()
@@ -454,6 +461,11 @@ fn update_secondary_weapon(
 fn update_target_display(
     player_query: Query<(Entity, &Ship), With<Player>>,
     ships_query: Query<&Ship, Without<Player>>,
+    asteroids_query: Query<&crate::asteroids::Asteroid>,
+    planets_query: Query<&Planet>,
+    pickups_query: Query<&crate::pickups::Pickup>,
+    current_system: Res<crate::CurrentStarSystem>,
+    item_universe: Res<ItemUniverse>,
     mut text_query: Query<&mut Text, With<TargetText>>,
 ) {
     let Ok((player_entity, player_ship)) = player_query.single() else {
@@ -467,16 +479,49 @@ fn update_target_display(
             if let Ok(target_ship) = ships_query.get(*entity) {
                 let is_hostile =
                     matches!(&target_ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
+                let display = &target_ship.data.display_name;
                 if is_hostile {
-                    format!("Target: {} [HOSTILE]", target_ship.ship_type)
+                    format!("Target: {} [HOSTILE]", display)
                 } else {
-                    format!("Target: {}", target_ship.ship_type)
+                    format!("Target: {}", display)
                 }
             } else {
                 "Target: None".to_string()
             }
         }
-        _ => "Target: None".to_string(),
+        Some(Target::Asteroid(entity)) => {
+            if let Ok(asteroid) = asteroids_query.get(*entity) {
+                format!("Target: Asteroid (size {:.0})", asteroid.size)
+            } else {
+                "Target: None".to_string()
+            }
+        }
+        Some(Target::Planet(entity)) => {
+            if let Ok(planet) = planets_query.get(*entity) {
+                let display = item_universe
+                    .star_systems
+                    .get(&current_system.0)
+                    .and_then(|sys| sys.planets.get(&planet.0))
+                    .map(|p| p.display_name.as_str())
+                    .unwrap_or(&planet.0);
+                format!("Target: {}", display)
+            } else {
+                "Target: None".to_string()
+            }
+        }
+        Some(Target::Pickup(entity)) => {
+            if let Ok(pickup) = pickups_query.get(*entity) {
+                let commodity_display = item_universe
+                    .commodities
+                    .get(&pickup.commodity)
+                    .map(|c| c.display_name.as_str())
+                    .unwrap_or(&pickup.commodity);
+                format!("Target: {} (x{})", commodity_display, pickup.quantity)
+            } else {
+                "Target: None".to_string()
+            }
+        }
+        None => "Target: None".to_string(),
     };
 }
 

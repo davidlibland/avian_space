@@ -191,6 +191,8 @@ pub struct Weapon {
     /// image instead of a plain colored rectangle.
     #[serde(default)]
     pub sprite_path: Option<String>,
+    #[serde(default)]
+    pub display_name: String,
 }
 
 #[derive(Component)]

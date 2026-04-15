@@ -219,6 +219,8 @@ pub struct ShipData {
     pub price: i128,
     pub personality: Personality,
     pub faction: Option<String>,
+    #[serde(default)]
+    pub display_name: String,
 
     // Tuning fields — rarely set in YAML, sensible defaults are fine:
     #[serde(default = "default_angular_drag")]

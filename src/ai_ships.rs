@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 // Some AI for the ships
 use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
-use crate::optimal_control::{pursuit_controls_ego, x_stop};
+use crate::optimal_control::{pursuit_controls_ego, turn_to_angle};
 use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_collection::{RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
@@ -359,28 +359,13 @@ fn angle_to_controls(
     torque: f32,
     damping: f32,
 ) -> (f32, f32) {
-    let stop_angle = x_stop(angular_velocity, torque, damping); // angle at which max braking would stop rotation
-    let turn = if -PI / 16. < target_angle && target_angle < PI / 16. {
-        0.0 // small angle → let damping handle it
-    } else if target_angle > 0.0 {
-        if stop_angle < target_angle {
-            -1.0 // max left torque
-        } else {
-            1.0 // max right torque
-        }
-    } else {
-        if stop_angle > target_angle {
-            1.0 // max right torque
-        } else {
-            -1.0 // max left torque
-        }
-    };
+    let turn = turn_to_angle(target_angle, angular_velocity, torque, damping);
     let thrust = if target_angle > -PI / 3. && target_angle < PI / 3. {
         1.0
     } else {
         0.0
     };
-    return (turn, thrust);
+    (turn, thrust)
 }
 
 /// The action chosen by the rule-based AI for a single decision step.

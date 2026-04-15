@@ -167,7 +167,7 @@ fn main() {
         use bevy::app::ScheduleRunnerPlugin;
         use bevy::time::TimeUpdateStrategy;
         use bevy::window::WindowPlugin;
-        
+
         // DefaultPlugins with no window and no exit-on-close, plus a headless
         // schedule runner.  The render pipeline still initialises (to satisfy
         // asset-type registrations) but draws nothing because there is no
@@ -415,15 +415,92 @@ fn set_arrival_velocity(
         .remove::<(Sensor, Mass, AngularInertia)>();
 }
 
+/// Compute (turn, thrust) to fly toward the ballistic intercept point of the
+/// player's current target. Returns `None` if there's no target, no target
+/// position available, or no firing solution exists.
+///
+/// Uses the first primary weapon's projectile speed for the intercept math;
+/// falls back to the straight bearing if the player has no primary weapons.
+fn compute_intercept_command(
+    player_ship: &Ship,
+    player_tf: &Transform,
+    player_vel: Vec2,
+    player_ang_vel: f32,
+    target_pos_query: &Query<&Position>,
+    target_vel_query: &Query<&LinearVelocity>,
+    item_universe: &ItemUniverse,
+) -> Scalar {
+    use std::f32::consts::PI;
+    let target_e = player_ship.weapons_target.as_ref()?.get_entity();
+    let target_pos = target_pos_query.get(target_e).ok()?.0;
+    let target_vel = target_vel_query
+        .get(target_e)
+        .map(|v| v.0)
+        .unwrap_or(Vec2::ZERO);
+
+    // World → ego frame: forward = +x.
+    let ship_dir = (player_tf.rotation * Vec3::Y).xy();
+    let frame_angle = -ship_dir.y.atan2(ship_dir.x);
+    let (sin_a, cos_a) = frame_angle.sin_cos();
+    let rotate_r = |v: Vec2| Vec2::new(v.x * cos_a - v.y * sin_a, v.x * sin_a + v.y * cos_a);
+
+    let player_pos = player_tf.translation.truncate();
+    let local_offset = rotate_r(target_pos - player_pos);
+    let local_rel_vel = rotate_r(target_vel - player_vel);
+
+    // Pick a projectile speed from any of the player's primary weapons.
+    let proj_speed = player_ship
+        .weapon_systems
+        .primary
+        .keys()
+        .filter_map(|wt| item_universe.weapons.get(wt))
+        .filter(|w| !w.guided)
+        .map(|w| w.speed)
+        .next();
+
+    let target_angle = match proj_speed {
+        Some(speed) => utils::angle_to_hit(speed, &local_offset, &local_rel_vel)?,
+        // No primary weapon → just aim straight at the target's current position.
+        None => local_offset.y.atan2(local_offset.x),
+    };
+    // Wrap to [-PI, PI] so the bang-bang controller picks the shorter arc.
+    let target_angle = (target_angle + PI).rem_euclid(2.0 * PI) - PI;
+
+    let turn = optimal_control::turn_to_angle(
+        target_angle,
+        player_ang_vel,
+        player_ship.data.torque,
+        player_ship.data.angular_drag,
+    );
+    turn
+}
+
 /// Sends [`MovementAction`] events based on keyboard input.
 fn keyboard_input(
     mut writer: MessageWriter<ShipCommand>,
     mut weapons_writer: MessageWriter<FireCommand>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut player_query: Query<(Entity, &Transform, &mut Ship), With<Player>>,
+    mut player_query: Query<
+        (
+            Entity,
+            &Transform,
+            &LinearVelocity,
+            &AngularVelocity,
+            &mut Ship,
+        ),
+        With<Player>,
+    >,
     enemy_ships_query: Query<(Entity, &Transform), (With<Ship>, Without<Player>)>,
+    asteroids_query: Query<(Entity, &Transform), With<Asteroid>>,
+    pickups_query: Query<(Entity, &Transform), With<pickups::Pickup>>,
+    planets_query: Query<(Entity, &Transform), With<planets::Planet>>,
+    target_pos_query: Query<&Position>,
+    target_vel_query: Query<&LinearVelocity>,
+    item_universe: Res<ItemUniverse>,
 ) {
-    let Ok((player_entity, player_tf, mut player_ship)) = player_query.single_mut() else {
+    let Ok((player_entity, player_tf, player_vel, player_ang_vel, mut player_ship)) =
+        player_query.single_mut()
+    else {
         return; // Player not spawned yet
     };
 
@@ -460,17 +537,89 @@ fn keyboard_input(
         }
     }
 
+    // Q: select nearest asteroid target
+    if keyboard_input.just_pressed(KeyCode::KeyQ) {
+        let player_pos = player_tf.translation.truncate();
+        let nearest = asteroids_query
+            .iter()
+            .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
+            .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some((entity, _)) = nearest {
+            player_ship.weapons_target = Some(Target::Asteroid(entity));
+        }
+    }
+
+    // P: select nearest pickup
+    if keyboard_input.just_pressed(KeyCode::KeyP) {
+        let player_pos = player_tf.translation.truncate();
+        let nearest = pickups_query
+            .iter()
+            .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
+            .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some((entity, _)) = nearest {
+            player_ship.weapons_target = Some(Target::Pickup(entity));
+        }
+    }
+
+    // [ / ]: cycle through planets in the current system
+    let cycle_planets = keyboard_input.just_pressed(KeyCode::BracketLeft) as i32
+        - keyboard_input.just_pressed(KeyCode::BracketRight) as i32;
+    if cycle_planets != 0 {
+        let mut entities: Vec<Entity> = planets_query.iter().map(|(e, _)| e).collect();
+        entities.sort();
+        if !entities.is_empty() {
+            let current = match &player_ship.weapons_target {
+                Some(Target::Planet(e)) => Some(*e),
+                _ => None,
+            };
+            let n = entities.len() as i32;
+            let idx = match current {
+                None => 0,
+                Some(cur) => entities.iter().position(|&e| e == cur).unwrap_or(0) as i32,
+            };
+            // `[` goes backward (cycle_planets = +1), `]` goes forward (-1).
+            let next_idx = ((idx - cycle_planets).rem_euclid(n)) as usize;
+            player_ship.weapons_target = Some(Target::Planet(entities[next_idx]));
+        }
+    }
+
+    // A (held): autopilot — turn toward the ballistic intercept angle for the
+    // current target, and thrust forward when roughly aimed.
+    let intercept = keyboard_input.pressed(KeyCode::KeyA);
+    let auto_turn_cmd = if intercept {
+        Some(compute_intercept_command(
+            &player_ship,
+            player_tf,
+            player_vel.0,
+            player_ang_vel.0,
+            &target_pos_query,
+            &target_vel_query,
+            &item_universe,
+        ))
+    } else {
+        None
+    };
+
     let left = keyboard_input.any_pressed([KeyCode::ArrowLeft]);
     let right = keyboard_input.any_pressed([KeyCode::ArrowRight]);
     let up = keyboard_input.any_pressed([KeyCode::ArrowUp]);
     let down = keyboard_input.any_pressed([KeyCode::ArrowDown]);
 
     let horizontal = right as i8 - left as i8;
-    let turn = horizontal as Scalar;
+    let mut turn = horizontal as Scalar;
 
     let vertical = up as i8;
-    let thrust = vertical as Scalar;
+    let mut thrust = vertical as Scalar;
     let reverse = (down as i8) as Scalar;
+
+    // Intercept autopilot overrides turn/thrust when the player isn't already
+    // giving arrow-key input on those axes. Arrow keys always win so the
+    // player can course-correct while holding I.
+    if let Some(auto_turn) = auto_turn_cmd {
+        if turn.abs() < f32::EPSILON {
+            turn = auto_turn;
+        }
+    }
 
     // Only send if there's actual input
     if thrust.abs() > f32::EPSILON || turn.abs() > f32::EPSILON || reverse.abs() > f32::EPSILON {
@@ -484,10 +633,7 @@ fn keyboard_input(
 
     let fire_primary = keyboard_input.any_pressed([KeyCode::Space]);
     if fire_primary {
-        let target_e = player_ship
-            .weapons_target
-            .as_ref()
-            .map(|t| t.get_entity());
+        let target_e = player_ship.weapons_target.as_ref().map(|t| t.get_entity());
         for weapon_type in player_ship.weapon_systems.primary.keys() {
             weapons_writer.write(FireCommand {
                 ship: player_entity,

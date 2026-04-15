@@ -22,6 +22,8 @@ pub struct PlanetData {
     pub shipyard: Vec<String>, // Ship types available for purchase
     pub radius: f32,
     pub color: [f32; 3],
+    #[serde(default)]
+    pub display_name: String,
 }
 
 #[derive(Component)]

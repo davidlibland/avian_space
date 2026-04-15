@@ -15,6 +15,8 @@ use std::path::Path;
 #[derive(Deserialize, Serialize)]
 pub struct CommodityData {
     pub color: [f32; 3],
+    #[serde(default)]
+    pub display_name: String,
 }
 
 #[derive(Resource, Deserialize, Serialize)]
@@ -59,6 +61,36 @@ pub struct ItemUniverse {
 }
 
 impl ItemUniverse {
+    /// Fill in `display_name` fields with a title-cased fallback derived from
+    /// the HashMap key whenever the YAML didn't specify one. Runs once at load
+    /// so all downstream UI code can read `.display_name` directly.
+    fn fill_display_names(&mut self) {
+        use crate::utils::title_case;
+        fn fill(field: &mut String, key: &str) {
+            if field.is_empty() {
+                *field = title_case(key);
+            }
+        }
+        for (k, v) in &mut self.ships {
+            fill(&mut v.display_name, k);
+        }
+        for (k, v) in &mut self.weapons {
+            fill(&mut v.display_name, k);
+        }
+        for (k, v) in &mut self.commodities {
+            fill(&mut v.display_name, k);
+        }
+        for (k, v) in &mut self.outfitter_items {
+            fill(v.display_name_mut(), k);
+        }
+        for (sys_key, sys) in &mut self.star_systems {
+            fill(&mut sys.display_name, sys_key);
+            for (planet_key, planet) in &mut sys.planets {
+                fill(&mut planet.display_name, planet_key);
+            }
+        }
+    }
+
     pub fn validate(&self) {
         for (ship_name, ship_data) in &self.ships {
             let consumed: i32 = WeaponSystems::build(&ship_data.base_weapons, self)
@@ -308,6 +340,8 @@ pub enum OutfitterItem {
         price: i128,
         space: u16,
         weapon_type: String,
+        #[serde(default)]
+        display_name: String,
     },
     SecondaryWeapon {
         price: i128,
@@ -315,6 +349,8 @@ pub enum OutfitterItem {
         weapon_type: String,
         ammo_price: i128,
         ammo_space: u16,
+        #[serde(default)]
+        display_name: String,
     },
 }
 
@@ -329,6 +365,18 @@ impl OutfitterItem {
         match self {
             OutfitterItem::PrimaryWeapon { space, .. } => *space,
             OutfitterItem::SecondaryWeapon { space, .. } => *space,
+        }
+    }
+    pub fn display_name(&self) -> &str {
+        match self {
+            OutfitterItem::PrimaryWeapon { display_name, .. } => display_name,
+            OutfitterItem::SecondaryWeapon { display_name, .. } => display_name,
+        }
+    }
+    fn display_name_mut(&mut self) -> &mut String {
+        match self {
+            OutfitterItem::PrimaryWeapon { display_name, .. } => display_name,
+            OutfitterItem::SecondaryWeapon { display_name, .. } => display_name,
         }
     }
 }
@@ -383,6 +431,8 @@ pub struct StarSystem {
     pub astroid_fields: Vec<AsteroidFieldData>,
     #[serde(default)]
     pub ships: ShipDistribution,
+    #[serde(default)]
+    pub display_name: String,
 }
 
 pub fn item_universe_plugin(app: &mut App) {
@@ -390,6 +440,7 @@ pub fn item_universe_plugin(app: &mut App) {
     let mut item_universe: ItemUniverse =
         parse_dir::<ItemUniverse>(Path::new("assets")).expect("failed to parse asset config");
 
+    item_universe.fill_display_names();
     item_universe.compute_global_averages();
     item_universe.compute_trade_maps();
     item_universe.compute_planet_ammo();

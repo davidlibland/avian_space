@@ -13,6 +13,24 @@ pub fn safe_despawn(commands: &mut Commands, entity: Entity) {
         let _ = world.try_despawn(entity);
     });
 }
+
+/// Fallback display name: convert a snake_case key into a Title Case string.
+/// `tau_ceti` → `Tau Ceti`, `iron_ore` → `Iron Ore`.
+pub fn title_case(snake: &str) -> String {
+    snake
+        .split('_')
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut chars = w.chars();
+            match chars.next() {
+                Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 use rand::Rng;
 use std::f32::consts::PI;
 

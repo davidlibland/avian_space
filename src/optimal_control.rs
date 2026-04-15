@@ -32,6 +32,26 @@ pub fn x_stop(v_now: f32, a: f32, gamma: f32) -> f32 {
     v_term * t_stop - (v_now - v_term) / gamma * (exp_term - 1.0)
 }
 
+/// Bang-bang turn command toward a desired `target_angle` (ego frame).
+///
+/// Returns `-1.0`, `0.0`, or `+1.0` (the `turn` field of `ShipCommand`).
+/// Logic: full torque toward the target until `x_stop` predicts the ship's
+/// rotation momentum will carry it past, then reverse torque to brake.
+/// A small deadband near zero lets angular damping bring the ship to rest.
+///
+/// `angular_drag` is the exponential decay rate of angular velocity
+/// (matches `ShipData.angular_drag`). `torque` is the maximum braking torque.
+pub fn turn_to_angle(target_angle: f32, ang_vel: f32, torque: f32, angular_drag: f32) -> f32 {
+    let stop_angle = x_stop(ang_vel, torque, angular_drag);
+    if -PI / 16. < target_angle && target_angle < PI / 16. {
+        0.0
+    } else if target_angle > 0.0 {
+        if stop_angle < target_angle { -1.0 } else { 1.0 }
+    } else {
+        if stop_angle > target_angle { 1.0 } else { -1.0 }
+    }
+}
+
 /// Ship-only control features (no target needed). Intended for use as
 /// observation inputs to a learned policy, in addition to driving
 /// [`pursuit_controls_ego`].
@@ -149,7 +169,6 @@ pub fn pursuit_controls_ego(
     v_max: f32,
     damping_factor: f32,
 ) -> (f32, f32) {
-    let ctrl = control_features(ang_vel, torque, angular_drag);
     let feat = pursuit_features_ego(
         x_target,
         v_target,
@@ -160,15 +179,7 @@ pub fn pursuit_controls_ego(
         v_max,
         damping_factor,
     );
-
-    let turn = if -PI / 16. < feat.target_angle && feat.target_angle < PI / 16. {
-        0.0 // small angle → let damping handle it
-    } else if feat.target_angle > 0.0 {
-        if ctrl.stop_angle < feat.target_angle { -1.0 } else { 1.0 }
-    } else {
-        if ctrl.stop_angle > feat.target_angle { 1.0 } else { -1.0 }
-    };
-
+    let turn = turn_to_angle(feat.target_angle, ang_vel, torque, angular_drag);
     (turn, feat.thrust_prob)
 }
 

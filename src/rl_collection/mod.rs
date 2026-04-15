@@ -818,6 +818,28 @@ fn build_all_observations(
                     };
                     let data = item_universe.ships.get(&other_ship.ship_type);
                     let other_distressed = all_distressed.get(e).map(|d| d.level).unwrap_or(0.0);
+                    // Their primary weapon's range + fire rate (first primary, if any).
+                    let (other_primary_range, other_primary_fire_rate) = other_ship
+                        .weapon_systems
+                        .primary
+                        .values()
+                        .next()
+                        .map(|ws| {
+                            let dur = ws.cooldown.duration().as_secs_f32().max(f32::EPSILON);
+                            (ws.weapon.range(), 1.0 / dur)
+                        })
+                        .unwrap_or((0.0, 0.0));
+                    // 1.0 iff their weapons_target's entity is us.
+                    let is_targeting_me = match &other_ship.weapons_target {
+                        Some(t) => {
+                            if t.get_entity() == entity {
+                                1.0
+                            } else {
+                                0.0
+                            }
+                        }
+                        None => 0.0,
+                    };
                     let sd = ShipSlotData {
                         max_health: data.map(|d| d.max_health as f32).unwrap_or(0.0),
                         health: other_ship.health as f32,
@@ -827,6 +849,10 @@ fn build_all_observations(
                         should_engage,
                         personality: data.map(|d| d.personality.clone()).unwrap_or_default(),
                         distressed: other_distressed,
+                        primary_weapon_range: other_primary_range,
+                        is_targeting_me,
+                        thrust: data.map(|d| d.thrust).unwrap_or(0.0),
+                        primary_fire_rate: other_primary_fire_rate,
                     };
                     (sd, 0.0_f32)
                 })
@@ -983,14 +1009,70 @@ fn build_all_observations(
         debug_assert!(entity_slots.len() <= model::N_OBJECTS);
         debug_assert_eq!(slot_targets.len(), model::N_OBJECTS);
 
-        // Primary weapon speed / range for fire-lead angle in the observation.
-        let (primary_weapon_speed, primary_weapon_range) = ship
+        // Primary weapon speed / range / damage / cooldown / fire_rate for self.
+        let (
+            primary_weapon_speed,
+            primary_weapon_range,
+            primary_weapon_damage,
+            primary_cooldown_frac,
+            primary_fire_rate,
+        ) = ship
             .weapon_systems
             .primary
             .values()
             .next()
-            .map(|ws| (ws.weapon.speed, ws.weapon.range()))
-            .unwrap_or((0.0, 0.0));
+            .map(|ws| {
+                let dur = ws.cooldown.duration().as_secs_f32().max(f32::EPSILON);
+                let frac = ws.cooldown.remaining_secs() / dur;
+                (
+                    ws.weapon.speed,
+                    ws.weapon.range(),
+                    ws.weapon.damage as f32,
+                    frac,
+                    1.0 / dur,
+                )
+            })
+            .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0));
+
+        // Secondary weapon stats — choose based on current weapons_target type.
+        let wep_target_is_ship = matches!(ship.weapons_target, Some(Target::Ship(_)));
+        let (
+            secondary_weapon_range,
+            secondary_weapon_damage,
+            secondary_weapon_speed,
+            secondary_cooldown_frac,
+            secondary_fire_rate,
+        ) = rl_obs::select_secondary_weapon(&ship, wep_target_is_ship)
+            .and_then(|(wname, _ammo)| ship.weapon_systems.secondary.get(wname))
+            .map(|ws| {
+                let dur = ws.cooldown.duration().as_secs_f32().max(f32::EPSILON);
+                let frac = ws.cooldown.remaining_secs() / dur;
+                (
+                    ws.weapon.range(),
+                    ws.weapon.damage as f32,
+                    ws.weapon.speed,
+                    frac,
+                    1.0 / dur,
+                )
+            })
+            .unwrap_or((0.0, 0.0, 0.0, 0.0, 0.0));
+
+        // Current nav/wep target types for the self observation one-hots.
+        let target_type_code = |t: &Option<Target>| -> u8 {
+            use rl_obs::{
+                TARGET_TYPE_IDX_ASTEROID, TARGET_TYPE_IDX_NONE, TARGET_TYPE_IDX_PICKUP,
+                TARGET_TYPE_IDX_PLANET, TARGET_TYPE_IDX_SHIP,
+            };
+            match t {
+                Some(Target::Ship(_)) => TARGET_TYPE_IDX_SHIP as u8,
+                Some(Target::Asteroid(_)) => TARGET_TYPE_IDX_ASTEROID as u8,
+                Some(Target::Planet(_)) => TARGET_TYPE_IDX_PLANET as u8,
+                Some(Target::Pickup(_)) => TARGET_TYPE_IDX_PICKUP as u8,
+                None => TARGET_TYPE_IDX_NONE as u8,
+            }
+        };
+        let nav_target_type = target_type_code(&ship.nav_target);
+        let weapons_target_type = target_type_code(&ship.weapons_target);
 
         let credit_scale = item_universe
             .ship_credit_scale
@@ -1007,6 +1089,11 @@ fn build_all_observations(
             let world_offset = [p.x - pos.x, p.y - pos.y];
             let world_rel_vel = [v.x - vel.x, v.y - vel.y];
             let weapon = item_universe.weapons.get(&proj.weapon_type);
+            // is_tracking_me: 1.0 if guided missile has us as target.
+            let is_tracking_me = guided
+                .and_then(|g| g.target)
+                .map(|t| if t == entity { 1.0 } else { 0.0 })
+                .unwrap_or(0.0);
             Some(ProjectileSlotData {
                 rel_pos: rl_obs::rotate_to_ego(world_offset, sin_a, cos_a),
                 rel_vel: rl_obs::rotate_to_ego(world_rel_vel, sin_a, cos_a),
@@ -1017,6 +1104,7 @@ fn build_all_observations(
                 lifetime_remaining: proj.lifetime,
                 lifetime_max: weapon.map(|w| w.lifetime).unwrap_or(1.0),
                 target_radius: ship.data.radius,
+                is_tracking_me,
             })
         };
 
@@ -1067,6 +1155,16 @@ fn build_all_observations(
             entity_slots,
             primary_weapon_speed,
             primary_weapon_range,
+            primary_weapon_damage,
+            primary_cooldown_frac,
+            secondary_weapon_range,
+            secondary_weapon_damage,
+            secondary_weapon_speed,
+            secondary_cooldown_frac,
+            primary_fire_rate,
+            secondary_fire_rate,
+            nav_target_type,
+            weapons_target_type,
             credit_scale,
             distressed: self_distressed.level,
             other_projectile_slots,
@@ -1165,9 +1263,17 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
     let current = (0..n).find(|&i| is_present(i) && is_nav_target(i));
     if let Some(i) = current {
         let still_valid = match personality {
-            Personality::Miner => is_pickup(i) || is_asteroid(i) || is_planet(i),
+            // Planets are always filtered through `planet_viable` to match the
+            // model's nav-target mask — otherwise BC labels can point at a
+            // masked logit (recently-visited / unprofitable) and blow up the
+            // cross-entropy.
+            Personality::Miner => {
+                is_pickup(i) || is_asteroid(i) || (is_planet(i) && planet_viable(i))
+            }
             Personality::Fighter => {
-                (is_ship(i) && should_engage(i)) || is_pickup(i) || is_planet(i)
+                (is_ship(i) && should_engage(i))
+                    || is_pickup(i)
+                    || (is_planet(i) && planet_viable(i))
             }
             Personality::Trader => (is_planet(i) && planet_viable(i)) || is_pickup(i),
         };
@@ -1180,11 +1286,11 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
     match personality {
         Personality::Miner => first_matching(&|i| is_pickup(i))
             .or_else(|| first_matching(&|i| is_asteroid(i)))
-            .or_else(|| first_matching(&|i| is_planet(i)))
+            .or_else(|| first_matching(&|i| is_planet(i) && planet_viable(i)))
             .unwrap_or(no_target),
         Personality::Fighter => first_matching(&|i| is_ship(i) && should_engage(i))
             .or_else(|| first_matching(&|i| is_pickup(i)))
-            .or_else(|| first_matching(&|i| is_planet(i)))
+            .or_else(|| first_matching(&|i| is_planet(i) && planet_viable(i)))
             .unwrap_or(no_target),
         Personality::Trader => first_matching(&|i| is_planet(i) && planet_viable(i))
             .or_else(|| first_matching(&|i| is_pickup(i)))
