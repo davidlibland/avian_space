@@ -262,6 +262,11 @@ pub struct Ship {
     pub data: ShipData, // The ship data, can be looked up in the item universe, but stored here for convenience
     pub health: i32,
     pub cargo: HashMap<String, u16>, // Map from commodities to quantity
+    /// Cumulative purchase cost (credits) of the cargo currently held, per
+    /// commodity. Pickups and other "free" acquisitions contribute zero.
+    /// Used to compute trade *profit* rather than gross sale value.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub cargo_cost: HashMap<String, i128>,
     pub credits: i128,
     // A map indicating inclusion in factions
     pub enemies: HashMap<String, f32>,
@@ -288,6 +293,7 @@ impl Ship {
             data: data.clone(),
             health: data.max_health,
             cargo: HashMap::new(),
+            cargo_cost: HashMap::new(),
             credits: 100000,
             nav_target: None,
             weapons_target: None,
@@ -310,21 +316,39 @@ impl Ship {
         return quantity_added;
     }
     pub fn sell_cargo(&mut self, commodity: &str, quantity: u16, price: i128) {
-        let quantity = std::cmp::min(*self.cargo.get(commodity).unwrap_or(&0u16), quantity);
+        let held = *self.cargo.get(commodity).unwrap_or(&0u16);
+        let quantity = std::cmp::min(held, quantity);
+        if quantity == 0 {
+            return;
+        }
+        // Deduct cost basis proportionally to the units sold, then update qty.
+        let cost_basis = self.cargo_cost.get(commodity).copied().unwrap_or(0);
+        let cost_removed = if held > 0 {
+            cost_basis * quantity as i128 / held as i128
+        } else {
+            0
+        };
         *self.cargo.entry(commodity.to_string()).or_insert(0) -= quantity;
         self.credits += (quantity as i128) * price;
-        if let std::collections::hash_map::Entry::Occupied(entry) =
-            self.cargo.entry(commodity.to_string())
-        {
-            if *entry.get() <= 0 {
-                entry.remove_entry(); // Removes the key-value pair
-            }
+        let remaining_qty = self.cargo.get(commodity).copied().unwrap_or(0);
+        if remaining_qty == 0 {
+            self.cargo.remove(commodity);
+            self.cargo_cost.remove(commodity);
+        } else {
+            self.cargo_cost
+                .insert(commodity.to_string(), (cost_basis - cost_removed).max(0));
         }
     }
     pub fn buy_cargo(&mut self, commodity: &str, quantity_desired: u16, price: i128) {
         let quantity_desired = std::cmp::min(quantity_desired, (self.credits / price) as u16);
         let quantity_added = self.add_cargo(commodity, quantity_desired);
         self.credits -= (quantity_added as i128) * price;
+        if quantity_added > 0 {
+            *self
+                .cargo_cost
+                .entry(commodity.to_string())
+                .or_insert(0) += (quantity_added as i128) * price;
+        }
     }
     pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &Res<ItemUniverse>) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
@@ -753,6 +777,14 @@ fn handle_buy_ship(
             let transfer = (*qty).min(space_left);
             if transfer > 0 {
                 *new_ship.cargo.entry(commodity.clone()).or_insert(0) += transfer;
+                let src_cost = ship.cargo_cost.get(commodity).copied().unwrap_or(0);
+                if *qty > 0 {
+                    let cost_transfer = src_cost * transfer as i128 / *qty as i128;
+                    *new_ship
+                        .cargo_cost
+                        .entry(commodity.clone())
+                        .or_insert(0) += cost_transfer;
+                }
             }
         }
         *ship = new_ship;

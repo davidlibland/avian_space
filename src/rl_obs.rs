@@ -111,6 +111,11 @@ pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 11
 pub const SHIP_IS_HOSTILE: usize = 4;
 pub const SHIP_SHOULD_ENGAGE: usize = 5;
 
+// ── Planet type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ───
+pub const PLANET_CARGO_PROFIT_VALUE: usize = 0;
+pub const PLANET_HAS_AMMO: usize = 1;
+pub const PLANET_COMMODITY_MARGIN: usize = 2;
+
 // ── Type one-hot indices ─────────────────────────────────────────────────
 pub const TYPE_IDX_SHIP: usize = 0;
 pub const TYPE_IDX_ASTEROID: usize = 1;
@@ -197,8 +202,9 @@ pub struct ShipSlotData {
 /// Planet-specific features.
 #[derive(Clone, Default)]
 pub struct PlanetSlotData {
-    /// Total value of selling the ship's current cargo at this planet.
-    pub cargo_sale_value: f32,
+    /// Profit (sale value - acquisition cost) the ship would realise by
+    /// selling its current cargo at this planet. May be negative.
+    pub cargo_profit_value: f32,
     /// Whether the ship can replenish ammo here.
     pub has_ammo: f32,
     /// Best commodity margin (most negative = best trade opportunity).
@@ -689,7 +695,7 @@ fn encode_slot(
             ts[9] = ship.distressed;
         }
         EntityKind::Planet(planet) => {
-            ts[0] = planet.cargo_sale_value;
+            ts[0] = planet.cargo_profit_value;
             ts[1] = planet.has_ammo;
             ts[2] = planet.commodity_margin;
         }

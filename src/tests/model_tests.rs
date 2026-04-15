@@ -1,4 +1,6 @@
 use super::*;
+use super::sampling::{coupled_gumbel_sample, logits_to_discrete_action};
+use burn::tensor::{Tensor, TensorData};
 use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, EntityKind, EntitySlotData, ObsInput, PlanetSlotData,
     ShipSlotData, CORE_BLOCK_START, CORE_FEAT_SIZE, OBS_DIM, SLOT_IS_PRESENT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
@@ -151,7 +153,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
             entity_type: 2, // Planet
         },
         kind: EntityKind::Planet(PlanetSlotData {
-            cargo_sale_value: 1234.0,
+            cargo_profit_value: 1234.0,
             has_ammo: 1.0,
             commodity_margin: -50.0,
         }),
@@ -244,7 +246,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
     assert_eq!(cf[1 * c + 4], 0.0, "slot1 is_nav_target");
     assert_eq!(cf[1 * c + 5], 0.0, "slot1 is_weapons_target");
     assert_eq!(tf[1 * s], 1234.0, "slot1 value");
-    assert_eq!(tf[1 * s + 1], 1234.0, "slot1 cargo_sale_value");
+    assert_eq!(tf[1 * s + 1], 1234.0, "slot1 cargo_profit_value");
     assert_eq!(tf[1 * s + 2], 1.0, "slot1 has_ammo");
     assert_eq!(tf[1 * s + 3], -50.0, "slot1 commodity_margin");
     // Remaining type-specific should be zero-padded.

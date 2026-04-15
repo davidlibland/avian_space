@@ -22,26 +22,21 @@
 /// # Decision rate
 /// `rl_step` is gated by a 4 Hz timer. Between ticks, `repeat_actions` re-emits the last
 /// chosen action every Update frame so the ship keeps moving.
-use std::collections::VecDeque;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
-use burn::nn::loss::CrossEntropyLossConfig;
-use burn::optim::{GradientsParams, Optimizer};
-use burn::tensor::backend::Backend;
-use burn::tensor::{Int, TensorData};
-use rand::Rng;
+
+mod bc;
+#[allow(unused_imports)]
+pub use bc::{compute_bc_loss, compute_bc_loss_from_logits, load_bc_buffer};
 
 use crate::CurrentStarSystem;
 use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::asteroids::{Asteroid, AsteroidField};
 use crate::item_universe::ItemUniverse;
-use crate::model::{
-    self, InferenceNet, N_OBJECTS, OBJECT_INPUT_DIM, RLInner,
-    RLResource, SELF_INPUT_DIM, TrainBackend, split_obs, training_net_to_bytes,
-};
+use crate::model::{self, RLResource};
 use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_obs::{
@@ -63,21 +58,6 @@ pub const RL_SEGMENT_LEN: usize = 128;
 
 /// Decision rate in seconds.
 const RL_STEP_PERIOD: f32 = 0.25; // 4 Hz
-
-// BC training hyperparameters
-/// Maximum number of `BCTransition`s kept in the replay buffer.
-const BC_BUFFER_SIZE: usize = 32_768;
-/// Mini-batch size for each BC gradient step.
-const BC_BATCH_SIZE: usize = 256;
-/// Adam learning rate for BC pre-training.
-const BC_LR: f64 = 3e-4;
-/// Push weights to the inference net every N gradient steps.
-const BC_WEIGHT_SYNC_INTERVAL: usize = 50;
-/// Save a checkpoint to disk every N gradient steps.
-const BC_SAVE_INTERVAL: usize = 1_000;
-/// Number of gradient steps to run per drain cycle when the buffer is full.
-/// Higher values keep the compute busy between data-drain pauses.
-const BC_STEPS_PER_DRAIN: usize = 10;
 
 const OVERRIDE_TRADER_NAV_TARGET: bool = false;
 
@@ -263,7 +243,7 @@ impl Plugin for RLCollectionPlugin {
         // Spawn training threads only for the modes that need them.
         match self.mode {
             crate::AppMode::BCTraining => {
-                spawn_bc_training_thread(bc_rx, inference_net_arc, experiment);
+                bc::spawn_bc_training_thread(bc_rx, inference_net_arc, experiment);
                 drop(rl_rx);
             }
             crate::AppMode::RLTraining => {
@@ -654,8 +634,10 @@ fn build_all_observations(
         // Compute asteroid field expected values for this system.
         let field_values = item_universe.asteroid_field_expected_value.get(system_name);
 
-        // Cargo sale value helper: total value of selling ship's cargo at a planet.
-        let cargo_sale_value = |planet_name: &str| -> f32 {
+        // Cargo profit value helper: profit (sale value - acquisition cost) of
+        // selling the ship's current cargo at a planet. Pickups have zero
+        // recorded cost basis so they show their full sale value as profit.
+        let cargo_profit_value = |planet_name: &str| -> f32 {
             let planet_data = item_universe
                 .star_systems
                 .get(system_name)
@@ -664,7 +646,10 @@ fn build_all_observations(
             ship.cargo
                 .iter()
                 .map(|(commodity, &qty)| {
-                    pd.commodities.get(commodity).copied().unwrap_or(0) as f32 * qty as f32
+                    let sale = pd.commodities.get(commodity).copied().unwrap_or(0) as f32
+                        * qty as f32;
+                    let cost = ship.cargo_cost.get(commodity).copied().unwrap_or(0) as f32;
+                    sale - cost
                 })
                 .sum()
         };
@@ -736,7 +721,7 @@ fn build_all_observations(
                     .get(*e)
                     .map(|(_, p)| p.0.as_str())
                     .unwrap_or("");
-                let csv = cargo_sale_value(planet_name);
+                let cpv = cargo_profit_value(planet_name);
                 let has_ammo = item_universe
                     .planet_has_ammo_for
                     .get(planet_name)
@@ -749,11 +734,11 @@ fn build_all_observations(
                 EntitySlotData {
                     core,
                     kind: EntityKind::Planet(PlanetSlotData {
-                        cargo_sale_value: csv,
+                        cargo_profit_value: cpv,
                         has_ammo: if has_ammo { 1.0 } else { 0.0 },
                         commodity_margin: margin,
                     }),
-                    value: csv,
+                    value: cpv,
                     is_nav_target: false,
                     is_weapons_target: false,
                 }
@@ -1132,10 +1117,25 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
         (0..n).find(|&i| is_present(i) && pred(i)).map(|i| i as u8)
     };
 
-    // 1. Traders with cargo → planet with highest value (= cargo_sale_value).
+    // Ship-level state that exempts a planet from the "must be profitable"
+    // filter: low health (needs repair), or free cargo space (can buy more).
+    let low_health = obs[SELF_HEALTH_FRAC] < 0.5;
+    let has_free_cargo = obs[SELF_CARGO_FRAC] < 1.0;
+    let planet_has_ammo =
+        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_HAS_AMMO] > 0.5;
+    let planet_profit =
+        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_CARGO_PROFIT_VALUE];
+    // A planet is a viable trader destination if selling its current cargo
+    // there would yield positive profit, OR if the ship has another reason to
+    // visit (repair, refill ammo, or load more cargo).
+    let planet_viable = |i: usize| {
+        planet_profit(i) > 0.0 || low_health || planet_has_ammo(i) || has_free_cargo
+    };
+
+    // 1. Traders with cargo → planet with highest value (= cargo_profit_value).
     if has_cargo && matches!(personality, Personality::Trader) {
         let best_planet = (0..n)
-            .filter(|&i| is_present(i) && is_planet(i))
+            .filter(|&i| is_present(i) && is_planet(i) && planet_viable(i))
             .max_by(|&a, &b| {
                 value(a)
                     .partial_cmp(&value(b))
@@ -1157,7 +1157,7 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
             Personality::Fighter => {
                 (is_ship(i) && should_engage(i)) || is_pickup(i) || is_planet(i)
             }
-            Personality::Trader => is_planet(i) || is_pickup(i),
+            Personality::Trader => (is_planet(i) && planet_viable(i)) || is_pickup(i),
         };
         if still_valid {
             return i as u8;
@@ -1174,7 +1174,7 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
             .or_else(|| first_matching(&|i| is_pickup(i)))
             .or_else(|| first_matching(&|i| is_planet(i)))
             .unwrap_or(no_target),
-        Personality::Trader => first_matching(&|i| is_planet(i))
+        Personality::Trader => first_matching(&|i| is_planet(i) && planet_viable(i))
             .or_else(|| first_matching(&|i| is_pickup(i)))
             .unwrap_or(no_target),
     }
@@ -1408,364 +1408,6 @@ fn store_obs_actions(
 }
 
 // ---------------------------------------------------------------------------
-// BC loss computation (shared by the BC trainer and PPO's BC auxiliary loss)
-// ---------------------------------------------------------------------------
-
-/// Compute the weighted BC cross-entropy loss from pre-computed logits and a
-/// slice of expert (rule-based) action labels.  Use this when you already did
-/// a forward pass for another purpose (e.g. PPO) and want to avoid a second
-/// forward.
-///
-/// Each head's loss is weighted inversely by `log(num_classes)` so the
-/// gradient contribution from each head is roughly equal at initialisation.
-///
-/// Returns only the differentiable total-loss tensor — the caller is
-/// responsible for syncing (`.into_scalar()`) once per cycle for logging
-/// rather than once per mini-batch, to avoid stalling the GPU pipeline.
-pub fn compute_bc_loss_from_logits(
-    action_logits: burn::tensor::Tensor<TrainBackend, 2>,
-    nav_target_logits: burn::tensor::Tensor<TrainBackend, 2>,
-    wep_target_logits: burn::tensor::Tensor<TrainBackend, 2>,
-    rule_based_actions: &[DiscreteAction],
-    loss_fn: &burn::nn::loss::CrossEntropyLoss<TrainBackend>,
-    device: &<TrainBackend as Backend>::Device,
-) -> burn::tensor::Tensor<TrainBackend, 1> {
-    let b = rule_based_actions.len();
-
-    let action_labels_flat: Vec<i64> = rule_based_actions
-        .iter()
-        .flat_map(|a| [a.0 as i64, a.1 as i64, a.2 as i64, a.3 as i64])
-        .collect();
-    let action_labels = burn::tensor::Tensor::<TrainBackend, 2, Int>::from_data(
-        TensorData::new(action_labels_flat, [b, 4]),
-        device,
-    );
-    let turn_t = action_labels.clone().narrow(1, 0, 1).reshape([b]);
-    let thrust_t = action_labels.clone().narrow(1, 1, 1).reshape([b]);
-    let fp_t = action_labels.clone().narrow(1, 2, 1).reshape([b]);
-    let fs_t = action_labels.narrow(1, 3, 1).reshape([b]);
-
-    let nav_target_labels: Vec<i64> = rule_based_actions.iter().map(|a| a.4 as i64).collect();
-    let nav_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
-        TensorData::new(nav_target_labels, [b]),
-        device,
-    );
-    let wep_target_labels: Vec<i64> = rule_based_actions.iter().map(|a| a.5 as i64).collect();
-    let wep_target_t = burn::tensor::Tensor::<TrainBackend, 1, Int>::from_data(
-        TensorData::new(wep_target_labels, [b]),
-        device,
-    );
-
-    let w3 = 1.0 / (3.0_f32).ln();
-    let w2 = 1.0 / (2.0_f32).ln();
-    let wt = 1.0 / (model::TARGET_OUTPUT_DIM as f32).ln();
-
-    let turn_loss = loss_fn.forward(action_logits.clone().narrow(1, 0, 3), turn_t) * w3;
-    let thrust_loss = loss_fn.forward(action_logits.clone().narrow(1, 3, 2), thrust_t) * w2;
-    let fp_loss = loss_fn.forward(action_logits.clone().narrow(1, 5, 2), fp_t) * w2;
-    let fs_loss = loss_fn.forward(action_logits.narrow(1, 7, 2), fs_t) * w2;
-    let nav_tgt_loss = loss_fn.forward(nav_target_logits, nav_target_t) * wt;
-    let wep_tgt_loss = loss_fn.forward(wep_target_logits, wep_target_t) * wt;
-
-    turn_loss + thrust_loss + fp_loss + fs_loss + nav_tgt_loss + wep_tgt_loss
-}
-
-/// Compute the weighted BC cross-entropy loss over a batch of `BCTransition`s.
-/// Runs its own forward pass through the net — use `compute_bc_loss_from_logits`
-/// instead if you already have the logits in hand.
-pub fn compute_bc_loss(
-    net: &model::RLNet<TrainBackend>,
-    batch: &[&BCTransition],
-    loss_fn: &burn::nn::loss::CrossEntropyLoss<TrainBackend>,
-    device: &<TrainBackend as Backend>::Device,
-) -> burn::tensor::Tensor<TrainBackend, 1> {
-    let b = batch.len();
-    let mut self_flat = Vec::with_capacity(b * SELF_INPUT_DIM);
-    let mut obj_flat = Vec::with_capacity(b * N_OBJECTS * OBJECT_INPUT_DIM);
-    let mut proj_flat = Vec::with_capacity(b * model::PROJECTILES_FLAT_DIM);
-    for t in batch {
-        let (s, o) = split_obs(&t.obs);
-        self_flat.extend_from_slice(s);
-        obj_flat.extend_from_slice(o);
-        proj_flat.extend_from_slice(&t.proj_obs);
-    }
-    let self_input = burn::tensor::Tensor::<TrainBackend, 2>::from_data(
-        TensorData::new(self_flat, [b, SELF_INPUT_DIM]),
-        device,
-    );
-    let obj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
-        TensorData::new(obj_flat, [b, N_OBJECTS, OBJECT_INPUT_DIM]),
-        device,
-    );
-    let proj_input = burn::tensor::Tensor::<TrainBackend, 3>::from_data(
-        TensorData::new(
-            proj_flat,
-            [b, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM],
-        ),
-        device,
-    );
-
-    let (action_logits, nav_target_logits, wep_target_logits) =
-        net.forward(self_input, obj_input, proj_input);
-
-    let rule_based: Vec<DiscreteAction> = batch.iter().map(|t| t.action).collect();
-    compute_bc_loss_from_logits(
-        action_logits,
-        nav_target_logits,
-        wep_target_logits,
-        &rule_based,
-        loss_fn,
-        device,
-    )
-}
-
-// ---------------------------------------------------------------------------
-// BC training thread
-// ---------------------------------------------------------------------------
-
-/// Spawn the behavioural-cloning pre-training thread.
-///
-/// The thread owns `bc_rx` and continuously:
-/// 1. Drains `BCTransition`s into a circular replay buffer.
-/// 2. Samples random mini-batches and runs Adam gradient steps, minimising
-///    cross-entropy loss on all four action heads simultaneously.
-/// 3. Every [`BC_WEIGHT_SYNC_INTERVAL`] steps pushes serialised weights to
-///    `inference_net` so the game thread always uses the latest policy.
-/// 4. Every [`BC_SAVE_INTERVAL`] steps saves a checkpoint to [`BC_SAVE_PATH`]`.bin`.
-///
-/// On startup the thread looks for an existing checkpoint and, if found, loads
-/// it into both the training net and the inference net before the first
-/// gradient step.
-fn spawn_bc_training_thread(
-    bc_rx: mpsc::Receiver<BCTransition>,
-    inference_net: Arc<Mutex<InferenceNet>>,
-    experiment: crate::experiments::ExperimentSetup,
-) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
-        let device = Default::default(); // <TrainBackend as Backend>::Device
-        let mut inner = RLInner::<TrainBackend>::new(&device);
-
-        let checkpoint_path = experiment.policy_checkpoint_path();
-
-        // Try to load an existing BC checkpoint into the training net.
-        if !experiment.is_fresh {
-            if let Some(net) = model::load_training_net(&checkpoint_path, &device) {
-                inner.policy_net = Some(net);
-                // Sync the loaded weights to the inference net immediately.
-                let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
-                if let Ok(mut lock) = inference_net.lock() {
-                    lock.load_bytes(bytes);
-                }
-                println!("[bc] Resumed from checkpoint {checkpoint_path}");
-            } else {
-                println!("[bc] No checkpoint found at {checkpoint_path} — starting from scratch.");
-            }
-        } else {
-            println!("[bc] Fresh run — skipping checkpoint load.");
-        }
-
-        let buffer_path = experiment.buffer_checkpoint_path();
-
-        // Try to restore a previously saved replay buffer so training starts hot.
-        let mut buffer: VecDeque<BCTransition> = if !experiment.is_fresh {
-            load_bc_buffer(&buffer_path)
-                .map(|b| {
-                    println!(
-                        "[bc] Restored buffer with {} transitions from {buffer_path}",
-                        b.len()
-                    );
-                    b
-                })
-                .unwrap_or_else(|| {
-                    println!("[bc] No buffer checkpoint found at {buffer_path} — starting empty.");
-                    VecDeque::with_capacity(BC_BUFFER_SIZE)
-                })
-        } else {
-            println!("[bc] Fresh run — starting with empty buffer.");
-            VecDeque::with_capacity(BC_BUFFER_SIZE)
-        };
-        let mut step = 0usize;
-        let mut rng = rand::thread_rng();
-
-        loop {
-            // ── Drain incoming data ──────────────────────────────────────────
-            // Only block waiting for new transitions when the buffer is too
-            // small to train.  Once we have enough data, drain non-blocking
-            // and go straight to gradient steps.
-            if buffer.len() < BC_BATCH_SIZE {
-                match bc_rx.recv_timeout(std::time::Duration::from_millis(50)) {
-                    Ok(t) => {
-                        if buffer.len() >= BC_BUFFER_SIZE {
-                            buffer.pop_front();
-                        }
-                        buffer.push_back(t);
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                        println!("[bc] Channel disconnected — saving final checkpoint.");
-                        if let Some(net) = inner.policy_net.as_ref() {
-                            save_bc_checkpoint(net, &checkpoint_path);
-                        }
-                        save_bc_buffer(&buffer, &buffer_path);
-                        break;
-                    }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
-                }
-            }
-            // Always drain the rest of the channel non-blocking.
-            while let Ok(t) = bc_rx.try_recv() {
-                if buffer.len() >= BC_BUFFER_SIZE {
-                    buffer.pop_front();
-                }
-                buffer.push_back(t);
-            }
-
-            if buffer.len() < BC_BATCH_SIZE {
-                continue;
-            }
-
-            // ── One-time setup hoisted above the inner loop ──────────────────
-            let loss_fn = CrossEntropyLossConfig::new().init::<TrainBackend>(&device);
-
-            // ── Multiple gradient steps per drain cycle ──────────────────────
-            // Amortises the drain overhead: run BC_STEPS_PER_DRAIN steps
-            // before going back to check for new data.
-            for _ in 0..BC_STEPS_PER_DRAIN {
-                let n = buffer.len();
-
-                // ── Build mini-batch ─────────────────────────────────────────
-                let batch: Vec<&BCTransition> = (0..BC_BATCH_SIZE)
-                    .map(|_| &buffer[rng.gen_range(0..n)])
-                    .collect();
-
-                // ── Forward + loss ─────────────────────────────────────────
-                // Only sync the scalar loss every 100 steps to avoid a GPU
-                // pipeline stall on every gradient step.
-                let log_this_step = step % 100 == 0;
-                let grads = {
-                    let net = inner.policy_net.as_ref().unwrap();
-                    let total_loss = compute_bc_loss(net, &batch, &loss_fn, &device);
-                    if log_this_step {
-                        let v = f32::from(total_loss.clone().into_scalar());
-                        println!("[bc] step={step:>6}  loss={v:.4}  buffer={}", buffer.len());
-                    }
-                    let raw = total_loss.backward();
-                    GradientsParams::from_grads(raw, net)
-                };
-
-                let net = inner.policy_net.take().unwrap();
-                inner.policy_net = Some(inner.policy_optim.step(BC_LR, net, grads));
-                step += 1;
-
-                // ── Sync weights to inference net ────────────────────────────
-                if step % BC_WEIGHT_SYNC_INTERVAL == 0 {
-                    let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
-                    if let Ok(mut lock) = inference_net.lock() {
-                        lock.load_bytes(bytes);
-                    }
-                }
-
-                // ── Periodic checkpoint ──────────────────────────────────────
-                if step % BC_SAVE_INTERVAL == 0 {
-                    save_bc_checkpoint(inner.policy_net.as_ref().unwrap(), &checkpoint_path);
-                    save_bc_buffer(&buffer, &buffer_path);
-                }
-            }
-        }
-    })
-}
-
-fn save_bc_checkpoint(net: &model::RLNet<TrainBackend>, path: &str) {
-    model::save_training_net(net, path);
-}
-
-// ---------------------------------------------------------------------------
-// BC buffer persistence
-// ---------------------------------------------------------------------------
-//
-// Binary format (little-endian):
-//   [u32] obs_dim   — number of f32s per observation
-//   [u32] count     — number of transitions
-//   for each transition:
-//     [u8; 5]       — action (turn, thrust, fire_primary, fire_secondary, target_idx)
-//     [f32; obs_dim] — flat observation
-
-/// Serialise the replay buffer to `path`.  Silent on error (training continues).
-fn save_bc_buffer(buffer: &VecDeque<BCTransition>, path: &str) {
-    use std::io::Write;
-    let Some(first) = buffer.front() else { return };
-    let input_dim = first.obs.len() as u32;
-
-    let result = (|| -> std::io::Result<()> {
-        let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
-        f.write_all(&input_dim.to_le_bytes())?;
-        f.write_all(&(buffer.len() as u32).to_le_bytes())?;
-        for t in buffer {
-            f.write_all(&[
-                t.action.0, t.action.1, t.action.2, t.action.3, t.action.4, t.action.5,
-            ])?;
-            for &v in &t.obs {
-                f.write_all(&v.to_le_bytes())?;
-            }
-        }
-        Ok(())
-    })();
-
-    if let Err(e) = result {
-        eprintln!("[bc] Failed to save buffer to {path}: {e}");
-    } else {
-        println!("[bc] Buffer saved ({} transitions) → {path}", buffer.len());
-    }
-}
-
-/// Deserialise a previously saved replay buffer from `path`.
-/// Returns `None` if the file is missing, corrupt, or has a mismatched
-/// observation dimension.
-pub(crate) fn load_bc_buffer(path: &str) -> Option<VecDeque<BCTransition>> {
-    use crate::rl_obs::OBS_DIM;
-    use std::io::Read;
-    let expected_dim = OBS_DIM;
-    let mut f = std::io::BufReader::new(std::fs::File::open(path).ok()?);
-
-    let mut u32_buf = [0u8; 4];
-    f.read_exact(&mut u32_buf).ok()?;
-    let stored_dim = u32::from_le_bytes(u32_buf) as usize;
-    if stored_dim != expected_dim {
-        eprintln!(
-            "[bc] Buffer at {path} has dim={stored_dim}, expected {expected_dim} — discarding."
-        );
-        return None;
-    }
-
-    f.read_exact(&mut u32_buf).ok()?;
-    let count = u32::from_le_bytes(u32_buf) as usize;
-
-    let mut buffer = VecDeque::with_capacity(count.min(BC_BUFFER_SIZE));
-    let mut action_buf = [0u8; 6];
-    let mut input_bytes = vec![0u8; expected_dim * 4];
-
-    for _ in 0..count {
-        f.read_exact(&mut action_buf).ok()?;
-        f.read_exact(&mut input_bytes).ok()?;
-        let obs: Vec<f32> = input_bytes
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
-            .collect();
-        buffer.push_back(BCTransition {
-            obs,
-            proj_obs: vec![0.0; crate::rl_obs::K_PROJECTILES * crate::rl_obs::PROJ_SLOT_SIZE],
-            action: (
-                action_buf[0],
-                action_buf[1],
-                action_buf[2],
-                action_buf[3],
-                action_buf[4],
-                action_buf[5],
-            ),
-        });
-    }
-    Some(buffer)
-}
-
 // ---------------------------------------------------------------------------
 // Public helper to build RLShipDied from apply_damage
 // ---------------------------------------------------------------------------

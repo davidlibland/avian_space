@@ -262,7 +262,7 @@ fn test_trader_targets_planet() {
         [0.0, 0.0],              // stationary
         false,                   // not nav target
         false,                   // not weapons target
-        &[500.0, 0.0, -100.0],  // cargo_sale_value=500, has_ammo=0, commodity_margin=-100
+        &[500.0, 0.0, -100.0],  // cargo_profit_value=500, has_ammo=0, commodity_margin=-100
         500.0,
     );
 

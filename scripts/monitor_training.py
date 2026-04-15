@@ -40,18 +40,24 @@ def get(df, tag):
     return df[df["tag"] == tag]["value"].values
 
 
-def mean_se(vals, k=10):
-    """Return (mean, standard_error_of_mean) over the last k samples.
+def mean_sd_se(vals, k=10):
+    """Return (mean, sd, standard_error_of_mean, n) over the last k samples.
 
-    Returns (nan, nan) if fewer than 2 samples available.
+    Returns (nan, nan, nan, n) if fewer than 2 samples available.
     """
     if len(vals) < 2:
-        return float("nan"), float("nan")
+        return float("nan"), float("nan"), float("nan"), len(vals)
     window = vals[-k:] if len(vals) >= k else vals
     n = len(window)
     m = float(np.mean(window))
     sd = float(np.std(window, ddof=1)) if n > 1 else 0.0
-    return m, sd / np.sqrt(n)
+    return m, sd, sd / np.sqrt(n), n
+
+
+def mean_se(vals, k=10):
+    """Back-compat: return (mean, standard_error_of_mean) over the last k."""
+    m, _, se, _ = mean_sd_se(vals, k)
+    return m, se
 
 
 def windowed_z(vals, frac=0.25):
@@ -99,7 +105,7 @@ def main():
     print(f"Total update cycles: {n}")
 
     # ── Throughput ────────────────────────────────────────────────────────
-    print_section("THROUGHPUT")
+    print_section("THROUGHPUT (mean ± sd over last 10 cycles)")
     for tag, label in [
         ("throughput/wait_secs", "Wait (data collection)"),
         ("throughput/train_secs", "Train (gradient steps)"),
@@ -108,10 +114,9 @@ def main():
         ("throughput/train_steps_per_sec", "Train steps/sec (GPU)"),
     ]:
         vals = get(df, tag)
-        if len(vals) >= 5:
-            last5 = vals[-5:]
-            print(f"  {label:30s}  last5: [{', '.join(f'{v:.1f}' for v in last5)}]  "
-                  f"mean={np.mean(vals[-10:]):.1f}")
+        if len(vals) >= 2:
+            m, sd, _se, n = mean_sd_se(vals, 10)
+            print(f"  {label:30s}  {m:>8.2f} ± {sd:<6.2f} (n={n})")
 
     wait = get(df, "throughput/wait_secs")
     train = get(df, "throughput/train_secs")
@@ -158,8 +163,8 @@ def main():
         if mild:
             print(f"  {pers:>10}  noise:       {', '.join(mild)}")
 
-    # ── Training health (last-10 mean ± stderr; also raw last-5) ──────────
-    print_section("TRAINING HEALTH (mean±se over last 10, raw last 5)")
+    # ── Training health (mean ± sd over last 10 cycles) ───────────────────
+    print_section("TRAINING HEALTH (mean ± sd over last 10 cycles)")
     for tag, label in [
         ("train/policy_loss", "Policy loss"),
         ("train/value_loss", "Value loss"),
@@ -169,13 +174,9 @@ def main():
         ("train/advantage_std", "Advantage std"),
     ]:
         vals = get(df, tag)
-        if len(vals) >= 5:
-            m, se = mean_se(vals, 10)
-            last5 = vals[-5:]
-            print(
-                f"  {label:25s}  {m:.4f}±{se:.4f}  "
-                f"[{', '.join(f'{v:.4f}' for v in last5)}]"
-            )
+        if len(vals) >= 2:
+            m, sd, _se, n = mean_sd_se(vals, 10)
+            print(f"  {label:25s}  {m:>8.4f} ± {sd:<7.4f} (n={n})")
 
     # ── Policy concentration + BC agreement ──────────────────────────────
     # max_prob: mean of max(softmax) per action head, averaged over last cycles.
@@ -210,19 +211,27 @@ def main():
             )
 
     # ── Per-head value diagnostics ────────────────────────────────────────
-    print_section("VALUE HEAD DIAGNOSTICS (last 5)")
-    header_ev = f"{'':>16} {'expl_var':>40}  {'mean_abs_td':>40}"
-    print(header_ev)
-    print("-" * len(header_ev))
+    print_section("VALUE HEAD DIAGNOSTICS (mean ± sd over last 10 cycles)")
+    print(f"  {'head':>16}  {'expl_var':>20}  {'mean_abs_td':>20}")
+    print("-" * 64)
     for rtype in REWARD_TYPES:
         ev_vals = get(df, f"value_head/{rtype}/explained_variance")
         td_vals = get(df, f"value_head/{rtype}/mean_abs_td_error")
-        ev_str = f"[{', '.join(f'{v:.3f}' for v in ev_vals[-5:])}]" if len(ev_vals) >= 5 else "n/a"
-        td_str = f"[{', '.join(f'{v:.4f}' for v in td_vals[-5:])}]" if len(td_vals) >= 5 else "n/a"
-        print(f"  {rtype:>14}: {ev_str:>40}  {td_str:>40}")
+        if len(ev_vals) >= 2:
+            m_ev, sd_ev, _, _ = mean_sd_se(ev_vals, 10)
+            ev_str = f"{m_ev:>7.3f} ± {sd_ev:<6.3f}"
+        else:
+            ev_str = "n/a"
+        if len(td_vals) >= 2:
+            m_td, sd_td, _, _ = mean_sd_se(td_vals, 10)
+            td_str = f"{m_td:>7.4f} ± {sd_td:<6.4f}"
+        else:
+            td_str = "n/a"
+        print(f"  {rtype:>16}  {ev_str:>20}  {td_str:>20}")
     vals = get(df, "train/explained_variance")
-    if len(vals) >= 5:
-        print(f"  {'TOTAL':>14}: [{', '.join(f'{v:.3f}' for v in vals[-5:])}]")
+    if len(vals) >= 2:
+        m, sd, _, _ = mean_sd_se(vals, 10)
+        print(f"  {'TOTAL':>16}  {m:>7.3f} ± {sd:<6.3f}")
 
     # ── Raw reward totals per cycle (recent) ──────────────────────────────
     print_section("RAW REWARD TOTAL PER CYCLE (last 10 avg)")
@@ -246,15 +255,18 @@ def main():
         if not has_data:
             return
         print_section(title)
-        header = f"{'':>12}" + "".join(f"{t:>14}" for t in type_names)
+        header = f"{'':>12}" + "".join(f"{t:>16}" for t in type_names)
         print(header)
         print("-" * len(header))
         for pers in PERSONALITIES:
-            row = []
+            cells = ""
             for tt in type_names:
                 vals = get(df, f"{prefix}/{pers}/{tt}")
-                row.append(float(np.mean(vals[-5:])) if len(vals) >= 5 else 0.0)
-            cells = "".join(f"{v:14.3f}" for v in row)
+                if len(vals) >= 2:
+                    m, sd, _, _ = mean_sd_se(vals, 10)
+                    cells += f"  {m:5.3f}±{sd:5.3f}"
+                else:
+                    cells += f"  {'n/a':>11}"
             print(f"{pers:>12}{cells}")
 
     print_target_matrix(

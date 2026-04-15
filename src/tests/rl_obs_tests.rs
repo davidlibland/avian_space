@@ -424,7 +424,7 @@ fn test_planet_slot_block_extraction() {
             entity_type: 2, // Planet
         },
         kind: EntityKind::Planet(PlanetSlotData {
-            cargo_sale_value: 500.0,
+            cargo_profit_value: 500.0,
             has_ammo: 1.0,
             commodity_margin: -100.0,
         }),
@@ -455,7 +455,7 @@ fn test_planet_slot_block_extraction() {
 
     // Block 4: value + type-specific
     assert_eq!(obs[s + SLOT_VALUE], 500.0, "value");
-    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 0], 500.0, "cargo_sale_value");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 0], 500.0, "cargo_profit_value");
     assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 1], 1.0, "has_ammo");
     assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 2], -100.0, "commodity_margin");
     // Remaining type-specific should be zero-padded.

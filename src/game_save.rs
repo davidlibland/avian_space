@@ -95,6 +95,7 @@ impl PlayerGameState {
             data: ship_data,
             health: save.health,
             cargo: save.cargo.clone(),
+            cargo_cost: HashMap::new(),
             credits: save.credits,
             nav_target: None,
             weapons_target: None,
