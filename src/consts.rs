@@ -147,3 +147,13 @@ pub const PICKUP_REWARD_MINER: f32 = 0.8;
 /// Reward for collecting a pickup (Trader).
 pub const PICKUP_REWARD_TRADER: f32 = 0.1;
 
+
+// ---------------------------------------------------------------------------
+// Recent-landing cooldown
+// ---------------------------------------------------------------------------
+
+/// Seconds (game time) for which a planet remains in a ship's "recently
+/// visited" set after landing. While in the set, the rule-based AI and the
+/// trained policy mask it out as a nav target so the ship has to engage
+/// elsewhere before returning.
+pub const LANDING_COOLDOWN_SECS: f32 = 30.0;

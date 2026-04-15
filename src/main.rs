@@ -484,11 +484,15 @@ fn keyboard_input(
 
     let fire_primary = keyboard_input.any_pressed([KeyCode::Space]);
     if fire_primary {
+        let target_e = player_ship
+            .weapons_target
+            .as_ref()
+            .map(|t| t.get_entity());
         for weapon_type in player_ship.weapon_systems.primary.keys() {
             weapons_writer.write(FireCommand {
                 ship: player_entity,
                 weapon_type: weapon_type.clone(),
-                target: None, // guided missiles auto-acquire the nearest enemy
+                target: target_e,
             });
         }
     }

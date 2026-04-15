@@ -427,6 +427,7 @@ fn test_planet_slot_block_extraction() {
             cargo_profit_value: 500.0,
             has_ammo: 1.0,
             commodity_margin: -100.0,
+            is_recently_visited: 0.0,
         }),
         value: 500.0,
         is_nav_target: false,
@@ -458,8 +459,9 @@ fn test_planet_slot_block_extraction() {
     assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 0], 500.0, "cargo_profit_value");
     assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 1], 1.0, "has_ammo");
     assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 2], -100.0, "commodity_margin");
+    assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 3], 0.0, "is_recently_visited");
     // Remaining type-specific should be zero-padded.
-    for i in 3..TYPE_SPECIFIC_SIZE {
+    for i in 4..TYPE_SPECIFIC_SIZE {
         assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + i], 0.0, "type_specific[{i}] should be 0");
     }
 }

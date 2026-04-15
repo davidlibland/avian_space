@@ -1,10 +1,12 @@
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use egui::{Align2, Color32, FontId, Pos2, Sense, Stroke};
 use std::collections::HashSet;
 
 use crate::{
-    CurrentStarSystem, PlayState, TravelContext, TravelPhase, item_universe::ItemUniverse,
+    CurrentStarSystem, PlayState, TravelContext, TravelPhase,
+    game_save::PlayerGameState, item_universe::ItemUniverse,
 };
 
 // Canvas is larger than the visible viewport — the ScrollArea lets the user pan around.
@@ -13,10 +15,6 @@ const CANVAS_H: f32 = 900.0;
 // Map origin (0,0) is placed at this pixel in the canvas.
 const CANVAS_CENTER_X: f32 = 700.0;
 const CANVAS_CENTER_Y: f32 = 450.0;
-// Visible viewport of the scroll area.
-const VIEWPORT_W: f32 = 600.0;
-const VIEWPORT_H: f32 = 400.0;
-
 const NODE_R: f32 = 3.5;   // visual dot radius
 const CLICK_R: f32 = 12.0; // invisible click hit radius
 
@@ -96,6 +94,8 @@ fn jump_ui(
     mut travel_ctx: ResMut<TravelContext>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
+    game_state: Res<PlayerGameState>,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
 ) {
     if !ui_state.open {
         return;
@@ -104,11 +104,33 @@ fn jump_ui(
         return;
     };
 
-    let neighbors: HashSet<String> = item_universe
+    let jumpable_neighbors: HashSet<String> = item_universe
         .star_systems
         .get(&current_system.0)
         .map(|s| s.connections.iter().cloned().collect())
         .unwrap_or_default();
+
+    let visited: &HashSet<String> = &game_state.visited_systems;
+    // Greyed discovery ring: strictly one jump from any visited system.
+    let mut discovered: HashSet<String> = HashSet::new();
+    for v in visited {
+        if let Some(sys) = item_universe.star_systems.get(v) {
+            for conn in &sys.connections {
+                if !visited.contains(conn) {
+                    discovered.insert(conn.clone());
+                }
+            }
+        }
+    }
+
+    // Size the map window to fit just inside the primary window.
+    let (win_w, win_h) = primary_window
+        .single()
+        .map(|w| (w.width(), w.height()))
+        .unwrap_or((1280.0, 720.0));
+    let margin = 40.0;
+    let map_w = (win_w - margin).max(400.0);
+    let map_h = (win_h - margin).max(300.0);
 
     let mut jump_target: Option<String> = None;
     let mut close = false;
@@ -116,7 +138,9 @@ fn jump_ui(
     egui::Window::new("Star Map")
         .collapsible(false)
         .resizable(true)
-        .default_size([VIEWPORT_W + 16.0, VIEWPORT_H + 60.0])
+        .default_size([map_w, map_h])
+        .max_size([map_w, map_h])
+        .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
             let mut scroll = egui::ScrollArea::both().id_salt("star_map_scroll");
             if !ui_state.scroll_initialized {
@@ -125,8 +149,8 @@ fn jump_ui(
                     .get(&current_system.0)
                     .map(|s| s.map_position)
                     .unwrap_or_default();
-                let offset_x = CANVAS_CENTER_X + map_pos.x - VIEWPORT_W * 0.5;
-                let offset_y = CANVAS_CENTER_Y + map_pos.y - VIEWPORT_H * 0.5;
+                let offset_x = CANVAS_CENTER_X + map_pos.x - map_w * 0.5;
+                let offset_y = CANVAS_CENTER_Y + map_pos.y - map_h * 0.5;
                 scroll = scroll.scroll_offset(egui::Vec2::new(offset_x, offset_y));
                 ui_state.scroll_initialized = true;
             }
@@ -145,11 +169,21 @@ fn jump_ui(
 
                 painter.rect_filled(response.rect, 0.0, Color32::from_rgb(4, 4, 18));
 
-                // Edges
+                let is_visible = |name: &String| -> bool {
+                    visited.contains(name) || discovered.contains(name)
+                };
+
+                // Edges — only when both endpoints are visible AND at least one is visited.
                 for (sys_name, sys) in &item_universe.star_systems {
+                    if !is_visible(sys_name) {
+                        continue;
+                    }
                     let from = to_screen(sys.map_position);
                     for conn in &sys.connections {
-                        if conn > sys_name {
+                        if conn > sys_name
+                            && is_visible(conn)
+                            && (visited.contains(sys_name) || visited.contains(conn))
+                        {
                             if let Some(other) = item_universe.star_systems.get(conn) {
                                 painter.line_segment(
                                     [from, to_screen(other.map_position)],
@@ -169,11 +203,15 @@ fn jump_ui(
 
                 // Nodes
                 for (sys_name, sys) in &item_universe.star_systems {
+                    if !is_visible(sys_name) {
+                        continue;
+                    }
                     let pos = to_screen(sys.map_position);
                     let is_current = *sys_name == current_system.0;
-                    let is_neighbor = neighbors.contains(sys_name);
+                    let is_visited = visited.contains(sys_name);
+                    let is_jumpable = jumpable_neighbors.contains(sys_name);
 
-                    if is_neighbor {
+                    if is_jumpable {
                         let hovered =
                             hover_pos.map_or(false, |hp| (hp - pos).length() < CLICK_R);
                         if hovered {
@@ -192,14 +230,15 @@ fn jump_ui(
 
                     let fill = if is_current {
                         Color32::from_rgb(100, 190, 255)
-                    } else if is_neighbor {
+                    } else if is_visited {
                         Color32::from_rgb(200, 210, 230)
                     } else {
-                        Color32::from_rgb(90, 95, 120)
+                        // Discovered but unvisited — greyed.
+                        Color32::from_rgb(80, 85, 100)
                     };
 
                     painter.circle_filled(pos, NODE_R, fill);
-                    if is_current || is_neighbor {
+                    if is_current || is_visited {
                         painter.circle_stroke(
                             pos,
                             NODE_R,
@@ -207,20 +246,22 @@ fn jump_ui(
                         );
                     }
 
-                    let display = sys_name.replace('_', " ");
-                    painter.text(
-                        Pos2::new(pos.x, pos.y + NODE_R + 5.0),
-                        Align2::CENTER_TOP,
-                        &display,
-                        FontId::proportional(11.0),
-                        if is_current {
-                            Color32::from_rgb(140, 210, 255)
-                        } else {
-                            Color32::from_rgb(170, 175, 200)
-                        },
-                    );
+                    if is_visited {
+                        let display = sys_name.replace('_', " ");
+                        painter.text(
+                            Pos2::new(pos.x, pos.y + NODE_R + 5.0),
+                            Align2::CENTER_TOP,
+                            &display,
+                            FontId::proportional(11.0),
+                            if is_current {
+                                Color32::from_rgb(140, 210, 255)
+                            } else {
+                                Color32::from_rgb(170, 175, 200)
+                            },
+                        );
+                    }
 
-                    if is_neighbor {
+                    if is_jumpable {
                         if let Some(cp) = click_pos {
                             if (cp - pos).length() < CLICK_R {
                                 jump_target = Some(sys_name.clone());

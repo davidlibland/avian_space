@@ -73,19 +73,19 @@ sol:
     min: 15
     max: 20
     types:
-      # fed_patrol: 3.0
-      # fed_destroyer: 1.0
-      # fed_missile_cruiser: 0.5
+      fed_patrol: 3.0
+      fed_destroyer: 1.0
+      fed_missile_cruiser: 0.5
       shuttle: 1.5
       hauler: 2.0
       freighter: 1.0
       courier: 0.5
       asteroid_miner: 3.0
-      # rebel_fighter: 3.0        # occasional Rebel scout near the border
-      # rebel_gunboat: 2.0
-      # rebel_frigate: 1.0
-      # pirate_corvette: 0.5
-      # pirate_missile_boat: 0.5
+      rebel_fighter: 3.0        # occasional Rebel scout near the border
+      rebel_gunboat: 2.0
+      rebel_frigate: 1.0
+      pirate_corvette: 0.5
+      pirate_missile_boat: 0.5
 
 kepler_22:
   map_position: [-520.0, 60.0]

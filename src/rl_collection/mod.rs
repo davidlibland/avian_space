@@ -397,6 +397,7 @@ fn rl_step(
         &spatial_query,
         item_universe,
         current_system,
+        time.elapsed_secs(),
     );
 
     // ── Sub-function 2: run batched model inference (RLControl mode only) ──
@@ -565,6 +566,7 @@ fn build_all_observations(
     spatial_query: &SpatialQuery,
     item_universe: &ItemUniverse,
     current_system: &CurrentStarSystem,
+    current_time_secs: f32,
 ) -> Vec<(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)> {
     let mut results = Vec::new();
 
@@ -731,12 +733,18 @@ fn build_all_observations(
                     .and_then(|m| m.get(planet_name))
                     .copied()
                     .unwrap_or(0.0) as f32;
+                let recently_visited = ship
+                    .recent_landings
+                    .get(planet_name)
+                    .map(|&t| t > current_time_secs)
+                    .unwrap_or(false);
                 EntitySlotData {
                     core,
                     kind: EntityKind::Planet(PlanetSlotData {
                         cargo_profit_value: cpv,
                         has_ammo: if has_ammo { 1.0 } else { 0.0 },
                         commodity_margin: margin,
+                        is_recently_visited: if recently_visited { 1.0 } else { 0.0 },
                     }),
                     value: cpv,
                     is_nav_target: false,
@@ -1125,11 +1133,15 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
         |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_HAS_AMMO] > 0.5;
     let planet_profit =
         |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_CARGO_PROFIT_VALUE];
+    let planet_recently_visited =
+        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_IS_RECENTLY_VISITED] > 0.5;
     // A planet is a viable trader destination if selling its current cargo
     // there would yield positive profit, OR if the ship has another reason to
-    // visit (repair, refill ammo, or load more cargo).
+    // visit (repair, refill ammo, or load more cargo). The recent-visited
+    // cooldown blocks re-landing regardless of the above reasons.
     let planet_viable = |i: usize| {
-        planet_profit(i) > 0.0 || low_health || planet_has_ammo(i) || has_free_cargo
+        !planet_recently_visited(i)
+            && (planet_profit(i) > 0.0 || low_health || planet_has_ammo(i) || has_free_cargo)
     };
 
     // 1. Traders with cargo → planet with highest value (= cargo_profit_value).

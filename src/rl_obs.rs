@@ -115,6 +115,8 @@ pub const SHIP_SHOULD_ENGAGE: usize = 5;
 pub const PLANET_CARGO_PROFIT_VALUE: usize = 0;
 pub const PLANET_HAS_AMMO: usize = 1;
 pub const PLANET_COMMODITY_MARGIN: usize = 2;
+/// 1.0 if the ship landed at this planet within the recent-visited cooldown.
+pub const PLANET_IS_RECENTLY_VISITED: usize = 3;
 
 // ── Type one-hot indices ─────────────────────────────────────────────────
 pub const TYPE_IDX_SHIP: usize = 0;
@@ -209,6 +211,9 @@ pub struct PlanetSlotData {
     pub has_ammo: f32,
     /// Best commodity margin (most negative = best trade opportunity).
     pub commodity_margin: f32,
+    /// 1.0 if the ship landed at this planet within the cooldown window;
+    /// 0.0 otherwise.
+    pub is_recently_visited: f32,
 }
 
 /// Asteroid-specific features.
@@ -698,6 +703,7 @@ fn encode_slot(
             ts[0] = planet.cargo_profit_value;
             ts[1] = planet.has_ammo;
             ts[2] = planet.commodity_margin;
+            ts[3] = planet.is_recently_visited;
         }
         EntityKind::Asteroid(asteroid) => {
             ts[0] = asteroid.size;

@@ -4,7 +4,7 @@ use crate::utils::safe_despawn;
 use crate::{GameLayer, PlayState};
 use avian2d::prelude::*;
 use bevy::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
 
 pub fn weapons_plugin(app: &mut App) {
@@ -182,6 +182,11 @@ pub struct Weapon {
     pub guided: bool,
     #[serde(default)]
     pub turn_rate: f32,
+    /// Half-angle of the weapon's aiming arc, in radians. Zero means a fixed
+    /// forward-firing weapon; `PI` represents a full turret. Deserialized
+    /// from degrees in asset files.
+    #[serde(default, deserialize_with = "deserialize_arc_degrees")]
+    pub aimable_arc: f32,
     /// Optional path to a sprite image. When set, the projectile uses this
     /// image instead of a plain colored rectangle.
     #[serde(default)]
@@ -198,6 +203,11 @@ impl Weapon {
     pub fn range(&self) -> f32 {
         self.speed * self.lifetime
     }
+}
+
+fn deserialize_arc_degrees<'de, D: Deserializer<'de>>(d: D) -> Result<f32, D::Error> {
+    let degrees = f32::deserialize(d)?;
+    Ok(degrees.to_radians())
 }
 #[derive(Clone)]
 pub struct WeaponSystem {
@@ -251,6 +261,7 @@ pub fn weapon_fire(
         &LinearVelocity,
         Option<&mut TracerSlots>,
     )>,
+    target_kinematics: Query<(&Position, &LinearVelocity)>,
     item_universe: Res<ItemUniverse>,
     asset_server: Res<AssetServer>,
 ) {
@@ -259,6 +270,7 @@ pub fn weapon_fire(
         else {
             continue;
         };
+        let ship_radius = ship.data.radius;
         let Some(specific) = ship.weapon_systems.find_weapon(&cmd.weapon_type) else {
             continue;
         };
@@ -274,8 +286,35 @@ pub fn weapon_fire(
         let Some(weapon) = item_universe.weapons.get(&cmd.weapon_type) else {
             continue;
         };
-        let forward = ship_transform.rotation * Vec3::Y;
-        let tip = ship_transform.translation + forward * 20.0;
+        let aim_offset = if weapon.aimable_arc > 0.0 {
+            cmd.target
+                .and_then(|e| {
+                    let (tp, tv) = target_kinematics.get(e).ok()?;
+                    let ship_pos = ship_transform.translation.truncate();
+                    let ship_dir = (ship_transform.rotation * Vec3::Y).xy();
+                    let frame_angle = -ship_dir.y.atan2(ship_dir.x);
+                    let (sin_a, cos_a) = frame_angle.sin_cos();
+                    let rotate_r =
+                        |v: Vec2| Vec2::new(v.x * cos_a - v.y * sin_a, v.x * sin_a + v.y * cos_a);
+                    let local_offset = rotate_r(tp.0 - ship_pos);
+                    let local_rel_vel = rotate_r(tv.0 - linear_velocity.0);
+                    let a = crate::utils::angle_to_hit(weapon.speed, &local_offset, &local_rel_vel)?;
+                    let wrapped = (a + std::f32::consts::PI)
+                        .rem_euclid(2.0 * std::f32::consts::PI)
+                        - std::f32::consts::PI;
+                    Some(wrapped.clamp(-weapon.aimable_arc, weapon.aimable_arc))
+                })
+                .unwrap_or(0.0)
+        } else {
+            0.0
+        };
+        let aim_rot = Quat::from_rotation_z(aim_offset);
+        let fire_rotation = ship_transform.rotation * aim_rot;
+        let forward = fire_rotation * Vec3::Y;
+        const PROJECTILE_RADIUS: f32 = 10.0;
+        const SPAWN_MARGIN: f32 = 1.0;
+        let spawn_offset = ship_radius + PROJECTILE_RADIUS + SPAWN_MARGIN;
+        let tip = ship_transform.translation + forward * spawn_offset;
         let vel = forward.truncate() * weapon.speed + linear_velocity.0;
         let [r, g, b] = weapon.color;
         let sprite = if let Some(path) = &weapon.sprite_path {
@@ -294,7 +333,7 @@ pub fn weapon_fire(
                 owner: cmd.ship,
                 weapon_type: cmd.weapon_type.clone(),
             },
-            Collider::circle(10.),
+            Collider::circle(PROJECTILE_RADIUS),
             CollisionLayers::new(GameLayer::Weapon, [GameLayer::Asteroid, GameLayer::Ship]),
             RigidBody::Dynamic,
             // Swept CCD prevents fast projectiles from tunneling through ships
@@ -303,7 +342,7 @@ pub fn weapon_fire(
             SweptCcd::LINEAR,
             LinearVelocity(vel),
             Transform::from_translation(tip.xy().extend(-0.3))
-                .with_rotation(ship_transform.rotation),
+                .with_rotation(fire_rotation),
             sprite,
         ));
         // Decrease the ammo:

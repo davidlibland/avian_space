@@ -498,7 +498,11 @@ pub fn compute_ai_action(
                 };
                 if local_offset.length() < weapon.range() {
                     let fire_angle = angle_to_hit(weapon.speed, &local_offset, &local_rel_vel);
-                    if weapon.guided || angle_indicator(fire_angle) > 0.5 {
+                    let residual = fire_angle.map(|a| {
+                        let wrapped = (a + PI).rem_euclid(2.0 * PI) - PI;
+                        wrapped - wrapped.clamp(-weapon.aimable_arc, weapon.aimable_arc)
+                    });
+                    if weapon.guided || angle_indicator(residual) > 0.5 {
                         weapons_to_fire.push((weapon_type.clone(), Some(*target_e)));
                     }
                 }
@@ -834,6 +838,7 @@ pub fn classic_ai_control(
 }
 
 fn land_ship(
+    time: Res<Time>,
     planets: Query<(&Planet, &Position)>,
     mut ships: Query<(
         Entity,
@@ -958,6 +963,14 @@ fn land_ship(
                     if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
                         ship.nav_target = None;
                     }
+
+                    // Record this landing so the recent-visited cooldown masks
+                    // the planet from nav-target selection until it expires.
+                    let now = time.elapsed_secs();
+                    let expire_at = now + crate::consts::LANDING_COOLDOWN_SECS;
+                    ship.recent_landings.insert(planet_name.clone(), expire_at);
+                    // Opportunistic prune of expired entries to keep the map small.
+                    ship.recent_landings.retain(|_, &mut t| t > now);
 
                     // Repair the ship:
                     ship.health = ship.data.max_health;

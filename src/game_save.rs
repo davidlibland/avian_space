@@ -3,7 +3,7 @@ use crate::ship::{Ship, ship_bundle_from_pilot};
 use crate::{CurrentStarSystem, PlayState, Player};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 // ── Serialisable save ────────────────────────────────────────────────────────
@@ -19,6 +19,8 @@ pub struct PilotSave {
     /// weapon_type → count owned
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
     pub enemies: HashMap<String, f32>,
+    #[serde(default)]
+    pub visited_systems: HashSet<String>,
 }
 
 // ── In-memory resource ───────────────────────────────────────────────────────
@@ -31,6 +33,7 @@ pub struct PlayerGameState {
     pub current_star_system: String,
     pub player_ship: Ship,
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
+    pub visited_systems: HashSet<String>,
 }
 
 impl PlayerGameState {
@@ -40,11 +43,14 @@ impl PlayerGameState {
             .ships
             .get(&starting_ship)
             .expect("Can't find the starting ship.");
+        let mut visited_systems = HashSet::new();
+        visited_systems.insert(item_universe.starting_system.clone());
         Self {
             pilot_name: name.to_string(),
             current_star_system: item_universe.starting_system.clone(),
             player_ship: Ship::from_ship_data(starting_ship_data, &starting_ship),
             weapon_loadout: HashMap::new(),
+            visited_systems,
         }
     }
 
@@ -96,17 +102,21 @@ impl PlayerGameState {
             health: save.health,
             cargo: save.cargo.clone(),
             cargo_cost: HashMap::new(),
+            recent_landings: HashMap::new(),
             credits: save.credits,
             nav_target: None,
             weapons_target: None,
             weapon_systems: Default::default(),
             enemies: save.enemies.clone(),
         };
+        let mut visited_systems = save.visited_systems;
+        visited_systems.insert(save.current_star_system.clone());
         Self {
             pilot_name: save.pilot_name,
             current_star_system: save.current_star_system,
             player_ship: ship,
             weapon_loadout: save.weapon_loadout,
+            visited_systems,
         }
     }
 
@@ -124,6 +134,7 @@ impl PlayerGameState {
             credits: self.player_ship.credits,
             weapon_loadout: self.weapon_loadout.clone(),
             enemies: self.player_ship.enemies.clone(),
+            visited_systems: self.visited_systems.clone(),
         }
     }
 
@@ -188,6 +199,7 @@ fn sync_player_state(
         game_state.player_ship = ship.clone();
     }
     game_state.current_star_system = current_system.0.clone();
+    game_state.visited_systems.insert(current_system.0.clone());
 }
 
 /// Spawns the player ship on the first entry into Flying (from the main menu).

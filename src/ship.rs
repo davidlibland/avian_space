@@ -267,6 +267,11 @@ pub struct Ship {
     /// Used to compute trade *profit* rather than gross sale value.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub cargo_cost: HashMap<String, i128>,
+    /// Recently-visited planets, mapping planet_name → game-time seconds at
+    /// which the cooldown expires. Used to discourage re-landing immediately
+    /// after a sale; runtime-only, not persisted.
+    #[serde(skip)]
+    pub recent_landings: HashMap<String, f32>,
     pub credits: i128,
     // A map indicating inclusion in factions
     pub enemies: HashMap<String, f32>,
@@ -294,6 +299,7 @@ impl Ship {
             health: data.max_health,
             cargo: HashMap::new(),
             cargo_cost: HashMap::new(),
+            recent_landings: HashMap::new(),
             credits: 100000,
             nav_target: None,
             weapons_target: None,

@@ -156,6 +156,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
             cargo_profit_value: 1234.0,
             has_ammo: 1.0,
             commodity_margin: -50.0,
+            is_recently_visited: 0.0,
         }),
         value: 1234.0,
         is_nav_target: false,
@@ -249,8 +250,9 @@ fn test_roundtrip_entity_slot_to_blocks() {
     assert_eq!(tf[1 * s + 1], 1234.0, "slot1 cargo_profit_value");
     assert_eq!(tf[1 * s + 2], 1.0, "slot1 has_ammo");
     assert_eq!(tf[1 * s + 3], -50.0, "slot1 commodity_margin");
+    assert_eq!(tf[1 * s + 4], 0.0, "slot1 is_recently_visited");
     // Remaining type-specific should be zero-padded.
-    for i in 4..s {
+    for i in 5..s {
         assert_eq!(tf[1 * s + i], 0.0, "slot1 type_specific[{i}] padding");
     }
 

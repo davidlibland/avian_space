@@ -11,9 +11,10 @@ use burn::{
 };
 
 use crate::rl_obs::{
-    CORE_BLOCK_START, CORE_FEAT_SIZE, K_PROJECTILES, N_ENTITY_TYPES, SHIP_IS_HOSTILE,
-    SHIP_SHOULD_ENGAGE, SLOT_IS_PRESENT, SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START,
-    TYPE_IDX_ASTEROID, TYPE_IDX_SHIP, TYPE_ONEHOT_SIZE,
+    CORE_BLOCK_START, CORE_FEAT_SIZE, K_PROJECTILES, N_ENTITY_TYPES, PLANET_CARGO_PROFIT_VALUE,
+    PLANET_HAS_AMMO, PLANET_IS_RECENTLY_VISITED, SELF_CARGO_FRAC, SELF_HEALTH_FRAC,
+    SHIP_IS_HOSTILE, SHIP_SHOULD_ENGAGE, SLOT_IS_PRESENT, SLOT_TYPE_ONEHOT, TYPE_BLOCK_SIZE,
+    TYPE_BLOCK_START, TYPE_IDX_ASTEROID, TYPE_IDX_PLANET, TYPE_IDX_SHIP, TYPE_ONEHOT_SIZE,
 };
 
 use super::{N_OBJECTS, PROJ_INPUT_DIM, SELF_INPUT_DIM, USE_SKIP};
@@ -274,6 +275,13 @@ impl<B: Backend> RLNet<B> {
         };
         let proj_enc = self.proj_enc_norm.forward(proj_enc);
 
+        // Pull out scalars needed for the planet-viability nav mask before
+        // self_feat is consumed by the embedding.
+        let health_frac = self_feat.clone().narrow(1, SELF_HEALTH_FRAC, 1);
+        let cargo_frac = self_feat.clone().narrow(1, SELF_CARGO_FRAC, 1);
+        let low_health = health_frac.lower_elem(0.5).float();
+        let has_free_cargo = cargo_frac.lower_elem(1.0).float();
+
         let self_enc = silu(self.self_embed.forward(self_feat));
         let self_enc = silu(self.self_fc2.forward(self_enc));
         let self_enc = self.self_enc_norm.forward(self_enc);
@@ -327,6 +335,47 @@ impl<B: Backend> RLNet<B> {
             &ent_enc,
         );
 
+        // Type-specific features live after the per-slot `value` field within
+        // the type block, so all per-kind feature offsets are shifted by 1.
+        let type_specific_offset = 1;
+
+        // Planet viability mask for the nav target. A planet slot is only a
+        // valid nav target if the ship has a reason to land: profitable sale,
+        // need to repair (health < 50%), the planet replenishes ammo, or there
+        // is free cargo space to fill. Non-planet slots are unaffected.
+        let is_planet = type_onehot
+            .clone()
+            .narrow(2, TYPE_IDX_PLANET, 1)
+            .squeeze_dim::<2>(2);
+        let planet_profit = type_feat
+            .clone()
+            .narrow(2, type_specific_offset + PLANET_CARGO_PROFIT_VALUE, 1)
+            .squeeze_dim::<2>(2);
+        let planet_has_ammo = type_feat
+            .clone()
+            .narrow(2, type_specific_offset + PLANET_HAS_AMMO, 1)
+            .squeeze_dim::<2>(2);
+        let planet_recently_visited = type_feat
+            .clone()
+            .narrow(2, type_specific_offset + PLANET_IS_RECENTLY_VISITED, 1)
+            .squeeze_dim::<2>(2);
+        let profit_pos = planet_profit.greater_elem(0.0).float();
+        let ammo_avail = planet_has_ammo.greater_elem(0.5).float();
+        let not_recent = planet_recently_visited.lower_elem(0.5).float();
+        let low_health_b = low_health.repeat_dim(1, n_ents);
+        let free_cargo_b = has_free_cargo.repeat_dim(1, n_ents);
+        let any_reason = (profit_pos + ammo_avail + low_health_b + free_cargo_b).clamp(0.0, 1.0);
+        // Recently-visited overrides all reasons — the planet is blocked
+        // until the cooldown expires.
+        let planet_allow = is_planet.clone() * any_reason * not_recent
+            + (is_planet.ones_like() - is_planet);
+        let nav_mask = Tensor::cat(
+            vec![planet_allow, Tensor::<B, 2>::ones([batch_size, 1], &device)],
+            1,
+        );
+        let nav_target_logits = nav_target_logits.clone() * nav_mask.clone()
+            + neg_inf.clone() * (nav_mask.ones_like() - nav_mask);
+
         let is_asteroid = type_onehot
             .clone()
             .narrow(2, TYPE_IDX_ASTEROID, 1)
@@ -335,7 +384,6 @@ impl<B: Backend> RLNet<B> {
             .clone()
             .narrow(2, TYPE_IDX_SHIP, 1)
             .squeeze_dim(2);
-        let type_specific_offset = 1;
         let is_hostile = type_feat
             .clone()
             .narrow(2, type_specific_offset + SHIP_IS_HOSTILE, 1)
