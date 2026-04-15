@@ -429,7 +429,7 @@ fn compute_intercept_command(
     target_pos_query: &Query<&Position>,
     target_vel_query: &Query<&LinearVelocity>,
     item_universe: &ItemUniverse,
-) -> Scalar {
+) -> Option<Scalar> {
     use std::f32::consts::PI;
     let target_e = player_ship.weapons_target.as_ref()?.get_entity();
     let target_pos = target_pos_query.get(target_e).ok()?.0;
@@ -472,7 +472,7 @@ fn compute_intercept_command(
         player_ship.data.torque,
         player_ship.data.angular_drag,
     );
-    turn
+    Some(turn)
 }
 
 /// Sends [`MovementAction`] events based on keyboard input.
@@ -587,7 +587,7 @@ fn keyboard_input(
     // current target, and thrust forward when roughly aimed.
     let intercept = keyboard_input.pressed(KeyCode::KeyA);
     let auto_turn_cmd = if intercept {
-        Some(compute_intercept_command(
+        compute_intercept_command(
             &player_ship,
             player_tf,
             player_vel.0,
@@ -595,7 +595,7 @@ fn keyboard_input(
             &target_pos_query,
             &target_vel_query,
             &item_universe,
-        ))
+        )
     } else {
         None
     };
