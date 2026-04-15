@@ -530,12 +530,30 @@ impl ShipBundle {
     }
 }
 
+/// Fill a ship's cargo hold to a uniformly random fraction with a single
+/// commodity drawn uniformly from `commodity_pool`. No-op if the pool is
+/// empty or the ship has no cargo space.
+fn fill_cargo_randomly(ship: &mut Ship, commodity_pool: &[String], rng: &mut impl rand::Rng) {
+    if commodity_pool.is_empty() || ship.data.cargo_space == 0 {
+        return;
+    }
+    let fill_frac: f32 = rng.gen_range(0.0..=1.0);
+    let qty = (ship.data.cargo_space as f32 * fill_frac).floor() as u16;
+    if qty == 0 {
+        return;
+    }
+    let commodity = commodity_pool[rng.gen_range(0..commodity_pool.len())].clone();
+    ship.cargo.insert(commodity, qty);
+}
+
 pub fn ship_bundle(
     ship_type: &str,
     asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
+    system_name: &str,
     pos: Vec2,
 ) -> ShipBundle {
+    use rand::Rng;
     let ship_data = item_universe
         .ships
         .get(ship_type)
@@ -552,6 +570,37 @@ pub fn ship_bundle(
                 .map(|v| v.iter().map(|s| (s.clone(), 1.0)).collect())
         })
         .unwrap_or_default();
+
+    // Randomize AI starting credits uniformly in [0, ship.price].
+    let mut rng = rand::thread_rng();
+    ship.credits = if ship_data.price > 0 {
+        rng.gen_range(0..=ship_data.price)
+    } else {
+        0
+    };
+
+    // Decide which commodity pool (if any) this ship can spawn carrying.
+    // - Systems with planets: only Traders carry cargo, drawn from commodities
+    //   sold at any planet in the system.
+    // - Planetless systems: any ship may carry cargo, drawn from the full
+    //   commodity catalog (there's no local economy to anchor to).
+    let commodity_pool: Vec<String> = match item_universe.star_systems.get(system_name) {
+        Some(sys) if !sys.planets.is_empty() => {
+            if matches!(ship_data.personality, Personality::Trader) {
+                use std::collections::HashSet;
+                sys.planets
+                    .values()
+                    .flat_map(|p| p.commodities.keys().cloned())
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        }
+        _ => item_universe.commodities.keys().cloned().collect(),
+    };
+    fill_cargo_randomly(&mut ship, &commodity_pool, &mut rng);
 
     ShipBundle {
         faction: ShipHostility(ship.enemies.clone()),

@@ -93,10 +93,11 @@ fn spawn_ai_ship_at(
     commands: &mut Commands,
     asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
+    system_name: &str,
     ship_type: &str,
     pos: Vec2,
 ) {
-    let bundle = ship_bundle(ship_type, asset_server, item_universe, pos);
+    let bundle = ship_bundle(ship_type, asset_server, item_universe, system_name, pos);
     let personality = bundle.get_personality();
     let mut rng = rand::thread_rng();
     let angle = rng.gen_range(0.0..std::f32::consts::TAU);
@@ -130,6 +131,7 @@ fn spawn_ai_ship_jumping_in(
     asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
     jump_flash_writer: &mut MessageWriter<crate::explosions::TriggerJumpFlash>,
+    system_name: &str,
     ship_type: &str,
 ) {
     let mut rng = rand::thread_rng();
@@ -151,7 +153,7 @@ fn spawn_ai_ship_jumping_in(
         size: 8.0,
     });
 
-    let bundle = ship_bundle(ship_type, asset_server, item_universe, edge_pos);
+    let bundle = ship_bundle(ship_type, asset_server, item_universe, system_name, edge_pos);
     let personality = bundle.get_personality();
     let radius = item_universe
         .ships
@@ -204,6 +206,7 @@ pub fn spawn_ai_ships(
                 &mut commands,
                 &asset_server,
                 &item_universe,
+                &star_system.0,
                 &ship_type,
                 Vec2::new(x, y),
             );
@@ -326,6 +329,7 @@ fn manage_ship_population(
                 &asset_server,
                 &item_universe,
                 &mut jump_flash_writer,
+                &star_system.0,
                 &ship_type,
             );
         }
