@@ -191,6 +191,8 @@ pub struct Weapon {
     /// image instead of a plain colored rectangle.
     #[serde(default)]
     pub sprite_path: Option<String>,
+    #[serde(skip)]
+    pub sprite_handle: Option<Handle<Image>>,
     #[serde(default)]
     pub display_name: String,
 }
@@ -265,7 +267,6 @@ pub fn weapon_fire(
     )>,
     target_kinematics: Query<(&Position, &LinearVelocity)>,
     item_universe: Res<ItemUniverse>,
-    asset_server: Res<AssetServer>,
 ) {
     for cmd in reader.read() {
         let Ok((ship_transform, mut ship, linear_velocity, tracer_slots)) = ships.get_mut(cmd.ship)
@@ -319,8 +320,8 @@ pub fn weapon_fire(
         let tip = ship_transform.translation + forward * spawn_offset;
         let vel = forward.truncate() * weapon.speed + linear_velocity.0;
         let [r, g, b] = weapon.color;
-        let sprite = if let Some(path) = &weapon.sprite_path {
-            Sprite::from_image(asset_server.load(path.clone()))
+        let sprite = if let Some(handle) = &weapon.sprite_handle {
+            Sprite::from_image(handle.clone())
         } else {
             Sprite {
                 color: Color::srgb(r, g, b),

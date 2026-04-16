@@ -463,6 +463,22 @@ pub fn item_universe_plugin(app: &mut App) {
     item_universe.compute_ship_credit_scales();
     item_universe.validate();
     app.insert_resource::<ItemUniverse>(item_universe);
+    app.add_systems(Startup, preload_sprites);
+}
+
+fn preload_sprites(
+    asset_server: Res<AssetServer>,
+    mut item_universe: ResMut<ItemUniverse>,
+) {
+    for data in item_universe.ships.values_mut() {
+        data.sprite_handle = asset_server.load(data.sprite_path.clone());
+    }
+    for weapon in item_universe.weapons.values_mut() {
+        weapon.sprite_handle = weapon
+            .sprite_path
+            .as_ref()
+            .map(|path| asset_server.load(path.clone()));
+    }
 }
 
 // Parsing code:

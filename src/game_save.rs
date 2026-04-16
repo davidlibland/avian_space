@@ -277,7 +277,6 @@ fn spawn_player_on_enter_flying(
     mut commands: Commands,
     player_query: Query<Entity, With<Player>>,
     game_state: Res<PlayerGameState>,
-    asset_server: Res<AssetServer>,
     item_universe: Res<ItemUniverse>,
 ) {
     if !player_query.is_empty() || game_state.pilot_name.is_empty() {
@@ -286,7 +285,6 @@ fn spawn_player_on_enter_flying(
     let bundle = ship_bundle_from_pilot(
         game_state.player_ship.clone(),
         &game_state.weapon_loadout,
-        &asset_server,
         &item_universe,
         Vec2::ZERO,
     );

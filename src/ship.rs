@@ -215,6 +215,8 @@ pub struct ShipData {
     pub item_space: u16,
     pub base_weapons: HashMap<String, (u8, Option<u32>)>, // A list of the basic weapons this ship starts with, along with counts
     pub sprite_path: String,
+    #[serde(skip)]
+    pub sprite_handle: Handle<Image>,
     pub radius: f32,
     pub price: i128,
     pub personality: Personality,
@@ -311,7 +313,7 @@ impl Ship {
             cargo_cost: HashMap::new(),
             reserved_cargo: HashMap::new(),
             recent_landings: HashMap::new(),
-            credits: 100000,
+            credits: 10000,
             nav_target: None,
             weapons_target: None,
             weapon_systems: WeaponSystems::default(),
@@ -363,10 +365,8 @@ impl Ship {
         let quantity_added = self.add_cargo(commodity, quantity_desired);
         self.credits -= (quantity_added as i128) * price;
         if quantity_added > 0 {
-            *self
-                .cargo_cost
-                .entry(commodity.to_string())
-                .or_insert(0) += (quantity_added as i128) * price;
+            *self.cargo_cost.entry(commodity.to_string()).or_insert(0) +=
+                (quantity_added as i128) * price;
         }
     }
     pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &Res<ItemUniverse>) {
@@ -561,7 +561,6 @@ fn fill_cargo_randomly(ship: &mut Ship, commodity_pool: &[String], rng: &mut imp
 
 pub fn ship_bundle(
     ship_type: &str,
-    asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
     system_name: &str,
     pos: Vec2,
@@ -620,7 +619,7 @@ pub fn ship_bundle(
         ship,
         distressed: Distressed::default(),
         tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
-        sprite: Sprite::from_image(asset_server.load(ship_data.sprite_path.to_string())),
+        sprite: Sprite::from_image(ship_data.sprite_handle.clone()),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
         angular_damping: AngularDamping(ship_data.angular_drag), // equivalent to angular_drag = 3.0
@@ -647,7 +646,6 @@ pub fn ship_bundle(
 pub fn ship_bundle_from_pilot(
     mut ship: Ship,
     weapon_loadout: &HashMap<String, (u8, Option<u32>)>,
-    asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
     pos: Vec2,
 ) -> ShipBundle {
@@ -659,7 +657,7 @@ pub fn ship_bundle_from_pilot(
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
         max_angular_speed: MaxAngularSpeed(4.0 * PI),
-        sprite: Sprite::from_image(asset_server.load(ship.data.sprite_path.clone())),
+        sprite: Sprite::from_image(ship.data.sprite_handle.clone()),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
         collider: Collider::circle(ship.data.radius),
@@ -752,8 +750,7 @@ fn apply_damage(
         // approaches the full damage magnitude (strong pressure to disengage).
         if rl_agents.contains(event.entity) {
             let dmg_frac = event.damage as f32 / ship.data.max_health.max(1) as f32;
-            let penalty =
-                -crate::consts::HEALTH_DAMAGE_PENALTY * dmg_frac * (1.0 - h_frac_before);
+            let penalty = -crate::consts::HEALTH_DAMAGE_PENALTY * dmg_frac * (1.0 - h_frac_before);
             rl_reward_writer.write(RLReward {
                 entity: event.entity,
                 reward: penalty,
@@ -819,7 +816,6 @@ fn handle_buy_ship(
     mut reader: MessageReader<BuyShip>,
     mut player_query: Query<(Entity, &mut Ship), With<crate::Player>>,
     item_universe: Res<ItemUniverse>,
-    asset_server: Res<AssetServer>,
 ) {
     for event in reader.read() {
         let Ok((entity, mut ship)) = player_query.single_mut() else {
@@ -848,10 +844,7 @@ fn handle_buy_ship(
                 let src_cost = ship.cargo_cost.get(commodity).copied().unwrap_or(0);
                 if *qty > 0 {
                     let cost_transfer = src_cost * transfer as i128 / *qty as i128;
-                    *new_ship
-                        .cargo_cost
-                        .entry(commodity.clone())
-                        .or_insert(0) += cost_transfer;
+                    *new_ship.cargo_cost.entry(commodity.clone()).or_insert(0) += cost_transfer;
                 }
             }
         }
@@ -860,16 +853,14 @@ fn handle_buy_ship(
             let held = new_ship.cargo.get(commodity).copied().unwrap_or(0);
             let locked = qty.min(held);
             if locked > 0 {
-                new_ship
-                    .reserved_cargo
-                    .insert(commodity.clone(), locked);
+                new_ship.reserved_cargo.insert(commodity.clone(), locked);
             }
         }
         *ship = new_ship;
 
         // Replace physics/render components.
         commands.entity(entity).insert((
-            Sprite::from_image(asset_server.load(new_data.sprite_path.clone())),
+            Sprite::from_image(new_data.sprite_handle.clone()),
             Collider::circle(new_data.radius),
             MaxLinearSpeed(new_data.max_speed),
             AngularDamping(new_data.angular_drag),
@@ -943,12 +934,8 @@ fn score_hits(
                         // bounded in [-r / EPS, 0].
                         combat_stats.neutral_hits += 1;
                         let p = combat_stats.good_fraction();
-                        let c = -p * COMBAT_HIT_ENGAGED_UNTARGETED
-                            / (COMBAT_HIT_EPS + (1.0 - p));
-                        c.clamp(
-                            -COMBAT_HIT_ENGAGED_UNTARGETED / COMBAT_HIT_EPS,
-                            0.0,
-                        )
+                        let c = -p * COMBAT_HIT_ENGAGED_UNTARGETED / (COMBAT_HIT_EPS + (1.0 - p));
+                        c.clamp(-COMBAT_HIT_ENGAGED_UNTARGETED / COMBAT_HIT_EPS, 0.0)
                     };
 
                     let personality_scale = match agent.personality {

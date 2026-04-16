@@ -91,13 +91,12 @@ fn sensor_mass_for_ship(radius: f32) -> (Mass, AngularInertia) {
 /// Spawn an AI ship at a given position (used for initial system load).
 fn spawn_ai_ship_at(
     commands: &mut Commands,
-    asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
     system_name: &str,
     ship_type: &str,
     pos: Vec2,
 ) {
-    let bundle = ship_bundle(ship_type, asset_server, item_universe, system_name, pos);
+    let bundle = ship_bundle(ship_type, item_universe, system_name, pos);
     let personality = bundle.get_personality();
     let mut rng = rand::thread_rng();
     let angle = rng.gen_range(0.0..std::f32::consts::TAU);
@@ -128,7 +127,6 @@ fn spawn_ai_ship_at(
 /// decelerates to its normal maximum speed.
 fn spawn_ai_ship_jumping_in(
     commands: &mut Commands,
-    asset_server: &Res<AssetServer>,
     item_universe: &Res<ItemUniverse>,
     jump_flash_writer: &mut MessageWriter<crate::explosions::TriggerJumpFlash>,
     system_name: &str,
@@ -153,7 +151,7 @@ fn spawn_ai_ship_jumping_in(
         size: 8.0,
     });
 
-    let bundle = ship_bundle(ship_type, asset_server, item_universe, system_name, edge_pos);
+    let bundle = ship_bundle(ship_type, item_universe, system_name, edge_pos);
     let personality = bundle.get_personality();
     let radius = item_universe
         .ships
@@ -187,7 +185,6 @@ fn spawn_ai_ship_jumping_in(
 
 pub fn spawn_ai_ships(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     item_universe: Res<ItemUniverse>,
     star_system: Res<CurrentStarSystem>,
 ) {
@@ -204,7 +201,6 @@ pub fn spawn_ai_ships(
             let y = rng.gen_range(-1000.0..1000.0);
             spawn_ai_ship_at(
                 &mut commands,
-                &asset_server,
                 &item_universe,
                 &star_system.0,
                 &ship_type,
@@ -297,7 +293,6 @@ fn jump_out_system(
 /// - Above `max`: pick a random non-jumping ship and trigger a jump-out.
 fn manage_ship_population(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     item_universe: Res<ItemUniverse>,
     star_system: Res<CurrentStarSystem>,
     time: Res<Time>,
@@ -326,7 +321,6 @@ fn manage_ship_population(
         if let Some(ship_type) = types.into_iter().next() {
             spawn_ai_ship_jumping_in(
                 &mut commands,
-                &asset_server,
                 &item_universe,
                 &mut jump_flash_writer,
                 &star_system.0,
