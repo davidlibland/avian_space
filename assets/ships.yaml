@@ -4,7 +4,7 @@ shuttle:
   torque: 20.0
   max_health: 30
   cargo_space: 10
-  item_space: 5
+  item_space: 16
   base_weapons:
     "laser": [1, null]
     "space_mine": [1, 5]
@@ -41,6 +41,7 @@ asteroid_miner:
   price: 35000
   sprite_path: ship_sprites/asteroid_miner.png
   personality: Miner
+  required_unlocks: [mining_license]
 
 hauler:
   thrust: 40.0
@@ -48,7 +49,7 @@ hauler:
   torque: 6.0
   max_health: 150
   cargo_space: 80
-  item_space: 3
+  item_space: 28
   base_weapons:
     "space_mine": [1, 12]
   radius: 40.0
@@ -56,6 +57,7 @@ hauler:
   sprite_path: ship_sprites/hauler.png
   personality: Trader
   faction: Merchant
+  required_unlocks: [merchant_hauler_license]
 
 # ── Fighter variants ──────────────────────────────────────────────────────────
 
@@ -79,7 +81,7 @@ frigate:
   torque: 18.0
   max_health: 220
   cargo_space: 12
-  item_space: 13
+  item_space: 17
   base_weapons:
     proton_beam: [2, null]
     ir_missile: [1, 4]
@@ -96,7 +98,7 @@ courier:
   torque: 28.0
   max_health: 45
   cargo_space: 18
-  item_space: 4
+  item_space: 16
   base_weapons:
     laser: [1, null]
     space_mine: [1, 5]
@@ -112,7 +114,7 @@ freighter:
   torque: 8.0
   max_health: 120
   cargo_space: 55
-  item_space: 4
+  item_space: 20
   base_weapons:
     space_mine: [1, 8]
   radius: 32.0
@@ -120,6 +122,7 @@ freighter:
   sprite_path: ship_sprites/freighter.png
   personality: Trader
   faction: Merchant
+  required_unlocks: [merchant_freighter_license]
 
 bulk_carrier:
   thrust: 22.0
@@ -127,7 +130,7 @@ bulk_carrier:
   torque: 4.0
   max_health: 280
   cargo_space: 160
-  item_space: 2
+  item_space: 44
   base_weapons:
     space_mine: [1, 20]
   radius: 55.0
@@ -135,6 +138,7 @@ bulk_carrier:
   sprite_path: ship_sprites/bulk_carrier.png
   personality: Trader
   faction: Merchant
+  required_unlocks: [merchant_bulk_license]
 
 # ── Federation faction ─────────────────────────────────────────────────────────
 # Black/grey/red. Slower than Rebels, heavier armour, heavier weapons.
@@ -153,6 +157,7 @@ fed_patrol:
   sprite_path: ship_sprites/fed_patrol.png
   personality: Fighter
   faction: Federation
+  required_unlocks: [federation_ship_license]
 
 fed_destroyer:
   thrust: 65.0
@@ -160,7 +165,7 @@ fed_destroyer:
   torque: 10.0
   max_health: 350
   cargo_space: 8
-  item_space: 26
+  item_space: 34
   base_weapons:
     proton_beam: [4, null]
     ir_missile: [2, 8]
@@ -169,6 +174,7 @@ fed_destroyer:
   sprite_path: ship_sprites/fed_destroyer.png
   personality: Fighter
   faction: Federation
+  required_unlocks: [federation_ship_license, federation_capital_license]
 
 fed_missile_cruiser:
   thrust: 55.0
@@ -176,7 +182,7 @@ fed_missile_cruiser:
   torque: 8.0
   max_health: 280
   cargo_space: 6
-  item_space: 24
+  item_space: 36
   base_weapons:
     proton_beam: [1, null]
     ir_missile: [3, 12]
@@ -185,6 +191,7 @@ fed_missile_cruiser:
   sprite_path: ship_sprites/fed_missile_cruiser.png
   personality: Fighter
   faction: Federation
+  required_unlocks: [federation_ship_license]
 
 # ── Rebel faction ──────────────────────────────────────────────────────────────
 # Blue/green. Faster than Federation, lighter armour, less heavy weapons.
@@ -203,6 +210,7 @@ rebel_fighter:
   sprite_path: ship_sprites/rebel_fighter.png
   personality: Fighter
   faction: Rebel
+  required_unlocks: [rebel_ship_license]
 
 rebel_gunboat:
   thrust: 95.0
@@ -210,15 +218,15 @@ rebel_gunboat:
   torque: 22.0
   max_health: 110
   cargo_space: 8
-  item_space: 7
+  item_space: 10
   base_weapons:
-    laser: [2, null]
-    proton_beam: [1, null]
+    laser: [5, null]
   radius: 22.0
   price: 55000
   sprite_path: ship_sprites/rebel_gunboat.png
   personality: Fighter
   faction: Rebel
+  required_unlocks: [rebel_ship_license]
 
 rebel_frigate:
   thrust: 80.0
@@ -226,16 +234,16 @@ rebel_frigate:
   torque: 18.0
   max_health: 160
   cargo_space: 10
-  item_space: 19
+  item_space: 37
   base_weapons:
-    laser: [2, null]
-    proton_beam: [2, null]
-    ir_missile: [1, 6]
+    laser: [5, null]
+    javelin: [1, 24]
   radius: 28.0
   price: 100000
   sprite_path: ship_sprites/rebel_frigate.png
   personality: Fighter
   faction: Rebel
+  required_unlocks: [rebel_ship_license, rebel_capital_license]
 
 # ── Pirate faction ─────────────────────────────────────────────────────────────
 # Brown/tan. Fast but outgunned by Rebel or Federation ships individually.
@@ -261,7 +269,7 @@ pirate_missile_boat:
   torque: 18.0
   max_health: 80
   cargo_space: 6
-  item_space: 16
+  item_space: 24
   base_weapons:
     laser: [1, null]
     ir_missile: [2, 8]

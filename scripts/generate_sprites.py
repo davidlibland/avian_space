@@ -855,6 +855,37 @@ def draw_ir_missile():
     img.save(os.path.join(OUT, "ir_missile.png"))
 
 
+# ─── JAVELIN (12×12) – fast long-range guided missile ────────────────────────
+# Design note: slimmer and shorter than the ir_missile, with a cool blue body
+# matching the weapon colour.  Sleek dart profile for a faster projectile.
+
+
+def draw_javelin():
+    S = 12
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Very slim pointed body – cool blue
+    body = [(cx, 1), (cx + 0.9, 4), (cx + 0.75, 9), (cx - 0.75, 9), (cx - 0.9, 4)]
+    d.polygon(body, fill=(80, 170, 230, 255))
+
+    # Nose tip – bright white-blue
+    nose = [(cx, 1), (cx + 0.5, 3), (cx - 0.5, 3)]
+    d.polygon(nose, fill=(220, 240, 255, 255))
+
+    # Small tail fins (narrow)
+    lfin = [(cx - 0.75, 8), (cx - 2.25, 10), (cx - 0.5, 10)]
+    rfin = [(cx + 0.75, 8), (cx + 2.25, 10), (cx + 0.5, 10)]
+    d.polygon(lfin, fill=(40, 110, 180, 255))
+    d.polygon(rfin, fill=(40, 110, 180, 255))
+
+    # Engine plume – cool blue glow
+    d.rectangle([int(cx), 9, int(cx) + 1, 11], fill=(150, 210, 255, 200))
+
+    img.save(os.path.join(OUT, "javelin.png"))
+
+
 # ─── SPACE MINE (16×16) – slow guided proximity mine ────────────────────────
 # Design note: round spiky shape suggesting danger.  Dark red body with
 # brighter red spikes radiating outward.  Must be smaller than the smallest
@@ -918,5 +949,6 @@ if __name__ == "__main__":
     draw_pirate_corvette()
     draw_pirate_missile_boat()
     draw_ir_missile()
+    draw_javelin()
     draw_space_mine()
     print("Sprites written to", OUT)

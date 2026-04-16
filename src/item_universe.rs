@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::missions::{MissionDef, MissionTemplate};
 use crate::planets::PlanetData;
 use crate::weapons::{Weapon, WeaponSystems};
 use crate::{asteroids::AsteroidFieldData, ship::ShipData};
@@ -33,6 +34,10 @@ pub struct ItemUniverse {
     pub starting_system: String,
     #[serde(default)]
     pub commodities: HashMap<String, CommodityData>,
+    #[serde(default)]
+    pub missions: HashMap<String, MissionDef>,
+    #[serde(default)]
+    pub mission_templates: HashMap<String, MissionTemplate>,
     /// Average price of each commodity across all planets in all star systems.
     #[serde(skip)]
     pub global_average_price: HashMap<String, f64>,
@@ -342,6 +347,8 @@ pub enum OutfitterItem {
         weapon_type: String,
         #[serde(default)]
         display_name: String,
+        #[serde(default)]
+        required_unlocks: Vec<String>,
     },
     SecondaryWeapon {
         price: i128,
@@ -351,6 +358,8 @@ pub enum OutfitterItem {
         ammo_space: u16,
         #[serde(default)]
         display_name: String,
+        #[serde(default)]
+        required_unlocks: Vec<String>,
     },
 }
 
@@ -371,6 +380,12 @@ impl OutfitterItem {
         match self {
             OutfitterItem::PrimaryWeapon { display_name, .. } => display_name,
             OutfitterItem::SecondaryWeapon { display_name, .. } => display_name,
+        }
+    }
+    pub fn required_unlocks(&self) -> &[String] {
+        match self {
+            OutfitterItem::PrimaryWeapon { required_unlocks, .. } => required_unlocks,
+            OutfitterItem::SecondaryWeapon { required_unlocks, .. } => required_unlocks,
         }
     }
     fn display_name_mut(&mut self) -> &mut String {

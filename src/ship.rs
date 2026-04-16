@@ -221,6 +221,10 @@ pub struct ShipData {
     pub faction: Option<String>,
     #[serde(default)]
     pub display_name: String,
+    /// Named unlock flags the player must have (all of) before this ship
+    /// appears in shipyard listings. Empty = always available.
+    #[serde(default)]
+    pub required_unlocks: Vec<String>,
 
     // Tuning fields — rarely set in YAML, sensible defaults are fine:
     #[serde(default = "default_angular_drag")]
@@ -269,6 +273,10 @@ pub struct Ship {
     /// Used to compute trade *profit* rather than gross sale value.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub cargo_cost: HashMap<String, i128>,
+    /// Quantity of each commodity that is locked (e.g. mission cargo) and
+    /// can't be sold or dropped by the player. Always `<= cargo[commodity]`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub reserved_cargo: HashMap<String, u16>,
     /// Recently-visited planets, mapping planet_name → game-time seconds at
     /// which the cooldown expires. Used to discourage re-landing immediately
     /// after a sale; runtime-only, not persisted.
@@ -301,6 +309,7 @@ impl Ship {
             health: data.max_health,
             cargo: HashMap::new(),
             cargo_cost: HashMap::new(),
+            reserved_cargo: HashMap::new(),
             recent_landings: HashMap::new(),
             credits: 100000,
             nav_target: None,
@@ -325,7 +334,9 @@ impl Ship {
     }
     pub fn sell_cargo(&mut self, commodity: &str, quantity: u16, price: i128) {
         let held = *self.cargo.get(commodity).unwrap_or(&0u16);
-        let quantity = std::cmp::min(held, quantity);
+        let reserved = *self.reserved_cargo.get(commodity).unwrap_or(&0u16);
+        let sellable = held.saturating_sub(reserved);
+        let quantity = std::cmp::min(sellable, quantity);
         if quantity == 0 {
             return;
         }
@@ -842,6 +853,16 @@ fn handle_buy_ship(
                         .entry(commodity.clone())
                         .or_insert(0) += cost_transfer;
                 }
+            }
+        }
+        // Preserve any locked mission cargo (clamped to what transferred).
+        for (commodity, &qty) in &ship.reserved_cargo {
+            let held = new_ship.cargo.get(commodity).copied().unwrap_or(0);
+            let locked = qty.min(held);
+            if locked > 0 {
+                new_ship
+                    .reserved_cargo
+                    .insert(commodity.clone(), locked);
             }
         }
         *ship = new_ship;

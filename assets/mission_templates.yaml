@@ -1,0 +1,70 @@
+random_delivery:
+  kind: delivery
+  briefing: "A harried broker pushes a manifest across the counter: {quantity} units of {commodity} needed at {planet_display}. Pays {pay} on arrival."
+  success_text: "Cargo accepted. Credits transferred."
+  failure_text: "The broker shakes their head. Word of this won't help your reputation."
+  offer:
+    kind: tab
+    weight: 0.4
+  commodity_pool: [food, water, electronics, chemicals, fuel_cells]
+  quantity_range: [5, 15]
+  pay_range: [500, 2500]
+  reserved: true
+
+urgent_delivery:
+  kind: delivery
+  briefing: "An agent in a rumpled suit waves you over. 'I need {quantity} units of {commodity} at {planet_display} yesterday. {pay} credits on arrival — quieter the better.'"
+  success_text: "The agent nods once and melts back into the crowd."
+  failure_text: "You feel several pairs of eyes follow you out of the bar."
+  offer:
+    kind: tab
+    weight: 0.3
+  preconditions:
+    - kind: completed
+      mission: deliver_wheat_intro
+  commodity_pool: [electronics, chemicals, weapons_parts, exotic_matter]
+  quantity_range: [3, 8]
+  pay_range: [2500, 6000]
+  reserved: true
+
+collect_then_deliver:
+  kind: collect_then_deliver
+  stage1_briefing: "A smuggler leans in close. 'I need {quantity} units of {commodity} from the fields in {system_display}. Don't buy it — pull it yourself. Then bring it to {planet_display}. {pay} credits when it's delivered, not before.'"
+  stage1_success_text: "Cargo is in the hold. Now get it to {planet_display}."
+  stage1_failure_text: "The smuggler's contact disappears into the crowd."
+  stage2_briefing: "Deliver the {commodity} to {planet_display}."
+  stage2_success_text: "The crate changes hands in a back alley. Credits hit your account."
+  stage2_failure_text: "The buyer won't be waiting next time."
+  offer:
+    kind: tab
+    weight: 0.2
+  quantity_range: [3, 8]
+  pay_range: [2000, 5000]
+
+mining_guild_contract:
+  kind: collect_from_asteroid_field
+  briefing: "A Mining Guild board posting: {quantity} units of {commodity} from the {system_display} fields. Guild-rate pay: {pay} credits."
+  success_text: "Guild pays on delivery — clean work."
+  failure_text: "The Guild logs a missed contract against your record."
+  offer:
+    kind: tab
+    weight: 0.6
+  preconditions:
+    - kind: has_unlock
+      name: mining_templates_unlocked
+  quantity_range: [4, 12]
+  pay_range: [1500, 4000]
+
+collect_from_random_asteroid_field:
+  kind: collect_from_asteroid_field
+  briefing: "A mining rep wants {quantity} units of {commodity} pulled straight from the asteroid fields in {system_display}. {pay} credits on return."
+  success_text: "The samples check out. Payment in full."
+  failure_text: "Samples rejected."
+  offer:
+    kind: tab
+    weight: 0.4
+  preconditions:
+    - kind: completed
+      mission: scavenge_iron
+  quantity_range: [3, 10]
+  pay_range: [400, 2000]

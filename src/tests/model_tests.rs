@@ -109,7 +109,6 @@ fn dummy_ship() -> Ship {
             max_speed: 200.0,
             cargo_space: 50,
             thrust: 100.0,
-            primary_fire_rate: 0.0,
             torque: 10.0,
             ..Default::default()
         },

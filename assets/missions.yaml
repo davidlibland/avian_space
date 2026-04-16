@@ -1,0 +1,236 @@
+deliver_wheat_intro:
+  briefing: "A dockworker slides into the booth across from you. 'Colony on Mars is starving. We need 10 units of food run over, fast. You take it there, we'll pay on delivery.'"
+  success_text: "The governor claps you on the shoulder. The grain is already being unloaded."
+  failure_text: "Word travels fast. Mars will be looking for a different pilot next time."
+  preconditions: []
+  offer:
+    kind: bar
+    planet: earth
+    weight: 1.0
+  start_effects:
+    - kind: load_cargo
+      commodity: food
+      quantity: 10
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: mars
+  requires:
+    - kind: has_cargo
+      commodity: food
+      quantity: 10
+  completion_effects:
+    - kind: remove_cargo
+      commodity: food
+      quantity: 10
+    - kind: pay
+      credits: 1500
+
+scavenge_iron:
+  briefing: "A prospector leans over the bar. 'I need 5 units of iron — but only the clean stuff. Pull it from the asteroid fields out in Sol, no market-bought slag. Then bring it back to me on Earth.'"
+  success_text: "You've got the ore. Head back to Earth to collect your pay."
+  failure_text: "Deal's off."
+  preconditions:
+    - kind: completed
+      mission: deliver_wheat_intro
+  offer:
+    kind: bar
+    planet: mars
+    weight: 0.5
+  objective:
+    kind: collect_pickups
+    commodity: iron
+    system: sol
+    quantity: 5
+
+scavenge_iron_deliver:
+  briefing: "Deliver the iron to the prospector on Earth."
+  success_text: "The prospector weighs the ore in one hand and nods. 'That's the real thing.'"
+  failure_text: "The prospector is long gone by the time you check back in."
+  preconditions:
+    - kind: completed
+      mission: scavenge_iron
+  offer:
+    kind: auto
+  objective:
+    kind: land_on_planet
+    planet: earth
+  requires:
+    - kind: has_cargo
+      commodity: iron
+      quantity: 5
+  completion_effects:
+    - kind: remove_cargo
+      commodity: iron
+      quantity: 5
+    - kind: pay
+      credits: 2500
+
+# ── Mining Guild storyline ─────────────────────────────────────────────────
+# Three escalating collect-iron missions that introduce the player to
+# asteroid mining across the Federation core and border systems. The final
+# stage grants the mining license (unlocks the asteroid_miner in shipyards)
+# plus an ongoing mining-template unlock so paid mining contracts keep
+# showing up on mission boards.
+
+mining_story_1:
+  briefing: "A weather-beaten Mining Guild recruiter at Earth's spaceport bar waves you over. 'Kid, we're short on haulers. Go shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 4,000 credits when you do. Find me at the Mars office when you're done.'"
+  success_text: "The recruiter looks impressed. 'Go see the foreman on Mars — she's got bigger work.'"
+  failure_text: "The recruiter snorts. 'Don't waste my time again.'"
+  preconditions: []
+  offer:
+    kind: bar
+    planet: earth
+    weight: 1.0
+  objective:
+    kind: collect_pickups
+    commodity: iron
+    system: sol
+    quantity: 4
+  completion_effects:
+    - kind: pay
+      credits: 4000
+
+mining_story_2:
+  briefing: "The foreman at Mars's miners' bar pushes a datapad across the table. '6 units of iron, pulled from the Tau Ceti belt. Federation space, but further out — you'll need to jump. 8,000 on delivery. Come see our frontier contact at Barnard Rock when you make it back.'"
+  success_text: "The foreman nods. 'Frontier work pays the best. Barnard Rock — ask for the Guild at the bar.'"
+  failure_text: "The foreman just shakes her head."
+  preconditions:
+    - kind: completed
+      mission: mining_story_1
+  offer:
+    kind: bar
+    planet: mars
+    weight: 1.0
+  objective:
+    kind: collect_pickups
+    commodity: iron
+    system: tau_ceti
+    quantity: 6
+  completion_effects:
+    - kind: pay
+      credits: 8000
+
+mining_story_3:
+  briefing: "A wiry Guild agent at Barnard Rock's bar leans across the table. 'Border work. 8 units of clean iron, pulled from the Barnard belt. Rebels and pirates both sweep through here, so keep your eyes open. 18,000 credits — and if you make it back, you'll have earned your Miner's Guild certification. The bulletin board will start showing real mining contracts after that.'"
+  success_text: "The agent slides a signed certification across the bar: 'You're Guild now. Check any mission board for mining contracts.' Your ship computer registers the new licenses."
+  failure_text: "The agent sighs. 'The border eats the unprepared.'"
+  preconditions:
+    - kind: completed
+      mission: mining_story_2
+  offer:
+    kind: bar
+    planet: barnard_rock
+    weight: 1.0
+  objective:
+    kind: collect_pickups
+    commodity: iron
+    system: barnard
+    quantity: 8
+  completion_effects:
+    - kind: pay
+      credits: 18000
+    - kind: grant_unlock
+      name: mining_license
+    - kind: grant_unlock
+      name: mining_templates_unlocked
+
+# ── Merchant Guild storyline ───────────────────────────────────────────────
+# Three escalating delivery missions that introduce the player to the
+# Merchant Guild's three cargo-ship tiers. Each stage pays roughly the
+# price of the next ship up and grants its license, creating a natural
+# upgrade path: shuttle → freighter → hauler → bulk_carrier.
+
+merchant_story_1:
+  briefing: "A Merchant Guild rep at Earth's spaceport bar sets down a drink. 'Short run — 8 units of food to Moon colony. Good shakedown for new pilots. 45,000 on delivery, and we'll get you certified for a real ship. Next contract is at Moon's lounge.'"
+  success_text: "The rep on Moon hands over the credits and a certification chit. 'Freighter license. Spend wisely. Come find me at Moon's bar for the next run.'"
+  failure_text: "The rep shrugs. 'The Guild's got other pilots.'"
+  preconditions: []
+  offer:
+    kind: bar
+    planet: earth
+    weight: 1.0
+  start_effects:
+    - kind: load_cargo
+      commodity: food
+      quantity: 8
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: moon
+  requires:
+    - kind: has_cargo
+      commodity: food
+      quantity: 8
+  completion_effects:
+    - kind: remove_cargo
+      commodity: food
+      quantity: 8
+    - kind: pay
+      credits: 45000
+    - kind: grant_unlock
+      name: merchant_freighter_license
+
+merchant_story_2:
+  briefing: "The Guild rep on Moon pushes over a manifest. 'Bigger run this time — 50 units of food out to tau_ceti_2, one jump from Sol. You'll want a freighter for this one. 50,000 on delivery. When it's done, head to the tau_ceti_2 bar — the Guild's regional office is there.'"
+  success_text: "The regional manager signs off the shipment and hands you a hauler license: 'Good run. We've got one more contract for you. Come back when you're ready.'"
+  failure_text: "The regional manager's disappointment is palpable."
+  preconditions:
+    - kind: completed
+      mission: merchant_story_1
+  offer:
+    kind: bar
+    planet: moon
+    weight: 1.0
+  start_effects:
+    - kind: load_cargo
+      commodity: food
+      quantity: 50
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: tau_ceti_2
+  requires:
+    - kind: has_cargo
+      commodity: food
+      quantity: 50
+  completion_effects:
+    - kind: remove_cargo
+      commodity: food
+      quantity: 50
+    - kind: pay
+      credits: 50000
+    - kind: grant_unlock
+      name: merchant_hauler_license
+
+merchant_story_3:
+  briefing: "The regional manager at tau_ceti_2 unrolls a long-haul contract. '75 units of food to kepler_22b, deep in Federation space. Long jumps. You'll need a hauler for this — anything smaller and the cargo won't fit. 85,000 credits, and we'll certify you for the biggest ships the Guild sells.'"
+  success_text: "The kepler_22b quartermaster confirms receipt. 'You're one of ours now. Bulk carrier license is yours — if you can afford one.'"
+  failure_text: "The contract is voided."
+  preconditions:
+    - kind: completed
+      mission: merchant_story_2
+  offer:
+    kind: bar
+    planet: tau_ceti_2
+    weight: 1.0
+  start_effects:
+    - kind: load_cargo
+      commodity: food
+      quantity: 75
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: kepler_22b
+  requires:
+    - kind: has_cargo
+      commodity: food
+      quantity: 75
+  completion_effects:
+    - kind: remove_cargo
+      commodity: food
+      quantity: 75
+    - kind: pay
+      credits: 85000
+    - kind: grant_unlock
+      name: merchant_bulk_license

@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::item_universe::ItemUniverse;
+use crate::missions::PlayerLandedOnPlanet;
 use crate::planet_ui::LandedContext;
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 
@@ -105,11 +106,15 @@ fn landing_input(
     mut state: ResMut<NextState<PlayState>>,
     mut landed_context: ResMut<LandedContext>,
     planet_query: Query<&Planet>,
+    mut landed_writer: MessageWriter<PlayerLandedOnPlanet>,
 ) {
     if keyboard_input.just_pressed(KeyCode::KeyL) {
         if let Some(planet_entity) = nearby.0 {
             if let Ok(planet) = planet_query.get(planet_entity) {
                 landed_context.planet_name = Some(planet.0.clone());
+                landed_writer.write(PlayerLandedOnPlanet {
+                    planet: planet.0.clone(),
+                });
                 state.set(PlayState::Landed);
             }
         }

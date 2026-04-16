@@ -41,7 +41,7 @@ const PPO_BC_COEFF: f32 = 0.03;
 const PPO_POLICY_LR: f64 = 3e-4;
 const PPO_VALUE_LR: f64 = 1e-3;
 const PPO_POLICY_EPOCHS: usize = 2;
-const PPO_VALUE_EPOCHS: usize = 2;
+const PPO_VALUE_EPOCHS: usize = 4;
 const PPO_MINI_BATCH_SIZE: usize = 512;
 const PPO_MIN_SEGMENTS: usize = 16;
 const PPO_MAX_SEGMENTS: usize = 64;
@@ -599,13 +599,13 @@ pub fn spawn_ppo_training_thread(
                                     (wep_target_logits.clone(), 5),
                                 ];
                                 for (logit, h) in slices.iter() {
-                                    let mp: Tensor<TrainBackend, 1> = softmax(logit.clone(), 1)
-                                        .max_dim(1)
-                                        .mean();
-                                    head_max_prob_sum[*h] = Some(match head_max_prob_sum[*h].take() {
-                                        Some(acc) => acc + mp,
-                                        None => mp,
-                                    });
+                                    let mp: Tensor<TrainBackend, 1> =
+                                        softmax(logit.clone(), 1).max_dim(1).mean();
+                                    head_max_prob_sum[*h] =
+                                        Some(match head_max_prob_sum[*h].take() {
+                                            Some(acc) => acc + mp,
+                                            None => mp,
+                                        });
                                 }
                             }
                             let mut agree = [0u32; 6];
@@ -785,7 +785,14 @@ pub fn spawn_ppo_training_thread(
                 writer.add_scalar("train/bc_loss", avg_bc, update_cycle);
             }
             if policy_epochs_run > 0 && policy_mbs_total > 0 {
-                let head_names = ["turn", "thrust", "fire_primary", "fire_secondary", "nav", "wep"];
+                let head_names = [
+                    "turn",
+                    "thrust",
+                    "fire_primary",
+                    "fire_secondary",
+                    "nav",
+                    "wep",
+                ];
                 for h in 0..6 {
                     writer.add_scalar(
                         &format!("policy/max_prob/{}", head_names[h]),

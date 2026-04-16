@@ -28,6 +28,19 @@ ir_missile:
     sprite_path: ship_sprites/ir_missile.png
     ammo:
         !Ammo:
+            space: 2
+javelin:
+    name: javelin
+    lifetime: 3.0
+    speed: 440.0
+    cooldown: 9.0
+    color: [0.4, 0.8, 1.0]
+    damage: 20
+    guided: true
+    turn_rate: 1.25
+    sprite_path: ship_sprites/javelin.png
+    ammo:
+        !Ammo:
             space: 1
 space_mine:
     name: space_mine

@@ -1,4 +1,6 @@
 use crate::item_universe::ItemUniverse;
+use crate::missions::types::{MissionDef, MissionStatus};
+use crate::missions::{MissionCatalog, MissionLog, PlayerUnlocks};
 use crate::ship::{Ship, ship_bundle_from_pilot};
 use crate::{CurrentStarSystem, PlayState, Player};
 use bevy::prelude::*;
@@ -21,6 +23,16 @@ pub struct PilotSave {
     pub enemies: HashMap<String, f32>,
     #[serde(default)]
     pub visited_systems: HashSet<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub reserved_cargo: HashMap<String, u16>,
+    /// id → status for every non-default status (Active/Completed/Failed).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub mission_statuses: HashMap<String, MissionStatus>,
+    /// Defs for currently-Active missions only; merged into MissionCatalog on load.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub active_mission_defs: HashMap<String, MissionDef>,
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
+    pub unlocks: HashSet<String>,
 }
 
 // ── In-memory resource ───────────────────────────────────────────────────────
@@ -34,6 +46,9 @@ pub struct PlayerGameState {
     pub player_ship: Ship,
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
     pub visited_systems: HashSet<String>,
+    pub mission_statuses: HashMap<String, MissionStatus>,
+    pub active_mission_defs: HashMap<String, MissionDef>,
+    pub unlocks: HashSet<String>,
 }
 
 impl PlayerGameState {
@@ -51,6 +66,9 @@ impl PlayerGameState {
             player_ship: Ship::from_ship_data(starting_ship_data, &starting_ship),
             weapon_loadout: HashMap::new(),
             visited_systems,
+            mission_statuses: HashMap::new(),
+            active_mission_defs: HashMap::new(),
+            unlocks: HashSet::new(),
         }
     }
 
@@ -102,6 +120,7 @@ impl PlayerGameState {
             health: save.health,
             cargo: save.cargo.clone(),
             cargo_cost: HashMap::new(),
+            reserved_cargo: save.reserved_cargo.clone(),
             recent_landings: HashMap::new(),
             credits: save.credits,
             nav_target: None,
@@ -117,6 +136,9 @@ impl PlayerGameState {
             player_ship: ship,
             weapon_loadout: save.weapon_loadout,
             visited_systems,
+            mission_statuses: save.mission_statuses,
+            active_mission_defs: save.active_mission_defs,
+            unlocks: save.unlocks,
         }
     }
 
@@ -135,6 +157,10 @@ impl PlayerGameState {
             weapon_loadout: self.weapon_loadout.clone(),
             enemies: self.player_ship.enemies.clone(),
             visited_systems: self.visited_systems.clone(),
+            reserved_cargo: self.player_ship.reserved_cargo.clone(),
+            mission_statuses: self.mission_statuses.clone(),
+            active_mission_defs: self.active_mission_defs.clone(),
+            unlocks: self.unlocks.clone(),
         }
     }
 
@@ -189,6 +215,9 @@ fn sync_player_state(
     player_query: Query<&Ship, With<Player>>,
     mut game_state: ResMut<PlayerGameState>,
     current_system: Res<CurrentStarSystem>,
+    mission_log: Res<MissionLog>,
+    mission_catalog: Res<MissionCatalog>,
+    unlocks: Res<PlayerUnlocks>,
 ) {
     if let Ok(ship) = player_query.single() {
         game_state.weapon_loadout = ship
@@ -200,6 +229,46 @@ fn sync_player_state(
     }
     game_state.current_star_system = current_system.0.clone();
     game_state.visited_systems.insert(current_system.0.clone());
+
+    // Mission state: keep only non-default statuses; preserve defs for the
+    // subset that are Active (the only ones whose defs we need across loads).
+    game_state.mission_statuses = mission_log
+        .statuses
+        .iter()
+        .filter(|(_, s)| !matches!(s, MissionStatus::Locked))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    game_state.unlocks = unlocks.0.clone();
+    game_state.active_mission_defs = mission_log
+        .statuses
+        .iter()
+        .filter_map(|(id, status)| {
+            matches!(status, MissionStatus::Active(_))
+                .then(|| mission_catalog.defs.get(id).map(|d| (id.clone(), d.clone())))
+                .flatten()
+        })
+        .collect();
+}
+
+/// Runs once on the first Flying entry of a pilot session — restores saved
+/// mission state into the ECS resources. Gated on `player_query.is_empty()`
+/// so it only fires when the player ship is about to be spawned (i.e. after
+/// pilot selection), not on every Landed → Flying transition.
+fn restore_mission_state_on_load(
+    player_query: Query<Entity, With<Player>>,
+    game_state: Res<PlayerGameState>,
+    mut mission_log: ResMut<MissionLog>,
+    mut mission_catalog: ResMut<MissionCatalog>,
+    mut unlocks: ResMut<PlayerUnlocks>,
+) {
+    if !player_query.is_empty() || game_state.pilot_name.is_empty() {
+        return;
+    }
+    mission_log.statuses = game_state.mission_statuses.clone();
+    for (id, def) in &game_state.active_mission_defs {
+        mission_catalog.defs.insert(id.clone(), def.clone());
+    }
+    unlocks.0 = game_state.unlocks.clone();
 }
 
 /// Spawns the player ship on the first entry into Flying (from the main menu).
@@ -234,7 +303,10 @@ fn save_pilot(game_state: Res<PlayerGameState>) {
 pub fn game_save_plugin(app: &mut App) {
     app.init_resource::<PlayerGameState>()
         .add_systems(Update, sync_player_state)
-        .add_systems(OnEnter(PlayState::Flying), spawn_player_on_enter_flying)
+        .add_systems(
+            OnEnter(PlayState::Flying),
+            (restore_mission_state_on_load, spawn_player_on_enter_flying).chain(),
+        )
         // Save when landing/taking off
         .add_systems(OnEnter(PlayState::Landed), save_pilot)
         .add_systems(OnExit(PlayState::Landed), save_pilot);

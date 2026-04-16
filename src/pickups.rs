@@ -3,10 +3,11 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 use crate::item_universe::ItemUniverse;
+use crate::missions::PickupCollected;
 use crate::rl_collection::{RLAgent, RLReward};
 use crate::ship::Ship;
 use crate::utils::{random_velocity, safe_despawn};
-use crate::{GameLayer, PlayState};
+use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 use rand::Rng;
 
 const PICKUP_RADIUS: f32 = 15.0;
@@ -72,8 +73,11 @@ fn collect_pickups(
     pickups: Query<&Pickup>,
     mut ships: Query<&mut Ship>,
     rl_agents: Query<&RLAgent>,
+    players: Query<(), With<Player>>,
+    current_system: Res<CurrentStarSystem>,
     mut commands: Commands,
     mut rl_reward_writer: MessageWriter<RLReward>,
+    mut pickup_collected_writer: MessageWriter<PickupCollected>,
 ) {
     let mut collected: HashSet<Entity> = HashSet::new();
 
@@ -102,6 +106,13 @@ fn collect_pickups(
         let qty = pickup.quantity.min(space);
         if qty > 0 {
             *ship.cargo.entry(pickup.commodity.clone()).or_insert(0) += qty;
+            if players.contains(ship_entity) {
+                pickup_collected_writer.write(PickupCollected {
+                    commodity: pickup.commodity.clone(),
+                    quantity: qty,
+                    system: current_system.0.clone(),
+                });
+            }
             // Flat pickup reward for RLAgent ships, personality-weighted.
             if let Ok(agent) = rl_agents.get(ship_entity) {
                 use crate::consts::*;

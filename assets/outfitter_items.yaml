@@ -14,7 +14,16 @@ ir_missile:
     space: 3
     weapon_type: ir_missile
     ammo_price: 50
+    ammo_space: 2
+    required_unlocks: [federation_weapons_license]
+javelin:
+  !SecondaryWeapon
+    price: 1000
+    space: 3
+    weapon_type: javelin
+    ammo_price: 60
     ammo_space: 1
+    required_unlocks: [rebel_weapons_license]
 space_mine:
   !SecondaryWeapon
     price: 500

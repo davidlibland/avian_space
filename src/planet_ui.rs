@@ -1,3 +1,7 @@
+use crate::missions::{
+    AbandonMission, AcceptMission, DeclineMission, MissionCatalog, MissionLog, MissionOffers,
+    PlayerUnlocks, render_bar_tab, render_missions_tab,
+};
 use crate::{
     CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse, ship::BuyShip,
 };
@@ -42,6 +46,13 @@ pub fn planet_ui(
     mut buy_ship_writer: MessageWriter<BuyShip>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
+    mission_log: Res<MissionLog>,
+    mission_offers: Res<MissionOffers>,
+    mission_catalog: Res<MissionCatalog>,
+    unlocks: Res<PlayerUnlocks>,
+    mut accept_writer: MessageWriter<AcceptMission>,
+    mut decline_writer: MessageWriter<DeclineMission>,
+    mut abandon_writer: MessageWriter<AbandonMission>,
 ) {
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
@@ -166,10 +177,17 @@ pub fn planet_ui(
                                 .outfitter
                                 .iter()
                                 .filter_map(|k| {
-                                    item_universe
-                                        .outfitter_items
-                                        .get(k)
-                                        .map(|item| (k.clone(), item.price(), item.space()))
+                                    item_universe.outfitter_items.get(k).and_then(|item| {
+                                        let locked = item
+                                            .required_unlocks()
+                                            .iter()
+                                            .any(|u| !unlocks.has(u));
+                                        if locked {
+                                            None
+                                        } else {
+                                            Some((k.clone(), item.price(), item.space()))
+                                        }
+                                    })
                                 })
                                 .collect();
                             for (item, price, space) in items {
@@ -235,7 +253,17 @@ pub fn planet_ui(
                                 .shipyard
                                 .iter()
                                 .filter_map(|k| {
-                                    item_universe.ships.get(k).map(|d| (k.clone(), d.clone()))
+                                    item_universe.ships.get(k).and_then(|d| {
+                                        let locked = d
+                                            .required_unlocks
+                                            .iter()
+                                            .any(|u| !unlocks.has(u));
+                                        if locked {
+                                            None
+                                        } else {
+                                            Some((k.clone(), d.clone()))
+                                        }
+                                    })
                                 })
                                 .collect();
                             for (ship_type, data) in ships {
@@ -267,7 +295,36 @@ pub fn planet_ui(
                         });
                 }
             }
-            _ => {}
+            PlanetTab::Missions => {
+                let free = player_query
+                    .single()
+                    .map(|s| s.remaining_cargo_space())
+                    .unwrap_or(0);
+                render_missions_tab(
+                    ui,
+                    &mission_log,
+                    &mission_offers,
+                    &mission_catalog,
+                    free,
+                    &mut accept_writer,
+                    &mut abandon_writer,
+                );
+            }
+            PlanetTab::Bar => {
+                let free = player_query
+                    .single()
+                    .map(|s| s.remaining_cargo_space())
+                    .unwrap_or(0);
+                render_bar_tab(
+                    ui,
+                    planet_name,
+                    &mission_offers,
+                    &mission_catalog,
+                    free,
+                    &mut accept_writer,
+                    &mut decline_writer,
+                );
+            }
         }
     });
 }

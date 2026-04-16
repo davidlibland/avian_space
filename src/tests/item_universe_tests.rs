@@ -10,6 +10,7 @@ fn test_universe() -> ItemUniverse {
     planets.insert(
         "earth".to_string(),
         PlanetData {
+            display_name: String::new(),
             location: Vec2::ZERO,
             description: String::new(),
             commodities: HashMap::from([
@@ -25,6 +26,7 @@ fn test_universe() -> ItemUniverse {
     planets.insert(
         "mars".to_string(),
         PlanetData {
+            display_name: String::new(),
             location: Vec2::new(1000.0, 0.0),
             description: String::new(),
             commodities: HashMap::from([
@@ -42,6 +44,7 @@ fn test_universe() -> ItemUniverse {
     ships.insert(
         "corvette".to_string(),
         ShipData {
+            display_name: String::new(),
             base_weapons: HashMap::from([("missile".to_string(), (1u8, Some(10u32)))]),
             ..Default::default()
         },
@@ -49,12 +52,14 @@ fn test_universe() -> ItemUniverse {
     ships.insert(
         "shuttle".to_string(),
         ShipData {
+            display_name: String::new(),
             base_weapons: HashMap::new(),
             ..Default::default()
         },
     );
 
     let system = StarSystem {
+        display_name: String::new(),
         map_position: Vec2::ZERO,
         connections: vec![],
         planets,
@@ -73,6 +78,7 @@ fn test_universe() -> ItemUniverse {
     let outfitter_items = HashMap::from([(
         "missile_launcher".to_string(),
         OutfitterItem::SecondaryWeapon {
+            display_name: String::new(),
             price: 1000,
             space: 2,
             weapon_type: "missile".to_string(),
@@ -90,6 +96,8 @@ fn test_universe() -> ItemUniverse {
         starting_ship: "shuttle".to_string(),
         starting_system: "sol".to_string(),
         commodities: HashMap::new(),
+        missions: HashMap::new(),
+        mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),
         system_commodity_best_planet_to_sell: HashMap::new(),
         system_planet_best_commodity_to_buy: HashMap::new(),

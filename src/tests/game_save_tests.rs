@@ -12,6 +12,10 @@ fn sample_save() -> PilotSave {
         credits: 50_000,
         weapon_loadout: [("laser".to_string(), (2u8, None))].into_iter().collect(),
         enemies: HashMap::from([("Trader".to_string(), 1.0)]),
+        visited_systems: HashSet::new(),
+        reserved_cargo: HashMap::new(),
+        mission_statuses: HashMap::new(),
+        active_mission_defs: HashMap::new(),
     }
 }
 
@@ -19,6 +23,7 @@ fn basic_item_universe() -> ItemUniverse {
     use crate::item_universe::StarSystem;
     use crate::ship::{Personality, ShipData};
     let shuttle = ShipData {
+        display_name: String::new(),
         thrust: 200.0,
         max_speed: 300.0,
         torque: 20.0,
@@ -43,6 +48,7 @@ fn basic_item_universe() -> ItemUniverse {
         star_systems: HashMap::from([(
             "sol".to_string(),
             StarSystem {
+                display_name: String::new(),
                 map_position: Vec2::ZERO,
                 connections: vec![],
                 planets: HashMap::new(),
@@ -52,6 +58,8 @@ fn basic_item_universe() -> ItemUniverse {
         )]),
         outfitter_items: HashMap::new(),
         commodities: HashMap::new(),
+        missions: HashMap::new(),
+        mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),
         system_commodity_best_planet_to_sell: HashMap::new(),
         system_planet_best_commodity_to_buy: HashMap::new(),

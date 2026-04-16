@@ -3,6 +3,7 @@ use bevy::prelude::*;
 
 mod asteroids;
 mod experiments;
+mod missions;
 mod explosions;
 mod game_save;
 mod hud;
@@ -39,6 +40,7 @@ use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
 use main_menu::main_menu_plugin;
+use missions::{missions_plugin, missions_ui_plugin, PlayerEnteredSystem};
 use pickups::pickup_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
@@ -209,6 +211,7 @@ fn main() {
             StarfieldPlugin::default(),
             HudPlugin::default(),
             main_menu_plugin,
+            missions_ui_plugin,
         ));
     }
     // Explosions plugin registers messages used by game logic (asteroid shatter),
@@ -229,6 +232,7 @@ fn main() {
         },
         pickup_plugin,
         game_save_plugin,
+        missions_plugin,
     ));
 
     // ── State and resources ──────────────────────────────────────────────
@@ -372,16 +376,21 @@ fn travel_system(
     mut ctx: ResMut<TravelContext>,
     mut current_system: ResMut<CurrentStarSystem>,
     mut state: ResMut<NextState<PlayState>>,
+    mut entered_writer: MessageWriter<PlayerEnteredSystem>,
     time: Res<Time>,
 ) {
     if ctx.phase != TravelPhase::Flashing {
         return;
     }
+    let was_flashing_past_half = ctx.flash_t >= 0.5;
     ctx.flash_t = (ctx.flash_t + time.delta_secs() / FLASH_DURATION).min(1.0);
 
     // Switch the star system at the visual peak of the flash (midpoint).
-    if ctx.flash_t >= 0.5 {
+    if ctx.flash_t >= 0.5 && !was_flashing_past_half {
         current_system.0 = ctx.destination.clone();
+        entered_writer.write(PlayerEnteredSystem {
+            system: current_system.0.clone(),
+        });
     }
 
     if ctx.flash_t >= 1.0 {
