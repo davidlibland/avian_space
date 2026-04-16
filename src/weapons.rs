@@ -8,16 +8,18 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
 
 pub fn weapons_plugin(app: &mut App) {
-    app.add_message::<FireCommand>().add_systems(
-        Update,
-        (
-            weapon_fire,
-            weapon_lifetime,
-            weapon_system_cooldown,
-            missile_guidance,
-            cleanup_tracer_slots,
-        ),
-    );
+    app.add_message::<FireCommand>()
+        .add_message::<WeaponFired>()
+        .add_systems(
+            Update,
+            (
+                weapon_fire,
+                weapon_lifetime,
+                weapon_system_cooldown,
+                missile_guidance,
+                cleanup_tracer_slots,
+            ),
+        );
 }
 
 #[derive(Event, Message)]
@@ -25,6 +27,12 @@ pub struct FireCommand {
     pub ship: Entity,
     pub weapon_type: String,
     pub target: Option<Entity>,
+}
+
+#[derive(Event, Message)]
+pub struct WeaponFired {
+    pub ship: Entity,
+    pub weapon_type: String,
 }
 
 /// A weapon fired by any ship.
@@ -193,6 +201,11 @@ pub struct Weapon {
     pub sprite_path: Option<String>,
     #[serde(skip)]
     pub sprite_handle: Option<Handle<Image>>,
+    /// Optional path to a fire sound effect, played when the weapon fires.
+    #[serde(default)]
+    pub sound_path: Option<String>,
+    #[serde(skip)]
+    pub sound_handle: Option<Handle<AudioSource>>,
     #[serde(default)]
     pub display_name: String,
 }
@@ -258,6 +271,7 @@ impl WeaponSystem {
 
 pub fn weapon_fire(
     mut reader: MessageReader<FireCommand>,
+    mut writer: MessageWriter<WeaponFired>,
     mut commands: Commands,
     mut ships: Query<(
         &Transform,
@@ -301,9 +315,9 @@ pub fn weapon_fire(
                         |v: Vec2| Vec2::new(v.x * cos_a - v.y * sin_a, v.x * sin_a + v.y * cos_a);
                     let local_offset = rotate_r(tp.0 - ship_pos);
                     let local_rel_vel = rotate_r(tv.0 - linear_velocity.0);
-                    let a = crate::utils::angle_to_hit(weapon.speed, &local_offset, &local_rel_vel)?;
-                    let wrapped = (a + std::f32::consts::PI)
-                        .rem_euclid(2.0 * std::f32::consts::PI)
+                    let a =
+                        crate::utils::angle_to_hit(weapon.speed, &local_offset, &local_rel_vel)?;
+                    let wrapped = (a + std::f32::consts::PI).rem_euclid(2.0 * std::f32::consts::PI)
                         - std::f32::consts::PI;
                     Some(wrapped.clamp(-weapon.aimable_arc, weapon.aimable_arc))
                 })
@@ -344,8 +358,7 @@ pub fn weapon_fire(
             // vs 9-unit corvette radius).
             SweptCcd::LINEAR,
             LinearVelocity(vel),
-            Transform::from_translation(tip.xy().extend(-0.3))
-                .with_rotation(fire_rotation),
+            Transform::from_translation(tip.xy().extend(-0.3)).with_rotation(fire_rotation),
             sprite,
         ));
         // Decrease the ammo:
@@ -372,6 +385,10 @@ pub fn weapon_fire(
                 }
             }
         }
+        writer.write(WeaponFired {
+            ship: cmd.ship,
+            weapon_type: cmd.weapon_type.clone(),
+        });
     }
 }
 

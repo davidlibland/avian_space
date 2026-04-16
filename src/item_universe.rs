@@ -478,6 +478,10 @@ fn preload_sprites(
             .sprite_path
             .as_ref()
             .map(|path| asset_server.load(path.clone()));
+        weapon.sound_handle = weapon
+            .sound_path
+            .as_ref()
+            .map(|path| asset_server.load(path.clone()));
     }
 }
 

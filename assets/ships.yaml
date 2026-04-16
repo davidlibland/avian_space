@@ -204,7 +204,7 @@ rebel_fighter:
   cargo_space: 2
   item_space: 6
   base_weapons:
-    laser: [3, null]
+    laser: [2, null]
   radius: 12.0
   price: 22000
   sprite_path: ship_sprites/rebel_fighter.png
@@ -220,7 +220,7 @@ rebel_gunboat:
   cargo_space: 8
   item_space: 10
   base_weapons:
-    laser: [5, null]
+    laser: [3, null]
   radius: 22.0
   price: 55000
   sprite_path: ship_sprites/rebel_gunboat.png
@@ -236,7 +236,7 @@ rebel_frigate:
   cargo_space: 10
   item_space: 37
   base_weapons:
-    laser: [5, null]
+    laser: [3, null]
     javelin: [1, 24]
   radius: 28.0
   price: 100000

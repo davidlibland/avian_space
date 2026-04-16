@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(cargo *)",
+            "command": "cmd=$(jq -r \".tool_input.command\"); if echo \"$cmd\" | grep -qE \"cargo[[:space:]]+(run|check|build|test)\\b\" && ! echo \"$cmd\" | grep -qE -- \"--release\\b\" && ! echo \"$cmd\" | grep -qE -- \"--features([= ])[^|;&]*\\bdev\\b\"; then printf \"%s\" '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Use --features dev for cargo run/check/build/test in this project (enables Bevy dynamic_linking for fast incremental builds). For release builds, include --release.\"}}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

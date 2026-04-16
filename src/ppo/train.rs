@@ -37,7 +37,7 @@ const PPO_LAMBDA: f32 = 0.95;
 const PPO_CLIP_EPS: f32 = 0.1;
 const PPO_ENTROPY_COEFF: f32 = 0.01;
 /// Coefficient on the behavioural-cloning auxiliary loss during PPO.
-const PPO_BC_COEFF: f32 = 0.03;
+const PPO_BC_COEFF: f32 = 0.1;
 const PPO_POLICY_LR: f64 = 3e-4;
 const PPO_VALUE_LR: f64 = 1e-3;
 const PPO_POLICY_EPOCHS: usize = 2;

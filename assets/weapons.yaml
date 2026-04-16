@@ -7,6 +7,7 @@ laser:
     color: [1.0, 0.0, 0.0]
     damage: 5
     aimable_arc: 15
+    sound_path: sounds/weapons/laser.ogg
 proton_beam:
     name: proton_beam
     lifetime: 1.25
@@ -16,6 +17,7 @@ proton_beam:
     color: [0.2, 0.4, 1.0]
     damage: 10
     aimable_arc: 5
+    sound_path: sounds/weapons/proton_beam.ogg
 ir_missile:
     name: ir_missile
     lifetime: 4.0
@@ -26,6 +28,7 @@ ir_missile:
     guided: true
     turn_rate: 2.5
     sprite_path: ship_sprites/ir_missile.png
+    sound_path: sounds/weapons/ir_missile.wav
     ammo:
         !Ammo:
             space: 2
@@ -39,6 +42,7 @@ javelin:
     guided: true
     turn_rate: 1.25
     sprite_path: ship_sprites/javelin.png
+    sound_path: sounds/weapons/javelin.ogg
     ammo:
         !Ammo:
             space: 1
@@ -53,6 +57,7 @@ space_mine:
     turn_rate: 1.0
     aimable_arc: 180
     sprite_path: ship_sprites/space_mine.png
+    sound_path: sounds/weapons/space_mine.ogg
     ammo:
         !Ammo:
             space: 2

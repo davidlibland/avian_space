@@ -3,13 +3,13 @@ use bevy::prelude::*;
 
 mod asteroids;
 mod experiments;
-mod missions;
 mod explosions;
 mod game_save;
 mod hud;
 mod item_universe;
 mod jump_ui;
 mod main_menu;
+mod missions;
 mod planet_ui;
 mod planets;
 use planets::planets_plugin;
@@ -22,6 +22,7 @@ mod pickups;
 mod ppo;
 mod rl_collection;
 mod rl_obs;
+mod sfx;
 mod ship;
 mod starfield;
 mod utils;
@@ -40,7 +41,7 @@ use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
 use main_menu::main_menu_plugin;
-use missions::{missions_plugin, missions_ui_plugin, PlayerEnteredSystem};
+use missions::{PlayerEnteredSystem, missions_plugin, missions_ui_plugin};
 use pickups::pickup_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
@@ -192,7 +193,13 @@ fn main() {
             std::time::Duration::from_millis(50),
         ));
     } else {
-        app.add_plugins(DefaultPlugins);
+        // Game uses pixel-scale world units (radii in tens, distances in hundreds-to-thousands).
+        // Default spatial scale (1.0) attenuates anything beyond a few units to silence — shrink
+        // it so spatial sounds remain audible across the play area.
+        app.add_plugins(DefaultPlugins.set(bevy::audio::AudioPlugin {
+            default_spatial_scale: bevy::audio::SpatialScale::new(0.003),
+            ..default()
+        }));
     }
 
     // ── Physics ──────────────────────────────────────────────────────────
@@ -212,6 +219,7 @@ fn main() {
             HudPlugin::default(),
             main_menu_plugin,
             missions_ui_plugin,
+            sfx::sfx_plugin,
         ));
     }
     // Explosions plugin registers messages used by game logic (asteroid shatter),
@@ -289,8 +297,8 @@ fn main() {
 pub struct Player;
 
 fn setup(mut commands: Commands) {
-    // Camera (persists across all states)
-    commands.spawn(Camera2d);
+    // Camera (persists across all states) — also the spatial audio listener.
+    commands.spawn((Camera2d, SpatialListener::default()));
     // Player ship is spawned by game_save_plugin when Flying state is first entered,
     // after the pilot has been selected or loaded from the main menu.
 }
@@ -617,8 +625,7 @@ fn keyboard_input(
     let horizontal = right as i8 - left as i8;
     let mut turn = horizontal as Scalar;
 
-    let vertical = up as i8;
-    let mut thrust = vertical as Scalar;
+    let thrust = (up as i8) as Scalar;
     let reverse = (down as i8) as Scalar;
 
     // Intercept autopilot overrides turn/thrust when the player isn't already

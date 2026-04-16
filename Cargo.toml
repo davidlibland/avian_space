@@ -3,9 +3,12 @@ name = "avian_space"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+dev = ["bevy/dynamic_linking"]
+
 [dependencies]
 avian2d = "0.5.0"
-bevy = "0.18.1"
+bevy = { version = "0.18.1", features = ["wav"] }
 bevy_egui = "0.39.1"
 egui = "0.33.3"
 rand = "0.8.0"
