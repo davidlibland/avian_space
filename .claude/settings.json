@@ -5,7 +5,8 @@
       "Bash(grep -l \"Message\\\\|EventWriter\\\\|EventReader\" /Users/dlibland/dev/avian_space/src/*.rs)",
       "Bash(grep -n \"struct Message\\\\|enum Message\" /Users/dlibland/dev/avian_space/src/*.rs)",
       "Bash(grep -r \"pub mod missions\\\\|missions::\" /Users/dlibland/dev/avian_space/src/*.rs)",
-      "Bash(grep -n \"EventWriter\\\\|EventReader\\\\|send\\\\|read_event\" /Users/dlibland/dev/avian_space/src/tests/*.rs)"
+      "Bash(grep -n \"EventWriter\\\\|EventReader\\\\|send\\\\|read_event\" /Users/dlibland/dev/avian_space/src/tests/*.rs)",
+      "Bash(ls /Users/dlibland/dev/avian_space/assets/*.yaml)"
     ]
   },
   "hooks": {

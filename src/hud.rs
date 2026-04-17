@@ -29,6 +29,12 @@ struct TargetText;
 struct SecondaryWeaponText;
 
 #[derive(Component)]
+struct CommsContainer;
+
+#[derive(Component)]
+struct CommsText;
+
+#[derive(Component)]
 struct RadarDisplay;
 
 #[derive(Component)]
@@ -36,6 +42,27 @@ struct RadarDot;
 
 #[derive(Resource)]
 struct RadarEntity(Entity);
+
+const COMMS_SCROLL_SPEED: f32 = 40.0;
+const COMMS_INITIAL_PAUSE: f32 = 2.0;
+const COMMS_LOOP_PAUSE: f32 = 1.0;
+
+/// Resource holding the comms ticker state. Use [`CommsChannel::send`] to
+/// display a message on the HUD ticker-tape.
+#[derive(Resource, Default)]
+pub struct CommsChannel {
+    message: String,
+    scroll_offset: f32,
+    pause_timer: f32,
+}
+
+impl CommsChannel {
+    pub fn send(&mut self, msg: impl Into<String>) {
+        self.message = msg.into();
+        self.scroll_offset = 0.0;
+        self.pause_timer = COMMS_INITIAL_PAUSE;
+    }
+}
 
 #[derive(Resource)]
 pub struct RadarConfig {
@@ -59,6 +86,7 @@ impl Plugin for HudPlugin {
         app.insert_resource(RadarConfig {
             range: self.radar_range,
         })
+        .init_resource::<CommsChannel>()
         .add_systems(Startup, spawn_hud)
         .add_systems(
             Update,
@@ -67,6 +95,7 @@ impl Plugin for HudPlugin {
                 update_cargo_credits,
                 update_target_display,
                 update_secondary_weapon,
+                update_comms_ticker,
             ),
         )
         .add_systems(
@@ -178,6 +207,38 @@ fn spawn_hud(mut commands: Commands) {
                         ..default()
                     },
                     TextColor(Color::srgb(1.0, 0.5, 0.2)),
+                ));
+            });
+
+            // ── Comms ticker ─────────────────────────────────────────────
+            root.spawn((
+                CommsContainer,
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(18.0),
+                    padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    overflow: Overflow::clip(),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.04, 0.0, 0.7)),
+            ))
+            .with_children(|w| {
+                w.spawn((
+                    CommsText,
+                    Text::new(""),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.2, 1.0, 0.4)),
+                    TextLayout::new_with_no_wrap(),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(4.0),
+                        top: Val::Px(2.0),
+                        ..default()
+                    },
                 ));
             });
 
@@ -585,6 +646,58 @@ fn draw_target_reticle(
         gizmos.line_2d(corner, corner + Vec2::new(-sx * arm, 0.0), color);
         gizmos.line_2d(corner, corner + Vec2::new(0.0, -sy * arm), color);
     }
+}
+
+fn update_comms_ticker(
+    time: Res<Time>,
+    mut channel: ResMut<CommsChannel>,
+    mut text_query: Query<(&mut Text, &mut Node, &ComputedNode), With<CommsText>>,
+    container_query: Query<&ComputedNode, (With<CommsContainer>, Without<CommsText>)>,
+) {
+    let Ok((mut text, mut node, text_computed)) = text_query.single_mut() else {
+        return;
+    };
+    let Ok(container_computed) = container_query.single() else {
+        return;
+    };
+
+    // Sync displayed text with resource
+    if **text != channel.message {
+        **text = channel.message.clone();
+        channel.scroll_offset = 0.0;
+        node.left = Val::Px(4.0);
+    }
+
+    if channel.message.is_empty() {
+        return;
+    }
+
+    let text_width = text_computed.size().x;
+    let container_width = container_computed.size().x;
+    let overflow = text_width - container_width;
+
+    if overflow <= 0.0 {
+        // Text fits — show static, left-aligned
+        node.left = Val::Px(4.0);
+        return;
+    }
+
+    // Pause before (re)starting scroll
+    if channel.pause_timer > 0.0 {
+        channel.pause_timer -= time.delta_secs();
+        return;
+    }
+
+    // Advance scroll
+    channel.scroll_offset += COMMS_SCROLL_SPEED * time.delta_secs();
+
+    // Once the end of the text has scrolled into view (+ a small gap), loop
+    if channel.scroll_offset > overflow + 30.0 {
+        channel.scroll_offset = 0.0;
+        channel.pause_timer = COMMS_LOOP_PAUSE;
+    }
+
+    node.left = Val::Px(4.0 - channel.scroll_offset);
 }
 
 fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {

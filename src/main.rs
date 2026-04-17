@@ -2,6 +2,7 @@ use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
 mod asteroids;
+mod comms;
 mod experiments;
 mod explosions;
 mod game_save;
@@ -232,6 +233,7 @@ fn main() {
         weapons_plugin,
         item_universe_plugin,
         planets_plugin,
+        comms::comms_plugin,
         asteroid_plugin,
         ai_ship_bundle,
         RLCollectionPlugin {
@@ -510,9 +512,10 @@ fn keyboard_input(
     enemy_ships_query: Query<(Entity, &Transform), (With<Ship>, Without<Player>)>,
     asteroids_query: Query<(Entity, &Transform), With<Asteroid>>,
     pickups_query: Query<(Entity, &Transform), With<pickups::Pickup>>,
-    planets_query: Query<(Entity, &Transform), With<planets::Planet>>,
+    planets_query: Query<(Entity, &Transform, &planets::Planet)>,
     target_pos_query: Query<&Position>,
     target_vel_query: Query<&LinearVelocity>,
+    current_star_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
 ) {
     let Ok((player_entity, player_tf, player_vel, player_ang_vel, mut player_ship)) =
@@ -579,24 +582,37 @@ fn keyboard_input(
     }
 
     // [ / ]: cycle through planets in the current system
-    let cycle_planets = keyboard_input.just_pressed(KeyCode::BracketLeft) as i32
-        - keyboard_input.just_pressed(KeyCode::BracketRight) as i32;
-    if cycle_planets != 0 {
-        let mut entities: Vec<Entity> = planets_query.iter().map(|(e, _)| e).collect();
-        entities.sort();
-        if !entities.is_empty() {
-            let current = match &player_ship.nav_target {
-                Some(Target::Planet(e)) => Some(*e),
-                _ => None,
-            };
-            let n = entities.len() as i32;
-            let idx = match current {
-                None => 0,
-                Some(cur) => entities.iter().position(|&e| e == cur).unwrap_or(0) as i32,
-            };
-            // `[` goes backward (cycle_planets = +1), `]` goes forward (-1).
-            let next_idx = ((idx - cycle_planets).rem_euclid(n)) as usize;
-            player_ship.nav_target = Some(Target::Planet(entities[next_idx]));
+    if let Some(current_system) = item_universe.star_systems.get(&current_star_system.0) {
+        let cycle_planets = keyboard_input.just_pressed(KeyCode::BracketLeft) as i32
+            - keyboard_input.just_pressed(KeyCode::BracketRight) as i32;
+        if cycle_planets != 0 {
+            let mut entities: Vec<Entity> = planets_query
+                .iter()
+                .filter(|(_, _, p)| {
+                    // Only include planets that can be landed on.
+                    current_system
+                        .planets
+                        .get(&p.0)
+                        .map(|pdata| !pdata.uncolonized)
+                        .unwrap_or(false)
+                })
+                .map(|(e, _, _)| e)
+                .collect();
+            entities.sort();
+            if !entities.is_empty() {
+                let current = match &player_ship.nav_target {
+                    Some(Target::Planet(e)) => Some(*e),
+                    _ => None,
+                };
+                let n = entities.len() as i32;
+                let idx = match current {
+                    None => 0,
+                    Some(cur) => entities.iter().position(|&e| e == cur).unwrap_or(0) as i32,
+                };
+                // `[` goes backward (cycle_planets = +1), `]` goes forward (-1).
+                let next_idx = ((idx - cycle_planets).rem_euclid(n)) as usize;
+                player_ship.nav_target = Some(Target::Planet(entities[next_idx]));
+            }
         }
     }
 

@@ -110,6 +110,28 @@ impl ItemUniverse {
                 );
             }
         }
+        for (sys_name, system) in &self.star_systems {
+            for (planet_name, planet) in &system.planets {
+                if planet.uncolonized && !planet.commodities.is_empty() {
+                    warn!(
+                        "Planet \"{planet_name}\" in \"{sys_name}\" is uncolonized \
+                         but has commodities — these will be inaccessible"
+                    );
+                }
+                if planet.uncolonized && !planet.outfitter.is_empty() {
+                    warn!(
+                        "Planet \"{planet_name}\" in \"{sys_name}\" is uncolonized \
+                         but has an outfitter — this will be inaccessible"
+                    );
+                }
+                if planet.uncolonized && !planet.shipyard.is_empty() {
+                    warn!(
+                        "Planet \"{planet_name}\" in \"{sys_name}\" is uncolonized \
+                         but has a shipyard — this will be inaccessible"
+                    );
+                }
+            }
+        }
     }
 
     fn compute_global_averages(&mut self) {

@@ -484,14 +484,38 @@ def _scale(c: tuple, factor: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, int(v * factor))) for v in c)
 
 
-def build_planet(name: str, planet_type: str, color_f32: list[float]) -> Planet:
+URANUS_RING_BANDS = [
+    {"r_start": 0.00, "r_end": 0.20, "color": [ 6,  6,  8]},
+    {"r_start": 0.20, "r_end": 0.35, "color": [38, 34, 30]},
+    {"r_start": 0.35, "r_end": 0.50, "color": [ 6,  6,  8]},
+    {"r_start": 0.50, "r_end": 0.62, "color": [44, 38, 34]},
+    {"r_start": 0.62, "r_end": 0.72, "color": [ 6,  6,  8]},
+    {"r_start": 0.72, "r_end": 0.82, "color": [48, 42, 38]},
+    {"r_start": 0.82, "r_end": 0.90, "color": [ 6,  6,  8]},
+    {"r_start": 0.90, "r_end": 1.00, "color": [58, 50, 44]},
+]
+
+
+def build_planet(name: str, pdata: dict) -> Planet:
     """
     Build a Planet using the factory for ``planet_type``, seeded from ``name``.
 
     The YAML ``color`` field (0-1 floats) is converted to a palette that drives
     the procedural generation, keeping each sprite visually consistent with the
     colour already assigned in the game data.
+
+    If a ``rings`` block is present in the YAML, a ring disc is added to the
+    planet after the base mesh is created.  Supported keys::
+
+        rings:
+          inner_radius: 2.30    # in mesh units (planet radius = 2.0)
+          outer_radius: 4.10
+          tilt_deg: 27.0
+          style: wide           # "wide" (Saturn, default) or "thin" (Uranus)
     """
+    planet_type = pdata.get("planet_type", "rocky")
+    color_f32   = pdata.get("color", [0.5, 0.5, 0.5])
+
     seed = _name_seed(name)
     c    = _f32_to_u8(color_f32)
     kwargs: dict = {"seed": seed, "name": name}
@@ -527,7 +551,21 @@ def build_planet(name: str, planet_type: str, color_f32: list[float]) -> Planet:
             bands.append(_scale(c, f))
         kwargs["band_colors"] = bands
 
-    return FACTORIES[planet_type](**kwargs)
+    planet = FACTORIES[planet_type](**kwargs)
+
+    # Attach rings if the YAML specifies a rings block
+    rings_cfg = pdata.get("rings")
+    if rings_cfg and planet.rings is None:
+        style     = rings_cfg.get("style", "wide")
+        band_spec = URANUS_RING_BANDS if style == "thin" else None
+        planet.rings = make_ring_disc(
+            r_inner  = rings_cfg.get("inner_radius", 2.30),
+            r_outer  = rings_cfg.get("outer_radius", 4.10),
+            tilt_deg = rings_cfg.get("tilt_deg", 27.0),
+            band_spec = band_spec,
+        )
+
+    return planet
 
 
 # ---------------------------------------------------------------------------
@@ -557,11 +595,17 @@ def sprite_size(radius: float) -> int:
 
 def render_sprite(planet: Planet, size: int = 256) -> Image.Image:
     """Render a planet to an RGBA PIL Image with transparent background."""
-    fov, dist = 35.0, 7.0
+    fov = 35.0
+    # Distance so the planet body just fits: r / tan(half_fov) + margin
+    dist = planet.radius / np.tan(np.radians(fov / 2)) * 1.15
+
     if planet.rings is not None:
-        ring_outer = planet.rings.bounds[1].max()
-        if ring_outer > planet.radius * 1.5:
-            fov, dist = 60.0, 9.0
+        # Use the full bounding box of the ring mesh (post-tilt) to find
+        # the maximum extent in any axis, then push the camera back enough
+        # that the rings fit inside the field of view with some padding.
+        ring_extent = np.abs(planet.rings.bounds).max()
+        needed_dist = ring_extent / np.tan(np.radians(fov / 2)) * 1.25
+        dist = max(dist, needed_dist)
 
     scene = pyrender.Scene(bg_color=[0, 0, 0, 1.0],
                            ambient_light=[0.04, 0.04, 0.06])
@@ -607,14 +651,24 @@ def main() -> None:
         planets = sys_data.get("planets") or {}
         for planet_name, pdata in planets.items():
             ptype = pdata.get("planet_type", "rocky")
-            color = pdata.get("color", [0.5, 0.5, 0.5])
 
             game_radius = pdata.get("radius", 30.0)
-            sz = sprite_size(game_radius)
+            planet = build_planet(planet_name, pdata)
+
+            # For ringed planets, scale the sprite to the ring outer extent
+            # so rings aren't clipped in-game.  The ratio ring_outer/body
+            # (both in mesh units where body=2.0) maps to the game-pixel
+            # scale factor.
+            if planet.rings is not None:
+                ring_extent = np.abs(planet.rings.bounds).max()
+                scale = ring_extent / planet.radius   # mesh-space ratio
+                effective_radius = game_radius * scale
+            else:
+                effective_radius = game_radius
+            sz = sprite_size(effective_radius)
 
             print(f"  {sys_name}/{planet_name} ({ptype}, {sz}x{sz})...",
                   end=" ", flush=True)
-            planet = build_planet(planet_name, ptype, color)
             img    = render_sprite(planet, size=max(sz, 128)).resize(
                 (sz, sz), Image.LANCZOS)
             out    = out_dir / f"{planet_name}.png"

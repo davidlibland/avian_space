@@ -8,6 +8,7 @@ sol:
   planets:
     mercury:
       planet_type: rocky
+      faction: Federation
       location: [120.0, 60.0]
       description: "A scorched rock barely above the sun. Iron ore practically falls out of the ground."
       radius: 20.0
@@ -20,6 +21,7 @@ sol:
       outfitter: []
     venus:
       planet_type: cloud
+      faction: Federation
       location: [280.0, -200.0]
       description: "Toxic atmosphere, crushing pressure, and the cheapest food in the system."
       radius: 35.0
@@ -32,6 +34,7 @@ sol:
       outfitter: []
     earth:
       planet_type: habitable
+      faction: Federation
       location: [500.0, 300.0]
       description: "The Federation capital and home to its largest naval fleet. A major hub for trade and military contracts."
       radius: 60.0
@@ -46,6 +49,7 @@ sol:
       shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser]
     moon:
       planet_type: rocky
+      faction: Federation
       location: [650.0, 380.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."
       radius: 22.0
@@ -58,6 +62,7 @@ sol:
       shipyard: [shuttle, courier]
     mars:
       planet_type: desert
+      faction: Federation
       location: [-350.0, 400.0]
       description: "Rust-red and cold. Colonists here sell cheap iron and pay dearly for food."
       radius: 30.0
@@ -68,6 +73,152 @@ sol:
         food: 45
         water: 30
         chemicals: 18
+      outfitter: []
+    jupiter:
+      planet_type: gas_giant
+      faction: Federation
+      uncolonized: true
+      location: [-800.0, -500.0]
+      description: "The largest planet in the system. No colony can survive the crushing gravity and radiation."
+      radius: 70.0
+      color: [0.75, 0.6, 0.4]
+      commodities: {}
+      outfitter: []
+    io:
+      planet_type: rocky
+      faction: Independent
+      location: [-720.0, -430.0]
+      description: "Jupiter's volcanic moon. Sulfur and silicates are dirt-cheap; water barely exists."
+      radius: 15.0
+      color: [0.8, 0.7, 0.3]
+      commodities:
+        silicates: 3
+        chemicals: 8
+        iron: 12
+        water: 60
+      outfitter: []
+    europa:
+      planet_type: icy_dwarf
+      faction: Independent
+      location: [-880.0, -560.0]
+      description: "An ice-covered moon hiding a subsurface ocean. Water is practically free."
+      radius: 16.0
+      color: [0.7, 0.7, 0.75]
+      commodities:
+        water: 2
+        exotic_matter: 180
+        food: 55
+      outfitter: []
+    saturn:
+      planet_type: gas_giant
+      faction: Federation
+      uncolonized: true
+      location: [1000.0, -700.0]
+      description: "The ringed giant. Beautiful but uninhabitable — no solid surface to land on."
+      radius: 65.0
+      color: [0.82, 0.75, 0.55]
+      rings:
+        inner_radius: 2.30
+        outer_radius: 4.10
+        tilt_deg: 27.0
+      commodities: {}
+      outfitter: []
+    titan:
+      planet_type: cloud
+      faction: Independent
+      location: [1100.0, -620.0]
+      description: "Saturn's largest moon, shrouded in orange haze. Hydrocarbon lakes make chemicals nearly free."
+      radius: 25.0
+      color: [0.7, 0.55, 0.25]
+      commodities:
+        chemicals: 3
+        fuel_cells: 15
+        food: 50
+        water: 35
+      outfitter: []
+    enceladus:
+      planet_type: icy_dwarf
+      faction: Independent
+      location: [940.0, -770.0]
+      description: "A tiny ice moon venting geysers of water into space. The cheapest water in the system."
+      radius: 12.0
+      color: [0.85, 0.85, 0.9]
+      commodities:
+        water: 1
+        food: 60
+      outfitter: []
+    uranus:
+      planet_type: ice_giant
+      faction: Federation
+      uncolonized: true
+      location: [-500.0, -900.0]
+      description: "A pale blue-green ice giant tilted on its side. No colony — just howling winds and crushing pressure."
+      radius: 55.0
+      color: [0.6, 0.82, 0.82]
+      rings:
+        inner_radius: 2.20
+        outer_radius: 2.85
+        tilt_deg: 98.0
+        style: thin
+      commodities: {}
+      outfitter: []
+    miranda:
+      planet_type: rocky
+      faction: Independent
+      location: [-430.0, -850.0]
+      description: "Uranus's fractured moon, a patchwork of cliffs and canyons. Silicates are plentiful."
+      radius: 12.0
+      color: [0.5, 0.48, 0.45]
+      commodities:
+        silicates: 4
+        iron: 15
+        water: 45
+      outfitter: []
+    neptune:
+      planet_type: ice_giant
+      faction: Federation
+      uncolonized: true
+      location: [1300.0, 400.0]
+      description: "The deep blue ice giant at the edge of the system. Fierce winds make surface operations impossible."
+      radius: 50.0
+      color: [0.2, 0.35, 0.75]
+      commodities: {}
+      outfitter: []
+    triton:
+      planet_type: icy_dwarf
+      faction: Independent
+      location: [1380.0, 470.0]
+      description: "Neptune's captured moon, orbiting backwards. Nitrogen geysers scar the frozen surface."
+      radius: 14.0
+      color: [0.55, 0.5, 0.55]
+      commodities:
+        exotic_matter: 100
+        water: 8
+        silicates: 12
+      outfitter: []
+    pluto:
+      planet_type: icy_dwarf
+      faction: Independent
+      location: [-200.0, -1200.0]
+      description: "A distant dwarf planet at the fringe of known space. Exotic matter deposits lie untouched."
+      radius: 12.0
+      color: [0.55, 0.45, 0.4]
+      commodities:
+        exotic_matter: 80
+        water: 30
+        silicates: 20
+      outfitter: []
+    charon:
+      planet_type: rocky
+      faction: Independent
+      location: [-160.0, -1170.0]
+      description: "Pluto's binary companion. Grey and silent, but hiding pockets of water ice."
+      radius: 10.0
+      color: [0.45, 0.42, 0.4]
+      commodities:
+        water: 15
+        iron: 25
+        silicates: 8
       outfitter: []
   astroid_fields:
     -
@@ -98,6 +249,7 @@ kepler_22:
   planets:
     kepler_22b:
       planet_type: habitable
+      faction: Federation
       location: [350.0, 200.0]
       description: "A temperate Federation colony world deep in Federation space. Weapons parts flow from orbital foundries."
       radius: 50.0
@@ -111,6 +263,7 @@ kepler_22:
       shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, courier, hauler]
     kepler_22_station:
       planet_type: rocky
+      faction: Federation
       location: [480.0, 310.0]
       description: "A Federation naval station. Weapons parts are stockpiled here; water comes at a premium."
       radius: 22.0
@@ -141,6 +294,7 @@ tau_ceti:
   planets:
     tau_ceti_4:
       planet_type: rocky
+      faction: Federation
       location: [400.0, -100.0]
       description: "Ancient ruins dot this Federation world. Scholars pay a fortune for artifacts from the deep dig sites."
       radius: 52.0
@@ -153,6 +307,7 @@ tau_ceti:
       shipyard: [shuttle, courier, hauler, freighter]
     tau_ceti_2:
       planet_type: rocky
+      faction: Federation
       location: [-200.0, 200.0]
       description: "A younger Federation colony that excavates artifacts cheaply but needs water badly."
       radius: 38.0
@@ -183,6 +338,7 @@ epsilon_eridani:
   planets:
     eridani_station:
       planet_type: habitable
+      faction: Federation
       location: [0.0, 400.0]
       description: "A Federation trade hub in a young, turbulent system. Fuel cells are cheap; exotic matter commands a premium."
       radius: 40.0
@@ -195,6 +351,7 @@ epsilon_eridani:
       shipyard: [shuttle, courier, hauler, freighter, bulk_carrier]
     eridani_moon:
       planet_type: icy_dwarf
+      faction: Federation
       location: [60.0, 500.0]
       description: "A tidally-locked moon. Exotic matter collects in the shadow zone, sold at a discount."
       radius: 18.0
@@ -225,10 +382,15 @@ vega:
   planets:
     vega_1:
       planet_type: desert
+      faction: Federation
       location: [300.0, 300.0]
       description: "A glittering Federation mining colony. Gold is abundant and cheap; titanium gets a premium."
       radius: 48.0
       color: [0.8, 0.8, 0.4]
+      rings:
+        inner_radius: 2.25
+        outer_radius: 3.80
+        tilt_deg: 22.0
       commodities:
         gold: 60
         titanium: 180
@@ -237,6 +399,7 @@ vega:
       shipyard: [corvette, courier, hauler, asteroid_miner, freighter]
     vega_2:
       planet_type: rocky
+      faction: Federation
       location: [-100.0, -200.0]
       description: "A quieter Federation world where titanium ore is mined cheaply. Gold buyers pay top credit here."
       radius: 30.0
@@ -268,6 +431,7 @@ barnard:
   planets:
     barnard_rock:
       planet_type: rocky
+      faction: Federation
       location: [-100.0, 200.0]
       description: "A Federation frontier world at the edge of the border zone. Uranium ore is dug up cheap and sold fast."
       radius: 35.0
@@ -280,6 +444,7 @@ barnard:
       shipyard: [shuttle, courier, asteroid_miner]
     barnard_station:
       planet_type: rocky
+      faction: Federation
       location: [100.0, 350.0]
       description: "A Federation refinery station and patrol staging point. Watch for Rebel scouts on the outbound lanes."
       radius: 20.0
@@ -364,10 +529,16 @@ procyon:
   planets:
     procyon_prime:
       planet_type: habitable
+      faction: Rebel
       location: [200.0, 300.0]
       description: "A Rebel-held trade hub. Water and food are cheap; weapons pay well. Federation patrols still probe the outskirts."
       radius: 55.0
       color: [0.2, 0.45, 0.55]
+      rings:
+        inner_radius: 2.15
+        outer_radius: 2.70
+        tilt_deg: 75.0
+        style: thin
       commodities:
         electronics: 150
         food: 20
@@ -377,6 +548,7 @@ procyon:
       shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, freighter, bulk_carrier, asteroid_miner]
     procyon_ii:
       planet_type: rocky
+      faction: Rebel
       location: [-200.0, -100.0]
       description: "An industrial Rebel moon where electronics are assembled cheaply from imported parts."
       radius: 28.0
@@ -407,10 +579,15 @@ sirius:
   planets:
     sirius_b:
       planet_type: desert
+      faction: Rebel
       location: [300.0, -200.0]
       description: "A scorched Rebel industrial world baking under Sirius's intense light. Cooling gel flows out cheap; titanium is in demand."
       radius: 50.0
       color: [0.2, 0.5, 0.4]
+      rings:
+        inner_radius: 2.30
+        outer_radius: 3.90
+        tilt_deg: 15.0
       commodities:
         titanium: 200
         cooling_gel: 80
@@ -419,6 +596,7 @@ sirius:
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, freighter]
     sirius_c:
       planet_type: rocky
+      faction: Rebel
       location: [100.0, 350.0]
       description: "A Rebel companion world where titanium ore sits cheap in long-abandoned mines."
       radius: 32.0
@@ -453,6 +631,7 @@ rigel:
   planets:
     rigel_outpost:
       planet_type: rocky
+      faction: Rebel
       location: [-200.0, 200.0]
       description: "A hardened Rebel stronghold at the edge of known space. Weapons parts are cheap; exotic matter commands a fortune."
       radius: 42.0
@@ -465,6 +644,7 @@ rigel:
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
       planet_type: rocky
+      faction: Rebel
       location: [-80.0, 350.0]
       description: "A Rebel resupply depot near Rigel. Exotic matter is surplus; weapons parts sell high."
       radius: 22.0
@@ -495,6 +675,7 @@ altair:
   planets:
     altair_haven:
       planet_type: habitable
+      faction: Rebel
       location: [200.0, -200.0]
       description: "A hidden Rebel resupply world tucked in a dense asteroid field. Fuel cells are stockpiled; food and water are always needed."
       radius: 38.0
@@ -508,6 +689,7 @@ altair:
       shipyard: [rebel_fighter, rebel_gunboat, courier, asteroid_miner]
     altair_rock:
       planet_type: rocky
+      faction: Rebel
       location: [-150.0, 300.0]
       description: "A Rebel mining outpost. Silicates are plentiful; everything else is scarce."
       radius: 20.0
@@ -538,10 +720,16 @@ deneb:
   planets:
     deneb_prime:
       planet_type: habitable
+      faction: Rebel
       location: [300.0, 100.0]
       description: "The beating heart of the Rebel Alliance. Weapons, ships, and fighters pour out of its shipyards."
       radius: 55.0
       color: [0.15, 0.35, 0.55]
+      rings:
+        inner_radius: 2.20
+        outer_radius: 2.80
+        tilt_deg: 62.0
+        style: thin
       commodities:
         weapons_parts: 180
         electronics: 100
@@ -551,6 +739,7 @@ deneb:
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, freighter]
     deneb_station:
       planet_type: rocky
+      faction: Rebel
       location: [420.0, 200.0]
       description: "A Rebel orbital shipyard. Advanced weapons and hulls are assembled here for the war effort."
       radius: 25.0

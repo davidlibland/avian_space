@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::item_universe::ItemUniverse;
 use crate::missions::PlayerLandedOnPlanet;
 use crate::planet_ui::LandedContext;
-use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
+use crate::ship::{ShipHostility, Target};
+use crate::{CurrentStarSystem, GameLayer, PlayState, Player, Ship};
 
 use std::collections::HashMap;
 
@@ -27,6 +28,12 @@ pub struct PlanetData {
     pub display_name: String,
     #[serde(default)]
     pub planet_type: String,
+    /// If true, the planet has no colony and ships cannot land on it.
+    #[serde(default)]
+    pub uncolonized: bool,
+    /// Controlling faction (e.g. "Federation", "Rebel", "Independent").
+    #[serde(default)]
+    pub faction: String,
     #[serde(skip)]
     pub sprite_handle: Handle<Image>,
 }
@@ -113,16 +120,48 @@ fn landing_input(
     mut landed_context: ResMut<LandedContext>,
     planet_query: Query<&Planet>,
     mut landed_writer: MessageWriter<PlayerLandedOnPlanet>,
+    item_universe: Res<ItemUniverse>,
+    current_star_system: Res<CurrentStarSystem>,
+    mut player_query: Query<(&mut Ship, &ShipHostility), With<Player>>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::KeyL) {
-        if let Some(planet_entity) = nearby.0 {
-            if let Ok(planet) = planet_query.get(planet_entity) {
-                landed_context.planet_name = Some(planet.0.clone());
-                landed_writer.write(PlayerLandedOnPlanet {
-                    planet: planet.0.clone(),
-                });
-                state.set(PlayState::Landed);
+    if !keyboard_input.just_pressed(KeyCode::KeyL) {
+        return;
+    }
+    let Some(planet_entity) = nearby.0 else {
+        return;
+    };
+    let Ok(planet) = planet_query.get(planet_entity) else {
+        return;
+    };
+    let Ok((mut ship, hostility)) = player_query.single_mut() else {
+        return;
+    };
+
+    // Always set nav_target so the comms module can display the right message
+    ship.nav_target = Some(Target::Planet(planet_entity));
+
+    // Check landing eligibility
+    if let Some(system) = item_universe.star_systems.get(&current_star_system.0) {
+        if let Some(planet_data) = system.planets.get(&planet.0) {
+            if planet_data.uncolonized {
+                return;
+            }
+            if !planet_data.faction.is_empty()
+                && hostility
+                    .0
+                    .get(&planet_data.faction)
+                    .copied()
+                    .unwrap_or(0.0)
+                    > 0.0
+            {
+                return;
             }
         }
     }
+
+    landed_context.planet_name = Some(planet.0.clone());
+    landed_writer.write(PlayerLandedOnPlanet {
+        planet: planet.0.clone(),
+    });
+    state.set(PlayState::Landed);
 }
