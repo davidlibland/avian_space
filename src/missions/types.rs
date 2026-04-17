@@ -1,3 +1,4 @@
+use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
@@ -83,7 +84,31 @@ pub enum Objective {
         system: String,
         quantity: u16,
     },
-    // Future: DestroyShip { mission_target_tag: String }, etc.
+    /// Player must destroy a group of ships in a specific system. The ships
+    /// are spawned when the player enters the system with this mission active
+    /// and tagged with `MissionTarget`. Optionally also collect cargo from
+    /// the wreckage.
+    DestroyShips {
+        system: String,
+        /// Ship type id (key in `ItemUniverse.ships`).
+        ship_type: String,
+        count: u8,
+        /// Display name shown in objective text (e.g. "Pirate Raiders").
+        target_name: String,
+        /// If true, spawned ships always target the player.
+        #[serde(default)]
+        hostile: bool,
+        /// If set, the player must also collect this cargo from wreckage.
+        #[serde(default)]
+        collect: Option<CollectRequirement>,
+    },
+}
+
+/// Sub-requirement for DestroyShips: also collect cargo from wreckage.
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+pub struct CollectRequirement {
+    pub commodity: String,
+    pub quantity: u16,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
@@ -116,6 +141,9 @@ impl MissionDef {
             .sum();
         let objective_room = match &self.objective {
             Objective::CollectPickups { quantity, .. } => *quantity,
+            Objective::DestroyShips {
+                collect: Some(req), ..
+            } => req.quantity,
             _ => 0,
         };
         loaded.saturating_add(objective_room)
@@ -177,6 +205,23 @@ pub enum MissionTemplate {
         /// Pay on final delivery (stage 2).
         pay_range: (i64, i64),
     },
+    /// "Destroy N ships of type T in a random system." Spawns hostile
+    /// mission targets. System chosen from systems that contain at least
+    /// one planet (so the player can land afterward).
+    BountyHunt {
+        briefing: String,
+        success_text: String,
+        failure_text: String,
+        offer: OfferKind,
+        #[serde(default)]
+        preconditions: Vec<Precondition>,
+        /// Pool of ship types to spawn as targets.
+        ship_type_pool: Vec<String>,
+        count_range: (u8, u8),
+        pay_range: (i64, i64),
+        /// Display name for targets in the HUD / objective text.
+        target_name: String,
+    },
 }
 
 impl MissionTemplate {
@@ -185,6 +230,7 @@ impl MissionTemplate {
             MissionTemplate::Delivery { preconditions, .. } => preconditions,
             MissionTemplate::CollectFromAsteroidField { preconditions, .. } => preconditions,
             MissionTemplate::CollectThenDeliver { preconditions, .. } => preconditions,
+            MissionTemplate::BountyHunt { preconditions, .. } => preconditions,
         }
     }
 }
@@ -210,4 +256,16 @@ pub enum MissionStatus {
 pub struct ObjectiveProgress {
     #[serde(default)]
     pub collected: u16,
+    #[serde(default)]
+    pub destroyed: u8,
+}
+
+/// Marker component attached to ships spawned for a mission's `DestroyShips`
+/// objective. The missions module owns this component; nothing outside
+/// `missions/` needs to read or write it.
+#[derive(Component, Clone, Debug)]
+pub struct MissionTarget {
+    pub mission_id: String,
+    pub display_name: String,
+    pub always_targets_player: bool,
 }

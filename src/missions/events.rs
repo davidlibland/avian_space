@@ -22,6 +22,12 @@ pub struct PickupCollected {
     pub system: String,
 }
 
+/// Emitted from `ship.rs::apply_damage` when any AI ship's health reaches 0.
+#[derive(Event, Message, Clone, Debug)]
+pub struct ShipDestroyed {
+    pub entity: Entity,
+}
+
 // ── Mission-specific events (UI <-> logic) ─────────────────────────────────
 
 #[derive(Event, Message, Clone, Debug)]

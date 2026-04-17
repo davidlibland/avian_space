@@ -63,7 +63,7 @@ import os
 
 from PIL import Image, ImageDraw
 
-OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "ship_sprites")
+OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "sprites", "ships")
 
 
 def make_img(size):

@@ -25,6 +25,10 @@ pub struct PlanetData {
     pub color: [f32; 3],
     #[serde(default)]
     pub display_name: String,
+    #[serde(default)]
+    pub planet_type: String,
+    #[serde(skip)]
+    pub sprite_handle: Handle<Image>,
 }
 
 #[derive(Component)]
@@ -45,8 +49,6 @@ pub fn planets_plugin(app: &mut App) {
 
 fn spawn_planets(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
 ) {
@@ -57,6 +59,7 @@ fn spawn_planets(
     for (planet_name, planet_data) in &star_system.planets {
         let r = planet_data.radius;
         let [cr, cg, cb] = planet_data.color;
+        let has_sprite = planet_data.sprite_handle.id() != Handle::<Image>::default().id();
         commands.spawn((
             DespawnOnExit(PlayState::Flying),
             Planet(planet_name.clone()),
@@ -68,8 +71,11 @@ fn spawn_planets(
             ),
             CollisionEventsEnabled,
             Sensor,
-            Mesh2d(meshes.add(Circle::new(r))),
-            MeshMaterial2d(materials.add(Color::srgb(cr, cg, cb))),
+            if has_sprite {
+                Sprite::from_image(planet_data.sprite_handle.clone())
+            } else {
+                Sprite::from_color(Color::srgb(cr, cg, cb), Vec2::splat(r * 2.0))
+            },
             Transform::from_xyz(planet_data.location.x, planet_data.location.y, -1.0),
         ));
     }

@@ -16,6 +16,7 @@ fn sample_save() -> PilotSave {
         reserved_cargo: HashMap::new(),
         mission_statuses: HashMap::new(),
         active_mission_defs: HashMap::new(),
+        unlocks: HashSet::new(),
     }
 }
 
@@ -32,10 +33,12 @@ fn basic_item_universe() -> ItemUniverse {
         item_space: 5,
         base_weapons: HashMap::new(),
         sprite_path: "shuttle.png".to_string(),
+        sprite_handle: Default::default(),
         radius: 10.0,
         price: 1000,
         personality: Personality::Trader,
         faction: None,
+        required_unlocks: Vec::new(),
         angular_drag: 3.0,
         thrust_kp: 5.0,
         thrust_kd: 1.0,

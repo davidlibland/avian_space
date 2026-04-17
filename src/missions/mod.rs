@@ -3,6 +3,11 @@
 
 use bevy::prelude::*;
 
+use crate::PlayState;
+
+#[cfg(test)]
+mod tests;
+
 mod events;
 mod log;
 mod progress;
@@ -11,7 +16,7 @@ pub mod ui;
 
 pub use events::*;
 pub use log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
-pub use types::{MissionDef, MissionTemplate};
+pub use types::{MissionDef, MissionTarget, MissionTemplate};
 pub use ui::{missions_ui_plugin, render_bar_tab, render_missions_tab, MissionToast};
 
 pub fn missions_plugin(app: &mut App) {
@@ -23,6 +28,7 @@ pub fn missions_plugin(app: &mut App) {
         .add_message::<PlayerLandedOnPlanet>()
         .add_message::<PlayerEnteredSystem>()
         .add_message::<PickupCollected>()
+        .add_message::<ShipDestroyed>()
         .add_message::<AcceptMission>()
         .add_message::<DeclineMission>()
         .add_message::<AbandonMission>()
@@ -40,10 +46,22 @@ pub fn missions_plugin(app: &mut App) {
                 progress::advance_travel_objectives,
                 progress::advance_land_objectives,
                 progress::advance_collect_objectives,
+                progress::advance_destroy_objectives,
+                progress::advance_destroy_collect,
                 progress::finalize_completions,
                 progress::finalize_failures,
+                progress::despawn_targets_on_failure,
                 ui::drain_completion_toasts,
             )
                 .chain(),
+        )
+        // Spawn/force-target run every Flying frame, outside the event chain.
+        .add_systems(
+            Update,
+            (
+                progress::spawn_mission_targets,
+                progress::force_target_player,
+            )
+                .run_if(in_state(PlayState::Flying)),
         );
 }

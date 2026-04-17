@@ -1,10 +1,12 @@
 use bevy::prelude::*;
 
+use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
+use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::ship::Target;
 use crate::utils::safe_despawn;
-use crate::{PlayState, Player, Ship};
+use crate::{CurrentStarSystem, PlayState, Player, Ship};
 
 const RADAR_SIZE: f32 = 144.0;
 const DOT_SIZE: f32 = 4.0;
@@ -69,7 +71,7 @@ impl Plugin for HudPlugin {
         )
         .add_systems(
             Update,
-            update_radar_dots.run_if(in_state(PlayState::Flying)),
+            (update_radar_dots, draw_target_reticle).run_if(in_state(PlayState::Flying)),
         );
     }
 }
@@ -256,7 +258,7 @@ fn update_radar_dots(
     let half = RADAR_SIZE / 2.0;
 
     // Targeted entity for blink effect
-    let targeted_entity: Option<Entity> = match &player_ship.weapons_target {
+    let targeted_entity: Option<Entity> = match &player_ship.nav_target {
         Some(Target::Ship(e)) => Some(*e),
         Some(Target::Planet(e)) => Some(*e),
         _ => None,
@@ -461,6 +463,7 @@ fn update_secondary_weapon(
 fn update_target_display(
     player_query: Query<(Entity, &Ship), With<Player>>,
     ships_query: Query<&Ship, Without<Player>>,
+    mission_targets: Query<&crate::missions::MissionTarget>,
     asteroids_query: Query<&crate::asteroids::Asteroid>,
     planets_query: Query<&Planet>,
     pickups_query: Query<&crate::pickups::Pickup>,
@@ -474,16 +477,22 @@ fn update_target_display(
     let Ok(mut text) = text_query.single_mut() else {
         return;
     };
-    **text = match &player_ship.weapons_target {
+    **text = match &player_ship.nav_target {
         Some(Target::Ship(entity)) => {
             if let Ok(target_ship) = ships_query.get(*entity) {
                 let is_hostile =
                     matches!(&target_ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
-                let display = &target_ship.data.display_name;
+                // Prefer mission target display name over generic ship type.
+                let display = mission_targets
+                    .get(*entity)
+                    .map(|mt| mt.display_name.as_str())
+                    .unwrap_or(&target_ship.data.display_name);
+                let max_health = target_ship.data.max_health.max(1) as f32;
+                let health_pct = (target_ship.health as f32 / max_health * 100.0).round();
                 if is_hostile {
-                    format!("Target: {} [HOSTILE]", display)
+                    format!("Target: {} ({}%) [HOSTILE]", display, health_pct)
                 } else {
-                    format!("Target: {}", display)
+                    format!("Target: {} ({}%)", display, health_pct)
                 }
             } else {
                 "Target: None".to_string()
@@ -523,6 +532,59 @@ fn update_target_display(
         }
         None => "Target: None".to_string(),
     };
+}
+
+/// Draw 4 corner brackets around the player's current nav_target.
+fn draw_target_reticle(
+    mut gizmos: Gizmos,
+    player: Query<&Ship, With<Player>>,
+    transforms: Query<&Transform>,
+    ships: Query<&Ship, Without<Player>>,
+    asteroids: Query<&Asteroid>,
+    planets: Query<&Planet>,
+    pickups: Query<&Pickup>,
+    item_universe: Res<ItemUniverse>,
+    current_system: Res<CurrentStarSystem>,
+) {
+    let Ok(player_ship) = player.single() else {
+        return;
+    };
+    let Some(target) = &player_ship.nav_target else {
+        return;
+    };
+    let entity = target.get_entity();
+    let Ok(tf) = transforms.get(entity) else {
+        return;
+    };
+
+    // Half-side of the bracket box, sized to the target with padding.
+    let radius = match target {
+        Target::Ship(_) => ships.get(entity).map(|s| s.data.radius).unwrap_or(20.0),
+        Target::Asteroid(_) => asteroids.get(entity).map(|a| a.size).unwrap_or(20.0),
+        Target::Planet(_) => planets
+            .get(entity)
+            .ok()
+            .and_then(|p| {
+                item_universe
+                    .star_systems
+                    .get(&current_system.0)
+                    .and_then(|sys| sys.planets.get(&p.0))
+            })
+            .map(|pd| pd.radius)
+            .unwrap_or(80.0),
+        Target::Pickup(_) => pickups.get(entity).map(|_| 8.0).unwrap_or(8.0),
+    };
+    let half = radius * 1.4;
+    let arm = half * 0.35;
+    let center = tf.translation.truncate();
+    let color = Color::srgb(0.4, 1.0, 0.6);
+
+    // 4 corners × 2 line segments each = 8 lines forming L-shapes.
+    for &(sx, sy) in &[(-1.0_f32, 1.0_f32), (1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)] {
+        let corner = center + Vec2::new(sx * half, sy * half);
+        gizmos.line_2d(corner, corner + Vec2::new(-sx * arm, 0.0), color);
+        gizmos.line_2d(corner, corner + Vec2::new(0.0, -sy * arm), color);
+    }
 }
 
 fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {

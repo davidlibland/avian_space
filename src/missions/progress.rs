@@ -1,12 +1,15 @@
+use avian2d::prelude::*;
 use bevy::prelude::*;
 use rand::Rng;
 
 use super::events::*;
 use super::log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
 use super::types::*;
+use crate::ai_ships::AIShip;
 use crate::item_universe::ItemUniverse;
-use crate::ship::Ship;
-use crate::Player;
+use crate::rl_collection::RLAgent;
+use crate::ship::{Ship, Target, ship_bundle};
+use crate::{CurrentStarSystem, GameLayer, Player};
 
 /// Startup: copy the static missions from ItemUniverse into the catalog.
 pub fn init_catalog(universe: Res<ItemUniverse>, mut catalog: ResMut<MissionCatalog>) {
@@ -171,7 +174,7 @@ fn remove_from_offers(offers: &mut MissionOffers, id: &str) {
 
 /// Check the mission's `requires` clauses against the player's current
 /// state. Returns true if all requirements are satisfied.
-fn requirements_met(def: &MissionDef, ship: &Ship, unlocks: &PlayerUnlocks) -> bool {
+pub(crate) fn requirements_met(def: &MissionDef, ship: &Ship, unlocks: &PlayerUnlocks) -> bool {
     def.requires.iter().all(|req| match req {
         CompletionRequirement::HasCargo {
             commodity,
@@ -293,6 +296,7 @@ pub fn advance_collect_objectives(
                     &id,
                     MissionStatus::Active(ObjectiveProgress {
                         collected: new_have,
+                        ..progress
                     }),
                 );
             }
@@ -403,6 +407,219 @@ pub fn finalize_completions(
                 CompletionEffect::GrantUnlock { name } => {
                     unlocks.0.insert(name.clone());
                 }
+            }
+        }
+    }
+}
+
+// ── DestroyShips: spawn, track, force-target ────────────────────────────────
+
+const DETECTION_RADIUS: f32 = 2000.0;
+
+/// Spawn mission-target ships for active `DestroyShips` missions when the
+/// player is in the right system. Only spawns the remainder
+/// (`count - destroyed`) so returning to a system after partial progress
+/// re-creates the surviving targets.
+pub fn spawn_mission_targets(
+    mut commands: Commands,
+    log: Res<MissionLog>,
+    catalog: Res<MissionCatalog>,
+    current: Res<CurrentStarSystem>,
+    item_universe: Res<ItemUniverse>,
+    existing: Query<&MissionTarget>,
+) {
+    let mut rng = rand::thread_rng();
+    for (id, def) in &catalog.defs {
+        let MissionStatus::Active(progress) = log.status(id) else {
+            continue;
+        };
+        let Objective::DestroyShips {
+            system,
+            ship_type,
+            count,
+            target_name,
+            hostile,
+            ..
+        } = &def.objective
+        else {
+            continue;
+        };
+        if &current.0 != system {
+            continue;
+        }
+        // How many targets already exist for this mission?
+        let alive = existing
+            .iter()
+            .filter(|mt| mt.mission_id == *id)
+            .count() as u8;
+        let need = (*count).saturating_sub(progress.destroyed).saturating_sub(alive);
+        if need == 0 {
+            continue;
+        }
+        for _ in 0..need {
+            let pos = bevy::math::Vec2::new(
+                rng.gen_range(-3000.0..3000.0),
+                rng.gen_range(-3000.0..3000.0),
+            );
+            let bundle = ship_bundle(ship_type, &item_universe, system, pos);
+            let personality = bundle.get_personality();
+            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            commands
+                .spawn((
+                    DespawnOnExit(crate::PlayState::Flying),
+                    AIShip {
+                        personality: personality.clone(),
+                    },
+                    RLAgent::new(personality),
+                    MissionTarget {
+                        mission_id: id.clone(),
+                        display_name: target_name.clone(),
+                        always_targets_player: *hostile,
+                    },
+                    bundle,
+                ))
+                .insert(
+                    Transform::from_xyz(pos.x, pos.y, 0.0)
+                        .with_rotation(Quat::from_rotation_z(angle)),
+                )
+                .with_child((
+                    Collider::circle(DETECTION_RADIUS),
+                    Sensor,
+                    CollisionLayers::new(
+                        GameLayer::Radar,
+                        [GameLayer::Planet, GameLayer::Asteroid, GameLayer::Ship],
+                    ),
+                ));
+        }
+    }
+}
+
+/// Track `ShipDestroyed` events against `MissionTarget` entities and advance
+/// the `destroyed` counter. When all targets are down (and any
+/// collect-requirement is met), resolve the mission.
+pub fn advance_destroy_objectives(
+    mut reader: MessageReader<ShipDestroyed>,
+    targets: Query<&MissionTarget>,
+    mut log: ResMut<MissionLog>,
+    catalog: Res<MissionCatalog>,
+    unlocks: Res<PlayerUnlocks>,
+    player_q: Query<&Ship, With<Player>>,
+    mut completed: MessageWriter<MissionCompleted>,
+    mut failed: MessageWriter<MissionFailed>,
+) {
+    let ship = player_q.single().ok();
+    for ShipDestroyed { entity } in reader.read() {
+        let Ok(mt) = targets.get(*entity) else {
+            continue;
+        };
+        let id = &mt.mission_id;
+        let MissionStatus::Active(progress) = log.status(id) else {
+            continue;
+        };
+        let Some(def) = catalog.defs.get(id) else {
+            continue;
+        };
+        let Objective::DestroyShips { count, collect, .. } = &def.objective else {
+            continue;
+        };
+        let new_destroyed = progress.destroyed.saturating_add(1);
+        let kills_done = new_destroyed >= *count;
+        let collect_done = match collect {
+            Some(req) => progress.collected >= req.quantity,
+            None => true,
+        };
+        if kills_done && collect_done {
+            resolve_active_mission(id, def, ship, &unlocks, &mut log, &mut completed, &mut failed);
+        } else {
+            log.set(
+                id,
+                MissionStatus::Active(ObjectiveProgress {
+                    destroyed: new_destroyed,
+                    ..progress
+                }),
+            );
+        }
+    }
+}
+
+/// For `DestroyShips` missions with a `collect` requirement, also track
+/// `PickupCollected` events to accumulate collected commodity count.
+pub fn advance_destroy_collect(
+    mut reader: MessageReader<PickupCollected>,
+    mut log: ResMut<MissionLog>,
+    catalog: Res<MissionCatalog>,
+    unlocks: Res<PlayerUnlocks>,
+    player_q: Query<&Ship, With<Player>>,
+    mut completed: MessageWriter<MissionCompleted>,
+    mut failed: MessageWriter<MissionFailed>,
+) {
+    let ship = player_q.single().ok();
+    for event in reader.read() {
+        let ids: Vec<String> = catalog.defs.keys().cloned().collect();
+        for id in ids {
+            let Some(def) = catalog.defs.get(&id) else {
+                continue;
+            };
+            let Objective::DestroyShips {
+                system,
+                count,
+                collect: Some(req),
+                ..
+            } = &def.objective
+            else {
+                continue;
+            };
+            if &event.commodity != &req.commodity || &event.system != system {
+                continue;
+            }
+            let MissionStatus::Active(progress) = log.status(&id) else {
+                continue;
+            };
+            let new_collected = progress.collected.saturating_add(event.quantity);
+            let kills_done = progress.destroyed >= *count;
+            let collect_done = new_collected >= req.quantity;
+            if kills_done && collect_done {
+                resolve_active_mission(&id, def, ship, &unlocks, &mut log, &mut completed, &mut failed);
+            } else {
+                log.set(
+                    &id,
+                    MissionStatus::Active(ObjectiveProgress {
+                        collected: new_collected,
+                        ..progress
+                    }),
+                );
+            }
+        }
+    }
+}
+
+/// Force `weapons_target` to the player for any mission target with
+/// `always_targets_player: true`.
+pub fn force_target_player(
+    player_q: Query<Entity, With<Player>>,
+    mut targets: Query<(&MissionTarget, &mut Ship)>,
+) {
+    let Ok(player_entity) = player_q.single() else {
+        return;
+    };
+    for (mt, mut ship) in &mut targets {
+        if mt.always_targets_player {
+            ship.weapons_target = Some(Target::Ship(player_entity));
+        }
+    }
+}
+
+/// Despawn leftover `MissionTarget` entities when a mission is abandoned
+/// or fails.
+pub fn despawn_targets_on_failure(
+    mut reader: MessageReader<MissionFailed>,
+    targets: Query<(Entity, &MissionTarget)>,
+    mut commands: Commands,
+) {
+    for MissionFailed(id) in reader.read() {
+        for (entity, mt) in &targets {
+            if mt.mission_id == *id {
+                crate::utils::safe_despawn(&mut commands, entity);
             }
         }
     }
@@ -746,6 +963,73 @@ fn instantiate_template(
             };
             vec![(stage1_id, stage1), (stage2_id, stage2)]
         }
+        MissionTemplate::BountyHunt {
+            briefing,
+            success_text,
+            failure_text,
+            offer,
+            preconditions: _,
+            ship_type_pool,
+            count_range,
+            pay_range,
+            target_name,
+        } => {
+            if ship_type_pool.is_empty() {
+                return Vec::new();
+            }
+            // Pick a random system that has at least one planet.
+            let systems: Vec<(String, String)> = universe
+                .star_systems
+                .iter()
+                .filter(|(_, sys)| !sys.planets.is_empty())
+                .map(|(id, sys)| (id.clone(), sys.display_name.clone()))
+                .collect();
+            if systems.is_empty() {
+                return Vec::new();
+            }
+            let (sys_id, sys_display) = systems[rng.gen_range(0..systems.len())].clone();
+            let ship_type =
+                ship_type_pool[rng.gen_range(0..ship_type_pool.len())].clone();
+            let count = rand_in_range_u8(rng, *count_range);
+            let pay = rand_in_range_i128(rng, *pay_range);
+
+            let vars = [
+                ("{system}", sys_id.clone()),
+                ("{system_display}", sys_display),
+                ("{ship_type}", ship_type.clone()),
+                ("{count}", count.to_string()),
+                ("{pay}", pay.to_string()),
+                ("{target_name}", target_name.clone()),
+            ];
+            let def = MissionDef {
+                briefing: subst(briefing, &vars),
+                success_text: subst(success_text, &vars),
+                failure_text: subst(failure_text, &vars),
+                preconditions: Vec::new(),
+                offer: offer.clone(),
+                start_effects: Vec::new(),
+                objective: Objective::DestroyShips {
+                    system: sys_id,
+                    ship_type,
+                    count,
+                    target_name: target_name.clone(),
+                    hostile: true,
+                    collect: None,
+                },
+                requires: Vec::new(),
+                completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+            };
+            vec![(gen_id(template_id, rng), def)]
+        }
+    }
+}
+
+fn rand_in_range_u8(rng: &mut impl Rng, range: (u8, u8)) -> u8 {
+    let (lo, hi) = (range.0.min(range.1), range.0.max(range.1));
+    if lo == hi {
+        lo
+    } else {
+        rng.gen_range(lo..=hi)
     }
 }
 

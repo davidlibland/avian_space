@@ -8,6 +8,7 @@ proton_beam:
     price: 250
     space: 3
     weapon_type: proton_beam
+    required_unlocks: [proton_beam_license]
 ir_missile:
   !SecondaryWeapon
     price: 800

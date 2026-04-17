@@ -1,12 +1,19 @@
+use std::collections::HashSet;
+
 use bevy::audio::{PlaybackMode, Volume};
 use bevy::prelude::*;
 
 use crate::explosions::{TriggerExplosion, TriggerJumpFlash};
 use crate::item_universe::ItemUniverse;
 use crate::missions::PickupCollected;
-use crate::ship::ShipCommand;
+use crate::ship::{Ship, ShipCommand, Target};
 use crate::weapons::WeaponFired;
 use crate::{PlayState, Player};
+
+/// Minimum gap between consecutive "you are being targeted" warnings.
+const WARNING_COOLDOWN_SECS: f32 = 4.0;
+/// How often to scan AI ships for new lock-ons.
+const WARNING_SCAN_INTERVAL_SECS: f32 = 1.0;
 
 pub fn sfx_plugin(app: &mut App) {
     app.init_resource::<ThrusterAudio>()
@@ -21,6 +28,8 @@ pub fn sfx_plugin(app: &mut App) {
                 drain_jump_flash_events,
                 update_thruster_sfx,
                 play_pickup_sfx,
+                play_target_change_sfx,
+                play_warning_sfx,
             )
                 .run_if(in_state(PlayState::Flying)),
         );
@@ -35,6 +44,8 @@ struct SfxHandles {
     jump: Handle<AudioSource>,
     pickup: Handle<AudioSource>,
     landing: Handle<AudioSource>,
+    target: Handle<AudioSource>,
+    warning: Handle<AudioSource>,
 }
 
 impl SfxHandles {
@@ -62,7 +73,9 @@ fn load_sfx(mut commands: Commands, asset_server: Res<AssetServer>) {
         thruster: asset_server.load("sounds/thruster_loop.ogg"),
         jump: asset_server.load("sounds/jump.ogg"),
         pickup: asset_server.load("sounds/pickup.ogg"),
-        landing: asset_server.load("sounds/landing.wav"),
+        landing: asset_server.load("sounds/landing.ogg"),
+        target: asset_server.load("sounds/target.ogg"),
+        warning: asset_server.load("sounds/warning.ogg"),
     });
 }
 
@@ -227,4 +240,84 @@ fn play_landing_sfx(mut commands: Commands, sfx: Option<Res<SfxHandles>>) {
             ..default()
         },
     ));
+}
+
+fn play_target_change_sfx(
+    mut commands: Commands,
+    mut last_target: Local<Option<Target>>,
+    sfx: Option<Res<SfxHandles>>,
+    player: Query<&Ship, With<Player>>,
+) {
+    let Some(sfx) = sfx else {
+        return;
+    };
+    let Ok(ship) = player.single() else {
+        *last_target = None;
+        return;
+    };
+    if ship.nav_target != *last_target {
+        *last_target = ship.nav_target.clone();
+        // Don't chime when the target is cleared (Some → None or initial None).
+        if ship.nav_target.is_some() {
+            commands.spawn((
+                AudioPlayer::<AudioSource>(sfx.target.clone()),
+                PlaybackSettings {
+                    mode: PlaybackMode::Despawn,
+                    volume: Volume::Linear(0.4),
+                    ..default()
+                },
+            ));
+        }
+    }
+}
+
+fn play_warning_sfx(
+    mut commands: Commands,
+    mut prev_lockers: Local<HashSet<Entity>>,
+    mut cooldown: Local<f32>,
+    mut scan_timer: Local<f32>,
+    time: Res<Time>,
+    sfx: Option<Res<SfxHandles>>,
+    player: Query<Entity, With<Player>>,
+    other_ships: Query<(Entity, &Ship), Without<Player>>,
+) {
+    let Some(sfx) = sfx else {
+        return;
+    };
+    let dt = time.delta_secs();
+    *cooldown = (*cooldown - dt).max(0.0);
+    *scan_timer -= dt;
+    if *scan_timer > 0.0 {
+        return;
+    }
+    *scan_timer = WARNING_SCAN_INTERVAL_SECS;
+
+    let Ok(player_entity) = player.single() else {
+        prev_lockers.clear();
+        return;
+    };
+
+    let mut current = HashSet::new();
+    let mut new_lockers = false;
+    for (entity, ship) in &other_ships {
+        if matches!(ship.weapons_target, Some(Target::Ship(e)) if e == player_entity) {
+            current.insert(entity);
+            if !prev_lockers.contains(&entity) {
+                new_lockers = true;
+            }
+        }
+    }
+    *prev_lockers = current;
+
+    if new_lockers && *cooldown <= 0.0 {
+        *cooldown = WARNING_COOLDOWN_SECS;
+        commands.spawn((
+            AudioPlayer::<AudioSource>(sfx.warning.clone()),
+            PlaybackSettings {
+                mode: PlaybackMode::Despawn,
+                volume: Volume::Linear(0.5),
+                ..default()
+            },
+        ));
+    }
 }

@@ -131,6 +131,25 @@ fn format_objective(obj: &Objective, progress: &ObjectiveProgress) -> String {
                 quantity, commodity, system, have, quantity
             )
         }
+        Objective::DestroyShips {
+            system,
+            count,
+            target_name,
+            collect,
+            ..
+        } => {
+            let mut s = format!(
+                "Destroy {} {} in the {} system ({}/{}).",
+                count, target_name, system, progress.destroyed, count
+            );
+            if let Some(req) = collect {
+                s += &format!(
+                    " Collect {} {} ({}/{}).",
+                    req.quantity, req.commodity, progress.collected, req.quantity
+                );
+            }
+            s
+        }
     }
 }
 

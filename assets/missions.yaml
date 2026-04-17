@@ -234,3 +234,135 @@ merchant_story_3:
       credits: 85000
     - kind: grant_unlock
       name: merchant_bulk_license
+
+# ── Bounty: Sol pirate ─────────────────────────────────────────────────────
+
+pirate_bounty_sol:
+  briefing: "A Federation officer leans against the Earth bar, looking tired. 'There's a pirate corvette making a nuisance of itself around Sol. Weak ship, but they keep hitting merchant convoys. Destroy them and we'll pay 25,000 credits — enough to pick up a fighter if you're thinking of going that route.'"
+  success_text: "The officer raises a glass. 'One less pirate. 25,000 credits, as promised.'"
+  failure_text: "The officer shakes her head. 'They got away. Maybe next time.'"
+  preconditions: []
+  offer:
+    kind: bar
+    planet: earth
+    weight: 1.0
+  objective:
+    kind: destroy_ships
+    system: sol
+    ship_type: pirate_corvette
+    count: 1
+    target_name: Notorious Pirate
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 25000
+    - kind: grant_unlock
+      name: fighter_license
+
+# ── Bounty Hunter storyline ────────────────────────────────────────────────
+# Escalating combat missions that unlock the corvette, frigate, and IR
+# missiles. Starts at Earth bar (Sol), moves outward through progressively
+# dangerous systems. Completing the full arc grants bounty_hunter_license
+# which unlocks ongoing random bounty templates on mission boards.
+
+# Phase 1: Corvette path (2 missions, pays ~18k each → corvette costs 18k)
+
+bounty_story_1:
+  briefing: "The Federation officer from last time flags you down at Earth's bar. 'Nice work with that pirate. We've got reports of two more pirate corvettes raiding convoys near Alpha Centauri. Dangerous space — no planets, thick asteroid fields. Take them out and we'll pay 18,000 credits. Come see me here when it's done.'"
+  success_text: "The officer nods. 'Alpha Centauri is a little safer tonight. 18,000 credits. Come back — we've got one more job before we can certify you for a real combat ship.'"
+  failure_text: "The officer grimaces. 'Those pirates are still out there.'"
+  preconditions:
+    - kind: completed
+      mission: pirate_bounty_sol
+  offer:
+    kind: bar
+    planet: earth
+    weight: 1.0
+  objective:
+    kind: destroy_ships
+    system: alpha_centauri
+    ship_type: pirate_corvette
+    count: 2
+    target_name: Pirate Raiders
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 18000
+
+bounty_story_2:
+  briefing: "The officer slides a dossier across the bar. 'A pirate missile boat has been ambushing freighters in the Drift. Heavy hitter — mines and missiles both. Destroy it and we'll certify you for corvette-class combat vessels. 20,000 credits on top. When you're ready for the next tier, find Captain Vasquez at Barnard Station's bar.'"
+  success_text: "The officer hands you a corvette certification chip. 'You've earned this. Vasquez at Barnard Station has bigger targets for you.'"
+  failure_text: "The officer shakes her head. 'That missile boat is still out there.'"
+  preconditions:
+    - kind: completed
+      mission: bounty_story_1
+  offer:
+    kind: bar
+    planet: earth
+    weight: 1.0
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: pirate_missile_boat
+    count: 1
+    target_name: Pirate Missile Boat
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 20000
+    - kind: grant_unlock
+      name: corvette_license
+    - kind: grant_unlock
+      name: proton_beam_license
+
+# Phase 2: Frigate path (2 missions, pays ~60k each → frigate costs 120k)
+
+bounty_story_3:
+  briefing: "Captain Vasquez at Barnard Station's bar sizes you up. 'You've got a reputation now. We've tracked a pirate strike group — two missile boats — operating out of the Drift. Border space, no backup. 55,000 credits if you eliminate them both. Report back here when it's done.'"
+  success_text: "Vasquez stamps your record. 'Impressive. One more target and you'll have earned a frigate certification — and access to Federation IR missiles. Come find me here.'"
+  failure_text: "Vasquez says nothing. The dossier stays on the table."
+  preconditions:
+    - kind: completed
+      mission: bounty_story_2
+  offer:
+    kind: bar
+    planet: barnard_station
+    weight: 1.0
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: pirate_missile_boat
+    count: 2
+    target_name: Pirate Strike Group
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 55000
+
+bounty_story_4:
+  briefing: "Vasquez leans forward. 'This is the big one. Three pirate missile boats have set up a forward base in Alpha Centauri. Dangerous — they're dug in among the asteroid fields. Take all three out and the Federation will certify you for frigate-class vessels and IR missile systems. 65,000 credits. And after this — the bounty board will keep you busy. Good hunting.'"
+  success_text: "Vasquez pins a frigate certification and weapons clearance to your file. 'You're one of ours now, Commander. The bounty board has a standing contract for you — check the missions tab whenever you want work.'"
+  failure_text: "Vasquez stares at the tactical display. 'They're still operational.'"
+  preconditions:
+    - kind: completed
+      mission: bounty_story_3
+  offer:
+    kind: bar
+    planet: barnard_station
+    weight: 1.0
+  objective:
+    kind: destroy_ships
+    system: alpha_centauri
+    ship_type: pirate_missile_boat
+    count: 3
+    target_name: Pirate Forward Base
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 65000
+    - kind: grant_unlock
+      name: frigate_license
+    - kind: grant_unlock
+      name: federation_weapons_license
+    - kind: grant_unlock
+      name: bounty_hunter_license

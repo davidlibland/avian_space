@@ -211,19 +211,36 @@ All mission state flows through `MissionLog` (per-player statuses) and
 3. Register the system in [mod.rs](mod.rs).
 4. Extend `format_objective` in [ui.rs](ui.rs) to display the new objective.
 
-### Add kill-ship objectives later
+### Kill-ship missions (`DestroyShips` objective)
 
-Preferred pattern (keeps weapons/ship code clean):
+```yaml
+objective:
+  kind: destroy_ships
+  system: drift
+  ship_type: pirate_corvette
+  count: 3
+  target_name: Pirate Raiders
+  hostile: true
+  collect:             # optional — also loot wreckage
+    commodity: iron
+    quantity: 5
+```
 
-1. Add an `Objective::DestroyShip { target_tag }` variant.
-2. When the mission starts, spawn the target ship with a mission-owned marker
-   component `MissionTarget { mission_id, tag }` (define this component in
-   `missions/`).
-3. Emit a general `ShipDestroyed { entity }` event from the existing death
-   path in `ship.rs::apply_damage` (one line).
-4. A new `advance_destroy_objectives` system reads `ShipDestroyed`, checks the
-   `MissionTarget` component on the entity, and completes the matching
-   mission. No mission concept appears in weapons/ship/ai code.
+When the player enters the target system with this mission active,
+`spawn_mission_targets` creates `count - destroyed` AI ships of
+`ship_type`, each tagged with a `MissionTarget` component. They are
+full RL-controlled AI ships (with `AIShip` + `RLAgent`). If `hostile`
+is true, `force_target_player` locks their `weapons_target` to the
+player every frame. `ShipDestroyed` (emitted from `ship.rs::apply_damage`)
+is tracked by `advance_destroy_objectives` which increments
+`ObjectiveProgress.destroyed`. If a `collect` requirement is specified,
+`PickupCollected` events are also tracked by `advance_destroy_collect`.
+Mission completes when both kills and collection reach their targets.
+
+Targets despawn on system exit (via `DespawnOnExit`) and re-spawn on
+re-entry for any kills still remaining. On abandon/failure,
+`despawn_targets_on_failure` cleans up all `MissionTarget` entities
+for that mission.
 
 ### Add faction / loyalty preconditions
 

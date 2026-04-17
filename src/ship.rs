@@ -243,7 +243,7 @@ pub struct ShipData {
     pub reverse_kd: Scalar,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Target {
     Ship(Entity),
     Planet(Entity),
@@ -732,6 +732,7 @@ fn apply_damage(
     mut pickup_writer: MessageWriter<crate::pickups::PickupDrop>,
     mut rl_died_writer: MessageWriter<RLShipDied>,
     mut rl_reward_writer: MessageWriter<RLReward>,
+    mut ship_destroyed_writer: MessageWriter<crate::missions::ShipDestroyed>,
     model_mode: Res<crate::ModelMode>,
 ) {
     use rand::Rng;
@@ -774,6 +775,9 @@ fn apply_damage(
                     )));
                 }
             } else if ai_ships.contains(event.entity) {
+                ship_destroyed_writer.write(crate::missions::ShipDestroyed {
+                    entity: event.entity,
+                });
                 // Flush RL segment with terminal flag before despawning.
                 if let Ok(agent) = rl_agents.get(event.entity) {
                     rl_died_writer.write(build_rl_ship_died(event.entity, agent));
@@ -933,9 +937,10 @@ fn score_hits(
                         // Adaptive neutral penalty: c = -p * r / (EPS + (1-p))
                         // bounded in [-r / EPS, 0].
                         combat_stats.neutral_hits += 1;
-                        let p = combat_stats.good_fraction();
-                        let c = -p * COMBAT_HIT_ENGAGED_UNTARGETED / (COMBAT_HIT_EPS + (1.0 - p));
-                        c.clamp(-COMBAT_HIT_ENGAGED_UNTARGETED / COMBAT_HIT_EPS, 0.0)
+                        // let p = combat_stats.good_fraction();
+                        // let c = -p * COMBAT_HIT_ENGAGED_UNTARGETED / (COMBAT_HIT_EPS + (1.0 - p));
+                        // c.clamp(-COMBAT_HIT_ENGAGED_UNTARGETED / COMBAT_HIT_EPS, 0.0)
+                        -COMBAT_HIT_ENGAGED_UNTARGETED
                     };
 
                     let personality_scale = match agent.personality {

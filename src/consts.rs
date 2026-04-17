@@ -95,7 +95,7 @@ pub const COMBAT_PERSONALITY_OTHER: f32 = 0.3;
 // ---------------------------------------------------------------------------
 
 /// Reward for hitting an asteroid when the firing ship is a Miner.
-pub const ASTEROID_HIT_MINER: f32 = 1.0;
+pub const ASTEROID_HIT_MINER: f32 = 3.0;
 /// Reward for hitting an asteroid when the firing ship is NOT a Miner.
 pub const ASTEROID_HIT_OTHER: f32 = 0.3;
 
@@ -146,7 +146,6 @@ pub const PICKUP_REWARD_FIGHTER: f32 = 0.1;
 pub const PICKUP_REWARD_MINER: f32 = 0.8;
 /// Reward for collecting a pickup (Trader).
 pub const PICKUP_REWARD_TRADER: f32 = 0.1;
-
 
 // ---------------------------------------------------------------------------
 // Recent-landing cooldown

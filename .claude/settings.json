@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"Message\\\\|Events\\\\|EventWriter\\\\|EventReader\" /Users/dlibland/dev/avian_space/src/*.rs)",
+      "Bash(grep -l \"Message\\\\|EventWriter\\\\|EventReader\" /Users/dlibland/dev/avian_space/src/*.rs)",
+      "Bash(grep -n \"struct Message\\\\|enum Message\" /Users/dlibland/dev/avian_space/src/*.rs)",
+      "Bash(grep -r \"pub mod missions\\\\|missions::\" /Users/dlibland/dev/avian_space/src/*.rs)",
+      "Bash(grep -n \"EventWriter\\\\|EventReader\\\\|send\\\\|read_event\" /Users/dlibland/dev/avian_space/src/tests/*.rs)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -6,8 +15,8 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(cargo *)",
-            "command": "cmd=$(jq -r \".tool_input.command\"); if echo \"$cmd\" | grep -qE \"cargo[[:space:]]+(run|check|build|test)\\b\" && ! echo \"$cmd\" | grep -qE -- \"--release\\b\" && ! echo \"$cmd\" | grep -qE -- \"--features([= ])[^|;&]*\\bdev\\b\"; then printf \"%s\" '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Use --features dev for cargo run/check/build/test in this project (enables Bevy dynamic_linking for fast incremental builds). For release builds, include --release.\"}}'; fi"
+            "command": "cmd=$(jq -r \".tool_input.command\"); if echo \"$cmd\" | grep -qE \"cargo[[:space:]]+(run|check|build|test)\\b\" && ! echo \"$cmd\" | grep -qE -- \"--release\\b\" && ! echo \"$cmd\" | grep -qE -- \"--features([= ])[^|;&]*\\bdev\\b\"; then printf \"%s\" '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Use --features dev for cargo run/check/build/test in this project (enables Bevy dynamic_linking for fast incremental builds). For release builds, include --release.\"}}'; fi",
+            "if": "Bash(cargo *)"
           }
         ]
       }

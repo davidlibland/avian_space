@@ -11,6 +11,8 @@ fn test_universe() -> ItemUniverse {
         "earth".to_string(),
         PlanetData {
             display_name: String::new(),
+            planet_type: String::new(),
+            sprite_handle: Default::default(),
             location: Vec2::ZERO,
             description: String::new(),
             commodities: HashMap::from([
@@ -27,6 +29,8 @@ fn test_universe() -> ItemUniverse {
         "mars".to_string(),
         PlanetData {
             display_name: String::new(),
+            planet_type: String::new(),
+            sprite_handle: Default::default(),
             location: Vec2::new(1000.0, 0.0),
             description: String::new(),
             commodities: HashMap::from([
@@ -79,6 +83,7 @@ fn test_universe() -> ItemUniverse {
         "missile_launcher".to_string(),
         OutfitterItem::SecondaryWeapon {
             display_name: String::new(),
+            required_unlocks: Vec::new(),
             price: 1000,
             space: 2,
             weapon_type: "missile".to_string(),

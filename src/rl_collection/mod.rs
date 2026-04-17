@@ -355,8 +355,9 @@ fn rl_step(
         Query<(Entity, &Asteroid)>,
         Query<&AsteroidField>,
         Query<(Entity, &Pickup)>,
-        // Ship data for non-RLAgent ships (disjoint with the mutable `agents` query).
-        Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
+        // Ship data for non-RLAgent ships (includes AI ships AND the player).
+        // Disjoint with the mutable `agents` query via Without<RLAgent>.
+        Query<(Entity, &Ship, &ShipHostility), Without<RLAgent>>,
     ),
     // ShipHostility for ALL ships — used to bucket nearby ships as hostile/friendly.
     // Only reads ShipHostility (not Ship), so disjoint with the `agents` query.
@@ -559,7 +560,7 @@ fn build_all_observations(
     asteroid_query: &Query<(Entity, &Asteroid)>,
     asteroid_field_query: &Query<&AsteroidField>,
     pickup_query: &Query<(Entity, &Pickup)>,
-    ship_query: &Query<(Entity, &Ship, &ShipHostility), (With<AIShip>, Without<RLAgent>)>,
+    ship_query: &Query<(Entity, &Ship, &ShipHostility), Without<RLAgent>>,
     all_ship_factions: &Query<&ShipHostility, With<Ship>>,
     all_distressed: &Query<&crate::ship::Distressed>,
     projectile_query: &Query<(&Projectile, Option<&GuidedMissile>)>,

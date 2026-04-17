@@ -473,6 +473,12 @@ fn preload_sprites(
     for data in item_universe.ships.values_mut() {
         data.sprite_handle = asset_server.load(data.sprite_path.clone());
     }
+    for system in item_universe.star_systems.values_mut() {
+        for (name, planet) in system.planets.iter_mut() {
+            let path = format!("sprites/planets/{}.png", name);
+            planet.sprite_handle = asset_server.load(path);
+        }
+    }
     for weapon in item_universe.weapons.values_mut() {
         weapon.sprite_handle = weapon
             .sprite_path

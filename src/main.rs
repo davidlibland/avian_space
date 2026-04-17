@@ -448,7 +448,7 @@ fn compute_intercept_command(
     item_universe: &ItemUniverse,
 ) -> Option<Scalar> {
     use std::f32::consts::PI;
-    let target_e = player_ship.weapons_target.as_ref()?.get_entity();
+    let target_e = player_ship.nav_target.as_ref()?.get_entity();
     let target_pos = target_pos_query.get(target_e).ok()?.0;
     let target_vel = target_vel_query
         .get(target_e)
@@ -526,7 +526,7 @@ fn keyboard_input(
         let mut entities: Vec<Entity> = enemy_ships_query.iter().map(|(e, _)| e).collect();
         entities.sort();
         if !entities.is_empty() {
-            let current = match &player_ship.weapons_target {
+            let current = match &player_ship.nav_target {
                 Some(Target::Ship(e)) => Some(*e),
                 _ => None,
             };
@@ -538,7 +538,7 @@ fn keyboard_input(
                     .map(|idx| entities[(idx + 1) % entities.len()])
                     .unwrap_or(entities[0]),
             };
-            player_ship.weapons_target = Some(Target::Ship(next));
+            player_ship.nav_target = Some(Target::Ship(next));
         }
     }
 
@@ -550,7 +550,7 @@ fn keyboard_input(
             .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
             .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
         if let Some((entity, _)) = nearest {
-            player_ship.weapons_target = Some(Target::Ship(entity));
+            player_ship.nav_target = Some(Target::Ship(entity));
         }
     }
 
@@ -562,7 +562,7 @@ fn keyboard_input(
             .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
             .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
         if let Some((entity, _)) = nearest {
-            player_ship.weapons_target = Some(Target::Asteroid(entity));
+            player_ship.nav_target = Some(Target::Asteroid(entity));
         }
     }
 
@@ -574,7 +574,7 @@ fn keyboard_input(
             .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
             .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
         if let Some((entity, _)) = nearest {
-            player_ship.weapons_target = Some(Target::Pickup(entity));
+            player_ship.nav_target = Some(Target::Pickup(entity));
         }
     }
 
@@ -585,7 +585,7 @@ fn keyboard_input(
         let mut entities: Vec<Entity> = planets_query.iter().map(|(e, _)| e).collect();
         entities.sort();
         if !entities.is_empty() {
-            let current = match &player_ship.weapons_target {
+            let current = match &player_ship.nav_target {
                 Some(Target::Planet(e)) => Some(*e),
                 _ => None,
             };
@@ -596,7 +596,18 @@ fn keyboard_input(
             };
             // `[` goes backward (cycle_planets = +1), `]` goes forward (-1).
             let next_idx = ((idx - cycle_planets).rem_euclid(n)) as usize;
-            player_ship.weapons_target = Some(Target::Planet(entities[next_idx]));
+            player_ship.nav_target = Some(Target::Planet(entities[next_idx]));
+        }
+    }
+
+    // Mirror nav_target onto weapons_target for combat-relevant targets;
+    // clear it otherwise so weapons don't aim at the previous selection.
+    match player_ship.nav_target {
+        Some(Target::Ship(_) | Target::Asteroid(_)) => {
+            player_ship.weapons_target = player_ship.nav_target.clone();
+        }
+        _ => {
+            player_ship.weapons_target = None;
         }
     }
 

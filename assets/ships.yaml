@@ -10,7 +10,7 @@ shuttle:
     "space_mine": [1, 5]
   radius: 10.0
   price: 5000
-  sprite_path: ship_sprites/shuttle.png
+  sprite_path: sprites/ships/shuttle.png
   personality: Trader
   faction: Merchant
 
@@ -25,8 +25,9 @@ fighter:
     laser: [2, null]
   radius: 12.0
   price: 25000
-  sprite_path: ship_sprites/fighter.png
+  sprite_path: sprites/ships/fighter.png
   personality: Fighter
+  required_unlocks: [fighter_license]
 
 asteroid_miner:
   thrust: 70.0
@@ -39,7 +40,7 @@ asteroid_miner:
     laser: [1, null]
   radius: 20.0
   price: 35000
-  sprite_path: ship_sprites/asteroid_miner.png
+  sprite_path: sprites/ships/asteroid_miner.png
   personality: Miner
   required_unlocks: [mining_license]
 
@@ -54,7 +55,7 @@ hauler:
     "space_mine": [1, 12]
   radius: 40.0
   price: 50000
-  sprite_path: ship_sprites/hauler.png
+  sprite_path: sprites/ships/hauler.png
   personality: Trader
   faction: Merchant
   required_unlocks: [merchant_hauler_license]
@@ -62,6 +63,7 @@ hauler:
 # ── Fighter variants ──────────────────────────────────────────────────────────
 
 corvette:
+  required_unlocks: [corvette_license]
   thrust: 160.0
   max_speed: 280.0
   torque: 50.0
@@ -72,7 +74,7 @@ corvette:
     proton_beam: [1, null]
   radius: 9.0
   price: 18000
-  sprite_path: ship_sprites/corvette.png
+  sprite_path: sprites/ships/corvette.png
   personality: Fighter
 
 frigate:
@@ -87,8 +89,9 @@ frigate:
     ir_missile: [1, 4]
   radius: 32.0
   price: 120000
-  sprite_path: ship_sprites/frigate.png
+  sprite_path: sprites/ships/frigate.png
   personality: Fighter
+  required_unlocks: [frigate_license]
 
 # ── Trader variants ───────────────────────────────────────────────────────────
 
@@ -104,7 +107,7 @@ courier:
     space_mine: [1, 5]
   radius: 12.0
   price: 15000
-  sprite_path: ship_sprites/courier.png
+  sprite_path: sprites/ships/courier.png
   personality: Trader
   faction: Merchant
 
@@ -119,7 +122,7 @@ freighter:
     space_mine: [1, 8]
   radius: 32.0
   price: 45000
-  sprite_path: ship_sprites/freighter.png
+  sprite_path: sprites/ships/freighter.png
   personality: Trader
   faction: Merchant
   required_unlocks: [merchant_freighter_license]
@@ -135,7 +138,7 @@ bulk_carrier:
     space_mine: [1, 20]
   radius: 55.0
   price: 85000
-  sprite_path: ship_sprites/bulk_carrier.png
+  sprite_path: sprites/ships/bulk_carrier.png
   personality: Trader
   faction: Merchant
   required_unlocks: [merchant_bulk_license]
@@ -154,7 +157,7 @@ fed_patrol:
     proton_beam: [2, null]
   radius: 15.0
   price: 30000
-  sprite_path: ship_sprites/fed_patrol.png
+  sprite_path: sprites/ships/fed_patrol.png
   personality: Fighter
   faction: Federation
   required_unlocks: [federation_ship_license]
@@ -171,7 +174,7 @@ fed_destroyer:
     ir_missile: [2, 8]
   radius: 42.0
   price: 180000
-  sprite_path: ship_sprites/fed_destroyer.png
+  sprite_path: sprites/ships/fed_destroyer.png
   personality: Fighter
   faction: Federation
   required_unlocks: [federation_ship_license, federation_capital_license]
@@ -188,7 +191,7 @@ fed_missile_cruiser:
     ir_missile: [3, 12]
   radius: 35.0
   price: 150000
-  sprite_path: ship_sprites/fed_missile_cruiser.png
+  sprite_path: sprites/ships/fed_missile_cruiser.png
   personality: Fighter
   faction: Federation
   required_unlocks: [federation_ship_license]
@@ -207,7 +210,7 @@ rebel_fighter:
     laser: [2, null]
   radius: 12.0
   price: 22000
-  sprite_path: ship_sprites/rebel_fighter.png
+  sprite_path: sprites/ships/rebel_fighter.png
   personality: Fighter
   faction: Rebel
   required_unlocks: [rebel_ship_license]
@@ -223,7 +226,7 @@ rebel_gunboat:
     laser: [3, null]
   radius: 22.0
   price: 55000
-  sprite_path: ship_sprites/rebel_gunboat.png
+  sprite_path: sprites/ships/rebel_gunboat.png
   personality: Fighter
   faction: Rebel
   required_unlocks: [rebel_ship_license]
@@ -240,7 +243,7 @@ rebel_frigate:
     javelin: [1, 24]
   radius: 28.0
   price: 100000
-  sprite_path: ship_sprites/rebel_frigate.png
+  sprite_path: sprites/ships/rebel_frigate.png
   personality: Fighter
   faction: Rebel
   required_unlocks: [rebel_ship_license, rebel_capital_license]
@@ -259,7 +262,7 @@ pirate_corvette:
     laser: [2, null]
   radius: 11.0
   price: 16000
-  sprite_path: ship_sprites/pirate_corvette.png
+  sprite_path: sprites/ships/pirate_corvette.png
   personality: Fighter
   faction: Pirate
 
@@ -275,6 +278,6 @@ pirate_missile_boat:
     ir_missile: [2, 8]
   radius: 18.0
   price: 40000
-  sprite_path: ship_sprites/pirate_missile_boat.png
+  sprite_path: sprites/ships/pirate_missile_boat.png
   personality: Fighter
   faction: Pirate

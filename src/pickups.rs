@@ -91,7 +91,7 @@ fn collect_pickups(
                 continue;
             };
 
-        if !collected.insert(pickup_entity) {
+        if collected.contains(&pickup_entity) {
             continue;
         }
 
@@ -104,36 +104,39 @@ fn collect_pickups(
 
         let space = ship.remaining_cargo_space();
         let qty = pickup.quantity.min(space);
-        if qty > 0 {
-            *ship.cargo.entry(pickup.commodity.clone()).or_insert(0) += qty;
-            if players.contains(ship_entity) {
-                pickup_collected_writer.write(PickupCollected {
-                    commodity: pickup.commodity.clone(),
-                    quantity: qty,
-                    system: current_system.0.clone(),
-                });
-            }
-            // Flat pickup reward for RLAgent ships, personality-weighted.
-            if let Ok(agent) = rl_agents.get(ship_entity) {
-                use crate::consts::*;
-                use crate::ship::Personality;
-                let weight = match agent.personality {
-                    Personality::Fighter => PICKUP_REWARD_FIGHTER,
-                    Personality::Miner => PICKUP_REWARD_MINER,
-                    Personality::Trader => PICKUP_REWARD_TRADER,
-                };
-                rl_reward_writer.write(RLReward {
-                    entity: ship_entity,
-                    reward: weight,
-                    reward_type: crate::consts::REWARD_PICKUP,
-                });
-                rl_reward_writer.write(RLReward {
-                    entity: ship_entity,
-                    reward: crate::consts::HEALTH_BONUS_PER_EVENT
-                        * (ship.health as f32 / ship.data.max_health.max(1) as f32),
-                    reward_type: crate::consts::REWARD_HEALTH_GATED,
-                });
-            }
+        if qty == 0 {
+            continue;
+        }
+        collected.insert(pickup_entity);
+
+        *ship.cargo.entry(pickup.commodity.clone()).or_insert(0) += qty;
+        if players.contains(ship_entity) {
+            pickup_collected_writer.write(PickupCollected {
+                commodity: pickup.commodity.clone(),
+                quantity: qty,
+                system: current_system.0.clone(),
+            });
+        }
+        // Flat pickup reward for RLAgent ships, personality-weighted.
+        if let Ok(agent) = rl_agents.get(ship_entity) {
+            use crate::consts::*;
+            use crate::ship::Personality;
+            let weight = match agent.personality {
+                Personality::Fighter => PICKUP_REWARD_FIGHTER,
+                Personality::Miner => PICKUP_REWARD_MINER,
+                Personality::Trader => PICKUP_REWARD_TRADER,
+            };
+            rl_reward_writer.write(RLReward {
+                entity: ship_entity,
+                reward: weight,
+                reward_type: crate::consts::REWARD_PICKUP,
+            });
+            rl_reward_writer.write(RLReward {
+                entity: ship_entity,
+                reward: crate::consts::HEALTH_BONUS_PER_EVENT
+                    * (ship.health as f32 / ship.data.max_health.max(1) as f32),
+                reward_type: crate::consts::REWARD_HEALTH_GATED,
+            });
         }
 
         safe_despawn(&mut commands, pickup_entity);
