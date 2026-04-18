@@ -13,8 +13,7 @@ use crate::ship::{Personality, Ship};
 
 /// Total length of the observation vector (self + entity slots only).
 /// Projectile data is stored in a separate tensor.
-pub const OBS_DIM: usize = SELF_SIZE
-    + (N_ENTITY_SLOTS) * SLOT_SIZE;
+pub const OBS_DIM: usize = SELF_SIZE + (N_ENTITY_SLOTS) * SLOT_SIZE;
 
 /// Number of entity slots (one per bucket position).
 pub const N_ENTITY_SLOTS: usize =
@@ -78,20 +77,20 @@ pub const SLOT_IS_PRESENT: usize = TYPE_ONEHOT_SIZE; // 4
 /// Offset of the core feature block.
 pub const CORE_BLOCK_START: usize = SLOT_IS_PRESENT + 1; // 5
 /// Offsets within the core block (absolute, for reading from flat obs).
-pub const SLOT_REL_POS: usize = CORE_BLOCK_START;         // 5  (2 floats)
-pub const SLOT_REL_VEL: usize = CORE_BLOCK_START + 2;     // 7  (2 floats)
-pub const SLOT_IS_NAV_TARGET: usize = CORE_BLOCK_START + 4;     // 9
+pub const SLOT_REL_POS: usize = CORE_BLOCK_START; // 5  (2 floats)
+pub const SLOT_REL_VEL: usize = CORE_BLOCK_START + 2; // 7  (2 floats)
+pub const SLOT_IS_NAV_TARGET: usize = CORE_BLOCK_START + 4; // 9
 pub const SLOT_IS_WEAPONS_TARGET: usize = CORE_BLOCK_START + 5; // 10
-pub const SLOT_PROXIMITY: usize = CORE_BLOCK_START + 6;   // 11
-pub const SLOT_PURSUIT_ANGLE: usize = CORE_BLOCK_START + 7;     // 12
+pub const SLOT_PROXIMITY: usize = CORE_BLOCK_START + 6; // 11
+pub const SLOT_PURSUIT_ANGLE: usize = CORE_BLOCK_START + 7; // 12
 pub const SLOT_PURSUIT_INDICATOR: usize = CORE_BLOCK_START + 8; // 13
-pub const SLOT_FIRE_ANGLE: usize = CORE_BLOCK_START + 9;        // 14
-pub const SLOT_FIRE_INDICATOR: usize = CORE_BLOCK_START + 10;   // 15
-pub const SLOT_IN_RANGE: usize = CORE_BLOCK_START + 11;         // 16
+pub const SLOT_FIRE_ANGLE: usize = CORE_BLOCK_START + 9; // 14
+pub const SLOT_FIRE_INDICATOR: usize = CORE_BLOCK_START + 10; // 15
+pub const SLOT_IN_RANGE: usize = CORE_BLOCK_START + 11; // 16
 // PD-based pursuit features (from `optimal_control::pursuit_features_ego`).
-pub const SLOT_PD_TARGET_ANGLE: usize = CORE_BLOCK_START + 12;  // 17
-pub const SLOT_PD_ALIGNMENT: usize = CORE_BLOCK_START + 13;     // 18
-pub const SLOT_PD_THRUST_PROB: usize = CORE_BLOCK_START + 14;   // 19
+pub const SLOT_PD_TARGET_ANGLE: usize = CORE_BLOCK_START + 12; // 17
+pub const SLOT_PD_ALIGNMENT: usize = CORE_BLOCK_START + 13; // 18
+pub const SLOT_PD_THRUST_PROB: usize = CORE_BLOCK_START + 14; // 19
 /// Number of core features.
 pub const CORE_FEAT_SIZE: usize = 15; // 12 prior + 3 PD features (target_angle, alignment, thrust_prob)
 
@@ -453,14 +452,14 @@ pub fn select_secondary_weapon<'a>(ship: &'a Ship, target_is_ship: bool) -> Opti
     ship.weapon_systems
         .secondary
         .iter()
-        .filter(|(_, ws)| ws.ammo_quantity.map(|a| a > 0).unwrap_or(false))
+        .filter(|(_, ws)| {
+            ws.ammo_quantity.map(|a| a > 0).unwrap_or(false) && ws.cooldown.is_finished()
+        })
         .max_by_key(|(_, ws)| {
-            let guided_bonus = if ws.weapon.guided && target_is_ship {
-                1_000_000u32
-            } else {
-                0
-            };
-            guided_bonus + ws.ammo_quantity.unwrap_or(0)
+            let is_bay = ws.weapon.carrier_bay.is_some() as u8;
+            let is_guided = (ws.weapon.guided && target_is_ship) as u8;
+            let range = ws.weapon.range() as u32;
+            (is_bay, is_guided, range)
         })
         .map(|(name, ws)| (name.as_str(), ws.ammo_quantity.unwrap_or(0)))
 }
@@ -680,10 +679,8 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     self_buf[SELF_MAX_SPEED] = input.ship.data.max_speed;
     self_buf[SELF_THRUST] = input.ship.data.thrust;
     self_buf[SELF_TORQUE] = input.ship.data.torque;
-    self_buf[SELF_PRIMARY_RANGE] =
-        (input.primary_weapon_range / WEAPON_RANGE_REF).clamp(0.0, 4.0);
-    self_buf[SELF_PRIMARY_SPEED] =
-        (input.primary_weapon_speed / WEAPON_SPEED_REF).clamp(0.0, 4.0);
+    self_buf[SELF_PRIMARY_RANGE] = (input.primary_weapon_range / WEAPON_RANGE_REF).clamp(0.0, 4.0);
+    self_buf[SELF_PRIMARY_SPEED] = (input.primary_weapon_speed / WEAPON_SPEED_REF).clamp(0.0, 4.0);
 
     // Weapon state + stats.
     self_buf[SELF_PRIMARY_COOLDOWN] = input.primary_cooldown_frac.clamp(0.0, 1.0);
@@ -792,9 +789,9 @@ fn encode_slot(
     // PD-based pursuit features. Damping factor is chosen per entity type to
     // match the rule-based controller's tuning in `ai_ships::compute_ai_action`.
     let damping = match s.core.entity_type as usize {
-        TYPE_IDX_PLANET => 1.0,  // landing: critical damping
-        TYPE_IDX_PICKUP => 0.2,  // fly-through
-        _ => 0.4,                // ship/asteroid pursuit
+        TYPE_IDX_PLANET => 1.0, // landing: critical damping
+        TYPE_IDX_PICKUP => 0.2, // fly-through
+        _ => 0.4,               // ship/asteroid pursuit
     };
     let feat = crate::optimal_control::pursuit_features_ego(
         bevy::math::Vec2::new(rel_pos[0], rel_pos[1]),
@@ -826,8 +823,7 @@ fn encode_slot(
             ts[6..9].copy_from_slice(&p);
             ts[9] = ship.distressed;
             ts[SHIP_HEALTH_FRAC] = (ship.health / ship.max_health.max(1.0)).clamp(0.0, 1.0);
-            ts[SHIP_WEAPON_RANGE] =
-                (ship.primary_weapon_range / WEAPON_RANGE_REF).clamp(0.0, 2.0);
+            ts[SHIP_WEAPON_RANGE] = (ship.primary_weapon_range / WEAPON_RANGE_REF).clamp(0.0, 2.0);
             ts[SHIP_IS_TARGETING_ME] = ship.is_targeting_me;
             ts[SHIP_THRUST] = ship.thrust;
             ts[SHIP_PRIMARY_FIRE_RATE] = ship.primary_fire_rate;
@@ -877,11 +873,7 @@ pub fn encode_projectiles(
 }
 
 /// Encode a single projectile slot (PROJ_SLOT_SIZE floats). `None` → all zeros.
-fn encode_projectile_slot(
-    slot: Option<&ProjectileSlotData>,
-    max_speed: f32,
-    obs: &mut Vec<f32>,
-) {
+fn encode_projectile_slot(slot: Option<&ProjectileSlotData>, max_speed: f32, obs: &mut Vec<f32>) {
     let Some(p) = slot else {
         obs.extend(std::iter::repeat(0.0_f32).take(PROJ_SLOT_SIZE));
         return;
@@ -936,4 +928,3 @@ fn personality_onehot(personality: &Personality) -> [f32; 3] {
 #[cfg(test)]
 #[path = "tests/rl_obs_tests.rs"]
 mod tests;
-

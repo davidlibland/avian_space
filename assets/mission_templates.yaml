@@ -80,7 +80,7 @@ federation_bounty:
   preconditions:
     - kind: has_unlock
       name: bounty_hunter_license
-  ship_type_pool: [pirate_corvette, pirate_missile_boat]
+  ship_type_pool: [pirate_corvette, pirate_missile_boat, pirate_carrier]
   count_range: [1, 3]
-  pay_range: [8000, 25000]
+  pay_range: [8000, 45000]
   target_name: Pirate Hostiles

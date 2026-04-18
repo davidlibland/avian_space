@@ -287,6 +287,10 @@ pub struct Ship {
     pub credits: i128,
     // A map indicating inclusion in factions
     pub enemies: HashMap<String, f32>,
+    /// Factions whose rewards are shared into this ship's reward signal.
+    /// Includes own faction (always) plus cross-faction allies from `allies.yaml`.
+    #[serde(skip)]
+    pub allies: Vec<String>,
     /// Navigation target — where the ship is heading (planet, asteroid, pickup).
     #[serde(skip)]
     pub nav_target: Option<Target>,
@@ -314,6 +318,7 @@ impl Ship {
             reserved_cargo: HashMap::new(),
             recent_landings: HashMap::new(),
             credits: 10000,
+            allies: Vec::new(),
             nav_target: None,
             weapons_target: None,
             weapon_systems: WeaponSystems::default(),
@@ -525,7 +530,7 @@ pub struct ShipBundle {
     faction: ShipHostility,
     distressed: Distressed,
     tracer_slots: crate::weapons::TracerSlots,
-    sprite: Sprite,
+    pub sprite: Sprite,
     transform: Transform,
     body: RigidBody,
     angular_damping: AngularDamping,
@@ -582,6 +587,16 @@ pub fn ship_bundle(
                 .map(|v| v.iter().map(|s| (s.clone(), 1.0)).collect())
         })
         .unwrap_or_default();
+
+    // Build allies list: own faction (always) + cross-faction allies from allies.yaml.
+    let mut allies: Vec<String> = Vec::new();
+    if let Some(ref faction) = ship_data.faction {
+        allies.push(faction.clone());
+        if let Some(cross) = item_universe.allies.get(faction) {
+            allies.extend(cross.iter().cloned());
+        }
+    }
+    ship.allies = allies;
 
     // Randomize AI starting credits uniformly in [0, ship.price].
     let mut rng = rand::thread_rng();
@@ -650,6 +665,10 @@ pub fn ship_bundle_from_pilot(
     pos: Vec2,
 ) -> ShipBundle {
     ship.weapon_systems = WeaponSystems::build(weapon_loadout, item_universe);
+    // Player ships have no faction — prevents faction-level hostility contagion
+    // (e.g. hitting one Merchant making ALL Merchants hostile).  The player's
+    // per-entity enemies map still drives engagement via ShipHostility.
+    ship.data.faction = None;
     ShipBundle {
         faction: ShipHostility(ship.enemies.clone()),
         distressed: Distressed::default(),
@@ -733,6 +752,7 @@ fn apply_damage(
     mut rl_died_writer: MessageWriter<RLShipDied>,
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut ship_destroyed_writer: MessageWriter<crate::missions::ShipDestroyed>,
+    mission_targets: Query<&crate::missions::MissionTarget>,
     model_mode: Res<crate::ModelMode>,
 ) {
     use rand::Rng;
@@ -777,6 +797,7 @@ fn apply_damage(
             } else if ai_ships.contains(event.entity) {
                 ship_destroyed_writer.write(crate::missions::ShipDestroyed {
                     entity: event.entity,
+                    mission_target: mission_targets.get(event.entity).ok().cloned(),
                 });
                 // Flush RL segment with terminal flag before despawning.
                 if let Ok(agent) = rl_agents.get(event.entity) {
@@ -884,33 +905,39 @@ fn score_hits(
     for event in reader.read() {
         match event {
             ScoreHit::OnShip { source, target } => {
-                // Faction hostility tracking (unchanged).
-                if let Ok(mut source_hostility) = ship_hostilities.get_mut(*source) {
-                    if let Ok(target_ship) = ships.get(*target) {
-                        if let Some(target_faction) = target_ship.data.faction.clone() {
-                            *(source_hostility
-                                .0
-                                .entry(target_faction.to_owned())
-                                .or_default()) += 1.0;
+                let source_ship = ships.get(*source).ok();
+                let target_ship = ships.get(*target).ok();
+                let on_target = source_ship
+                    .and_then(|s| s.weapons_target.as_ref())
+                    .map(|t| t.get_entity() == *target)
+                    .unwrap_or(false);
+
+                // Faction hostility: only escalate for INTENTIONAL hits (the
+                // target was the source's weapons_target).  Accidental/stray
+                // hits don't trigger faction-level contagion.
+                if on_target {
+                    if let Ok(mut source_hostility) = ship_hostilities.get_mut(*source) {
+                        if let Some(ts) = &target_ship {
+                            if let Some(target_faction) = ts.data.faction.as_ref() {
+                                *(source_hostility
+                                    .0
+                                    .entry(target_faction.clone())
+                                    .or_default()) += 1.0;
+                            }
                         }
                     }
                 }
                 // RL reward for hitting a ship.
                 if let Ok(agent) = rl_agents.get(*source) {
-                    let source_ship = ships.get(*source).ok();
-                    let target_ship = ships.get(*target).ok();
-
                     // Check if the target is hostile or should-engage.
                     let is_engaged = match (&source_ship, &target_ship) {
                         (Some(ss), Some(ts)) => {
-                            // should_engage: my hostility to their faction is positive
                             let should_engage = ss.should_engage(
                                 &ship_hostilities
                                     .get(*target)
                                     .map(|h| h.clone())
                                     .unwrap_or_default(),
                             );
-                            // hostile: their hostility to my faction is positive
                             let hostile = ts.should_engage(
                                 &ship_hostilities
                                     .get(*source)
@@ -921,11 +948,6 @@ fn score_hits(
                         }
                         _ => false,
                     };
-
-                    let on_target = source_ship
-                        .and_then(|s| s.weapons_target.as_ref())
-                        .map(|t| t.get_entity() == *target)
-                        .unwrap_or(false);
 
                     let r = if is_engaged && on_target {
                         combat_stats.good_hits += 1;

@@ -8,6 +8,7 @@ use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_collection::{RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target, ship_bundle};
+use crate::ship_anim::{self, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, ScaleUpFinished, image_size};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::weapons::FireCommand;
 use crate::{CurrentStarSystem, GameLayer, PlayState};
@@ -45,6 +46,18 @@ pub struct JumpingIn;
 #[derive(Component)]
 pub struct JumpingOut;
 
+/// AI ship is in the landing scale-down animation.
+#[derive(Component)]
+pub struct AILanding {
+    pub planet_entity: Entity,
+}
+
+/// AI ship is waiting on a planet surface before taking off again.
+#[derive(Component)]
+pub struct AILanded {
+    pub timer: Timer,
+}
+
 /// Periodic timer that checks whether the AI ship population needs adjusting.
 #[derive(Resource)]
 pub struct ShipPopulationTimer(pub Timer);
@@ -61,6 +74,9 @@ pub fn ai_ship_bundle(app: &mut App) {
                 classic_ai_target_selection,
                 classic_ai_control,
                 land_ship,
+                finish_ai_landing,
+                tick_ai_landed,
+                finish_ai_takeoff,
                 jump_in_system,
                 jump_out_system,
                 manage_ship_population,
@@ -579,7 +595,7 @@ pub fn classic_ai_target_selection(
     spatial_query: SpatialQuery,
     mut ships: Query<
         (Entity, &Position, &mut Ship, &AIShip, Option<&RLAgent>),
-        Without<JumpingOut>,
+        (Without<JumpingOut>, Without<AILanding>, Without<AILanded>),
     >,
     all_positions: Query<&Position>,
     planet_marker: Query<(), With<Planet>>,
@@ -759,7 +775,7 @@ pub fn classic_ai_control(
             &AIShip,
             Option<&RLAgent>,
         ),
-        Without<JumpingOut>,
+        (Without<JumpingOut>, Without<AILanding>, Without<AILanded>),
     >,
     all_positions: Query<&Position>,
     velocities: Query<&LinearVelocity>,
@@ -820,227 +836,278 @@ pub fn classic_ai_control(
     }
 }
 
+/// Start the landing animation when an AI ship is close enough and slow enough.
+/// The actual transactions happen in [`finish_ai_landing`] when the animation
+/// completes.
 fn land_ship(
-    time: Res<Time>,
     planets: Query<(&Planet, &Position)>,
-    mut ships: Query<(
-        Entity,
-        &mut Ship,
-        &Position,
-        &LinearVelocity,
-        &AIShip,
-        Option<&RLAgent>,
-    )>,
+    ships: Query<
+        (Entity, &Ship, &Position, &LinearVelocity, &Sprite),
+        (With<AIShip>, Without<AILanding>, Without<AILanded>, Without<JumpingOut>, Without<JumpingIn>),
+    >,
+    mut commands: Commands,
+    images: Res<Assets<Image>>,
+) {
+    for (entity, ship, ship_pos, vel, sprite) in ships.iter() {
+        let Some(Target::Planet(planet_entity)) = ship.nav_target else {
+            continue;
+        };
+        if vel.length() >= LANDING_SPEED {
+            continue;
+        }
+        let Ok((_planet, planet_pos)) = planets.get(planet_entity) else {
+            continue;
+        };
+        if (planet_pos.0 - ship_pos.0).length() > LANDING_RADIUS {
+            continue;
+        }
+        let full_size = image_size(sprite, &images);
+        let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
+        commands.entity(entity).insert((
+            AILanding { planet_entity },
+            Sensor,
+            mass,
+            inertia,
+            AngularVelocity(0.0),
+            LinearVelocity(Vec2::ZERO),
+            ScalingDown {
+                timer: Timer::from_seconds(PLANET_ANIM_DURATION, TimerMode::Once),
+                full_size,
+            },
+        ));
+    }
+}
+
+/// When the landing scale-down finishes, do the actual transactions (sell/buy/
+/// repair) and start the on-planet wait timer.
+fn finish_ai_landing(
+    time: Res<Time>,
+    mut reader: MessageReader<ScaleDownFinished>,
+    mut ships: Query<(Entity, &mut Ship, &Position, &AIShip, &AILanding, Option<&RLAgent>)>,
+    planets: Query<&Planet>,
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut commands: Commands,
-    ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
 ) {
     let mut rng = rand::thread_rng();
-    for (ship_entity, mut ship, ship_pos, vel, ai_ship, rl_agent) in ships.iter_mut() {
-        match ship.nav_target {
-            Some(Target::Planet(planet_entity)) => {
-                // ── Landed ───────────────────────────────────────────────────
-                if vel.length() < LANDING_SPEED {
-                    let Ok((planet, planet_pos)) = planets.get(planet_entity) else {
-                        continue;
-                    };
-                    if (planet_pos.0 - ship_pos.0).length() > LANDING_RADIUS {
-                        continue;
+    for ScaleDownFinished { entity } in reader.read() {
+        let Ok((ship_entity, mut ship, ship_pos, ai_ship, landing, rl_agent)) =
+            ships.get_mut(*entity)
+        else {
+            continue;
+        };
+        let planet_entity = landing.planet_entity;
+        let Ok(planet) = planets.get(planet_entity) else {
+            commands.entity(ship_entity).remove::<AILanding>();
+            continue;
+        };
+        let planet_name = planet.0.clone();
+        let system_name = current_star_system.0.clone();
+        let planet_data = item_universe
+            .star_systems
+            .get(&system_name)
+            .and_then(|s| s.planets.get(&planet_name));
+
+        // ── Landing reward for RLAgent ships ──────────────────
+        if rl_agent.is_some() {
+            use crate::consts::*;
+            let cargo_held: u16 = ship.cargo.values().sum();
+            let cargo_cap = ship.data.cargo_space.max(1) as f32;
+            let cargo_frac = cargo_held as f32 / cargo_cap;
+            let health_frac = ship.health as f32 / ship.data.max_health.max(1) as f32;
+
+            let mut reward = 0.0_f32;
+            reward += (1.0 - health_frac) * LANDING_LOW_HEALTH;
+
+            match ai_ship.personality {
+                Personality::Trader => {
+                    if cargo_held > 0 {
+                        reward += cargo_frac * LANDING_TRADER_CAN_SELL;
                     }
-                    // Resolve planet data for reward computation and transactions.
-                    let planet_name = planet.0.clone();
-                    let system_name = current_star_system.0.clone();
-                    let planet_data = item_universe
-                        .star_systems
-                        .get(&system_name)
-                        .and_then(|s| s.planets.get(&planet_name));
-
-                    // ── Landing reward for RLAgent ships ──────────────────
-                    if rl_agent.is_some() {
-                        use crate::consts::*;
-                        let cargo_held: u16 = ship.cargo.values().sum();
-                        let cargo_cap = ship.data.cargo_space.max(1) as f32;
-                        let cargo_frac = cargo_held as f32 / cargo_cap;
-                        let health_frac = ship.health as f32 / ship.data.max_health.max(1) as f32;
-
-                        let mut reward = 0.0_f32;
-
-                        // Any personality: low health → incentive to heal.
-                        reward += (1.0 - health_frac) * LANDING_LOW_HEALTH;
-
-                        match ai_ship.personality {
-                            Personality::Trader => {
-                                // Can sell: has cargo to unload.
-                                if cargo_held > 0 {
-                                    reward += cargo_frac * LANDING_TRADER_CAN_SELL;
-                                }
-                                // Can buy: has cargo space AND credits for at least something.
-                                let can_buy = ship.remaining_cargo_space() > 0
-                                    && ship.credits > 0
-                                    && planet_data
-                                        .map(|pd| !pd.commodities.is_empty())
-                                        .unwrap_or(false);
-                                if can_buy {
-                                    reward += LANDING_TRADER_CAN_BUY;
-                                }
-                            }
-                            Personality::Fighter => {
-                                // Can rearm: planet sells ammo for a weapon we carry.
-                                let can_rearm = planet_data
-                                    .map(|pd| {
-                                        ship.weapon_systems
-                                            .secondary
-                                            .keys()
-                                            .any(|wt| pd.outfitter.contains(wt) && ship.credits > 0)
-                                    })
-                                    .unwrap_or(false);
-                                if can_rearm {
-                                    reward += LANDING_FIGHTER_CAN_REARM;
-                                }
-                                // Cargo full → sell it off.
-                                if ship.remaining_cargo_space() == 0 {
-                                    reward += LANDING_FIGHTER_CARGO_FULL;
-                                }
-                            }
-                            Personality::Miner => {
-                                // Can sell: has cargo to unload.
-                                if cargo_held > 0 {
-                                    reward += cargo_frac * LANDING_MINER_CAN_SELL;
-                                }
-                            }
-                        }
-
-                        // Targeting bonus.
-                        let targeting_mult = if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity)
-                        {
-                            LANDING_ON_TARGET_MULTIPLIER
-                        } else {
-                            LANDING_OFF_TARGET_MULTIPLIER
-                        };
-                        reward *= targeting_mult;
-
-                        if reward > 0.0 {
-                            rl_reward_writer.write(RLReward {
-                                entity: ship_entity,
-                                reward,
-                                reward_type: crate::consts::REWARD_LANDING,
-                            });
-                        }
+                    let can_buy = ship.remaining_cargo_space() > 0
+                        && ship.credits > 0
+                        && planet_data
+                            .map(|pd| !pd.commodities.is_empty())
+                            .unwrap_or(false);
+                    if can_buy {
+                        reward += LANDING_TRADER_CAN_BUY;
                     }
-
-                    // Snapshot health fraction BEFORE repair — used for
-                    // health-gated bonuses fired at landing / cargo_sold.
-                    let h_frac_at_landing =
-                        ship.health as f32 / ship.data.max_health.max(1) as f32;
-                    if rl_agent.is_some() {
-                        rl_reward_writer.write(RLReward {
-                            entity: ship_entity,
-                            reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
-                            reward_type: crate::consts::REWARD_HEALTH_GATED,
-                        });
+                }
+                Personality::Fighter => {
+                    let can_rearm = planet_data
+                        .map(|pd| {
+                            ship.weapon_systems
+                                .secondary
+                                .keys()
+                                .any(|wt| pd.outfitter.contains(wt) && ship.credits > 0)
+                        })
+                        .unwrap_or(false);
+                    if can_rearm {
+                        reward += LANDING_FIGHTER_CAN_REARM;
                     }
-
-                    // Landed successfully, so clear the target
-                    if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
-                        ship.nav_target = None;
+                    if ship.remaining_cargo_space() == 0 {
+                        reward += LANDING_FIGHTER_CARGO_FULL;
                     }
-
-                    // Record this landing so the recent-visited cooldown masks
-                    // the planet from nav-target selection until it expires.
-                    let now = time.elapsed_secs();
-                    let expire_at = now + crate::consts::LANDING_COOLDOWN_SECS;
-                    ship.recent_landings.insert(planet_name.clone(), expire_at);
-                    // Opportunistic prune of expired entries to keep the map small.
-                    ship.recent_landings.retain(|_, &mut t| t > now);
-
-                    // Repair the ship:
-                    ship.health = ship.data.max_health;
-
-                    // Sell all cargo at the planet's listed prices.
-                    if let Some(planet_data) = planet_data {
-                        let credits_before = ship.credits;
-
-                        for (commodity, qty) in ship.clone().cargo.iter() {
-                            if let Some(&price) = planet_data.commodities.get(commodity) {
-                                ship.sell_cargo(commodity, *qty, price);
-                            }
-                        }
-
-                        // Reward: credits earned normalised by ship credit scale.
-                        let credits_earned = (ship.credits - credits_before).max(0) as f32;
-                        if rl_agent.is_some() && credits_earned > 0.0 {
-                            use crate::consts::*;
-                            let credit_scale = item_universe
-                                .ship_credit_scale
-                                .get(&ship.ship_type)
-                                .copied()
-                                .unwrap_or(1.0);
-                            let credit_frac = credits_earned / credit_scale;
-                            let personality_weight = match ai_ship.personality {
-                                Personality::Fighter => CARGO_SOLD_FIGHTER,
-                                Personality::Miner => CARGO_SOLD_MINER,
-                                Personality::Trader => CARGO_SOLD_TRADER,
-                            };
-                            rl_reward_writer.write(RLReward {
-                                entity: ship_entity,
-                                reward: credit_frac * personality_weight,
-                                reward_type: crate::consts::REWARD_CARGO_SOLD,
-                            });
-                            // Health bonus uses pre-repair health (captured above).
-                            rl_reward_writer.write(RLReward {
-                                entity: ship_entity,
-                                reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
-                                reward_type: crate::consts::REWARD_HEALTH_GATED,
-                            });
-                        }
-
-                        // Traders buy the commodity with the best discount here.
-                        if matches!(ai_ship.personality, Personality::Trader) {
-                            if let Some(commodity) = item_universe
-                                .system_planet_best_commodity_to_buy
-                                .get(&system_name)
-                                .and_then(|m| m.get(&planet_name))
-                            {
-                                if let Some(&price) = planet_data.commodities.get(commodity) {
-                                    ship.buy_cargo(commodity, u16::MAX, price);
-                                }
-                            }
-                        }
-
-                        // Buy Ammo:
-                        for weapon_type in ship.clone().weapon_systems.secondary.keys() {
-                            if planet_data.outfitter.contains(weapon_type) {
-                                ship.buy_max_ammo(weapon_type, &item_universe);
-                            }
-                        }
-                    }
-
-                    // Fighters: if no hostile ships are visible, jump out.
-                    let jump_out_bundle = {
-                        let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
-                        (JumpingOut, Sensor, mass, inertia, AngularVelocity(0.0))
-                    };
-                    if matches!(ai_ship.personality, Personality::Fighter) {
-                        let has_hostile =
-                            ship_factions.iter().any(|(other_e, other_h, other_pos)| {
-                                other_e != ship_entity
-                                    && ship.should_engage(other_h)
-                                    && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
-                            });
-                        if !has_hostile {
-                            commands.entity(ship_entity).try_insert(jump_out_bundle);
-                        }
-                    } else {
-                        let choose_to_jump = rng.gen_bool(0.1);
-                        if choose_to_jump {
-                            commands.entity(ship_entity).try_insert(jump_out_bundle);
-                        }
+                }
+                Personality::Miner => {
+                    if cargo_held > 0 {
+                        reward += cargo_frac * LANDING_MINER_CAN_SELL;
                     }
                 }
             }
-            _ => (),
+
+            let targeting_mult =
+                if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
+                    LANDING_ON_TARGET_MULTIPLIER
+                } else {
+                    LANDING_OFF_TARGET_MULTIPLIER
+                };
+            reward *= targeting_mult;
+
+            if reward > 0.0 {
+                rl_reward_writer.write(RLReward {
+                    entity: ship_entity,
+                    reward,
+                    reward_type: crate::consts::REWARD_LANDING,
+                });
+            }
+        }
+
+        let h_frac_at_landing = ship.health as f32 / ship.data.max_health.max(1) as f32;
+        if rl_agent.is_some() {
+            rl_reward_writer.write(RLReward {
+                entity: ship_entity,
+                reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
+                reward_type: crate::consts::REWARD_HEALTH_GATED,
+            });
+        }
+
+        if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
+            ship.nav_target = None;
+        }
+
+        let now = time.elapsed_secs();
+        let expire_at = now + crate::consts::LANDING_COOLDOWN_SECS;
+        ship.recent_landings.insert(planet_name.clone(), expire_at);
+        ship.recent_landings.retain(|_, &mut t| t > now);
+
+        ship.health = ship.data.max_health;
+
+        if let Some(planet_data) = planet_data {
+            let credits_before = ship.credits;
+            for (commodity, qty) in ship.clone().cargo.iter() {
+                if let Some(&price) = planet_data.commodities.get(commodity) {
+                    ship.sell_cargo(commodity, *qty, price);
+                }
+            }
+            let credits_earned = (ship.credits - credits_before).max(0) as f32;
+            if rl_agent.is_some() && credits_earned > 0.0 {
+                use crate::consts::*;
+                let credit_scale = item_universe
+                    .ship_credit_scale
+                    .get(&ship.ship_type)
+                    .copied()
+                    .unwrap_or(1.0);
+                let credit_frac = credits_earned / credit_scale;
+                let personality_weight = match ai_ship.personality {
+                    Personality::Fighter => CARGO_SOLD_FIGHTER,
+                    Personality::Miner => CARGO_SOLD_MINER,
+                    Personality::Trader => CARGO_SOLD_TRADER,
+                };
+                rl_reward_writer.write(RLReward {
+                    entity: ship_entity,
+                    reward: credit_frac * personality_weight,
+                    reward_type: crate::consts::REWARD_CARGO_SOLD,
+                });
+                rl_reward_writer.write(RLReward {
+                    entity: ship_entity,
+                    reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
+                    reward_type: crate::consts::REWARD_HEALTH_GATED,
+                });
+            }
+            if matches!(ai_ship.personality, Personality::Trader) {
+                if let Some(commodity) = item_universe
+                    .system_planet_best_commodity_to_buy
+                    .get(&system_name)
+                    .and_then(|m| m.get(&planet_name))
+                {
+                    if let Some(&price) = planet_data.commodities.get(commodity) {
+                        ship.buy_cargo(commodity, u16::MAX, price);
+                    }
+                }
+            }
+            for weapon_type in ship.clone().weapon_systems.secondary.keys() {
+                if planet_data.outfitter.contains(weapon_type) {
+                    ship.buy_max_ammo(weapon_type, &item_universe);
+                }
+            }
+        }
+
+        // Replace AILanding with AILanded (random 1-3 second wait).
+        let wait = rng.gen_range(1.0..3.0);
+        commands
+            .entity(ship_entity)
+            .remove::<AILanding>()
+            .insert(AILanded {
+                timer: Timer::from_seconds(wait, TimerMode::Once),
+            });
+    }
+}
+
+/// Tick the on-planet wait timer and start the take-off animation when done.
+fn tick_ai_landed(
+    time: Res<Time>,
+    mut ships: Query<(Entity, &mut AILanded, &Sprite)>,
+    mut commands: Commands,
+    images: Res<Assets<Image>>,
+) {
+    for (entity, mut landed, sprite) in &mut ships {
+        landed.timer.tick(time.delta());
+        if landed.timer.just_finished() {
+            let full_size = image_size(sprite, &images);
+            commands
+                .entity(entity)
+                .remove::<(AILanded, Sensor, Mass, AngularInertia)>()
+                .insert(ScalingUp {
+                    timer: Timer::from_seconds(PLANET_ANIM_DURATION, TimerMode::Once),
+                    full_size,
+                });
+        }
+    }
+}
+
+/// When the take-off scale-up finishes, decide whether the AI should jump out
+/// or resume flying.
+fn finish_ai_takeoff(
+    mut reader: MessageReader<ScaleUpFinished>,
+    ships: Query<(Entity, &Ship, &Position, &AIShip), Without<crate::carrier::CarrierEscort>>,
+    ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
+    mut commands: Commands,
+) {
+    let mut rng = rand::thread_rng();
+    for ScaleUpFinished { entity } in reader.read() {
+        let Ok((ship_entity, ship, ship_pos, ai_ship)) = ships.get(*entity) else {
+            continue;
+        };
+        let jump_out_bundle = {
+            let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
+            (JumpingOut, Sensor, mass, inertia, AngularVelocity(0.0))
+        };
+        if matches!(ai_ship.personality, Personality::Fighter) {
+            let has_hostile = ship_factions.iter().any(|(other_e, other_h, other_pos)| {
+                other_e != ship_entity
+                    && ship.should_engage(other_h)
+                    && (other_pos.0 - ship_pos.0).length() <= DETECTION_RADIUS
+            });
+            if !has_hostile {
+                commands.entity(ship_entity).try_insert(jump_out_bundle);
+            }
+        } else {
+            let choose_to_jump = rng.gen_bool(0.1);
+            if choose_to_jump {
+                commands.entity(ship_entity).try_insert(jump_out_bundle);
+            }
         }
     }
 }

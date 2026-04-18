@@ -54,6 +54,10 @@ pub struct CommsChannel {
     message: String,
     scroll_offset: f32,
     pause_timer: f32,
+    /// Set to `true` by the ticker after the first full scroll pass (or
+    /// immediately if the text fits without scrolling).  External systems
+    /// can poll this to know when to refresh the message.
+    pub cycle_complete: bool,
 }
 
 impl CommsChannel {
@@ -61,6 +65,7 @@ impl CommsChannel {
         self.message = msg.into();
         self.scroll_offset = 0.0;
         self.pause_timer = COMMS_INITIAL_PAUSE;
+        self.cycle_complete = false;
     }
 }
 
@@ -679,6 +684,7 @@ fn update_comms_ticker(
     if overflow <= 0.0 {
         // Text fits — show static, left-aligned
         node.left = Val::Px(4.0);
+        channel.cycle_complete = true;
         return;
     }
 
@@ -695,6 +701,7 @@ fn update_comms_ticker(
     if channel.scroll_offset > overflow + 30.0 {
         channel.scroll_offset = 0.0;
         channel.pause_timer = COMMS_LOOP_PAUSE;
+        channel.cycle_complete = true;
     }
 
     node.left = Val::Px(4.0 - channel.scroll_offset);

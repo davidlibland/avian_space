@@ -1,3 +1,15 @@
+pirate_laser:
+  !PrimaryWeapon
+    price: 60
+    space: 2
+    weapon_type: pirate_laser
+goose:
+  !SecondaryWeapon
+    price: 400
+    space: 3
+    weapon_type: goose
+    ammo_price: 35
+    ammo_space: 2
 laser:
   !PrimaryWeapon
     price: 100
@@ -9,6 +21,18 @@ proton_beam:
     space: 3
     weapon_type: proton_beam
     required_unlocks: [proton_beam_license]
+laser_turret:
+  !PrimaryWeapon
+    price: 2000
+    space: 10
+    weapon_type: laser_turret
+    required_unlocks: [turret_license]
+proton_beam_turret:
+  !PrimaryWeapon
+    price: 5000
+    space: 15
+    weapon_type: proton_beam_turret
+    required_unlocks: [turret_license]
 ir_missile:
   !SecondaryWeapon
     price: 800
@@ -32,3 +56,42 @@ space_mine:
     weapon_type: space_mine
     ammo_price: 30
     ammo_space: 2
+fighter_bay:
+  !SecondaryWeapon
+    price: 8000
+    space: 8
+    weapon_type: fighter_bay
+    ammo_price: 2000
+    ammo_space: 4
+    required_unlocks: [carrier_license]
+fed_fighter_bay:
+  !SecondaryWeapon
+    price: 10000
+    space: 8
+    weapon_type: fed_fighter_bay
+    ammo_price: 3000
+    ammo_space: 4
+    required_unlocks: [carrier_license]
+shuttle_bay:
+  !SecondaryWeapon
+    price: 4000
+    space: 6
+    weapon_type: shuttle_bay
+    ammo_price: 1000
+    ammo_space: 3
+    required_unlocks: [carrier_license]
+rebel_fighter_bay:
+  !SecondaryWeapon
+    price: 8000
+    space: 8
+    weapon_type: rebel_fighter_bay
+    ammo_price: 2000
+    ammo_space: 4
+    required_unlocks: [rebel_carrier_license]
+pirate_corvette_bay:
+  !SecondaryWeapon
+    price: 6000
+    space: 7
+    weapon_type: pirate_corvette_bay
+    ammo_price: 1500
+    ammo_space: 3

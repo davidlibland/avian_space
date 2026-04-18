@@ -6,7 +6,15 @@
       "Bash(grep -n \"struct Message\\\\|enum Message\" /Users/dlibland/dev/avian_space/src/*.rs)",
       "Bash(grep -r \"pub mod missions\\\\|missions::\" /Users/dlibland/dev/avian_space/src/*.rs)",
       "Bash(grep -n \"EventWriter\\\\|EventReader\\\\|send\\\\|read_event\" /Users/dlibland/dev/avian_space/src/tests/*.rs)",
-      "Bash(ls /Users/dlibland/dev/avian_space/assets/*.yaml)"
+      "Bash(ls /Users/dlibland/dev/avian_space/assets/*.yaml)",
+      "Bash(grep -rn \"weapons_target\\\\|targeting.*player\\\\|targeted.*by\\\\|alert_sound\\\\|threat_level\\\\|red.*ship\\\\|ship.*red\\\\|hostil.*indicator\" /Users/dlibland/dev/avian_space/src/hud*.rs /Users/dlibland/dev/avian_space/src/ui*.rs /Users/dlibland/dev/avian_space/src/player*.rs)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -rn \"#\\\\[path.*tests\\\\]\" /Users/dlibland/dev/avian_space/src/*.rs /Users/dlibland/dev/avian_space/src/**/*.rs)",
+      "Bash(cargo clean:*)",
+      "Bash(cargo doc:*)",
+      "Bash(grep -r \"fn position_to_transform\\\\|fn sync_transform\\\\|translation.z\\\\|scale\" /Users/dlibland/.cargo/registry/src/*/avian2d-*/src/sync/)",
+      "Bash(python3 scripts/monitor_training.py experiments/run_20/tb)",
+      "Bash(grep -n \"PlayerLandedOnPlanet\" /Users/dlibland/dev/avian_space/src/missions/*.rs)"
     ]
   },
   "hooks": {

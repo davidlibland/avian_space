@@ -367,8 +367,8 @@ impl<B: Backend> RLNet<B> {
         let any_reason = (profit_pos + ammo_avail + low_health_b + free_cargo_b).clamp(0.0, 1.0);
         // Recently-visited overrides all reasons — the planet is blocked
         // until the cooldown expires.
-        let planet_allow = is_planet.clone() * any_reason * not_recent
-            + (is_planet.ones_like() - is_planet);
+        let planet_allow =
+            is_planet.clone() * any_reason * not_recent + (is_planet.ones_like() - is_planet);
         let nav_mask = Tensor::cat(
             vec![planet_allow, Tensor::<B, 2>::ones([batch_size, 1], &device)],
             1,
@@ -396,7 +396,10 @@ impl<B: Backend> RLNet<B> {
             + is_ship
                 * (is_hostile.clamp(0.0, 1.0) + should_engage.clamp(0.0, 1.0)).clamp(0.0, 1.0);
         let valid_weapons_target = Tensor::cat(
-            vec![valid_weapons_entity, Tensor::<B, 2>::ones([batch_size, 1], &device)],
+            vec![
+                valid_weapons_entity,
+                Tensor::<B, 2>::ones([batch_size, 1], &device),
+            ],
             1,
         );
         let weapons_target_logits = nav_target_logits.clone() * valid_weapons_target.clone()

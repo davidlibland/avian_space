@@ -24,6 +24,7 @@ fn empty_item_universe() -> ItemUniverse {
         planet_has_ammo_for: HashMap::new(),
         asteroid_field_expected_value: HashMap::new(),
         ship_credit_scale: HashMap::new(),
+        allies: HashMap::new(),
     }
 }
 

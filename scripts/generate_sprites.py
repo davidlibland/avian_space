@@ -930,6 +930,321 @@ def draw_space_mine():
     img.save(os.path.join(OUT, "space_mine.png"))
 
 
+# ─── SURPLUS CARRIER (100×100) – decommissioned military light carrier ──────
+# Design note: Smaller and sleeker than faction carriers. A retired Federation
+# hull stripped of insignia and repainted neutral grey-green. Streamlined
+# wedge hull with a compact rear flight deck, single bridge fin, and twin
+# engines. The silhouette reads as "fast escort carrier" — longer and
+# narrower than the boxy faction carriers.
+
+
+def draw_surplus_carrier():
+    S = 100
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Streamlined main hull – long narrow wedge
+    hull = [
+        (cx, 4), (cx + 18, 18), (cx + 20, 82),
+        (cx - 20, 82), (cx - 18, 18),
+    ]
+    d.polygon(hull, fill=(62, 68, 64, 255))
+
+    # Swept-back fins (give it a fast, sleek look)
+    lfin = [(cx - 18, 24), (cx - 34, 40), (cx - 30, 44), (cx - 18, 34)]
+    rfin = [(cx + 18, 24), (cx + 34, 40), (cx + 30, 44), (cx + 18, 34)]
+    d.polygon(lfin, fill=(52, 58, 54, 255))
+    d.polygon(rfin, fill=(52, 58, 54, 255))
+
+    # Nose – sharp, aerodynamic
+    nose = [(cx, 4), (cx + 12, 16), (cx - 12, 16)]
+    d.polygon(nose, fill=(85, 92, 86, 255))
+
+    # Faded paint stripe (neutral olive — no faction colours)
+    d.rectangle([int(cx) - 16, 18, int(cx) + 16, 21], fill=(78, 82, 58, 255))
+
+    # Bridge fin (small, offset starboard — vestige of military origin)
+    bridge = [(cx + 14, 28), (cx + 22, 30), (cx + 20, 42), (cx + 14, 44)]
+    d.polygon(bridge, fill=(72, 78, 74, 255))
+    d.rectangle([int(cx) + 16, 32, int(cx) + 20, 35], fill=(110, 180, 160, 170))
+
+    # Compact rear flight deck (takes up the back third of the hull)
+    d.rectangle([int(cx) - 12, 50, int(cx) + 12, 76], fill=(28, 30, 28, 255))
+    # Amber guide lights (civilian surplus feel)
+    for y in range(54, 74, 6):
+        d.rectangle([int(cx) - 1, y, int(cx) + 1, y + 3], fill=(190, 165, 60, 195))
+
+    # Hull panel lines (suggest repaired/refurbished plating)
+    d.rectangle([int(cx) - 16, 36, int(cx) - 14, 48], fill=(55, 60, 56, 255))
+    d.rectangle([int(cx) + 14, 38, int(cx) + 16, 50], fill=(55, 60, 56, 255))
+
+    # Stern
+    d.rectangle([int(cx) - 18, 78, int(cx) + 18, 84], fill=(48, 52, 48, 255))
+
+    # Twin engines (compact, blue-white — still military hardware)
+    for ex in [int(cx) - 12, int(cx) + 12]:
+        d.rectangle([ex - 4, 82, ex + 4, 88], fill=(32, 34, 32, 255))
+        d.ellipse([ex - 4, 86, ex + 4, 96], fill=(80, 160, 255, 185))
+
+    img.save(os.path.join(OUT, "surplus_carrier.png"))
+
+
+# ─── FED CARRIER (140×140) – Federation fleet carrier ───────────────────────
+# Design note: Wide, flat-topped warship inspired by modern aircraft carriers.
+# Distinctive angled flight deck running most of the hull length, prominent
+# dorsal bridge tower offset to starboard, armoured bow with ram plating,
+# weapon turret hardpoints on the nacelles, and 6-nozzle engine array.
+# Silhouette is uniquely WIDE and flat — no other ship has this aspect ratio.
+
+
+def draw_fed_carrier():
+    S = 140
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Wide outer hull sponsons (weapon platforms)
+    lspon = [(cx - 32, 28), (cx - 56, 38), (cx - 54, 108), (cx - 30, 112)]
+    rspon = [(cx + 32, 28), (cx + 56, 38), (cx + 54, 108), (cx + 30, 112)]
+    d.polygon(lspon, fill=(34, 38, 44, 255))
+    d.polygon(rspon, fill=(34, 38, 44, 255))
+
+    # Weapon turrets on sponsons (small circles)
+    for ty in [50, 72, 92]:
+        d.ellipse([int(cx) - 54, ty - 3, int(cx) - 46, ty + 3], fill=(62, 66, 74, 255))
+        d.ellipse([int(cx) + 46, ty - 3, int(cx) + 54, ty + 3], fill=(62, 66, 74, 255))
+
+    # Main hull – broad flat-top deck
+    hull = [
+        (cx - 8, 6), (cx + 8, 6),
+        (cx + 30, 20), (cx + 30, 110),
+        (cx - 30, 110), (cx - 30, 20),
+    ]
+    d.polygon(hull, fill=(52, 58, 68, 255))
+
+    # Armoured bow ram – chevron shape
+    bow = [(cx - 8, 6), (cx, 2), (cx + 8, 6), (cx + 18, 18), (cx - 18, 18)]
+    d.polygon(bow, fill=(88, 92, 102, 255))
+    # Red Federation chevron on bow
+    d.polygon([(cx, 5), (cx + 12, 16), (cx - 12, 16)], fill=(200, 30, 30, 255))
+
+    # Flight deck – angled landing strip (distinctive diagonal)
+    deck = [(cx - 22, 30), (cx + 14, 26), (cx + 22, 88), (cx - 14, 92)]
+    d.polygon(deck, fill=(18, 20, 24, 255))
+    # Yellow centreline markings (diagonal)
+    for i in range(6):
+        y = 34 + i * 10
+        x_off = -4 + i * 0.6
+        d.rectangle([int(cx + x_off) - 1, y, int(cx + x_off) + 1, y + 5],
+                     fill=(200, 200, 50, 210))
+
+    # Bridge tower (tall, offset starboard — dominates the silhouette)
+    bridge = [(cx + 22, 36), (cx + 36, 38), (cx + 38, 62), (cx + 34, 68),
+              (cx + 22, 68)]
+    d.polygon(bridge, fill=(68, 74, 84, 255))
+    # Bridge windows
+    d.rectangle([int(cx) + 26, 42, int(cx) + 34, 46], fill=(120, 200, 225, 190))
+    # Antenna mast
+    d.rectangle([int(cx) + 30, 32, int(cx) + 32, 38], fill=(90, 94, 104, 255))
+    d.rectangle([int(cx) + 28, 32, int(cx) + 34, 34], fill=(100, 104, 114, 255))
+
+    # Stern hangar opening
+    d.rectangle([int(cx) - 18, 100, int(cx) + 18, 110], fill=(28, 30, 36, 255))
+
+    # Engine array – 6 nozzles in a wide row
+    for ex in [int(cx) - 50, int(cx) - 32, int(cx) - 14,
+               int(cx) + 14, int(cx) + 32, int(cx) + 50]:
+        d.rectangle([ex - 4, 110, ex + 4, 116], fill=(22, 22, 28, 255))
+        d.ellipse([ex - 4, 114, ex + 4, 124], fill=(80, 160, 255, 190))
+
+    img.save(os.path.join(OUT, "fed_carrier.png"))
+
+
+# ─── REBEL CARRIER (130×130) – Rebel catamaran carrier ─────────────────────
+# Design note: Split-hull catamaran design — two parallel hulls connected by
+# crossbeams, with the flight deck suspended between them. Forward-swept
+# wing fins give an aggressive, predatory silhouette. The negative space
+# between the hulls is the most distinctive feature at any zoom level.
+
+
+def draw_rebel_carrier():
+    S = 130
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Port hull (left)
+    lhull = [
+        (cx - 14, 8), (cx - 8, 4), (cx - 8, 100), (cx - 14, 104),
+        (cx - 28, 104), (cx - 32, 98), (cx - 32, 28), (cx - 22, 12),
+    ]
+    d.polygon(lhull, fill=(26, 72, 112, 255))
+
+    # Starboard hull (right)
+    rhull = [
+        (cx + 14, 8), (cx + 8, 4), (cx + 8, 100), (cx + 14, 104),
+        (cx + 28, 104), (cx + 32, 98), (cx + 32, 28), (cx + 22, 12),
+    ]
+    d.polygon(rhull, fill=(26, 72, 112, 255))
+
+    # Forward-swept wing fins (distinctive angular shapes)
+    lfin = [(cx - 32, 30), (cx - 52, 18), (cx - 48, 22), (cx - 32, 40)]
+    rfin = [(cx + 32, 30), (cx + 52, 18), (cx + 48, 22), (cx + 32, 40)]
+    d.polygon(lfin, fill=(20, 58, 92, 255))
+    d.polygon(rfin, fill=(20, 58, 92, 255))
+    # Green wingtip lights
+    d.ellipse([int(cx) - 52, 16, int(cx) - 48, 22], fill=(50, 210, 90, 220))
+    d.ellipse([int(cx) + 48, 16, int(cx) + 52, 22], fill=(50, 210, 90, 220))
+
+    # Rear stabiliser fins (swept back)
+    lstab = [(cx - 28, 88), (cx - 44, 108), (cx - 38, 106), (cx - 28, 96)]
+    rstab = [(cx + 28, 88), (cx + 44, 108), (cx + 38, 106), (cx + 28, 96)]
+    d.polygon(lstab, fill=(18, 54, 85, 255))
+    d.polygon(rstab, fill=(18, 54, 85, 255))
+
+    # Cross-beams connecting the two hulls (fore and aft)
+    d.rectangle([int(cx) - 8, 24, int(cx) + 8, 28], fill=(38, 95, 138, 255))
+    d.rectangle([int(cx) - 8, 84, int(cx) + 8, 88], fill=(38, 95, 138, 255))
+
+    # Flight deck between hulls (open space with deck plating)
+    d.rectangle([int(cx) - 6, 30, int(cx) + 6, 82], fill=(10, 28, 42, 255))
+    # Green launch guide lights
+    for y in range(34, 80, 7):
+        d.rectangle([int(cx) - 1, y, int(cx) + 1, y + 3], fill=(55, 220, 95, 210))
+
+    # Nose highlights on each hull
+    d.polygon([(cx - 22, 12), (cx - 14, 8), (cx - 8, 4), (cx - 8, 14)],
+              fill=(45, 130, 155, 255))
+    d.polygon([(cx + 22, 12), (cx + 14, 8), (cx + 8, 4), (cx + 8, 14)],
+              fill=(45, 130, 155, 255))
+
+    # Green accent stripes on each hull
+    d.rectangle([int(cx) - 30, 40, int(cx) - 28, 70], fill=(48, 185, 80, 255))
+    d.rectangle([int(cx) + 28, 40, int(cx) + 30, 70], fill=(48, 185, 80, 255))
+
+    # Bridge bubble (small, centred on port hull)
+    d.ellipse([int(cx) - 26, 48, int(cx) - 16, 58], fill=(36, 96, 135, 255))
+    d.ellipse([int(cx) - 24, 50, int(cx) - 18, 54], fill=(75, 195, 155, 185))
+
+    # Engines — two per hull (teal glow)
+    for ex in [int(cx) - 24, int(cx) - 12, int(cx) + 12, int(cx) + 24]:
+        d.rectangle([ex - 3, 104, ex + 3, 110], fill=(14, 40, 58, 255))
+        d.ellipse([ex - 4, 108, ex + 4, 118], fill=(55, 185, 200, 200))
+
+    img.save(os.path.join(OUT, "rebel_carrier.png"))
+
+
+# ─── PIRATE CARRIER (120×120) – Pirate converted freighter ─────────────────
+# Design note: A stolen bulk freighter with a crude flight platform welded
+# onto the port side. The original freighter hull is visible on the right
+# (boxy cargo hold shape), while the left side has a flat launch platform
+# with scaffolding and exposed girders. Deliberately asymmetric — the most
+# lopsided ship in the game. Rust, weld scars, and mismatched plating.
+
+
+def draw_pirate_carrier():
+    S = 120
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # ── Right side: original freighter hull (boxy) ───────────────────
+    freighter = [
+        (cx + 4, 12), (cx + 26, 20), (cx + 28, 96),
+        (cx + 22, 102), (cx + 4, 102),
+    ]
+    d.polygon(freighter, fill=(112, 86, 54, 255))
+
+    # Cargo hold panels on freighter side
+    for y in [30, 48, 66, 82]:
+        d.rectangle([int(cx) + 10, y, int(cx) + 24, y + 12], fill=(95, 72, 44, 255))
+        d.rectangle([int(cx) + 10, y, int(cx) + 12, y + 12], fill=(78, 58, 34, 255))
+
+    # Rust streaks on hull
+    d.rectangle([int(cx) + 20, 36, int(cx) + 26, 44], fill=(72, 42, 22, 255))
+    d.rectangle([int(cx) + 18, 72, int(cx) + 26, 78], fill=(68, 38, 18, 255))
+
+    # ── Left side: welded-on launch platform ─────────────────────────
+    platform = [
+        (cx - 4, 18), (cx - 38, 28), (cx - 40, 94), (cx - 4, 98),
+    ]
+    d.polygon(platform, fill=(98, 74, 46, 255))
+
+    # Scaffolding/girder framework (exposed structure)
+    for y in [32, 52, 72]:
+        d.rectangle([int(cx) - 38, y, int(cx) - 6, y + 2], fill=(130, 105, 70, 255))
+    for x in [int(cx) - 34, int(cx) - 22, int(cx) - 10]:
+        d.rectangle([x, 28, x + 2, 94], fill=(125, 100, 65, 255))
+
+    # Flight deck surface (dark, on the platform)
+    d.rectangle([int(cx) - 32, 34, int(cx) - 12, 90], fill=(42, 30, 18, 255))
+    # Dim amber guide lights
+    for y in range(38, 88, 8):
+        d.rectangle([int(cx) - 23, y, int(cx) - 21, y + 3], fill=(210, 145, 55, 185))
+
+    # ── Centre spine connecting both halves ──────────────────────────
+    d.rectangle([int(cx) - 4, 12, int(cx) + 4, 102], fill=(105, 80, 50, 255))
+
+    # Nose – crude welded prow
+    nose = [(cx - 2, 6), (cx + 4, 6), (cx + 10, 14), (cx - 8, 16)]
+    d.polygon(nose, fill=(145, 118, 78, 255))
+    # Weld scar across the nose
+    d.line([(int(cx) - 6, 12), (int(cx) + 8, 10)], fill=(85, 55, 30, 255), width=2)
+
+    # Dangling antenna (port side — broken, bent)
+    d.line([(int(cx) - 36, 28), (int(cx) - 42, 16), (int(cx) - 44, 20)],
+           fill=(140, 115, 75, 255), width=1)
+
+    # Stern — heavy, uneven
+    d.rectangle([int(cx) - 36, 94, int(cx) + 24, 100], fill=(78, 58, 36, 255))
+
+    # Engine array — 3 mismatched nozzles (2 on freighter side, 1 on platform)
+    # Freighter engines (larger, orange)
+    for ex in [int(cx) + 10, int(cx) + 22]:
+        d.rectangle([ex - 5, 100, ex + 5, 108], fill=(58, 38, 22, 255))
+        d.ellipse([ex - 5, 105, ex + 5, 115], fill=(255, 155, 75, 195))
+    # Platform engine (smaller, yellower — salvaged)
+    ex = int(cx) - 24
+    d.rectangle([ex - 4, 98, ex + 4, 106], fill=(52, 34, 18, 255))
+    d.ellipse([ex - 4, 103, ex + 4, 112], fill=(255, 190, 55, 180))
+
+    img.save(os.path.join(OUT, "pirate_carrier.png"))
+
+
+# ─── GOOSE (14×14) – pirate guided missile ──────────────────────────────────
+# Design note: Chunkier than the ir_missile, with a dirty orange-brown body
+# matching the pirate colour palette.  Stubby fins and a sooty exhaust trail.
+# Same canvas size as the ir_missile but wider profile — reads as "crude but
+# dangerous" at a glance.
+
+
+def draw_goose():
+    S = 14
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Chunky pointed body – dirty orange-brown (wider than ir_missile)
+    body = [(cx, 1), (cx + 2, 5), (cx + 2, 10), (cx - 2, 10), (cx - 2, 5)]
+    d.polygon(body, fill=(185, 105, 40, 255))
+
+    # Nose tip – dull reddish orange
+    nose = [(cx, 1), (cx + 1, 4), (cx - 1, 4)]
+    d.polygon(nose, fill=(220, 130, 50, 255))
+
+    # Stubby tail fins (wider than ir_missile fins — crude look)
+    lfin = [(cx - 2, 8), (cx - 4.5, 12), (cx - 1.5, 12)]
+    rfin = [(cx + 2, 8), (cx + 4.5, 12), (cx + 1.5, 12)]
+    d.polygon(lfin, fill=(145, 78, 28, 255))
+    d.polygon(rfin, fill=(145, 78, 28, 255))
+
+    # Sooty engine plume – warm dirty glow
+    d.rectangle([int(cx) - 1, 10, int(cx) + 1, 13], fill=(255, 145, 40, 190))
+
+    img.save(os.path.join(OUT, "goose.png"))
+
+
 if __name__ == "__main__":
     draw_shuttle()
     draw_fighter()
@@ -943,12 +1258,17 @@ if __name__ == "__main__":
     draw_fed_patrol()
     draw_fed_destroyer()
     draw_fed_missile_cruiser()
+    draw_surplus_carrier()
+    draw_fed_carrier()
     draw_rebel_fighter()
     draw_rebel_gunboat()
     draw_rebel_frigate()
+    draw_rebel_carrier()
     draw_pirate_corvette()
     draw_pirate_missile_boat()
+    draw_pirate_carrier()
     draw_ir_missile()
     draw_javelin()
     draw_space_mine()
+    draw_goose()
     print("Sprites written to", OUT)

@@ -366,3 +366,55 @@ bounty_story_4:
       name: federation_weapons_license
     - kind: grant_unlock
       name: bounty_hunter_license
+
+# Phase 3: Carrier tier (2 missions — pirate carriers in border systems)
+# These are endgame-difficulty missions targeting the heavily armed pirate
+# carrier ships. Completing the arc grants carrier_license.
+
+bounty_story_5:
+  briefing: "Vasquez pulls up a tactical display showing the Drift. 'Intel says a pirate carrier has set up shop in the Drift. A carrier, Commander — it launches corvettes from a flight deck. Take out the carrier itself and the escorts scatter. 90,000 credits. And be careful — those corvettes will be on you the moment you engage.'"
+  success_text: "Vasquez lets out a low whistle. 'You took down a carrier. That's not something many pilots can claim. 90,000 credits — and come back when you're ready for the last one.'"
+  failure_text: "Vasquez stares at the tactical display. 'That carrier is still launching raids.'"
+  preconditions:
+    - kind: completed
+      mission: bounty_story_4
+  offer:
+    kind: bar
+    planet: barnard_station
+    weight: 1.0
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: pirate_carrier
+    count: 1
+    target_name: Pirate Carrier
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 90000
+
+bounty_story_6:
+  briefing: "Vasquez leans back and folds her arms. 'This is the endgame. Two pirate carriers operating out of Alpha Centauri — they've been coordinating raids across the border for months. Eliminate both and the Federation will grant you carrier-class certification. 120,000 credits. This is the hardest contract we've ever posted. Good hunting, Commander.'"
+  success_text: "Vasquez stands and salutes. 'Two carriers down. The border is secure for the first time in years. 120,000 credits, carrier certification, and the respect of every Federation officer in the fleet. The bounty board will keep posting carrier-class contracts — if you're hungry for more.'"
+  failure_text: "Vasquez says quietly, 'They're still out there. The border won't hold much longer.'"
+  preconditions:
+    - kind: completed
+      mission: bounty_story_5
+  offer:
+    kind: bar
+    planet: barnard_station
+    weight: 1.0
+  objective:
+    kind: destroy_ships
+    system: alpha_centauri
+    ship_type: pirate_carrier
+    count: 2
+    target_name: Pirate Carrier Group
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 120000
+    - kind: grant_unlock
+      name: carrier_license
+    - kind: grant_unlock
+      name: turret_license

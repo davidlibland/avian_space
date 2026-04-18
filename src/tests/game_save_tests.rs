@@ -73,6 +73,7 @@ fn basic_item_universe() -> ItemUniverse {
         starting_system: "sol".to_string(),
         starting_ship: "shuttle".to_string(),
         enemies: HashMap::new(),
+        allies: HashMap::new(),
     }
 }
 
@@ -109,7 +110,7 @@ fn new_pilot_defaults() {
     let state = PlayerGameState::new_pilot("Zara", &basic_item_universe());
     assert_eq!(state.pilot_name, "Zara");
     assert_eq!(state.current_star_system, "sol");
-    assert_eq!(state.player_ship.credits, 100_000);
+    assert_eq!(state.player_ship.credits, 10_000);
     assert!(state.weapon_loadout.is_empty());
 }
 

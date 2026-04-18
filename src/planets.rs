@@ -10,6 +10,7 @@ use crate::item_universe::ItemUniverse;
 use crate::missions::PlayerLandedOnPlanet;
 use crate::planet_ui::LandedContext;
 use crate::ship::{ShipHostility, Target};
+use crate::ship_anim::{self, ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, image_size};
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player, Ship};
 
 use std::collections::HashMap;
@@ -45,12 +46,17 @@ pub struct Planet(pub String);
 #[derive(Resource, Default)]
 pub struct NearbyPlanet(pub Option<Entity>);
 
+/// Marker: the player ship is in the landing scale-down animation.
+#[derive(Component)]
+pub struct PlayerLanding;
+
 pub fn planets_plugin(app: &mut App) {
     app.init_resource::<NearbyPlanet>()
         .add_systems(OnEnter(PlayState::Flying), spawn_planets)
         .add_systems(
             Update,
-            (track_nearby_planet, landing_input).run_if(in_state(PlayState::Flying)),
+            (track_nearby_planet, landing_input, finish_player_landing)
+                .run_if(in_state(PlayState::Flying)),
         );
 }
 
@@ -116,13 +122,16 @@ fn track_nearby_planet(
 fn landing_input(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     nearby: Res<NearbyPlanet>,
-    mut state: ResMut<NextState<PlayState>>,
     mut landed_context: ResMut<LandedContext>,
     planet_query: Query<&Planet>,
-    mut landed_writer: MessageWriter<PlayerLandedOnPlanet>,
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
-    mut player_query: Query<(&mut Ship, &ShipHostility), With<Player>>,
+    mut player_query: Query<
+        (Entity, &mut Ship, &ShipHostility, &Sprite),
+        (With<Player>, Without<PlayerLanding>),
+    >,
+    mut commands: Commands,
+    images: Res<Assets<Image>>,
 ) {
     if !keyboard_input.just_pressed(KeyCode::KeyL) {
         return;
@@ -133,7 +142,7 @@ fn landing_input(
     let Ok(planet) = planet_query.get(planet_entity) else {
         return;
     };
-    let Ok((mut ship, hostility)) = player_query.single_mut() else {
+    let Ok((entity, mut ship, hostility, sprite)) = player_query.single_mut() else {
         return;
     };
 
@@ -160,8 +169,37 @@ fn landing_input(
     }
 
     landed_context.planet_name = Some(planet.0.clone());
-    landed_writer.write(PlayerLandedOnPlanet {
-        planet: planet.0.clone(),
-    });
-    state.set(PlayState::Landed);
+
+    // Start scale-down animation; actual state transition happens in
+    // finish_player_landing when the animation completes.
+    let full_size = image_size(sprite, &images);
+    commands.entity(entity).insert((
+        PlayerLanding,
+        ScalingDown {
+            timer: Timer::from_seconds(PLANET_ANIM_DURATION, TimerMode::Once),
+            full_size,
+        },
+    ));
+}
+
+/// When the player's landing scale-down animation finishes, transition to Landed.
+fn finish_player_landing(
+    mut reader: MessageReader<ScaleDownFinished>,
+    player_q: Query<(), (With<Player>, With<PlayerLanding>)>,
+    mut commands: Commands,
+    mut state: ResMut<NextState<PlayState>>,
+    mut landed_writer: MessageWriter<PlayerLandedOnPlanet>,
+    landed_context: Res<LandedContext>,
+) {
+    for event in reader.read() {
+        if player_q.get(event.entity).is_ok() {
+            commands.entity(event.entity).remove::<PlayerLanding>();
+            if let Some(ref planet_name) = landed_context.planet_name {
+                landed_writer.write(PlayerLandedOnPlanet {
+                    planet: planet_name.clone(),
+                });
+            }
+            state.set(PlayState::Landed);
+        }
+    }
 }

@@ -7,6 +7,8 @@ use std::collections::HashSet;
 use crate::{
     CurrentStarSystem, PlayState, TravelContext, TravelPhase,
     game_save::PlayerGameState, item_universe::ItemUniverse,
+    missions::{MissionCatalog, MissionLog},
+    missions::types::{MissionStatus, Objective},
 };
 
 // Canvas is larger than the visible viewport — the ScrollArea lets the user pan around.
@@ -39,11 +41,18 @@ pub fn jump_ui_plugin(app: &mut App) {
         );
 }
 
-fn toggle_jump_ui(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<JumpUiOpen>) {
+fn toggle_jump_ui(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<JumpUiOpen>,
+    mut virtual_time: ResMut<Time<Virtual>>,
+) {
     if keyboard.just_pressed(KeyCode::KeyJ) {
         state.open = !state.open;
         if state.open {
             state.scroll_initialized = false;
+            virtual_time.pause();
+        } else {
+            virtual_time.unpause();
         }
     }
 }
@@ -88,6 +97,24 @@ fn jump_flash(mut egui_contexts: EguiContexts, travel_ctx: Res<TravelContext>) {
         });
 }
 
+/// Return the target star system for an objective, looking up the planet's
+/// system when necessary.
+fn objective_system<'a>(obj: &'a Objective, item_universe: &'a ItemUniverse) -> Option<&'a str> {
+    match obj {
+        Objective::TravelToSystem { system } => Some(system.as_str()),
+        Objective::CollectPickups { system, .. } => Some(system.as_str()),
+        Objective::DestroyShips { system, .. } => Some(system.as_str()),
+        Objective::LandOnPlanet { planet } => {
+            // Scan all systems for the planet.
+            item_universe
+                .star_systems
+                .iter()
+                .find(|(_, sys)| sys.planets.contains_key(planet))
+                .map(|(name, _)| name.as_str())
+        }
+    }
+}
+
 fn jump_ui(
     mut egui_contexts: EguiContexts,
     mut ui_state: ResMut<JumpUiOpen>,
@@ -95,7 +122,10 @@ fn jump_ui(
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
     game_state: Res<PlayerGameState>,
+    mission_log: Res<MissionLog>,
+    mission_catalog: Res<MissionCatalog>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
+    mut virtual_time: ResMut<Time<Virtual>>,
 ) {
     if !ui_state.open {
         return;
@@ -123,14 +153,28 @@ fn jump_ui(
         }
     }
 
-    // Size the map window to fit just inside the primary window.
+    // Systems with active mission objectives.
+    let mission_systems: HashSet<String> = mission_log
+        .statuses
+        .iter()
+        .filter_map(|(id, status)| {
+            if let MissionStatus::Active(_) = status {
+                let def = mission_catalog.defs.get(id)?;
+                objective_system(&def.objective, &item_universe)
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Size the map window proportionally to the primary window.
     let (win_w, win_h) = primary_window
         .single()
         .map(|w| (w.width(), w.height()))
         .unwrap_or((1280.0, 720.0));
-    let margin = 40.0;
-    let map_w = (win_w - margin).max(400.0);
-    let map_h = (win_h - margin).max(300.0);
+    let map_w = (win_w * 0.85).max(400.0);
+    let map_h = (win_h * 0.70).max(250.0);
 
     let mut jump_target: Option<String> = None;
     let mut close = false;
@@ -260,12 +304,51 @@ fn jump_ui(
                         );
                     }
 
+                    // Red mission marker for systems with active objectives.
+                    if mission_systems.contains(sys_name) {
+                        let half = NODE_R + 6.0;
+                        let rect = egui::Rect::from_center_size(
+                            pos,
+                            egui::Vec2::splat(half * 2.0),
+                        );
+                        painter.rect_stroke(
+                            rect,
+                            1.0,
+                            Stroke::new(1.5, Color32::from_rgb(220, 50, 50)),
+                            egui::StrokeKind::Outside,
+                        );
+                    }
+
                     if is_jumpable {
                         if let Some(cp) = click_pos {
                             if (cp - pos).length() < CLICK_R {
                                 jump_target = Some(sys_name.clone());
                             }
                         }
+                    }
+                }
+
+                // Mission markers for hidden (unvisited & undiscovered) systems —
+                // show a dim red diamond at the map position so the player has a
+                // directional hint when scrolling.
+                for sys_name in &mission_systems {
+                    if visited.contains(sys_name) || discovered.contains(sys_name) {
+                        continue; // already drawn above
+                    }
+                    if let Some(sys) = item_universe.star_systems.get(sys_name) {
+                        let pos = to_screen(sys.map_position);
+                        let s = NODE_R + 4.0;
+                        let points = vec![
+                            Pos2::new(pos.x, pos.y - s),
+                            Pos2::new(pos.x + s, pos.y),
+                            Pos2::new(pos.x, pos.y + s),
+                            Pos2::new(pos.x - s, pos.y),
+                        ];
+                        painter.add(egui::Shape::convex_polygon(
+                            points,
+                            Color32::from_rgba_unmultiplied(180, 40, 40, 120),
+                            Stroke::new(1.0, Color32::from_rgb(200, 60, 60)),
+                        ));
                     }
                 }
             });
@@ -279,10 +362,11 @@ fn jump_ui(
     if let Some(dest) = jump_target {
         travel_ctx.destination = dest;
         travel_ctx.phase = TravelPhase::Accelerating;
-        // The state transition to Traveling happens in accelerate_for_jump once JUMP_SPEED is reached.
         ui_state.open = false;
+        virtual_time.unpause();
     }
     if close {
         ui_state.open = false;
+        virtual_time.unpause();
     }
 }

@@ -18,7 +18,7 @@ fighter:
   thrust: 120.0
   max_speed: 200.0
   torque: 35.0
-  max_health: 40
+  max_health: 75
   cargo_space: 4
   item_space: 4
   base_weapons:
@@ -33,9 +33,9 @@ asteroid_miner:
   thrust: 70.0
   max_speed: 70.0
   torque: 12.0
-  max_health: 90
+  max_health: 120
   cargo_space: 25
-  item_space: 6
+  item_space: 16
   base_weapons:
     laser: [1, null]
   radius: 20.0
@@ -67,9 +67,9 @@ corvette:
   thrust: 160.0
   max_speed: 280.0
   torque: 50.0
-  max_health: 35
+  max_health: 90
   cargo_space: 2
-  item_space: 3
+  item_space: 20
   base_weapons:
     proton_beam: [1, null]
   radius: 9.0
@@ -83,7 +83,7 @@ frigate:
   torque: 18.0
   max_health: 220
   cargo_space: 12
-  item_space: 17
+  item_space: 30
   base_weapons:
     proton_beam: [2, null]
     ir_missile: [1, 4]
@@ -189,6 +189,7 @@ fed_missile_cruiser:
   base_weapons:
     proton_beam: [1, null]
     ir_missile: [3, 12]
+    fighter_bay: [1, 3]
   radius: 35.0
   price: 150000
   sprite_path: sprites/ships/fed_missile_cruiser.png
@@ -241,6 +242,7 @@ rebel_frigate:
   base_weapons:
     laser: [3, null]
     javelin: [1, 24]
+    rebel_fighter_bay: [1, 3]
   radius: 28.0
   price: 100000
   sprite_path: sprites/ships/rebel_frigate.png
@@ -259,7 +261,7 @@ pirate_corvette:
   cargo_space: 4
   item_space: 4
   base_weapons:
-    laser: [2, null]
+    pirate_laser: [2, null]
   radius: 11.0
   price: 16000
   sprite_path: sprites/ships/pirate_corvette.png
@@ -274,10 +276,82 @@ pirate_missile_boat:
   cargo_space: 6
   item_space: 24
   base_weapons:
-    laser: [1, null]
-    ir_missile: [2, 8]
+    pirate_laser: [1, null]
+    goose: [2, 8]
   radius: 18.0
   price: 40000
   sprite_path: sprites/ships/pirate_missile_boat.png
+  personality: Fighter
+  faction: Pirate
+
+# ── Carriers ─────────────────────────────────────────────────────────────────
+
+surplus_carrier:
+  thrust: 55.0
+  max_speed: 75.0
+  torque: 5.0
+  max_health: 300
+  cargo_space: 18
+  item_space: 58
+  base_weapons:
+    laser_turret: [1, null]
+    fighter_bay: [1, 3]
+  radius: 45.0
+  price: 200000
+  sprite_path: sprites/ships/surplus_carrier.png
+  personality: Fighter
+  required_unlocks: [carrier_license]
+
+fed_carrier:
+  thrust: 40.0
+  max_speed: 55.0
+  torque: 4.0
+  max_health: 500
+  cargo_space: 15
+  item_space: 60
+  base_weapons:
+    proton_beam_turret: [2, null]
+    ir_missile: [2, 8]
+    fed_fighter_bay: [1, 4]
+  radius: 60.0
+  price: 300000
+  sprite_path: sprites/ships/fed_carrier.png
+  personality: Fighter
+  faction: Federation
+  required_unlocks: [carrier_license]
+
+rebel_carrier:
+  thrust: 50.0
+  max_speed: 65.0
+  torque: 5.0
+  max_health: 400
+  cargo_space: 12
+  item_space: 55
+  base_weapons:
+    laser_turret: [3, null]
+    javelin: [2, 16]
+    rebel_fighter_bay: [1, 4]
+  radius: 55.0
+  price: 250000
+  sprite_path: sprites/ships/rebel_carrier.png
+  personality: Fighter
+  faction: Rebel
+  required_unlocks: [rebel_carrier_license]
+
+pirate_carrier:
+  thrust: 35.0
+  max_speed: 50.0
+  torque: 3.5
+  max_health: 350
+  cargo_space: 20
+  item_space: 48
+  base_weapons:
+    laser_turret: [2, null]
+    goose: [1, 6]
+    space_mine: [1, 6]
+    pirate_corvette_bay: [1, 3]
+  radius: 50.0
+  price: 180000
+  sprite_path: sprites/ships/pirate_carrier.png
   personality: Fighter
   faction: Pirate

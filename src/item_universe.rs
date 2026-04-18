@@ -28,6 +28,11 @@ pub struct ItemUniverse {
     pub outfitter_items: HashMap<String, OutfitterItem>,
     // A map from my faction, to which factions engage me
     pub enemies: HashMap<String, Vec<String>>,
+    /// Cross-faction ally declarations for reward sharing.
+    /// Key = faction, Value = list of factions whose rewards are shared.
+    /// Same-faction sharing is always implicit; this adds cross-faction allies.
+    #[serde(default)]
+    pub allies: HashMap<String, Vec<String>>,
     // The starting ship for the player:
     pub starting_ship: String,
     // The starting system for the player:

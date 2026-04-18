@@ -12,6 +12,8 @@ fn test_universe() -> ItemUniverse {
         PlanetData {
             display_name: String::new(),
             planet_type: String::new(),
+            uncolonized: false,
+            faction: String::new(),
             sprite_handle: Default::default(),
             location: Vec2::ZERO,
             description: String::new(),
@@ -30,6 +32,8 @@ fn test_universe() -> ItemUniverse {
         PlanetData {
             display_name: String::new(),
             planet_type: String::new(),
+            uncolonized: false,
+            faction: String::new(),
             sprite_handle: Default::default(),
             location: Vec2::new(1000.0, 0.0),
             description: String::new(),
@@ -110,6 +114,7 @@ fn test_universe() -> ItemUniverse {
         planet_has_ammo_for: HashMap::new(),
         asteroid_field_expected_value: HashMap::new(),
         ship_credit_scale: HashMap::new(),
+        allies: HashMap::new(),
     };
     iu.compute_global_averages();
     iu.compute_trade_maps();

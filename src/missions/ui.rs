@@ -5,15 +5,13 @@ use super::events::*;
 use super::log::{MissionCatalog, MissionLog, MissionOffers};
 use super::types::*;
 
-/// Render the Missions tab inside the planet UI window.
-pub fn render_missions_tab(
+/// Render the list of active missions into any `egui::Ui`.
+/// When `abandon` is provided, an Abandon button is shown for each mission.
+pub fn render_active_missions(
     ui: &mut egui::Ui,
     log: &MissionLog,
-    offers: &MissionOffers,
     catalog: &MissionCatalog,
-    player_free_cargo: u16,
-    accept: &mut MessageWriter<AcceptMission>,
-    abandon: &mut MessageWriter<AbandonMission>,
+    mut abandon: Option<&mut MessageWriter<AbandonMission>>,
 ) {
     ui.heading("Active");
     let mut any_active = false;
@@ -26,8 +24,10 @@ pub fn render_missions_tab(
             ui.group(|ui| {
                 ui.label(&def.briefing);
                 ui.label(format_objective(&def.objective, progress));
-                if ui.button("Abandon").clicked() {
-                    abandon.write(AbandonMission(id.clone()));
+                if let Some(ref mut w) = abandon {
+                    if ui.button("Abandon").clicked() {
+                        w.write(AbandonMission(id.clone()));
+                    }
                 }
             });
         }
@@ -35,6 +35,19 @@ pub fn render_missions_tab(
     if !any_active {
         ui.label("(No active missions.)");
     }
+}
+
+/// Render the Missions tab inside the planet UI window.
+pub fn render_missions_tab(
+    ui: &mut egui::Ui,
+    log: &MissionLog,
+    offers: &MissionOffers,
+    catalog: &MissionCatalog,
+    player_free_cargo: u16,
+    accept: &mut MessageWriter<AcceptMission>,
+    abandon: &mut MessageWriter<AbandonMission>,
+) {
+    render_active_missions(ui, log, catalog, Some(abandon));
 
     ui.separator();
     ui.heading("Available");
@@ -185,9 +198,70 @@ pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionTo
     }
 }
 
+#[derive(Resource, Default)]
+pub struct MissionLogOpen(pub bool);
+
+fn toggle_mission_log(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<MissionLogOpen>,
+    mut virtual_time: ResMut<Time<Virtual>>,
+) {
+    if keyboard.just_pressed(KeyCode::KeyI) {
+        state.0 = !state.0;
+        if state.0 {
+            virtual_time.pause();
+        } else {
+            virtual_time.unpause();
+        }
+    }
+}
+
+fn render_mission_log(
+    mut egui_contexts: EguiContexts,
+    mut state: ResMut<MissionLogOpen>,
+    log: Res<MissionLog>,
+    catalog: Res<MissionCatalog>,
+    mut abandon: MessageWriter<AbandonMission>,
+    mut virtual_time: ResMut<Time<Virtual>>,
+) {
+    if !state.0 {
+        return;
+    }
+    let Ok(ctx) = egui_contexts.ctx_mut() else {
+        return;
+    };
+    let mut close = false;
+    egui::Window::new("Mission Log")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(ctx, |ui| {
+            render_active_missions(ui, &log, &catalog, Some(&mut abandon));
+            ui.separator();
+            if ui.button("Close  [I]").clicked() {
+                close = true;
+            }
+        });
+    if close {
+        state.0 = false;
+        virtual_time.unpause();
+    }
+}
+
 pub fn missions_ui_plugin(app: &mut App) {
     use bevy_egui::EguiPrimaryContextPass;
-    app.add_systems(EguiPrimaryContextPass, render_toast);
+    app.init_resource::<MissionLogOpen>()
+        .add_systems(
+            Update,
+            toggle_mission_log.run_if(in_state(crate::PlayState::Flying)),
+        )
+        .add_systems(
+            EguiPrimaryContextPass,
+            (
+                render_toast,
+                render_mission_log.run_if(in_state(crate::PlayState::Flying)),
+            ),
+        );
 }
 
 pub fn drain_completion_toasts(

@@ -1,3 +1,27 @@
+pirate_laser:
+    name: pirate_laser
+    lifetime: 0.4
+    speed: 420.0
+    cooldown: 3.5
+    color: [1.0, 0.3, 0.0]
+    damage: 3
+    display_name: "Pirate Laser"
+    sound_path: sounds/weapons/laser.ogg
+goose:
+    name: goose
+    lifetime: 5.0
+    speed: 120.0
+    cooldown: 8.0
+    color: [0.9, 0.4, 0.1]
+    damage: 20
+    guided: true
+    turn_rate: 2.0
+    sprite_path: sprites/ships/goose.png
+    sound_path: sounds/weapons/ir_missile.ogg
+    display_name: "Goose Missile"
+    ammo:
+        !Ammo:
+            space: 2
 laser:
     name: laser
     lifetime: 0.5
@@ -17,6 +41,26 @@ proton_beam:
     color: [0.2, 0.4, 1.0]
     damage: 10
     aimable_arc: 5
+    sound_path: sounds/weapons/proton_beam.ogg
+laser_turret:
+    name: laser_turret
+    lifetime: 0.5
+    speed: 500.0
+    cooldown: 3.0
+    color: [1.0, 0.0, 0.0]
+    damage: 5
+    aimable_arc: 180
+    display_name: "Laser Turret"
+    sound_path: sounds/weapons/laser.ogg
+proton_beam_turret:
+    name: proton_beam_turret
+    lifetime: 1.25
+    speed: 400.0
+    cooldown: 4.0
+    color: [0.2, 0.4, 1.0]
+    damage: 10
+    aimable_arc: 180
+    display_name: "Proton Beam Turret"
     sound_path: sounds/weapons/proton_beam.ogg
 ir_missile:
     name: ir_missile
@@ -61,3 +105,63 @@ space_mine:
     ammo:
         !Ammo:
             space: 2
+fighter_bay:
+    name: fighter_bay
+    lifetime: 0.0
+    speed: 0.0
+    cooldown: 8.0
+    color: [0.0, 0.8, 0.3]
+    damage: 0
+    display_name: "Fighter Bay"
+    carrier_bay: fighter
+    ammo:
+        !Ammo:
+            space: 4
+fed_fighter_bay:
+    name: fed_fighter_bay
+    lifetime: 0.0
+    speed: 0.0
+    cooldown: 8.0
+    color: [0.0, 0.8, 0.3]
+    damage: 0
+    display_name: "Patrol Bay"
+    carrier_bay: fed_patrol
+    ammo:
+        !Ammo:
+            space: 4
+shuttle_bay:
+    name: shuttle_bay
+    lifetime: 0.0
+    speed: 0.0
+    cooldown: 8.0
+    color: [0.3, 0.6, 0.8]
+    damage: 0
+    display_name: "Shuttle Bay"
+    carrier_bay: shuttle
+    ammo:
+        !Ammo:
+            space: 3
+rebel_fighter_bay:
+    name: rebel_fighter_bay
+    lifetime: 0.0
+    speed: 0.0
+    cooldown: 8.0
+    color: [0.8, 0.3, 0.0]
+    damage: 0
+    display_name: "Rebel Fighter Bay"
+    carrier_bay: rebel_fighter
+    ammo:
+        !Ammo:
+            space: 4
+pirate_corvette_bay:
+    name: pirate_corvette_bay
+    lifetime: 0.0
+    speed: 0.0
+    cooldown: 10.0
+    color: [0.6, 0.0, 0.0]
+    damage: 0
+    display_name: "Pirate Corvette Bay"
+    carrier_bay: pirate_corvette
+    ammo:
+        !Ammo:
+            space: 3

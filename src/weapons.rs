@@ -1,3 +1,4 @@
+use crate::carrier::SpawnEscort;
 use crate::item_universe::ItemUniverse;
 use crate::ship::Ship;
 use crate::utils::safe_despawn;
@@ -208,6 +209,10 @@ pub struct Weapon {
     pub sound_handle: Option<Handle<AudioSource>>,
     #[serde(default)]
     pub display_name: String,
+    /// If set, this weapon spawns an escort ship of this type instead of a
+    /// projectile (carrier bay).
+    #[serde(default)]
+    pub carrier_bay: Option<String>,
 }
 
 #[derive(Component)]
@@ -243,10 +248,12 @@ impl WeaponSystem {
         item_universe: &ItemUniverse,
     ) -> Option<Self> {
         let Some(weapon) = item_universe.weapons.get(weapon_type) else {
+            warn!("Weapon type '{weapon_type}' not found in weapons.yaml");
             return None;
         };
         // Lookup the space used:
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
+            warn!("Weapon type '{weapon_type}' not found in outfitter_items.yaml");
             return None;
         };
         if number == 0 {
@@ -272,9 +279,11 @@ impl WeaponSystem {
 pub fn weapon_fire(
     mut reader: MessageReader<FireCommand>,
     mut writer: MessageWriter<WeaponFired>,
+    mut escort_writer: MessageWriter<SpawnEscort>,
     mut commands: Commands,
     mut ships: Query<(
         &Transform,
+        &Position,
         &mut Ship,
         &LinearVelocity,
         Option<&mut TracerSlots>,
@@ -283,7 +292,7 @@ pub fn weapon_fire(
     item_universe: Res<ItemUniverse>,
 ) {
     for cmd in reader.read() {
-        let Ok((ship_transform, mut ship, linear_velocity, tracer_slots)) = ships.get_mut(cmd.ship)
+        let Ok((ship_transform, ship_pos, mut ship, linear_velocity, tracer_slots)) = ships.get_mut(cmd.ship)
         else {
             continue;
         };
@@ -303,6 +312,27 @@ pub fn weapon_fire(
         let Some(weapon) = item_universe.weapons.get(&cmd.weapon_type) else {
             continue;
         };
+
+        // ── Carrier bay: spawn an escort ship instead of a projectile ───
+        if let Some(ref escort_type) = weapon.carrier_bay {
+            specific.ammo_quantity = specific.ammo_quantity.map(|x| x - 1);
+            // Use physics Position (not rendering Transform) so the escort
+            // spawns at the carrier's actual location, not last frame's visual.
+            let forward = (ship_transform.rotation * Vec3::Y).xy();
+            let spawn_pos = ship_pos.0 + forward * (ship_radius + 30.0);
+            escort_writer.write(SpawnEscort {
+                mother: cmd.ship,
+                ship_type: escort_type.clone(),
+                weapon_type: cmd.weapon_type.clone(),
+                position: spawn_pos,
+            });
+            writer.write(WeaponFired {
+                ship: cmd.ship,
+                weapon_type: cmd.weapon_type.clone(),
+            });
+            continue;
+        }
+
         let aim_offset = if weapon.aimable_arc > 0.0 {
             cmd.target
                 .and_then(|e| {

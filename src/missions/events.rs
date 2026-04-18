@@ -23,9 +23,12 @@ pub struct PickupCollected {
 }
 
 /// Emitted from `ship.rs::apply_damage` when any AI ship's health reaches 0.
+/// Carries a snapshot of the `MissionTarget` (if any) so the objective can be
+/// advanced even after the entity is despawned.
 #[derive(Event, Message, Clone, Debug)]
 pub struct ShipDestroyed {
     pub entity: Entity,
+    pub mission_target: Option<super::MissionTarget>,
 }
 
 // ── Mission-specific events (UI <-> logic) ─────────────────────────────────

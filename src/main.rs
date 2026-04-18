@@ -2,6 +2,7 @@ use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
 mod asteroids;
+mod carrier;
 mod comms;
 mod experiments;
 mod explosions;
@@ -25,6 +26,7 @@ mod rl_collection;
 mod rl_obs;
 mod sfx;
 mod ship;
+mod ship_anim;
 mod starfield;
 mod utils;
 mod value_fn;
@@ -218,6 +220,7 @@ fn main() {
             jump_ui_plugin,
             StarfieldPlugin::default(),
             HudPlugin::default(),
+            comms::comms_plugin,
             main_menu_plugin,
             missions_ui_plugin,
             sfx::sfx_plugin,
@@ -233,7 +236,8 @@ fn main() {
         weapons_plugin,
         item_universe_plugin,
         planets_plugin,
-        comms::comms_plugin,
+        ship_anim::ship_anim_plugin,
+        carrier::carrier_plugin,
         asteroid_plugin,
         ai_ship_bundle,
         RLCollectionPlugin {
@@ -282,6 +286,10 @@ fn main() {
             Update,
             (keyboard_input, collision_system, accelerate_for_jump)
                 .run_if(in_state(PlayState::Flying)),
+        )
+        .add_systems(
+            Update,
+            escape_to_menu.run_if(in_state(PlayState::Flying)),
         );
     }
 
@@ -434,6 +442,18 @@ fn set_arrival_velocity(
         .remove::<(Sensor, Mass, AngularInertia)>();
 }
 
+/// Save the game and return to the main menu when Escape is pressed.
+fn escape_to_menu(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    game_state: Res<game_save::PlayerGameState>,
+    mut next_state: ResMut<NextState<PlayState>>,
+) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        game_state.save();
+        next_state.set(PlayState::MainMenu);
+    }
+}
+
 /// Compute (turn, thrust) to fly toward the ballistic intercept point of the
 /// player's current target. Returns `None` if there's no target, no target
 /// position available, or no firing solution exists.
@@ -509,7 +529,10 @@ fn keyboard_input(
         ),
         With<Player>,
     >,
-    enemy_ships_query: Query<(Entity, &Transform), (With<Ship>, Without<Player>)>,
+    enemy_ships_query: Query<
+        (Entity, &Transform, Option<&missions::MissionTarget>, &ship::ShipHostility),
+        (With<Ship>, Without<Player>),
+    >,
     asteroids_query: Query<(Entity, &Transform), With<Asteroid>>,
     pickups_query: Query<(Entity, &Transform), With<pickups::Pickup>>,
     planets_query: Query<(Entity, &Transform, &planets::Planet)>,
@@ -526,7 +549,7 @@ fn keyboard_input(
 
     // Tab: cycle through ship targets
     if keyboard_input.just_pressed(KeyCode::Tab) {
-        let mut entities: Vec<Entity> = enemy_ships_query.iter().map(|(e, _)| e).collect();
+        let mut entities: Vec<Entity> = enemy_ships_query.iter().map(|(e, ..)| e).collect();
         entities.sort();
         if !entities.is_empty() {
             let current = match &player_ship.nav_target {
@@ -545,14 +568,42 @@ fn keyboard_input(
         }
     }
 
-    // R: select nearest ship target
+    // R: target nearest mission target → nearest hostile → nearest ship
     if keyboard_input.just_pressed(KeyCode::KeyR) {
         let player_pos = player_tf.translation.truncate();
-        let nearest = enemy_ships_query
-            .iter()
-            .map(|(e, tf)| (e, (tf.translation.truncate() - player_pos).length()))
-            .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal));
-        if let Some((entity, _)) = nearest {
+        let nearest_by = |iter: Box<dyn Iterator<Item = Entity> + '_>| -> Option<Entity> {
+            iter.filter_map(|e| {
+                enemy_ships_query
+                    .get(e)
+                    .ok()
+                    .map(|(_, tf, ..)| (e, (tf.translation.truncate() - player_pos).length()))
+            })
+            .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(e, _)| e)
+        };
+
+        // 1. Nearest mission target
+        let target = nearest_by(Box::new(
+            enemy_ships_query
+                .iter()
+                .filter(|(_, _, mt, _)| mt.is_some())
+                .map(|(e, ..)| e),
+        ))
+        // 2. Nearest hostile ship
+        .or_else(|| {
+            nearest_by(Box::new(
+                enemy_ships_query
+                    .iter()
+                    .filter(|(_, _, _, hostility)| player_ship.should_engage(hostility))
+                    .map(|(e, ..)| e),
+            ))
+        })
+        // 3. Nearest any ship
+        .or_else(|| {
+            nearest_by(Box::new(enemy_ships_query.iter().map(|(e, ..)| e)))
+        });
+
+        if let Some(entity) = target {
             player_ship.nav_target = Some(Target::Ship(entity));
         }
     }
@@ -710,7 +761,7 @@ fn collision_system(
     mut score_hit_writer: MessageWriter<ScoreHit>,
     mut commands: Commands,
     asteroids: Query<(), With<Asteroid>>,
-    ships: Query<&Ship>,
+    ships: Query<&Ship, Without<Sensor>>,
     weapons: Query<&Projectile>,
     item_universe: Res<ItemUniverse>,
 ) {

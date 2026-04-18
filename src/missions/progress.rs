@@ -47,10 +47,7 @@ pub fn update_locked_to_available(
             }
             match def.offer {
                 OfferKind::Auto => {
-                    log.set(
-                        &id,
-                        MissionStatus::Active(initial_progress(&def.objective)),
-                    );
+                    log.set(&id, MissionStatus::Active(initial_progress(&def.objective)));
                     started.write(MissionStarted(id.clone()));
                     changed = true;
                 }
@@ -108,10 +105,7 @@ pub fn apply_start_effects(
                 } => {
                     *ship.cargo.entry(commodity.clone()).or_insert(0) += quantity;
                     if *reserved {
-                        *ship
-                            .reserved_cargo
-                            .entry(commodity.clone())
-                            .or_insert(0) += quantity;
+                        *ship.reserved_cargo.entry(commodity.clone()).or_insert(0) += quantity;
                     }
                 }
             }
@@ -227,7 +221,15 @@ pub fn advance_travel_objectives(
             }
             if let Objective::TravelToSystem { system: target } = &def.objective {
                 if target == system {
-                    resolve_active_mission(id, def, ship, &unlocks, &mut log, &mut completed, &mut failed);
+                    resolve_active_mission(
+                        id,
+                        def,
+                        ship,
+                        &unlocks,
+                        &mut log,
+                        &mut completed,
+                        &mut failed,
+                    );
                 }
             }
         }
@@ -251,7 +253,15 @@ pub fn advance_land_objectives(
             }
             if let Objective::LandOnPlanet { planet: target } = &def.objective {
                 if target == planet {
-                    resolve_active_mission(id, def, ship, &unlocks, &mut log, &mut completed, &mut failed);
+                    resolve_active_mission(
+                        id,
+                        def,
+                        ship,
+                        &unlocks,
+                        &mut log,
+                        &mut completed,
+                        &mut failed,
+                    );
                 }
             }
         }
@@ -290,7 +300,15 @@ pub fn advance_collect_objectives(
             };
             let new_have = progress.collected.saturating_add(event.quantity);
             if new_have >= *quantity {
-                resolve_active_mission(&id, def, ship, &unlocks, &mut log, &mut completed, &mut failed);
+                resolve_active_mission(
+                    &id,
+                    def,
+                    ship,
+                    &unlocks,
+                    &mut log,
+                    &mut completed,
+                    &mut failed,
+                );
             } else {
                 log.set(
                     &id,
@@ -323,7 +341,9 @@ pub fn finalize_failures(
         for effect in &def.start_effects {
             match effect {
                 StartEffect::LoadCargo {
-                    commodity, quantity, ..
+                    commodity,
+                    quantity,
+                    ..
                 } => {
                     let held = ship.cargo.get(commodity).copied().unwrap_or(0);
                     let remove = held.min(*quantity);
@@ -448,11 +468,10 @@ pub fn spawn_mission_targets(
             continue;
         }
         // How many targets already exist for this mission?
-        let alive = existing
-            .iter()
-            .filter(|mt| mt.mission_id == *id)
-            .count() as u8;
-        let need = (*count).saturating_sub(progress.destroyed).saturating_sub(alive);
+        let alive = existing.iter().filter(|mt| mt.mission_id == *id).count() as u8;
+        let need = (*count)
+            .saturating_sub(progress.destroyed)
+            .saturating_sub(alive);
         if need == 0 {
             continue;
         }
@@ -499,7 +518,6 @@ pub fn spawn_mission_targets(
 /// collect-requirement is met), resolve the mission.
 pub fn advance_destroy_objectives(
     mut reader: MessageReader<ShipDestroyed>,
-    targets: Query<&MissionTarget>,
     mut log: ResMut<MissionLog>,
     catalog: Res<MissionCatalog>,
     unlocks: Res<PlayerUnlocks>,
@@ -508,8 +526,8 @@ pub fn advance_destroy_objectives(
     mut failed: MessageWriter<MissionFailed>,
 ) {
     let ship = player_q.single().ok();
-    for ShipDestroyed { entity } in reader.read() {
-        let Ok(mt) = targets.get(*entity) else {
+    for event in reader.read() {
+        let Some(mt) = &event.mission_target else {
             continue;
         };
         let id = &mt.mission_id;
@@ -529,7 +547,15 @@ pub fn advance_destroy_objectives(
             None => true,
         };
         if kills_done && collect_done {
-            resolve_active_mission(id, def, ship, &unlocks, &mut log, &mut completed, &mut failed);
+            resolve_active_mission(
+                id,
+                def,
+                ship,
+                &unlocks,
+                &mut log,
+                &mut completed,
+                &mut failed,
+            );
         } else {
             log.set(
                 id,
@@ -579,7 +605,15 @@ pub fn advance_destroy_collect(
             let kills_done = progress.destroyed >= *count;
             let collect_done = new_collected >= req.quantity;
             if kills_done && collect_done {
-                resolve_active_mission(&id, def, ship, &unlocks, &mut log, &mut completed, &mut failed);
+                resolve_active_mission(
+                    &id,
+                    def,
+                    ship,
+                    &unlocks,
+                    &mut log,
+                    &mut completed,
+                    &mut failed,
+                );
             } else {
                 log.set(
                     &id,
@@ -604,6 +638,7 @@ pub fn force_target_player(
     };
     for (mt, mut ship) in &mut targets {
         if mt.always_targets_player {
+            ship.nav_target = Some(Target::Ship(player_entity));
             ship.weapons_target = Some(Target::Ship(player_entity));
         }
     }
@@ -646,10 +681,9 @@ pub fn roll_offers_on_land(
             }
             match &def.offer {
                 OfferKind::Tab { weight } => tab.push((id.clone(), *weight)),
-                OfferKind::Bar {
-                    planet: p,
-                    weight,
-                } if p == planet => bar.push((id.clone(), *weight)),
+                OfferKind::Bar { planet: p, weight } if p == planet => {
+                    bar.push((id.clone(), *weight))
+                }
                 _ => {}
             }
         }
@@ -661,13 +695,7 @@ pub fn roll_offers_on_land(
             if !preconditions_met(template.preconditions(), &log, &unlocks) {
                 continue;
             }
-            let chain = instantiate_template(
-                template_id,
-                template,
-                planet,
-                &universe,
-                &mut rng,
-            );
+            let chain = instantiate_template(template_id, template, planet, &universe, &mut rng);
             if chain.is_empty() {
                 continue;
             }
@@ -810,8 +838,7 @@ fn instantiate_template(
             // from asteroid fields across the universe, dedup by pair.
             let mut candidates: Vec<(String, String, String)> = Vec::new();
             for (sys_id, sys) in &universe.star_systems {
-                let mut seen: std::collections::HashSet<&String> =
-                    std::collections::HashSet::new();
+                let mut seen: std::collections::HashSet<&String> = std::collections::HashSet::new();
                 for field in &sys.astroid_fields {
                     for commodity in field.commodities.keys() {
                         if seen.insert(commodity) {
@@ -871,16 +898,11 @@ fn instantiate_template(
             // Pick a (system, commodity) from asteroid fields.
             let mut candidates: Vec<(String, String, String)> = Vec::new();
             for (sys_id, sys) in &universe.star_systems {
-                let mut seen: std::collections::HashSet<&String> =
-                    std::collections::HashSet::new();
+                let mut seen: std::collections::HashSet<&String> = std::collections::HashSet::new();
                 for field in &sys.astroid_fields {
                     for c in field.commodities.keys() {
                         if seen.insert(c) {
-                            candidates.push((
-                                sys_id.clone(),
-                                sys.display_name.clone(),
-                                c.clone(),
-                            ));
+                            candidates.push((sys_id.clone(), sys.display_name.clone(), c.clone()));
                         }
                     }
                 }
@@ -988,8 +1010,7 @@ fn instantiate_template(
                 return Vec::new();
             }
             let (sys_id, sys_display) = systems[rng.gen_range(0..systems.len())].clone();
-            let ship_type =
-                ship_type_pool[rng.gen_range(0..ship_type_pool.len())].clone();
+            let ship_type = ship_type_pool[rng.gen_range(0..ship_type_pool.len())].clone();
             let count = rand_in_range_u8(rng, *count_range);
             let pay = rand_in_range_i128(rng, *pay_range);
 
@@ -1026,29 +1047,17 @@ fn instantiate_template(
 
 fn rand_in_range_u8(rng: &mut impl Rng, range: (u8, u8)) -> u8 {
     let (lo, hi) = (range.0.min(range.1), range.0.max(range.1));
-    if lo == hi {
-        lo
-    } else {
-        rng.gen_range(lo..=hi)
-    }
+    if lo == hi { lo } else { rng.gen_range(lo..=hi) }
 }
 
 fn rand_in_range_u16(rng: &mut impl Rng, range: (u16, u16)) -> u16 {
     let (lo, hi) = (range.0.min(range.1), range.0.max(range.1));
-    if lo == hi {
-        lo
-    } else {
-        rng.gen_range(lo..=hi)
-    }
+    if lo == hi { lo } else { rng.gen_range(lo..=hi) }
 }
 
 fn rand_in_range_i128(rng: &mut impl Rng, range: (i64, i64)) -> i64 {
     let (lo, hi) = (range.0.min(range.1), range.0.max(range.1));
-    if lo == hi {
-        lo
-    } else {
-        rng.gen_range(lo..=hi)
-    }
+    if lo == hi { lo } else { rng.gen_range(lo..=hi) }
 }
 
 fn gen_id(template_id: &str, rng: &mut impl Rng) -> String {

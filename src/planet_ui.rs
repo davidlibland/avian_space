@@ -5,7 +5,8 @@ use crate::missions::{
 use crate::{
     CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse, ship::BuyShip,
 };
-use avian2d::prelude::{LinearVelocity, Physics, PhysicsTime, Position};
+use crate::ship_anim::{self, ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp, image_size};
+use avian2d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
@@ -333,11 +334,16 @@ pub fn planet_ui(
 /// and zero its velocity. Only runs when planet_name is set (i.e. coming from a landing,
 /// not from a jump).
 fn place_player_at_launch_site(
+    mut commands: Commands,
     mut landed: ResMut<LandedContext>,
-    mut player_query: Query<(&mut Transform, &mut Position, &mut LinearVelocity), With<Player>>,
+    mut player_query: Query<
+        (Entity, &mut Transform, &mut Position, &mut LinearVelocity, &mut Sprite),
+        With<Player>,
+    >,
     mut camera_query: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
+    images: Res<Assets<Image>>,
 ) {
     let Some(planet_name) = landed.planet_name.take() else {
         return;
@@ -349,20 +355,30 @@ fn place_player_at_launch_site(
         return;
     };
     let pos = planet_data.location;
-    if let Ok((mut tf, mut physics_pos, mut vel)) = player_query.single_mut() {
+    if let Ok((entity, mut tf, mut physics_pos, mut vel, mut sprite)) =
+        player_query.single_mut()
+    {
         tf.translation = pos.extend(tf.translation.z);
         physics_pos.0 = pos;
         vel.0 = Vec2::ZERO;
         if let Ok(mut cam_tf) = camera_query.single_mut() {
             cam_tf.translation = pos.extend(cam_tf.translation.z);
         }
+
+        // Start take-off scale-up animation.
+        let full_size = image_size(&sprite, &images);
+        sprite.custom_size = Some(full_size * ANIM_MIN_SCALE);
+        commands.entity(entity).insert(ScalingUp {
+            timer: Timer::from_seconds(PLANET_ANIM_DURATION, TimerMode::Once),
+            full_size,
+        });
     }
 }
 
-pub fn pause_physics(mut time: ResMut<Time<Physics>>) {
+pub fn pause_physics(mut time: ResMut<Time<Virtual>>) {
     time.pause();
 }
 
-pub fn unpause_physics(mut time: ResMut<Time<Physics>>) {
+pub fn unpause_physics(mut time: ResMut<Time<Virtual>>) {
     time.unpause();
 }

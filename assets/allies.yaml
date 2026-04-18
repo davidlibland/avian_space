@@ -1,0 +1,10 @@
+# Cross-faction ally declarations for reward sharing.
+# Same-faction sharing is always implicit; this declares additional factions
+# whose rewards are mixed into the observer's reward signal.
+#
+# "Federation: [Merchant]" means Federation ships get a fraction of nearby
+# Merchant ships' rewards — incentivising Fighters to protect traders.
+Federation: ["Merchant"]
+Rebel: ["Merchant"]
+Merchant: []
+Pirate: []

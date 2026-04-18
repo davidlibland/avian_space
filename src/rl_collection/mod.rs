@@ -466,10 +466,12 @@ fn repeat_actions(
             turn,
             reverse: 0.0,
         });
-        // Weapons fire at the weapons_target, not the nav_target.
+        // Weapons fire only when the ship has a valid weapons_target.
+        // This prevents firing at neutral/friendly ships that happen to be
+        // in front because they're the nav_target.
         let wep_entity = ship.weapons_target.as_ref().map(|t| t.get_entity());
         let wep_is_ship = matches!(ship.weapons_target, Some(Target::Ship(_)));
-        if fire_primary == 1 {
+        if fire_primary == 1 && wep_entity.is_some() {
             for weapon_type in ship.weapon_systems.primary.keys() {
                 fire_writer.write(FireCommand {
                     ship: entity,
@@ -478,7 +480,7 @@ fn repeat_actions(
                 });
             }
         }
-        if fire_secondary == 1 {
+        if fire_secondary == 1 && wep_entity.is_some() {
             if let Some((wtype, _)) = rl_obs::select_secondary_weapon(ship, wep_is_ship) {
                 fire_writer.write(FireCommand {
                     ship: entity,
@@ -662,9 +664,28 @@ fn build_all_observations(
         // there are few and they're critical for navigation/trading.
         // Note: static RigidBody entities may only have Transform, not Position.
         let all_transforms: &Query<&Transform> = all_transforms;
+        let system_data = item_universe.star_systems.get(system_name);
         let mut planets: Vec<(Entity, f32)> = planet_query
             .iter()
-            .filter_map(|(e, _)| {
+            .filter_map(|(e, planet)| {
+                // Skip planets the ship can't land on (uncolonized or hostile).
+                if let Some(sd) = system_data {
+                    if let Some(pd) = sd.planets.get(&planet.0) {
+                        if pd.uncolonized {
+                            return None;
+                        }
+                        if !pd.faction.is_empty()
+                            && _self_hostility
+                                .0
+                                .get(&pd.faction)
+                                .copied()
+                                .unwrap_or(0.0)
+                                > 0.0
+                        {
+                            return None;
+                        }
+                    }
+                }
                 // Try Position first (dynamic bodies), fall back to Transform.
                 let planet_pos = all_positions
                     .get(e)
@@ -1304,6 +1325,63 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
 /// entry in `decisions` (same order). Used as the executed action in `RLControl`
 /// mode. In `BehavioralCloning` mode (or when `None`) the rule-based action
 /// from `compute_ai_action` is used for both execution and BC labels.
+/// Mix visible allies' rewards into `rewards`, scaled by personality.
+///
+/// Only considers entities in `slot_targets` that are `Target::Ship` AND
+/// appear in `reward_snapshots` (i.e. are RLAgent ships) AND whose faction
+/// is in the observer's `allies` list.  `health_raw` is excluded (diagnostic
+/// channel with weight 0).
+pub(crate) fn mix_ally_rewards(
+    rewards: &mut [f32; crate::consts::N_REWARD_TYPES],
+    slot_targets: &[Option<Target>],
+    allies: &[String],
+    self_entity: Entity,
+    personality: &Personality,
+    reward_snapshots: &std::collections::HashMap<
+        Entity,
+        ([f32; crate::consts::N_REWARD_TYPES], Option<String>),
+    >,
+) {
+    use crate::consts::*;
+    let alpha = match personality {
+        Personality::Fighter => REWARD_SHARING_FIGHTER,
+        Personality::Miner => REWARD_SHARING_MINER,
+        Personality::Trader => REWARD_SHARING_TRADER,
+    };
+    if alpha <= 0.0 || allies.is_empty() {
+        return;
+    }
+    let mut ally_reward_sum = [0.0_f32; N_REWARD_TYPES];
+    let mut ally_count = 0u32;
+    for target in slot_targets.iter() {
+        if let Some(Target::Ship(ally_e)) = target {
+            if *ally_e == self_entity {
+                continue;
+            }
+            if let Some((ally_rewards, ally_faction)) = reward_snapshots.get(ally_e) {
+                let is_ally = ally_faction
+                    .as_ref()
+                    .map(|f| allies.contains(f))
+                    .unwrap_or(false);
+                if is_ally {
+                    for ch in 0..N_REWARD_TYPES {
+                        if ch != REWARD_HEALTH_RAW {
+                            ally_reward_sum[ch] += ally_rewards[ch];
+                        }
+                    }
+                    ally_count += 1;
+                }
+            }
+        }
+    }
+    if ally_count > 0 {
+        let scale = alpha / ally_count as f32;
+        for ch in 0..N_REWARD_TYPES {
+            rewards[ch] += scale * ally_reward_sum[ch];
+        }
+    }
+}
+
 fn store_obs_actions(
     decisions: &[(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)],
     model_actions: Option<&[(DiscreteAction, f32)]>,
@@ -1327,6 +1405,17 @@ fn store_obs_actions(
     bc_sender: &BCSender,
     mode: &AIPlayMode,
 ) {
+    // Pre-pass: snapshot accumulated_rewards and faction for every RLAgent.
+    // This must happen before the mutable loop so reward sharing can read
+    // allies' rewards without borrow conflicts.
+    let reward_snapshots: std::collections::HashMap<Entity, ([f32; crate::consts::N_REWARD_TYPES], Option<String>)> =
+        agents
+            .iter()
+            .map(|(e, agent, s, _, _, _, _, _, _, _, _)| {
+                (e, (agent.accumulated_rewards, s.data.faction.clone()))
+            })
+            .collect();
+
     for (idx, (entity, obs, proj_obs, slot_targets)) in decisions.iter().enumerate() {
         let Ok((
             _,
@@ -1445,6 +1534,28 @@ fn store_obs_actions(
             }
             let wep_idx = executed_action.5 as usize;
             if wep_idx < model::N_OBJECTS {
+                // DEBUG: check if the model selected a non-engageable ship as wep target
+                if let Some(ref tgt) = slot_targets[wep_idx] {
+                    use rl_obs::*;
+                    let sb = SELF_SIZE + wep_idx * SLOT_SIZE;
+                    let is_ship_v = obs[sb + SLOT_TYPE_ONEHOT];
+                    let hostile_v = obs[sb + SLOT_TYPE_SPECIFIC + SHIP_IS_HOSTILE];
+                    let engage_v = obs[sb + SLOT_TYPE_SPECIFIC + SHIP_SHOULD_ENGAGE];
+                    if is_ship_v > 0.5 && hostile_v < 0.5 && engage_v < 0.5 {
+                        eprintln!(
+                            "[BUG] {:?} selected NEUTRAL ship {:?} as wep_target! \
+                             slot={wep_idx} is_hostile={hostile_v:.1} should_engage={engage_v:.1} \
+                             bucket_type={}",
+                            entity,
+                            tgt.get_entity(),
+                            if wep_idx < rl_obs::K_PLANETS { "planet" }
+                            else if wep_idx < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS { "asteroid" }
+                            else if wep_idx < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS + rl_obs::K_HOSTILE_SHIPS { "hostile_ship" }
+                            else if wep_idx < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS + rl_obs::K_HOSTILE_SHIPS + rl_obs::K_FRIENDLY_SHIPS { "friendly_ship" }
+                            else { "pickup" },
+                        );
+                    }
+                }
                 ship.weapons_target = slot_targets[wep_idx].clone();
             } else {
                 ship.weapons_target = None;
@@ -1475,6 +1586,17 @@ fn store_obs_actions(
             let mut rewards = agent.accumulated_rewards;
             rewards[crate::consts::REWARD_HEALTH_RAW] =
                 ship.health as f32 / ship.data.max_health.max(1) as f32;
+
+            // Reward sharing: mix visible allies' rewards.
+            mix_ally_rewards(
+                &mut rewards,
+                slot_targets,
+                &ship.allies,
+                *entity,
+                &agent.personality,
+                &reward_snapshots,
+            );
+
             let transition = Transition {
                 obs: last_obs,
                 proj_obs: last_proj.clone(),
@@ -1547,3 +1669,8 @@ pub fn build_rl_ship_jumped(_entity: Entity, agent: &RLAgent) -> RLShipJumped {
         transitions: agent.segment_buffer.clone(),
     }
 }
+
+
+#[cfg(test)]
+#[path = "../tests/rl_collection_tests.rs"]
+mod tests;

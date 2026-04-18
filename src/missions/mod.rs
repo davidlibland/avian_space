@@ -17,7 +17,9 @@ pub mod ui;
 pub use events::*;
 pub use log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
 pub use types::{MissionDef, MissionTarget, MissionTemplate};
-pub use ui::{missions_ui_plugin, render_bar_tab, render_missions_tab, MissionToast};
+pub use ui::{
+    missions_ui_plugin, render_active_missions, render_bar_tab, render_missions_tab, MissionToast,
+};
 
 pub fn missions_plugin(app: &mut App) {
     app.init_resource::<MissionLog>()

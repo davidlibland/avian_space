@@ -156,3 +156,15 @@ pub const PICKUP_REWARD_TRADER: f32 = 0.1;
 /// trained policy mask it out as a nav target so the ship has to engage
 /// elsewhere before returning.
 pub const LANDING_COOLDOWN_SECS: f32 = 30.0;
+
+// ---------------------------------------------------------------------------
+// Reward sharing (ally rewards mixed into individual reward)
+// ---------------------------------------------------------------------------
+
+/// Fraction of visible allies' rewards mixed into a Fighter's own reward.
+/// Fighters benefit most — they need to learn to protect allies and cooperate.
+pub const REWARD_SHARING_FIGHTER: f32 = 0.3;
+/// Fraction for Miners (minimal — stay focused on mining).
+pub const REWARD_SHARING_MINER: f32 = 0.05;
+/// Fraction for Traders (minimal — stay focused on trading).
+pub const REWARD_SHARING_TRADER: f32 = 0.05;

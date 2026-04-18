@@ -123,6 +123,7 @@ impl PlayerGameState {
             reserved_cargo: save.reserved_cargo.clone(),
             recent_landings: HashMap::new(),
             credits: save.credits,
+            allies: Vec::new(),
             nav_target: None,
             weapons_target: None,
             weapon_systems: Default::default(),
