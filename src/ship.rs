@@ -762,7 +762,8 @@ fn apply_damage(
             continue;
         };
         // Health fraction BEFORE damage — used to scale the damage penalty.
-        let h_frac_before = ship.health as f32 / ship.data.max_health.max(1) as f32;
+        let health_before = ship.health;
+        let h_frac_before = health_before as f32 / ship.data.max_health.max(1) as f32;
         ship.health = (ship.health - event.damage as i32).max(0);
         distressed.level = 1.0;
 
@@ -778,7 +779,9 @@ fn apply_damage(
                 reward_type: crate::consts::REWARD_DAMAGE,
             });
         }
-        if ship.health == 0 {
+        // Only trigger death on the first hit that kills — ignore subsequent
+        // damage events for an entity already at 0 HP in the same frame.
+        if ship.health == 0 && health_before > 0 {
             let location = transform.translation.xy();
             if player_ships.contains(event.entity) {
                 // During training mode, we don't math the player die
