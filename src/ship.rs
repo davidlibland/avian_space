@@ -374,7 +374,7 @@ impl Ship {
                 (quantity_added as i128) * price;
         }
     }
-    pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &Res<ItemUniverse>) {
+    pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
@@ -409,7 +409,7 @@ impl Ship {
             }
         }
     }
-    pub fn sell_weapon(&mut self, weapon_type: &str, item_universe: &Res<ItemUniverse>) {
+    pub fn sell_weapon(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };

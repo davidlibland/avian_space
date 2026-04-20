@@ -1,4 +1,4 @@
-use crate::game_save::{PlayerGameState, list_saves, load_save};
+use crate::game_save::{Gender, PlayerGameState, list_saves, load_save};
 use crate::item_universe::ItemUniverse;
 use crate::{CurrentStarSystem, PlayState};
 use bevy::prelude::*;
@@ -9,6 +9,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 #[derive(Resource, Default)]
 struct MainMenuState {
     new_pilot_name: String,
+    new_pilot_gender: Gender,
     saves: Vec<String>,
 }
 
@@ -48,10 +49,20 @@ fn main_menu_ui(
                             .hint_text("Pilot name…")
                             .desired_width(200.0),
                     );
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Gender:");
+                    ui.radio_value(&mut menu_state.new_pilot_gender, Gender::Boy, "Boy");
+                    ui.radio_value(&mut menu_state.new_pilot_gender, Gender::Girl, "Girl");
+                });
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
                     let ready = !menu_state.new_pilot_name.trim().is_empty();
                     if ui.add_enabled(ready, egui::Button::new("Create")).clicked() {
                         let name = menu_state.new_pilot_name.trim().to_string();
-                        *game_state = PlayerGameState::new_pilot(&name, &item_universe);
+                        let gender = menu_state.new_pilot_gender;
+                        *game_state =
+                            PlayerGameState::new_pilot(&name, gender, &item_universe);
                         current_system.0 = game_state.current_star_system.clone();
                         next_state.set(PlayState::Flying);
                     }

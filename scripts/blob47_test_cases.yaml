@@ -1,0 +1,282 @@
+# Blob-47 auto-tile test cases — Boris The Brave's standard ordering.
+# https://www.boristhebrave.com/2013/07/14/tileset-roundup/
+#
+# Each case is a 3x3 ASCII grid where '#' = same terrain as center,
+# '.' = different terrain. The center cell is always '#' (the tile
+# being evaluated). Rows are top-to-bottom: TL T TR / L X R / BL B BR.
+#
+# Bit assignments:  TL=1  T=2  TR=4  L=8  R=16  BL=32  B=64  BR=128
+#
+# After diagonal reduction (clear TL if !T or !L, etc.), the reduced
+# mask indexes into the sorted-order pick_tile table to give the atlas
+# column.
+
+# --- No neighbours ---
+- name: isolated
+  grid: |
+    ...
+    .#.
+    ...
+  mask: 0
+  column: 0
+
+# --- Single cardinal ---
+- name: top_only
+  grid: |
+    .#.
+    .#.
+    ...
+  mask: 2
+  column: 1
+
+- name: left_only
+  grid: |
+    ...
+    ##.
+    ...
+  mask: 8
+  column: 2
+
+- name: right_only
+  grid: |
+    ...
+    .##
+    ...
+  mask: 16
+  column: 5
+
+- name: bottom_only
+  grid: |
+    ...
+    .#.
+    .#.
+  mask: 64
+  column: 13
+
+# --- Two cardinals ---
+- name: top_left
+  grid: |
+    .#.
+    ##.
+    ...
+  mask: 10
+  column: 3
+
+- name: top_left_with_diag
+  grid: |
+    ##.
+    ##.
+    ...
+  mask: 11
+  column: 4
+
+- name: top_right
+  grid: |
+    .#.
+    .##
+    ...
+  mask: 18
+  column: 6
+
+- name: top_right_with_diag
+  grid: |
+    .##
+    .##
+    ...
+  mask: 22
+  column: 7
+
+- name: horizontal_corridor
+  grid: |
+    ...
+    ###
+    ...
+  mask: 24
+  column: 8
+
+- name: vertical_corridor
+  grid: |
+    .#.
+    .#.
+    .#.
+  mask: 66
+  column: 14
+
+- name: bottom_left
+  grid: |
+    ...
+    ##.
+    .#.
+  mask: 72
+  column: 15
+
+- name: bottom_left_with_diag
+  grid: |
+    ...
+    ##.
+    ##.
+  mask: 104
+  column: 26
+
+- name: bottom_right
+  grid: |
+    ...
+    .##
+    .#.
+  mask: 80
+  column: 18
+
+- name: bottom_right_with_diag
+  grid: |
+    ...
+    .##
+    .##
+  mask: 208
+  column: 34
+
+# --- Three cardinals ---
+- name: T_open_bottom
+  grid: |
+    .#.
+    ###
+    ...
+  mask: 26
+  column: 9
+
+- name: T_open_bottom_with_TL
+  grid: |
+    ##.
+    ###
+    ...
+  mask: 27
+  column: 10
+
+- name: T_open_bottom_with_TR
+  grid: |
+    .##
+    ###
+    ...
+  mask: 30
+  column: 11
+
+- name: T_open_bottom_all_diags
+  grid: |
+    ###
+    ###
+    ...
+  mask: 31
+  column: 12
+
+- name: T_open_right
+  grid: |
+    .#.
+    ##.
+    .#.
+  mask: 74
+  column: 16
+
+- name: T_open_left
+  grid: |
+    .#.
+    .##
+    .#.
+  mask: 82
+  column: 19
+
+- name: T_open_top
+  grid: |
+    ...
+    ###
+    .#.
+  mask: 88
+  column: 21
+
+# --- All four cardinals (cross + diagonal variants) ---
+- name: cross_no_diags
+  grid: |
+    .#.
+    ###
+    .#.
+  mask: 90
+  column: 22
+
+- name: cross_TL
+  grid: |
+    ##.
+    ###
+    .#.
+  mask: 91
+  column: 23
+
+- name: cross_TR
+  grid: |
+    .##
+    ###
+    .#.
+  mask: 94
+  column: 24
+
+- name: cross_TL_TR
+  grid: |
+    ###
+    ###
+    .#.
+  mask: 95
+  column: 25
+
+- name: cross_BL
+  grid: |
+    .#.
+    ###
+    ##.
+  mask: 122
+  column: 30
+
+- name: cross_BR
+  grid: |
+    .#.
+    ###
+    .##
+  mask: 218
+  column: 38
+
+- name: T_open_top_BL_BR
+  grid: |
+    ...
+    ###
+    ###
+  mask: 248
+  column: 42
+
+- name: cross_all_diags
+  grid: |
+    ###
+    ###
+    ###
+  mask: 255
+  column: 46
+
+# --- Diagonal reduction: diagonal ignored when adjacent cardinal absent ---
+- name: diag_ignored_no_cardinals
+  grid: |
+    #.#
+    .#.
+    #.#
+  mask: 0
+  column: 0
+
+- name: diag_ignored_top_only
+  grid: |
+    ##.
+    .#.
+    ...
+  mask: 2
+  column: 1
+
+- name: diag_kept_top_left
+  grid: |
+    ##.
+    ##.
+    ...
+  mask: 11
+  column: 4

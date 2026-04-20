@@ -8,11 +8,33 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+// ── Gender ───────────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Gender {
+    #[default]
+    Boy,
+    Girl,
+}
+
+impl Gender {
+    /// Sprite directory name under `assets/people/`.
+    pub fn sprite_dir(&self) -> &'static str {
+        match self {
+            Gender::Boy => "boy",
+            Gender::Girl => "girl",
+        }
+    }
+}
+
 // ── Serialisable save ────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct PilotSave {
     pub pilot_name: String,
+    #[serde(default)]
+    pub gender: Gender,
     pub current_star_system: String,
     pub ship_type: String,
     pub health: i32,
@@ -42,6 +64,7 @@ pub struct PilotSave {
 #[derive(Resource, Clone, Default)]
 pub struct PlayerGameState {
     pub pilot_name: String,
+    pub gender: Gender,
     pub current_star_system: String,
     pub player_ship: Ship,
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
@@ -52,7 +75,7 @@ pub struct PlayerGameState {
 }
 
 impl PlayerGameState {
-    pub fn new_pilot(name: &str, item_universe: &ItemUniverse) -> Self {
+    pub fn new_pilot(name: &str, gender: Gender, item_universe: &ItemUniverse) -> Self {
         let starting_ship = item_universe.starting_ship.clone();
         let starting_ship_data = item_universe
             .ships
@@ -62,6 +85,7 @@ impl PlayerGameState {
         visited_systems.insert(item_universe.starting_system.clone());
         Self {
             pilot_name: name.to_string(),
+            gender,
             current_star_system: item_universe.starting_system.clone(),
             player_ship: Ship::from_ship_data(starting_ship_data, &starting_ship),
             weapon_loadout: HashMap::new(),
@@ -133,6 +157,7 @@ impl PlayerGameState {
         visited_systems.insert(save.current_star_system.clone());
         Self {
             pilot_name: save.pilot_name,
+            gender: save.gender,
             current_star_system: save.current_star_system,
             player_ship: ship,
             weapon_loadout: save.weapon_loadout,
@@ -150,6 +175,7 @@ impl PlayerGameState {
     fn to_save(&self) -> PilotSave {
         PilotSave {
             pilot_name: self.pilot_name.clone(),
+            gender: self.gender,
             current_star_system: self.current_star_system.clone(),
             ship_type: self.player_ship.ship_type.clone(),
             health: self.player_ship.health,

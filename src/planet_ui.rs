@@ -1,11 +1,7 @@
-use crate::missions::{
-    AbandonMission, AcceptMission, DeclineMission, MissionCatalog, MissionLog, MissionOffers,
-    PlayerUnlocks, render_bar_tab, render_missions_tab,
-};
 use crate::{
     CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse, ship::BuyShip,
 };
-use crate::ship_anim::{self, ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp, image_size};
+use crate::ship_anim::{ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp, image_size};
 use avian2d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
@@ -15,7 +11,7 @@ pub fn planet_ui_plugin(app: &mut App) {
         .insert_resource(LandedContext::default())
         .add_systems(
             EguiPrimaryContextPass,
-            planet_ui.run_if(in_state(PlayState::Landed)),
+            ship_pad_ui.run_if(in_state(PlayState::Landed)),
         )
         .add_systems(OnEnter(PlayState::Landed), pause_physics)
         .add_systems(OnExit(PlayState::Landed), unpause_physics)
@@ -26,308 +22,62 @@ pub fn planet_ui_plugin(app: &mut App) {
 pub struct LandedContext {
     /// Name of the planet the player is docked at.
     pub planet_name: Option<String>,
-    pub active_tab: PlanetTab,
 }
 
-#[derive(PartialEq, Default)]
-pub enum PlanetTab {
-    #[default]
-    Trade,
-    Shipyard,
-    Outfitter,
-    Bar,
-    Missions,
-}
-
-pub fn planet_ui(
+/// Ship-pad UI shown during `Landed` state — just Repair + Launch.
+///
+/// The full Trade/Outfitter/Shipyard/Bar/Missions UIs are now handled by
+/// [`crate::surface::surface_building_ui`] during the `Exploring` state.
+fn ship_pad_ui(
     mut egui_contexts: EguiContexts,
     mut state: ResMut<NextState<PlayState>>,
-    mut landed: ResMut<LandedContext>,
+    landed: Res<LandedContext>,
     mut player_query: Query<&mut Ship, With<Player>>,
-    mut buy_ship_writer: MessageWriter<BuyShip>,
-    current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
-    mission_log: Res<MissionLog>,
-    mission_offers: Res<MissionOffers>,
-    mission_catalog: Res<MissionCatalog>,
-    unlocks: Res<PlayerUnlocks>,
-    mut accept_writer: MessageWriter<AcceptMission>,
-    mut decline_writer: MessageWriter<DeclineMission>,
-    mut abandon_writer: MessageWriter<AbandonMission>,
+    current_system: Res<CurrentStarSystem>,
 ) {
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
-    let Some(current_system) = item_universe.star_systems.get(&current_system.0) else {
-        return;
-    };
-    let Some(planet_name) = &landed.planet_name.clone() else {
-        return;
-    };
-    let Some(planet) = current_system.planets.get(planet_name) else {
-        return;
-    };
-    egui::Window::new(format!("Docked on {}", planet.display_name)).show(ctx, |ui| {
-        ui.label(&planet.description);
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut landed.active_tab, PlanetTab::Trade, "Trade");
-            ui.selectable_value(&mut landed.active_tab, PlanetTab::Shipyard, "Shipyard");
-            ui.selectable_value(&mut landed.active_tab, PlanetTab::Outfitter, "Outfitter");
-            ui.selectable_value(&mut landed.active_tab, PlanetTab::Bar, "Bar");
-            ui.selectable_value(&mut landed.active_tab, PlanetTab::Missions, "Missions");
+    let display_name = landed
+        .planet_name
+        .as_ref()
+        .and_then(|name| {
+            item_universe
+                .star_systems
+                .get(&current_system.0)
+                .and_then(|sys| sys.planets.get(name))
+                .map(|pd| pd.display_name.as_str())
+        })
+        .unwrap_or("Unknown");
+
+    egui::Window::new(format!("Ship Pad - {}", display_name))
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .show(ctx, |ui| {
+            if let Ok(ship) = player_query.single() {
+                ui.label(format!(
+                    "Hull: {}/{}",
+                    ship.health, ship.data.max_health
+                ));
+                ui.label(format!("Credits: {}", ship.credits));
+            }
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button("Repair").clicked() {
+                    if let Ok(mut ship) = player_query.single_mut() {
+                        ship.health = ship.data.max_health;
+                    }
+                }
+                if ui.button("Launch").clicked() {
+                    state.set(PlayState::Flying);
+                }
+                if ui.button("Back to Surface").clicked() {
+                    state.set(PlayState::Exploring);
+                }
+            });
         });
-        ui.separator();
-        ui.horizontal(|ui| {
-            if ui.button("Repair").clicked() {
-                if let Ok(mut ship) = player_query.single_mut() {
-                    ship.health = ship.data.max_health;
-                }
-            }
-            if ui.button("Launch").clicked() {
-                state.set(PlayState::Flying);
-            }
-        });
-        match landed.active_tab {
-            PlanetTab::Trade => {
-                if let Ok(mut ship) = player_query.single_mut() {
-                    ui.label(format!("Credits: {}", ship.credits));
-                    ui.separator();
-                    egui::Grid::new("trade_grid")
-                        .num_columns(6)
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.strong("Commodity");
-                            ui.strong("Price");
-                            ui.strong("Market");
-                            ui.strong("Cargo");
-                            ui.label("");
-                            ui.label("");
-                            ui.end_row();
-                            let mut commodities: Vec<(String, i128)> = planet
-                                .commodities
-                                .iter()
-                                .map(|(k, v)| (k.clone(), *v))
-                                .collect();
-                            commodities.sort_by(|a, b| a.0.cmp(&b.0));
-                            for (commodity, price) in commodities {
-                                let qty = *ship.cargo.get(&commodity).unwrap_or(&0);
-                                let commodity_display = item_universe
-                                    .commodities
-                                    .get(&commodity)
-                                    .map(|c| c.display_name.as_str())
-                                    .unwrap_or(&commodity);
-                                ui.label(commodity_display);
-                                ui.label(price.to_string());
-                                // Price indicator vs. global average
-                                if let Some(&avg) =
-                                    item_universe.global_average_price.get(&commodity)
-                                {
-                                    let ratio = price as f64 / avg;
-                                    let (label, color) = if ratio < 0.6 {
-                                        ("very cheap", egui::Color32::from_rgb(50, 220, 50))
-                                    } else if ratio < 0.85 {
-                                        ("cheap", egui::Color32::from_rgb(150, 230, 150))
-                                    } else if ratio > 1.6 {
-                                        ("very expensive", egui::Color32::from_rgb(230, 60, 60))
-                                    } else if ratio > 1.15 {
-                                        ("expensive", egui::Color32::from_rgb(230, 160, 100))
-                                    } else {
-                                        ("average", egui::Color32::GRAY)
-                                    };
-                                    ui.colored_label(color, label);
-                                } else {
-                                    ui.label("-");
-                                }
-                                ui.label(qty.to_string());
-                                if ui.button("Buy").clicked() {
-                                    ship.buy_cargo(&commodity, 1, price);
-                                }
-                                if ui.button("Sell").clicked() {
-                                    ship.sell_cargo(&commodity, 1, price);
-                                }
-                                ui.end_row();
-                            }
-                        });
-                }
-            }
-            PlanetTab::Outfitter => {
-                if let Ok(mut ship) = player_query.single_mut() {
-                    ui.label(format!("Credits: {}", ship.credits));
-                    ui.label(format!(
-                        "Free space: {}/{}",
-                        ship.remaining_item_space(),
-                        ship.data.item_space
-                    ));
-                    ui.separator();
-                    egui::Grid::new("outfitter_grid")
-                        .num_columns(6)
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.strong("Item");
-                            ui.strong("Price");
-                            ui.strong("Space");
-                            ui.strong("Owned");
-                            ui.label("");
-                            ui.label("");
-                            ui.strong("Ammo");
-                            ui.label("");
-                            ui.label("");
-                            ui.end_row();
-                            let items: Vec<(String, i128, u16)> = planet
-                                .outfitter
-                                .iter()
-                                .filter_map(|k| {
-                                    item_universe.outfitter_items.get(k).and_then(|item| {
-                                        let locked = item
-                                            .required_unlocks()
-                                            .iter()
-                                            .any(|u| !unlocks.has(u));
-                                        if locked {
-                                            None
-                                        } else {
-                                            Some((k.clone(), item.price(), item.space()))
-                                        }
-                                    })
-                                })
-                                .collect();
-                            for (item, price, space) in items {
-                                let (owned, ammo) = ship
-                                    .weapon_systems
-                                    .find_weapon(&item)
-                                    .map(|ws| (ws.number, ws.ammo_quantity))
-                                    .unwrap_or((0, None));
-                                let item_display = item_universe
-                                    .outfitter_items
-                                    .get(&item)
-                                    .map(|i| i.display_name())
-                                    .unwrap_or(&item);
-                                ui.label(item_display);
-                                ui.label(price.to_string());
-                                ui.label(space.to_string());
-                                ui.label(owned.to_string());
-                                if ui.button("Buy").clicked() {
-                                    ship.buy_weapon(&item, &item_universe);
-                                }
-                                if ui.button("Sell").clicked() {
-                                    ship.sell_weapon(&item, &item_universe);
-                                }
-                                ui.label(match ammo {
-                                    Some(qty) => qty.to_string(),
-                                    _ => "n/a".to_string(),
-                                });
-                                if ui.button("Buy").clicked() {
-                                    ship.buy_ammo(&item, &item_universe);
-                                }
-                                if ui.button("Sell").clicked() {
-                                    ship.sell_ammo(&item, &item_universe);
-                                }
-                                ui.end_row();
-                            }
-                        });
-                }
-            }
-            PlanetTab::Shipyard => {
-                let player_credits = player_query.single().map(|s| s.credits).unwrap_or(0);
-                let player_ship_type = player_query
-                    .single()
-                    .map(|s| s.ship_type.clone())
-                    .unwrap_or_default();
-                ui.label(format!("Credits: {}", player_credits));
-                ui.separator();
-                if planet.shipyard.is_empty() {
-                    ui.label("No ships for sale here.");
-                } else {
-                    egui::Grid::new("shipyard_grid")
-                        .num_columns(7)
-                        .striped(true)
-                        .show(ui, |ui| {
-                            ui.strong("Ship");
-                            ui.strong("Price");
-                            ui.strong("Speed");
-                            ui.strong("Health");
-                            ui.strong("Cargo");
-                            ui.strong("Slots");
-                            ui.label("");
-                            ui.end_row();
-                            let ships: Vec<(String, _)> = planet
-                                .shipyard
-                                .iter()
-                                .filter_map(|k| {
-                                    item_universe.ships.get(k).and_then(|d| {
-                                        let locked = d
-                                            .required_unlocks
-                                            .iter()
-                                            .any(|u| !unlocks.has(u));
-                                        if locked {
-                                            None
-                                        } else {
-                                            Some((k.clone(), d.clone()))
-                                        }
-                                    })
-                                })
-                                .collect();
-                            for (ship_type, data) in ships {
-                                let is_current = ship_type == player_ship_type;
-                                let can_afford = player_credits >= data.price;
-                                if is_current {
-                                    ui.strong(&data.display_name);
-                                } else {
-                                    ui.label(&data.display_name);
-                                }
-                                ui.label(format!("${}", data.price));
-                                ui.label(format!("{}", data.max_speed as i32));
-                                ui.label(format!("{}", data.max_health));
-                                ui.label(format!("{}", data.cargo_space));
-                                ui.label(format!("{}", data.item_space));
-                                if is_current {
-                                    ui.label("(current)");
-                                } else {
-                                    ui.add_enabled_ui(can_afford, |ui| {
-                                        if ui.button("Buy").clicked() {
-                                            buy_ship_writer.write(BuyShip {
-                                                ship_type: ship_type.clone(),
-                                            });
-                                        }
-                                    });
-                                }
-                                ui.end_row();
-                            }
-                        });
-                }
-            }
-            PlanetTab::Missions => {
-                let free = player_query
-                    .single()
-                    .map(|s| s.remaining_cargo_space())
-                    .unwrap_or(0);
-                render_missions_tab(
-                    ui,
-                    &mission_log,
-                    &mission_offers,
-                    &mission_catalog,
-                    free,
-                    &mut accept_writer,
-                    &mut abandon_writer,
-                );
-            }
-            PlanetTab::Bar => {
-                let free = player_query
-                    .single()
-                    .map(|s| s.remaining_cargo_space())
-                    .unwrap_or(0);
-                render_bar_tab(
-                    ui,
-                    planet_name,
-                    &mission_offers,
-                    &mission_catalog,
-                    free,
-                    &mut accept_writer,
-                    &mut decline_writer,
-                );
-            }
-        }
-    });
 }
 
 /// When re-entering Flying from a landing, place the ship at the planet's YAML position
@@ -381,4 +131,224 @@ pub fn pause_physics(mut time: ResMut<Time<Virtual>>) {
 
 pub fn unpause_physics(mut time: ResMut<Time<Virtual>>) {
     time.unpause();
+}
+
+// ---------------------------------------------------------------------------
+// Extracted tab renderers (reused by surface::surface_building_ui)
+// ---------------------------------------------------------------------------
+
+use crate::planets::PlanetData;
+use bevy_egui::egui;
+
+/// Render the Trade tab content into an egui Ui.
+pub fn render_trade_tab(
+    ui: &mut egui::Ui,
+    ship: &mut Ship,
+    planet: &PlanetData,
+    item_universe: &ItemUniverse,
+) {
+    ui.label(format!("Credits: {}", ship.credits));
+    ui.separator();
+    egui::Grid::new("trade_grid")
+        .num_columns(6)
+        .striped(true)
+        .show(ui, |ui| {
+            ui.strong("Commodity");
+            ui.strong("Price");
+            ui.strong("Market");
+            ui.strong("Cargo");
+            ui.label("");
+            ui.label("");
+            ui.end_row();
+            let mut commodities: Vec<(String, i128)> = planet
+                .commodities
+                .iter()
+                .map(|(k, v)| (k.clone(), *v))
+                .collect();
+            commodities.sort_by(|a, b| a.0.cmp(&b.0));
+            for (commodity, price) in commodities {
+                let qty = *ship.cargo.get(&commodity).unwrap_or(&0);
+                let commodity_display = item_universe
+                    .commodities
+                    .get(&commodity)
+                    .map(|c| c.display_name.as_str())
+                    .unwrap_or(&commodity);
+                ui.label(commodity_display);
+                ui.label(price.to_string());
+                if let Some(&avg) = item_universe.global_average_price.get(&commodity) {
+                    let ratio = price as f64 / avg;
+                    let (label, color) = if ratio < 0.6 {
+                        ("very cheap", egui::Color32::from_rgb(50, 220, 50))
+                    } else if ratio < 0.85 {
+                        ("cheap", egui::Color32::from_rgb(150, 230, 150))
+                    } else if ratio > 1.6 {
+                        ("very expensive", egui::Color32::from_rgb(230, 60, 60))
+                    } else if ratio > 1.15 {
+                        ("expensive", egui::Color32::from_rgb(230, 160, 100))
+                    } else {
+                        ("average", egui::Color32::GRAY)
+                    };
+                    ui.colored_label(color, label);
+                } else {
+                    ui.label("-");
+                }
+                ui.label(qty.to_string());
+                if ui.button("Buy").clicked() {
+                    ship.buy_cargo(&commodity, 1, price);
+                }
+                if ui.button("Sell").clicked() {
+                    ship.sell_cargo(&commodity, 1, price);
+                }
+                ui.end_row();
+            }
+        });
+}
+
+/// Render the Outfitter tab content into an egui Ui.
+pub fn render_outfitter_tab(
+    ui: &mut egui::Ui,
+    ship: &mut Ship,
+    planet: &PlanetData,
+    item_universe: &ItemUniverse,
+    unlocks: &crate::missions::PlayerUnlocks,
+) {
+    ui.label(format!("Credits: {}", ship.credits));
+    ui.label(format!(
+        "Free space: {}/{}",
+        ship.remaining_item_space(),
+        ship.data.item_space
+    ));
+    ui.separator();
+    egui::Grid::new("outfitter_grid")
+        .num_columns(6)
+        .striped(true)
+        .show(ui, |ui| {
+            ui.strong("Item");
+            ui.strong("Price");
+            ui.strong("Space");
+            ui.strong("Owned");
+            ui.label("");
+            ui.label("");
+            ui.strong("Ammo");
+            ui.label("");
+            ui.label("");
+            ui.end_row();
+            let items: Vec<(String, i128, u16)> = planet
+                .outfitter
+                .iter()
+                .filter_map(|k| {
+                    item_universe.outfitter_items.get(k).and_then(|item| {
+                        let locked = item.required_unlocks().iter().any(|u| !unlocks.has(u));
+                        if locked {
+                            None
+                        } else {
+                            Some((k.clone(), item.price(), item.space()))
+                        }
+                    })
+                })
+                .collect();
+            for (item, price, space) in items {
+                let (owned, ammo) = ship
+                    .weapon_systems
+                    .find_weapon(&item)
+                    .map(|ws| (ws.number, ws.ammo_quantity))
+                    .unwrap_or((0, None));
+                let item_display = item_universe
+                    .outfitter_items
+                    .get(&item)
+                    .map(|i| i.display_name())
+                    .unwrap_or(&item);
+                ui.label(item_display);
+                ui.label(price.to_string());
+                ui.label(space.to_string());
+                ui.label(owned.to_string());
+                if ui.button("Buy").clicked() {
+                    ship.buy_weapon(&item, &item_universe);
+                }
+                if ui.button("Sell").clicked() {
+                    ship.sell_weapon(&item, &item_universe);
+                }
+                ui.label(match ammo {
+                    Some(qty) => qty.to_string(),
+                    _ => "n/a".to_string(),
+                });
+                if ui.button("Buy").clicked() {
+                    ship.buy_ammo(&item, &item_universe);
+                }
+                if ui.button("Sell").clicked() {
+                    ship.sell_ammo(&item, &item_universe);
+                }
+                ui.end_row();
+            }
+        });
+}
+
+/// Render the Shipyard tab content into an egui Ui.
+pub fn render_shipyard_tab(
+    ui: &mut egui::Ui,
+    ship: &Ship,
+    planet: &PlanetData,
+    item_universe: &ItemUniverse,
+    unlocks: &crate::missions::PlayerUnlocks,
+    buy_ship_writer: &mut MessageWriter<BuyShip>,
+) {
+    ui.label(format!("Credits: {}", ship.credits));
+    ui.separator();
+    if planet.shipyard.is_empty() {
+        ui.label("No ships for sale here.");
+    } else {
+        egui::Grid::new("shipyard_grid")
+            .num_columns(7)
+            .striped(true)
+            .show(ui, |ui| {
+                ui.strong("Ship");
+                ui.strong("Price");
+                ui.strong("Speed");
+                ui.strong("Health");
+                ui.strong("Cargo");
+                ui.strong("Slots");
+                ui.label("");
+                ui.end_row();
+                let ships: Vec<(String, _)> = planet
+                    .shipyard
+                    .iter()
+                    .filter_map(|k| {
+                        item_universe.ships.get(k).and_then(|d| {
+                            let locked = d.required_unlocks.iter().any(|u| !unlocks.has(u));
+                            if locked {
+                                None
+                            } else {
+                                Some((k.clone(), d.clone()))
+                            }
+                        })
+                    })
+                    .collect();
+                for (ship_type, data) in ships {
+                    let is_current = ship_type == ship.ship_type;
+                    let can_afford = ship.credits >= data.price;
+                    if is_current {
+                        ui.strong(&data.display_name);
+                    } else {
+                        ui.label(&data.display_name);
+                    }
+                    ui.label(format!("${}", data.price));
+                    ui.label(format!("{}", data.max_speed as i32));
+                    ui.label(format!("{}", data.max_health));
+                    ui.label(format!("{}", data.cargo_space));
+                    ui.label(format!("{}", data.item_space));
+                    if is_current {
+                        ui.label("(current)");
+                    } else {
+                        ui.add_enabled_ui(can_afford, |ui| {
+                            if ui.button("Buy").clicked() {
+                                buy_ship_writer.write(BuyShip {
+                                    ship_type: ship_type.clone(),
+                                });
+                            }
+                        });
+                    }
+                    ui.end_row();
+                }
+            });
+    }
 }

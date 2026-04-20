@@ -6,6 +6,7 @@ mod carrier;
 mod comms;
 mod experiments;
 mod explosions;
+mod fbm;
 mod game_save;
 mod hud;
 mod item_universe;
@@ -27,17 +28,19 @@ mod rl_obs;
 mod sfx;
 mod ship;
 mod ship_anim;
+mod space;
 mod starfield;
+mod surface;
 mod utils;
 mod value_fn;
 mod weapons;
+mod world_assets;
 
 #[cfg(test)]
 #[path = "tests/policy_tests.rs"]
 mod policy_tests;
 
-use ai_ships::ai_ship_bundle;
-use asteroids::{Asteroid, ShatterAsteroid, asteroid_plugin, build_asteroid_field};
+use asteroids::{Asteroid, ShatterAsteroid, build_asteroid_field};
 use explosions::explosions_plugin;
 use game_save::game_save_plugin;
 use hud::HudPlugin;
@@ -45,14 +48,13 @@ use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
 use main_menu::main_menu_plugin;
 use missions::{PlayerEnteredSystem, missions_plugin, missions_ui_plugin};
-use pickups::pickup_plugin;
 use planet_ui::planet_ui_plugin;
 use planets::NearbyPlanet;
 use rl_collection::RLCollectionPlugin;
-use ship::{DamageShip, ScoreHit, Ship, ShipCommand, Target, ship_plugin};
+use ship::{DamageShip, ScoreHit, Ship, ShipCommand, Target};
 use starfield::StarfieldPlugin;
 use utils::safe_despawn;
-use weapons::{FireCommand, Projectile, weapon_lifetime, weapons_plugin};
+use weapons::{FireCommand, Projectile, weapon_lifetime};
 
 // Define your boundary
 const BOUNDS: f32 = 10000.0;
@@ -62,6 +64,9 @@ pub enum PlayState {
     #[default]
     MainMenu,
     Flying,
+    /// Player is walking around the planet surface (tilemap world).
+    Exploring,
+    /// Player is at the ship pad — egui Launch/Repair UI, physics paused.
     Landed,
     Traveling,
 }
@@ -74,6 +79,8 @@ pub enum GameLayer {
     Planet,
     Radar,
     Pickup,
+    /// Walkable planet surface: walker + building walls/doors.
+    Surface,
     #[default]
     Other,
 }
@@ -229,24 +236,20 @@ fn main() {
     // Explosions plugin registers messages used by game logic (asteroid shatter),
     // so it's needed even in headless mode (particles just won't render).
     app.add_plugins(explosions_plugin);
+    app.add_plugins(world_assets::WorldAssetsPlugin);
 
     // ── Game-logic plugins (always loaded) ───────────────────────────────
     app.add_plugins((
-        ship_plugin,
-        weapons_plugin,
-        item_universe_plugin,
-        planets_plugin,
-        ship_anim::ship_anim_plugin,
-        carrier::carrier_plugin,
-        asteroid_plugin,
-        ai_ship_bundle,
+        space::space_plugin,    // consolidated space-flight systems
+        item_universe_plugin,   // data loading (shared across states)
+        planets_plugin,         // planet spawning (shared)
         RLCollectionPlugin {
             mode: app_mode,
             fresh,
         },
-        pickup_plugin,
         game_save_plugin,
         missions_plugin,
+        surface::surface_plugin, // walkable planet surface
     ));
 
     // ── State and resources ──────────────────────────────────────────────

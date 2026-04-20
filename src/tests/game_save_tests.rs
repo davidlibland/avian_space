@@ -3,6 +3,7 @@ use super::*;
 fn sample_save() -> PilotSave {
     PilotSave {
         pilot_name: "Zara".to_string(),
+        gender: Gender::default(),
         current_star_system: "sol".to_string(),
         ship_type: "shuttle".to_string(),
         health: 75,
@@ -107,7 +108,7 @@ fn yaml_contains_expected_keys() {
 
 #[test]
 fn new_pilot_defaults() {
-    let state = PlayerGameState::new_pilot("Zara", &basic_item_universe());
+    let state = PlayerGameState::new_pilot("Zara", Gender::default(), &basic_item_universe());
     assert_eq!(state.pilot_name, "Zara");
     assert_eq!(state.current_star_system, "sol");
     assert_eq!(state.player_ship.credits, 10_000);
@@ -116,7 +117,7 @@ fn new_pilot_defaults() {
 
 #[test]
 fn to_save_captures_state() {
-    let mut state = PlayerGameState::new_pilot("Rex", &basic_item_universe());
+    let mut state = PlayerGameState::new_pilot("Rex", Gender::default(), &basic_item_universe());
     state.player_ship.health = 42;
     state.player_ship.credits = 7_777;
     state.player_ship.cargo.insert("ore".to_string(), 3);
@@ -161,7 +162,7 @@ fn from_save_target_is_none() {
 
 #[test]
 fn state_to_save_and_back() {
-    let mut original = PlayerGameState::new_pilot("Lyra", &basic_item_universe());
+    let mut original = PlayerGameState::new_pilot("Lyra", Gender::default(), &basic_item_universe());
     original.player_ship.health = 60;
     original.player_ship.credits = 12_345;
     original.player_ship.cargo.insert("fuel".to_string(), 4);

@@ -34,7 +34,11 @@ impl Plugin for ToroidalWrapPlugin {
         app.insert_resource(ToroidalWorld {
             size: self.world_size,
         })
-        .add_systems(Update, toroidal_wrap_system);
+        .add_systems(
+            Update,
+            toroidal_wrap_system
+                .run_if(not(in_state(crate::PlayState::Exploring))),
+        );
     }
 }
 
@@ -54,9 +58,16 @@ impl Plugin for StarfieldPlugin {
         )
         .add_systems(
             Update,
-            origin_shift_system.run_if(player_is_far_from_origin),
+            origin_shift_system.run_if(
+                player_is_far_from_origin
+                    .and(not(in_state(crate::PlayState::Exploring))),
+            ),
         )
-        .add_systems(FixedUpdate, camera_follow_player);
+        .add_systems(
+            FixedUpdate,
+            camera_follow_player
+                .run_if(not(in_state(crate::PlayState::Exploring))),
+        );
     }
 }
 

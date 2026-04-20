@@ -14,7 +14,32 @@
       "Bash(cargo doc:*)",
       "Bash(grep -r \"fn position_to_transform\\\\|fn sync_transform\\\\|translation.z\\\\|scale\" /Users/dlibland/.cargo/registry/src/*/avian2d-*/src/sync/)",
       "Bash(python3 scripts/monitor_training.py experiments/run_20/tb)",
-      "Bash(grep -n \"PlayerLandedOnPlanet\" /Users/dlibland/dev/avian_space/src/missions/*.rs)"
+      "Bash(grep -n \"PlayerLandedOnPlanet\" /Users/dlibland/dev/avian_space/src/missions/*.rs)",
+      "Bash(grep -r \"pub struct Camera2d\" ~/.cargo/registry/src/*/bevy_core_pipeline-*/src/)",
+      "Bash(grep -rn \"OrthographicProjection\" ~/.cargo/registry/src/*/bevy_render-0.18.*/src/)",
+      "Bash(grep -rn \"OrthographicProjection\" ~/.cargo/registry/src/*/bevy_*0.18*/src/)",
+      "Bash(grep -rn \"TileColor\\\\|fill_tilemap_rect_color\" ~/.cargo/registry/src/*/bevy_ecs_tilemap-0.18*/src/)",
+      "WebSearch",
+      "Bash(python3 -c \"from PIL import Image; print\\('Pillow available'\\)\")",
+      "Bash(python3 tools/combine_spritesheet.py)",
+      "Bash(pip3 install:*)",
+      "Bash(python3 -c \"import opensimplex; print\\('ok'\\)\")",
+      "Bash(python3 /Users/dlibland/dev/avian_space/scripts/tilegen.py --out-dir /Users/dlibland/dev/avian_space/assets/sprites/worlds --tile-size 32 --map-preview 64)",
+      "Bash(python3 -c \"import opensimplex\")",
+      "Bash(python3.14 /Users/dlibland/dev/avian_space/scripts/tilegen.py --out-dir /Users/dlibland/dev/avian_space/assets/sprites/worlds --tile-size 32 --map-preview 64)",
+      "Bash(pip3.14 install:*)",
+      "Bash(grep -n \"TilemapGridSize\\\\|grid_size\" ~/.cargo/registry/src/*/bevy_ecs_tilemap-0.18*/src/map.rs)",
+      "Bash(grep -n \"TilemapGridSize\" ~/.cargo/registry/src/*/bevy_ecs_tilemap-0.18*/src/map.rs)",
+      "Bash(grep -rn \"TileTextureIndex\\\\|texture_index\\\\|atlas_col\" ~/.cargo/registry/src/*/bevy_ecs_tilemap-0.18*/src/render/)",
+      "Bash(grep -n \"columns\" ~/.cargo/registry/src/*/bevy_ecs_tilemap-0.18*/src/render/shaders/tilemap_vertex.wgsl)",
+      "Read(//Users/dlibland/**)",
+      "Bash(pip install:*)",
+      "Bash(python test_blob47.py)",
+      "Bash(python tilegen.py --tile-size 32 --map-preview 64 --out-dir ../assets/sprites/worlds)",
+      "Bash(python tilegen.py --tile-size 32 --out-dir ../assets/sprites/worlds)"
+    ],
+    "additionalDirectories": [
+      "/Users/dlibland/dev/avian_space/assets/sprites/worlds"
     ]
   },
   "hooks": {

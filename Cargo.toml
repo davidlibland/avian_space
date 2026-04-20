@@ -18,3 +18,6 @@ burn = { version = "0.20", default-features = false, features = ["wgpu", "ndarra
 tensorboard-rs = "0.5"
 # Force naga 26 to compile with termcolor to fix WriteColor trait error
 naga = { version = "=26.0.0", features = ["termcolor", "wgsl-in"] }
+bevy_ecs_tilemap = "0.18"
+bevy_common_assets = { version = "0.16.0", features = ["ron"] }
+ron = "0.12.1"

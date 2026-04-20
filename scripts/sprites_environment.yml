@@ -7,9 +7,10 @@ dependencies:
   - pip
   - numpy
   - tbparse
+  - pillow>=10.0
   - pip:
-      - Pillow==11.3.0
       - PyYAML>=6.0
       - trimesh>=4.0
       - pyrender>=0.1.45
       - noise>=1.2.2
+      - opensimplex>=0.4.5

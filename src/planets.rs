@@ -199,7 +199,7 @@ fn finish_player_landing(
                     planet: planet_name.clone(),
                 });
             }
-            state.set(PlayState::Landed);
+            state.set(PlayState::Exploring);
         }
     }
 }

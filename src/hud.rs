@@ -101,7 +101,8 @@ impl Plugin for HudPlugin {
                 update_target_display,
                 update_secondary_weapon,
                 update_comms_ticker,
-            ),
+            )
+                .run_if(not(in_state(crate::PlayState::Exploring))),
         )
         .add_systems(
             Update,
