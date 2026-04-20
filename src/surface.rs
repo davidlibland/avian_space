@@ -245,6 +245,42 @@ impl Default for CameraZoom {
 #[derive(Component)]
 struct BuildingLabel;
 
+/// Spawn a building label with a dark plaque behind for readability.
+fn spawn_building_label(
+    commands: &mut Commands,
+    text: &str,
+    pos: Vec3,
+) {
+    let scale = Vec3::splat(0.18);
+    let char_w = 28.0 * 0.6; // approximate glyph width at font_size 28
+    let plaque_w = text.len() as f32 * char_w * scale.x + 4.0;
+    let plaque_h = 28.0 * scale.y + 2.5;
+
+    // Dark plaque background.
+    commands.spawn((
+        DespawnOnExit(PlayState::Exploring),
+        BuildingLabel,
+        Sprite {
+            color: Color::srgba(0.05, 0.05, 0.08, 0.85),
+            custom_size: Some(Vec2::new(plaque_w, plaque_h)),
+            ..default()
+        },
+        Transform::from_translation(pos + Vec3::new(0.0, 0.0, -0.02)),
+    ));
+    // White text.
+    commands.spawn((
+        DespawnOnExit(PlayState::Exploring),
+        BuildingLabel,
+        Text2d::new(text.to_string()),
+        TextFont {
+            font_size: 28.0,
+            ..default()
+        },
+        TextColor(Color::srgb(1.0, 1.0, 1.0)),
+        Transform::from_translation(pos).with_scale(scale),
+    ));
+}
+
 /// Marker for the "Press E" prompt.
 #[derive(Component)]
 struct InteractPrompt;
@@ -311,12 +347,13 @@ fn tile_to_world(tx: u32, ty: u32, map_w: u32, map_h: u32, tile_px: f32) -> Vec2
 }
 
 /// Determine which buildings to place based on planet data.
+/// ShipPad is handled separately as a landing pad, not a building template.
 fn building_kinds_for_planet(
     planet_name: &str,
     item_universe: &ItemUniverse,
     system_name: &str,
 ) -> Vec<BuildingKind> {
-    let mut kinds = vec![BuildingKind::ShipPad];
+    let mut kinds = Vec::new();
     let planet_data = item_universe
         .star_systems
         .get(system_name)
@@ -336,6 +373,21 @@ fn building_kinds_for_planet(
     kinds.push(BuildingKind::MissionControl);
     kinds
 }
+
+/// Landing pad: all 9 tiles of the 3×3 atlas.
+/// (dx, dy, atlas_index). Atlas is row-major top-down in the PNG,
+/// but tile placement is bottom-up (dy=+1 = up on screen).
+const PAD_TILES: [(i32, i32, usize); 9] = [
+    (-1,  1, 0),  // TL corner
+    ( 0,  1, 1),  // T  edge
+    ( 1,  1, 2),  // TR corner
+    (-1,  0, 3),  // L  edge
+    ( 0,  0, 4),  // C  center
+    ( 1,  0, 5),  // R  edge
+    (-1, -1, 6),  // BL corner
+    ( 0, -1, 7),  // B  edge
+    ( 1, -1, 8),  // BR corner
+];
 
 /// Find walkable tile positions in the collision data, suitable for placing
 /// buildings. Returns positions in tile coordinates, sorted by distance from
@@ -420,13 +472,13 @@ fn setup_surface(
     let map_h = WORLD_HEIGHT;
     let tile_px = TILE_PX;
 
-    let (terrain_flat, col_data) = if let (Some(lut_data), Some(manifest)) = (&lut, &manifest) {
+    let (col_data, placed_buildings) = if let (Some(lut_data), Some(manifest)) = (&lut, &manifest) {
         // Seed fBm from planet name for deterministic, per-planet terrain.
         let seed = planet_name
             .bytes()
             .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
 
-        let terrain_flat = crate::fbm::generate_terrain_map(
+        let mut terrain_flat = crate::fbm::generate_terrain_map(
             map_w,
             map_h,
             N_TERRAIN_TYPES,
@@ -451,13 +503,168 @@ fn setup_surface(
                 )
             };
 
+        // Find the lowest walkable terrain index for this biome.
+        let walkable_terrain: u32 = collision_codes
+            .iter()
+            .position(|&c| c == 0) // CollisionType::Walkable
+            .unwrap_or(0) as u32;
+
+        // ── Pre-tilemap building placement ─────────────────────────────
+        // Find building positions on the initial terrain, then force
+        // nearby tiles to walkable terrain and re-clamp before building
+        // the tilemap.
+        let building_kinds = building_kinds_for_planet(&planet_name, &item_universe, system_name);
+
+        let initial_col: Vec<u8> = terrain_flat
+            .iter()
+            .map(|&t| *collision_codes.get(t as usize).unwrap_or(&0))
+            .collect();
+        let mut walkable_positions = find_walkable_positions(&initial_col, map_w, map_h, 5.0);
+        {
+            use rand::{SeedableRng, seq::SliceRandom};
+            let seed = planet_name
+                .bytes()
+                .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            walkable_positions.shuffle(&mut rng);
+        }
+
+        // Load building templates so we know footprint sizes.
+        let style_name = crate::world_assets::biome_to_building_style(biome_name);
+        let bldg_manifest = load_ron("buildings_manifest.ron")
+            .and_then(|t| ron::from_str::<crate::world_assets::BuildingsManifest>(&t).ok());
+        let bldg_style = bldg_manifest
+            .as_ref()
+            .and_then(|m| m.styles.get(style_name));
+        let ext_atlas_handle: Option<Handle<Image>> = bldg_style.map(|s| {
+            asset_server.load(format!("{WORLDS_DIR}/{}", s.exterior_atlas))
+        });
+        let ext_layout: Option<Handle<TextureAtlasLayout>> = bldg_manifest.as_ref().map(|m| {
+            atlas_layouts.add(TextureAtlasLayout::from_grid(
+                UVec2::new(tile_px as u32, tile_px as u32),
+                m.ext_cols,
+                m.ext_rows,
+                None,
+                None,
+            ))
+        });
+        let templates: Vec<crate::world_assets::BuildingTemplate> = bldg_style
+            .map(|s| {
+                s.templates
+                    .iter()
+                    .filter_map(|name| {
+                        let path = format!(
+                            "assets/{WORLDS_DIR}/buildings/{style_name}_{name}.ron"
+                        );
+                        std::fs::read_to_string(&path)
+                            .ok()
+                            .and_then(|t| ron::from_str(&t).ok())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ext_collision: Vec<u8> = bldg_manifest
+            .as_ref()
+            .map(|m| m.ext_collision.clone())
+            .unwrap_or_default();
+        const EXT_DOOR: u32 = 28;
+
+        // Place the landing pad at the map center.
+        let pad_cx = map_w / 2;
+        let pad_cy = map_h / 2;
+
+        let min_building_spacing = 10_u32;
+        let mut placed_buildings: Vec<(u32, u32, u32, u32)> = Vec::new(); // (x, y, w, h)
+        // Reserve the pad area (3x3 centered on pad_cx, pad_cy).
+        placed_buildings.push((pad_cx - 1, pad_cy - 1, 3, 3));
+        let mut template_idx = 0;
+        let mut building_assignments: Vec<(BuildingKind, u32, u32, usize)> = Vec::new(); // (kind, x, y, template_idx)
+
+        for kind in &building_kinds {
+            let tmpl = if templates.is_empty() {
+                None
+            } else {
+                let t = &templates[template_idx % templates.len()];
+                template_idx += 1;
+                Some(t)
+            };
+            let (bw, bh) = tmpl.map(|t| (t.width, t.height)).unwrap_or((2, 2));
+            let spacing = min_building_spacing.max(bw.max(bh) + 2);
+
+            let pos = walkable_positions.iter().find(|&&(x, y)| {
+                if x + bw >= map_w || y + bh >= map_h || x < 1 || y < 1 {
+                    return false;
+                }
+                // Check entire footprint is on walkable terrain.
+                for dy in 0..bh {
+                    for dx in 0..bw {
+                        let idx = ((y + dy) * map_w + (x + dx)) as usize;
+                        if idx >= initial_col.len() {
+                            return false;
+                        }
+                        if initial_col[idx] == 1 { // Solid
+                            return false;
+                        }
+                    }
+                }
+                placed_buildings.iter().all(|&(px, py, _, _)| {
+                    let dx = (x as i32 - px as i32).unsigned_abs();
+                    let dy = (y as i32 - py as i32).unsigned_abs();
+                    dx + dy >= spacing
+                })
+            });
+
+            if let Some(&(tx, ty)) = pos {
+                let ti = if templates.is_empty() { 0 } else { (template_idx - 1) % templates.len() };
+                placed_buildings.push((tx, ty, bw, bh));
+                building_assignments.push((*kind, tx, ty, ti));
+            }
+        }
+
+        // Force tiles within 2 of each building floor plan (and the
+        // landing pad, which is the first entry) to walkable terrain,
+        // then re-clamp.
+        {
+            let w = map_w as usize;
+            let h = map_h as usize;
+            let margin = 2_i32;
+            let mut pinned = vec![false; w * h];
+
+            for &(bx, by, bw, bh) in &placed_buildings {
+                for dy in -margin..(bh as i32 + margin) {
+                    for dx in -margin..(bw as i32 + margin) {
+                        let x = bx as i32 + dx;
+                        let y = by as i32 + dy;
+                        if x >= 0 && y >= 0 && x < w as i32 && y < h as i32 {
+                            let idx = y as usize * w + x as usize;
+                            terrain_flat[idx] = walkable_terrain;
+                            pinned[idx] = true;
+                        }
+                    }
+                }
+            }
+
+            // Also pin the border tiles so they don't get pulled down.
+            for x in 0..w {
+                pinned[x] = true;
+                pinned[(h - 1) * w + x] = true;
+            }
+            for y in 0..h {
+                pinned[y * w] = true;
+                pinned[y * w + (w - 1)] = true;
+            }
+
+            crate::fbm::clamp_terrain_indices(&mut terrain_flat, w, h, &pinned);
+        }
+
+        // Re-derive collision from the modified terrain.
         let col_data: Vec<u8> = terrain_flat
             .iter()
             .map(|&t| *collision_codes.get(t as usize).unwrap_or(&0))
             .collect();
 
-        // Build the 2D terrain map for bitmask computation (image convention:
-        // y=0 = top of map). Y-flip to bevy_ecs_tilemap is at TilePos level.
+        // Build the 2D terrain map for bitmask computation.
+        // Bottom-up convention: y=0 = bottom, matching bevy_ecs_tilemap.
         let terrain_map: Vec<Vec<u32>> = (0..map_h)
             .map(|y| {
                 (0..map_w)
@@ -502,10 +709,8 @@ fn setup_surface(
                 } else {
                     border_tex
                 };
-                let tile_pos = TilePos {
-                    x: tx,
-                    y: total_h - 1 - ty,
-                };
+                // No y-flip: data is already bottom-up, matching TilePos.
+                let tile_pos = TilePos { x: tx, y: ty };
                 let tile_entity = commands
                     .spawn(TileBundle {
                         position: tile_pos,
@@ -542,10 +747,10 @@ fn setup_surface(
         let total_len = (total_w * total_h) as usize;
         let mut expanded_col = vec![solid_code; total_len];
         let mut expanded_terrain = vec![max_terrain; total_len];
+        // No y-flip: data is already bottom-up, matching bevy_ecs_tilemap.
         for ty in border..border + map_h {
             for tx in border..border + map_w {
-                let src_y = map_h - 1 - (ty - border); // Y-flip
-                let src_idx = (src_y * map_w + (tx - border)) as usize;
+                let src_idx = ((ty - border) * map_w + (tx - border)) as usize;
                 let dst_idx = (ty * total_w + tx) as usize;
                 expanded_col[dst_idx] = col_data[src_idx];
                 expanded_terrain[dst_idx] = terrain_flat[src_idx];
@@ -573,7 +778,160 @@ fn setup_surface(
             surface_layers,
         );
 
-        (terrain_flat, col_data)
+        // ── Spawn landing pad (plus/cross shape, 3x3 atlas) ──────────
+        let pad_atlas_handle: Option<Handle<Image>> = bldg_style.map(|s| {
+            asset_server.load(format!("{WORLDS_DIR}/{}", s.landing_pad_atlas))
+        });
+        let pad_layout: Option<Handle<TextureAtlasLayout>> = pad_atlas_handle.as_ref().map(|_| {
+            atlas_layouts.add(TextureAtlasLayout::from_grid(
+                UVec2::new(tile_px as u32, tile_px as u32),
+                3, 3,
+                None, None,
+            ))
+        });
+
+        for &(dx, dy, atlas_idx) in &PAD_TILES {
+            let tx = (pad_cx as i32 + dx) as u32;
+            let ty = (pad_cy as i32 + dy) as u32;
+            let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
+
+            let mut entity = if let (Some(pad_img), Some(pad_lay)) =
+                (pad_atlas_handle.as_ref(), pad_layout.as_ref())
+            {
+                commands.spawn((
+                    DespawnOnExit(PlayState::Exploring),
+                    Sprite::from_atlas_image(
+                        pad_img.clone(),
+                        TextureAtlas {
+                            layout: pad_lay.clone(),
+                            index: atlas_idx,
+                        },
+                    ),
+                    Transform::from_xyz(world_pos.x, world_pos.y, -9.0),
+                ))
+            } else {
+                // Fallback: flat colored sprite if atlas unavailable.
+                commands.spawn((
+                    DespawnOnExit(PlayState::Exploring),
+                    Sprite {
+                        color: Color::srgb(0.35, 0.35, 0.4),
+                        custom_size: Some(Vec2::splat(tile_px)),
+                        ..default()
+                    },
+                    Transform::from_xyz(world_pos.x, world_pos.y, -9.0),
+                ))
+            };
+
+            // Center tile is the interaction sensor.
+            if dx == 0 && dy == 0 {
+                entity.insert((
+                    Building { kind: BuildingKind::ShipPad },
+                    Sensor,
+                    RigidBody::Static,
+                    Collider::rectangle(tile_px, tile_px),
+                    CollisionEventsEnabled,
+                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                ));
+            }
+        }
+        // Pad label — just above the center tile.
+        {
+            let label_world = tile_to_world(pad_cx, pad_cy, map_w, map_h, tile_px);
+            spawn_building_label(
+                &mut commands,
+                BuildingKind::ShipPad.label(),
+                Vec3::new(label_world.x, label_world.y + tile_px * 0.8, 5.0),
+            );
+        }
+
+        // ── Spawn building sprites from pre-computed assignments ─────
+        for &(kind, anchor_tx, anchor_ty, ti) in &building_assignments {
+            let tmpl = templates.get(ti);
+            let (bw, bh) = tmpl.map(|t| (t.width, t.height)).unwrap_or((2, 2));
+
+            if let (Some(tmpl), Some(ext_img), Some(ext_lay)) =
+                (tmpl, ext_atlas_handle.as_ref(), ext_layout.as_ref())
+            {
+                for row in 0..tmpl.height {
+                    for col in 0..tmpl.width {
+                        let tile_idx = tmpl.tiles[row as usize][col as usize];
+                        if tile_idx == 0 {
+                            continue;
+                        }
+                        let tx = anchor_tx + col;
+                        let ty = anchor_ty + row;
+                        let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
+
+                        let is_door = tile_idx == EXT_DOOR;
+                        let collision_code = ext_collision
+                            .get(tile_idx as usize)
+                            .copied()
+                            .unwrap_or(1);
+
+                        let mut entity = commands.spawn((
+                            DespawnOnExit(PlayState::Exploring),
+                            Sprite::from_atlas_image(
+                                ext_img.clone(),
+                                TextureAtlas {
+                                    layout: ext_lay.clone(),
+                                    index: tile_idx as usize,
+                                },
+                            ),
+                            Transform::from_xyz(world_pos.x, world_pos.y, -5.0),
+                        ));
+
+                        if is_door {
+                            entity.insert((
+                                Building { kind },
+                                Sensor,
+                                RigidBody::Static,
+                                Collider::rectangle(tile_px, tile_px),
+                                CollisionEventsEnabled,
+                                CollisionLayers::new(
+                                    GameLayer::Surface,
+                                    [GameLayer::Surface],
+                                ),
+                            ));
+                        } else if collision_code == 1 {
+                            entity.insert((
+                                RigidBody::Static,
+                                Collider::rectangle(tile_px, tile_px),
+                                CollisionLayers::new(
+                                    GameLayer::Surface,
+                                    [GameLayer::Surface],
+                                ),
+                            ));
+                        }
+                    }
+                }
+            } else {
+                let world_pos = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
+                commands.spawn((
+                    DespawnOnExit(PlayState::Exploring),
+                    Building { kind },
+                    RigidBody::Static,
+                    Collider::rectangle(tile_px * 2.0, tile_px * 2.0),
+                    Sensor,
+                    CollisionEventsEnabled,
+                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                    Transform::from_xyz(world_pos.x, world_pos.y, 0.0),
+                ));
+            }
+
+            // Place label just above the door.
+            let (door_tx, door_ty) = tmpl
+                .and_then(|t| t.entry_points.first())
+                .map(|&(c, r)| (anchor_tx + c, anchor_ty + r))
+                .unwrap_or((anchor_tx + bw / 2, anchor_ty));
+            let door_world = tile_to_world(door_tx, door_ty, map_w, map_h, tile_px);
+            spawn_building_label(
+                &mut commands,
+                kind.label(),
+                Vec3::new(door_world.x, door_world.y + tile_px * 0.8, 5.0),
+            );
+        }
+
+        (col_data, placed_buildings)
     } else {
         eprintln!(
             "[surface] WARNING: could not load world data for biome '{biome_name}' \
@@ -590,68 +948,12 @@ fn setup_surface(
             },
             Transform::from_xyz(0.0, 0.0, -10.0),
         ));
-        // All walkable fallback
         let n = (map_w * map_h) as usize;
-        (vec![0u32; n], vec![0u8; n])
+        (vec![0u8; n], Vec::new())
     };
 
-    // Bug 5 fixed: shuffle walkable positions so buildings aren't always
-    // clustered in the top-left.  Seed from planet name for determinism —
-    // the same planet always produces the same layout.
-    let building_kinds = building_kinds_for_planet(&planet_name, &item_universe, system_name);
-    let mut walkable_positions = find_walkable_positions(&col_data, map_w, map_h, 5.0);
-
-    // Deterministic shuffle: seed from planet name bytes.
-    {
-        use rand::{SeedableRng, seq::SliceRandom};
-        let seed = planet_name
-            .bytes()
-            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-        walkable_positions.shuffle(&mut rng);
-    }
-
-    let min_building_spacing = 8_u32;
-    let mut placed_positions: Vec<(u32, u32)> = Vec::new();
-
-    for kind in &building_kinds {
-        let pos = walkable_positions.iter().find(|&&(x, y)| {
-            placed_positions.iter().all(|&(px, py)| {
-                let dx = (x as i32 - px as i32).unsigned_abs();
-                let dy = (y as i32 - py as i32).unsigned_abs();
-                dx + dy >= min_building_spacing
-            })
-        });
-
-        if let Some(&(tx, ty)) = pos {
-            placed_positions.push((tx, ty));
-            let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
-
-            commands.spawn((
-                DespawnOnExit(PlayState::Exploring),
-                Building { kind: *kind },
-                RigidBody::Static,
-                Collider::rectangle(tile_px * 2.0, tile_px * 2.0),
-                Sensor,
-                CollisionEventsEnabled,
-                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
-                Transform::from_xyz(world_pos.x, world_pos.y, 0.0),
-            ));
-
-            commands.spawn((
-                DespawnOnExit(PlayState::Exploring),
-                BuildingLabel,
-                Text2d::new(kind.label()),
-                TextFont {
-                    font_size: 10.0,
-                    ..default()
-                },
-                TextColor(kind.color()),
-                Transform::from_xyz(world_pos.x, world_pos.y + tile_px * 1.5, 5.0)
-                    .with_scale(Vec3::splat(0.3)),
-            ));
-        }
-    }
+    // Spawn on the landing pad (always at map center).
+    let spawn_pos = tile_to_world(map_w / 2, map_h / 2, map_w, map_h, tile_px);
 
     let walker_sheet = WalkerSheet::load(
         &asset_server,
@@ -679,7 +981,7 @@ fn setup_surface(
                 index: initial_index,
             },
         ),
-        Transform::from_xyz(0.0, 0.0, 1.0), // Bug 6: z above buildings (0.0), below labels (5.0)
+        Transform::from_xyz(spawn_pos.x, spawn_pos.y, 1.0),
     ));
 
     commands.insert_resource(walker_sheet);

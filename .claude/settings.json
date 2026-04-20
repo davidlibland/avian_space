@@ -36,7 +36,10 @@
       "Bash(pip install:*)",
       "Bash(python test_blob47.py)",
       "Bash(python tilegen.py --tile-size 32 --map-preview 64 --out-dir ../assets/sprites/worlds)",
-      "Bash(python tilegen.py --tile-size 32 --out-dir ../assets/sprites/worlds)"
+      "Bash(python tilegen.py --tile-size 32 --out-dir ../assets/sprites/worlds)",
+      "Bash(python buildings_scifi.py --tile-size 32 --out-dir ../assets/sprites/worlds)",
+      "Bash(python combine_spritesheet.py)",
+      "Bash(grep -l \"gas_giant\" /Users/dlibland/dev/avian_space/assets/data/*.yaml)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds"

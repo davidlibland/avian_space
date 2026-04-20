@@ -828,14 +828,180 @@ def make_station_room(style: BuildingStyle) -> BuildingTemplate:
     )
 
 
-# Map style name → list of template-factory functions
+def make_wide_house(style: BuildingStyle) -> BuildingTemplate:
+    """7-wide × 4-tall wide building — market / outfitter."""
+    W, H = 7, 4
+    door_col = 3
+    grid = _make_exterior_shell(
+        W, H, door_col=door_col, window_rows=[2], window_cols=[1, 2, 4, 5]
+    )
+    return BuildingTemplate(
+        name="wide_house",
+        style=style.name,
+        tiles=grid,
+        width=W,
+        height=H,
+        entry_points=[(door_col, H - 1)],
+        interior_offset=(1, 2),
+        interior_size=(W - 2, H - 2 - 1),
+    )
+
+
+def make_tall_building(style: BuildingStyle) -> BuildingTemplate:
+    """5-wide × 6-tall building — bar / mission control."""
+    W, H = 5, 6
+    door_col = 2
+    grid = _make_exterior_shell(
+        W, H, door_col=door_col, window_rows=[2, 3, 4], window_cols=[1, 3]
+    )
+    return BuildingTemplate(
+        name="tall_building",
+        style=style.name,
+        tiles=grid,
+        width=W,
+        height=H,
+        entry_points=[(door_col, H - 1)],
+        interior_offset=(1, 2),
+        interior_size=(W - 2, H - 2 - 1),
+    )
+
+
+# Map style name → list of template-factory functions (5 per style for 5 building kinds)
 _TEMPLATE_FACTORIES: dict[str, list[Callable]] = {
-    "stone": [make_small_house, make_medium_house, make_large_building, make_tower],
-    "brick": [make_small_house, make_medium_house, make_large_building],
-    "ice": [make_small_house, make_medium_house, make_tower],
-    "log": [make_small_house, make_medium_house],
-    "panel": [make_station_room, make_medium_house, make_large_building],
+    "stone": [make_small_house, make_medium_house, make_large_building, make_wide_house, make_tall_building],
+    "brick": [make_small_house, make_medium_house, make_large_building, make_wide_house, make_tall_building],
+    "ice": [make_small_house, make_medium_house, make_tower, make_wide_house, make_tall_building],
+    "log": [make_small_house, make_medium_house, make_wide_house, make_tall_building, make_tower],
+    "panel": [make_station_room, make_medium_house, make_large_building, make_wide_house, make_tall_building],
 }
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Landing pad atlas (3×3 octagon, per-biome style)                        ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+# Pad layout (3×3 octagon — all 9 tiles filled, corners diagonally cut):
+#
+#   /##\       tile indices in the 3×3 atlas:
+#   ####         0=TL  1=T   2=TR
+#   \##/         3=L   4=C   5=R
+#                6=BL  7=B   8=BR
+#
+# Corner tiles have a transparent triangle cut away to form the
+# octagonal shape.
+PAD_COLS = 3
+PAD_ROWS = 3
+
+# (idx, which edges face outward)
+_PAD_EDGE_INFO: dict[int, list[str]] = {
+    0: ["top", "left"],      # TL corner
+    1: ["top"],              # T edge
+    2: ["top", "right"],     # TR corner
+    3: ["left"],             # L edge
+    4: [],                   # C center
+    5: ["right"],            # R edge
+    6: ["bottom", "left"],   # BL corner
+    7: ["bottom"],           # B edge
+    8: ["bottom", "right"],  # BR corner
+}
+
+# Corner diagonal cut: which triangle to make transparent.
+# (idx, three polygon vertices forming the cut-away triangle)
+_PAD_CORNER_CUT: dict[int, str] = {
+    0: "tl",  # top-left: cut triangle at (0,0)
+    2: "tr",  # top-right: cut triangle at (S,0)
+    6: "bl",  # bottom-left: cut triangle at (0,S)
+    8: "br",  # bottom-right: cut triangle at (S,S)
+}
+
+
+def build_landing_pad_atlas(style: BuildingStyle, tile_size: int) -> Image.Image:
+    """
+    Generate a 3×3 (9-tile) landing pad atlas for this building style.
+    All 9 tiles are filled; corner tiles have a diagonal transparency cut
+    to form an octagonal outline. The pad blends with the biome's style.
+    """
+    S = tile_size
+    p = style.palette
+    atlas = Image.new("RGBA", (PAD_COLS * S, PAD_ROWS * S), (0, 0, 0, 0))
+
+    pad_base = tuple((w + f) // 2 for w, f in zip(p.wall_fill, p.floor_fill))
+    pad_edge = tuple(max(0, c - 25) for c in pad_base)
+    accent = getattr(p, "_emissive", None) or p.window_fill
+
+    for idx in range(PAD_COLS * PAD_ROWS):
+        col = idx % PAD_COLS
+        row = idx // PAD_COLS
+        px, py = col * S, row * S
+
+        # Base fill with subtle noise + grid joints.
+        arr = _fill(S, pad_base, 0.03, style.seed + 200 + idx)
+        img = Image.fromarray(arr)
+        draw = ImageDraw.Draw(img)
+
+        sp = max(4, S // 4)
+        for x in range(0, S, sp):
+            draw.line([(x, 0), (x, S - 1)], fill=pad_edge, width=1)
+        for y in range(0, S, sp):
+            draw.line([(0, y), (S - 1, y)], fill=pad_edge, width=1)
+
+        # Edge shadow on outward-facing sides.
+        arr = np.array(img)
+        for edge in _PAD_EDGE_INFO.get(idx, []):
+            arr = _shadow_edge(arr, edge, 3, 0.6)
+        img = Image.fromarray(arr)
+
+        # Corner diagonal: draw an accent stripe along the cut, then
+        # make the outer triangle transparent.
+        if idx in _PAD_CORNER_CUT:
+            corner = _PAD_CORNER_CUT[idx]
+            img = img.convert("RGBA")
+            draw = ImageDraw.Draw(img)
+
+            # Accent stripe along the diagonal edge.
+            if corner == "tl":
+                draw.line([(0, S - 1), (S - 1, 0)], fill=accent, width=2)
+            elif corner == "tr":
+                draw.line([(0, 0), (S - 1, S - 1)], fill=accent, width=2)
+            elif corner == "bl":
+                draw.line([(0, 0), (S - 1, S - 1)], fill=accent, width=2)
+            elif corner == "br":
+                draw.line([(0, S - 1), (S - 1, 0)], fill=accent, width=2)
+
+            # Cut the outer triangle to transparent.
+            mask = Image.new("L", (S, S), 255)
+            mask_draw = ImageDraw.Draw(mask)
+            if corner == "tl":
+                mask_draw.polygon([(0, 0), (S - 1, 0), (0, S - 1)], fill=0)
+            elif corner == "tr":
+                mask_draw.polygon([(0, 0), (S - 1, 0), (S - 1, S - 1)], fill=0)
+            elif corner == "bl":
+                mask_draw.polygon([(0, 0), (0, S - 1), (S - 1, S - 1)], fill=0)
+            elif corner == "br":
+                mask_draw.polygon([(S - 1, 0), (0, S - 1), (S - 1, S - 1)], fill=0)
+            img.putalpha(mask)
+        else:
+            img = img.convert("RGBA")
+
+        # Centre tile: "H" helipad marking.
+        if idx == 4:
+            draw = ImageDraw.Draw(img)
+            m = S // 4
+            draw.line([(m, m), (m, S - m)], fill=accent, width=2)
+            draw.line([(S - m, m), (S - m, S - m)], fill=accent, width=2)
+            draw.line([(m, S // 2), (S - m, S // 2)], fill=accent, width=2)
+
+        # Edge tiles: guide stripes.
+        if idx in (1, 7):
+            draw = ImageDraw.Draw(img)
+            draw.line([(S // 4, S // 2), (3 * S // 4, S // 2)], fill=accent, width=1)
+        if idx in (3, 5):
+            draw = ImageDraw.Draw(img)
+            draw.line([(S // 2, S // 4), (S // 2, 3 * S // 4)], fill=accent, width=1)
+
+        atlas.paste(img, (px, py))
+
+    return atlas
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -844,14 +1010,21 @@ _TEMPLATE_FACTORIES: dict[str, list[Callable]] = {
 
 
 def _template_to_ron(tmpl: BuildingTemplate) -> str:
+    # Output rows bottom-up: row 0 = base/door, last row = roof.
+    # This matches bevy's bottom-up coordinate system so no y-flip
+    # is needed in Rust.
+    flipped_tiles = list(reversed(tmpl.tiles))
     rows_ron = (
-        "[\n" + "".join(f"            {row!r},\n" for row in tmpl.tiles) + "        ]"
+        "[\n" + "".join(f"            {row!r},\n" for row in flipped_tiles) + "        ]"
     )
-    ep_ron = "[" + ", ".join(f"({c}, {r})" for c, r in tmpl.entry_points) + "]"
+    h = tmpl.height
+    # Flip entry_point and interior y-coords to match bottom-up.
+    ep_ron = "[" + ", ".join(f"({c}, {h - 1 - r})" for c, r in tmpl.entry_points) + "]"
     io = tmpl.interior_offset
     is_ = tmpl.interior_size
+    io_flipped_y = h - 1 - (io[1] + is_[1] - 1)
     return (
-        f"// {tmpl.name}.ron — auto-generated by buildings.py\n"
+        f"// {tmpl.name}.ron — auto-generated by buildings.py (bottom-up rows)\n"
         f"(\n"
         f'    name:            "{tmpl.name}",\n'
         f'    style:           "{tmpl.style}",\n'
@@ -860,7 +1033,7 @@ def _template_to_ron(tmpl: BuildingTemplate) -> str:
         f"    layer:           {tmpl.layer},\n"
         f"    tiles:           {rows_ron},\n"
         f"    entry_points:    {ep_ron},\n"
-        f"    interior_offset: ({io[0]}, {io[1]}),\n"
+        f"    interior_offset: ({io[0]}, {io_flipped_y}),\n"
         f"    interior_size:   ({is_[0]}, {is_[1]}),\n"
         f")\n"
     )
@@ -894,7 +1067,10 @@ def write_buildings_manifest(
             f'            biome: "{s.biome}",\n',
             f'            exterior_atlas: "{s.name}_building_exterior.png",\n',
             f'            interior_atlas: "{s.name}_building_interior.png",\n',
-            f"            templates: {template_names!r},\n",
+            f'            landing_pad_atlas: "{s.name}_landing_pad.png",\n',
+            "            templates: [{}],\n".format(
+                ", ".join(f'"{n}"' for n in template_names)
+            ),
             "        ),\n",
         ]
     lines += ["    },\n", ")\n"]
@@ -1056,6 +1232,12 @@ def generate_all(tile_size: int, out_dir: Path) -> None:
         int_path = out_dir / f"{style.name}_building_interior.png"
         int_atlas.save(int_path)
         print(f"    → {int_path.name}  {int_atlas.size[0]}×{int_atlas.size[1]}px")
+
+        # Landing pad atlas
+        pad_atlas = build_landing_pad_atlas(style, tile_size)
+        pad_path = out_dir / f"{style.name}_landing_pad.png"
+        pad_atlas.save(pad_path)
+        print(f"    → {pad_path.name}  {pad_atlas.size[0]}×{pad_atlas.size[1]}px")
 
         # Templates
         factories = _TEMPLATE_FACTORIES.get(style.wall_texture, [make_small_house])

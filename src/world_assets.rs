@@ -83,6 +83,61 @@ pub struct WorldManifest {
     pub biomes: HashMap<String, BiomeMeta>,
 }
 
+// ── Building types ───────────────────────────────────────────────────────
+
+#[derive(Deserialize, Debug)]
+pub struct BuildingTemplate {
+    pub name: String,
+    pub style: String,
+    pub width: u32,
+    pub height: u32,
+    #[allow(dead_code)]
+    pub layer: u32,
+    /// `tiles[row][col]` — exterior atlas index (0 = transparent/skip).
+    pub tiles: Vec<Vec<u32>>,
+    /// `(col, row)` positions of door tiles.
+    pub entry_points: Vec<(u32, u32)>,
+    #[allow(dead_code)]
+    pub interior_offset: (u32, u32),
+    #[allow(dead_code)]
+    pub interior_size: (u32, u32),
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct BuildingStyleMeta {
+    pub biome: String,
+    pub exterior_atlas: String,
+    pub interior_atlas: String,
+    pub landing_pad_atlas: String,
+    pub templates: Vec<String>,
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct BuildingsManifest {
+    pub tile_size: u32,
+    pub ext_cols: u32,
+    pub ext_rows: u32,
+    pub int_cols: u32,
+    pub int_rows: u32,
+    pub blob4_lut: Vec<u32>,
+    pub ext_collision: Vec<u8>,
+    pub styles: HashMap<String, BuildingStyleMeta>,
+}
+
+/// Map a biome name to the building style used on that biome's planets.
+pub fn biome_to_building_style(biome: &str) -> &'static str {
+    match biome {
+        "garden" => "colony",
+        "ice" => "cryo",
+        "rocky" => "extraction",
+        "desert" => "outpost",
+        "interior" => "station",
+        _ => "colony",
+    }
+}
+
 // ── Blob-47 bitmask helpers ───────────────────────────────────────────────
 //
 // Boris The Brave's standard ordering.
@@ -135,15 +190,17 @@ pub fn compute_bitmask(
             terrain_map[ny as usize][nx as usize] >= terrain
         }
     };
+    // Bottom-up convention: y increases upward.
+    // y+1 = up (T), y-1 = down (B).
     let mut mask = 0u8;
-    if same(0, -1) { mask |= T; }
+    if same(0, 1) { mask |= T; }
     if same(1, 0) { mask |= R; }
-    if same(0, 1) { mask |= B; }
+    if same(0, -1) { mask |= B; }
     if same(-1, 0) { mask |= L; }
-    if same(-1, -1) { mask |= TL; }
-    if same(1, -1) { mask |= TR; }
-    if same(1, 1) { mask |= BR; }
-    if same(-1, 1) { mask |= BL; }
+    if same(-1, 1) { mask |= TL; }
+    if same(1, 1) { mask |= TR; }
+    if same(1, -1) { mask |= BR; }
+    if same(-1, -1) { mask |= BL; }
     mask
 }
 
@@ -182,7 +239,8 @@ pub fn tile_texture_index(
 /// the keys in `world_manifest.ron`).
 pub fn planet_type_to_biome(planet_type: &str) -> &'static str {
     match planet_type {
-        "habitable" | "cloud" => "garden",
+        "habitable" => "garden",
+        "cloud" => "interior",
         "icy_dwarf" | "ice_giant" => "ice",
         "rocky" => "rocky",
         "desert" => "desert",
@@ -460,12 +518,13 @@ mod tests {
 
     #[test]
     fn compute_bitmask_higher_neighbour_is_same() {
-        // Center=1, top neighbour=2 (higher) → treated as "same"
+        // Bottom-up: row 0 = bottom, row 2 = top.
+        // Center=1 at (1,1), top neighbour at (1,2)=2 (higher) → "same"
         // All other neighbours=0 (lower) → "different"
         let map = vec![
-            vec![0, 2, 0],
-            vec![0, 1, 0],
-            vec![0, 0, 0],
+            vec![0, 0, 0], // row 0 = bottom
+            vec![0, 1, 0], // row 1 = center
+            vec![0, 2, 0], // row 2 = top
         ];
         let mask = compute_bitmask(&map, 1, 1, 3, 3);
         let reduced = reduce_to_47(mask);
@@ -474,11 +533,12 @@ mod tests {
 
     #[test]
     fn compute_bitmask_lower_neighbour_is_different() {
-        // Center=2, top neighbour=2 (same), all others=1 (lower)
+        // Bottom-up: row 2 = top.
+        // Center=2 at (1,1), top neighbour at (1,2)=2 (same), all others=1 (lower)
         let map = vec![
-            vec![1, 2, 1],
-            vec![1, 2, 1],
-            vec![1, 1, 1],
+            vec![1, 1, 1], // row 0 = bottom
+            vec![1, 2, 1], // row 1 = center
+            vec![1, 2, 1], // row 2 = top
         ];
         let mask = compute_bitmask(&map, 1, 1, 3, 3);
         let reduced = reduce_to_47(mask);

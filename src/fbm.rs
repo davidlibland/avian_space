@@ -81,6 +81,75 @@ pub fn generate_terrain_map(
         .collect()
 }
 
+/// Clamp discrete terrain indices so no two 8-connected neighbours differ
+/// by more than 1.  Cells where `pinned[idx]` is true are never modified.
+///
+/// Call this after forcing specific tiles to a target terrain index (e.g.
+/// to ensure walkable terrain near buildings).
+pub fn clamp_terrain_indices(terrain: &mut [u32], w: usize, h: usize, pinned: &[bool]) {
+    let neighbours: [(i32, i32); 8] = [
+        (-1, -1), (0, -1), (1, -1),
+        (-1,  0),          (1,  0),
+        (-1,  1), (0,  1), (1,  1),
+    ];
+
+    /// Clamp `v` toward its neighbours.  When constraints conflict
+    /// (lo > hi — e.g. a pinned 2 next to a pinned 4 with one cell
+    /// between), pick the midpoint so we converge rather than panic.
+    #[inline]
+    fn clamp_toward(v: i32, terrain: &[u32], idx: usize, x: usize, y: usize,
+                    w: usize, h: usize, neighbours: &[(i32, i32); 8]) -> Option<u32> {
+        let mut lo = i32::MIN;
+        let mut hi = i32::MAX;
+        for &(dx, dy) in neighbours {
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx >= 0 && ny >= 0 && nx < w as i32 && ny < h as i32 {
+                let nv = terrain[(ny as usize) * w + nx as usize] as i32;
+                lo = lo.max(nv - 1);
+                hi = hi.min(nv + 1);
+            }
+        }
+        // When constraints conflict, pick the midpoint.
+        if lo > hi {
+            lo = (lo + hi) / 2;
+            hi = lo;
+        }
+        let clamped = v.clamp(lo, hi).max(0) as u32;
+        if clamped != terrain[idx] { Some(clamped) } else { None }
+    }
+
+    loop {
+        let mut changed = false;
+
+        for y in 0..h {
+            for x in 0..w {
+                let idx = y * w + x;
+                if pinned[idx] { continue; }
+                if let Some(c) = clamp_toward(terrain[idx] as i32, terrain, idx, x, y, w, h, &neighbours) {
+                    terrain[idx] = c;
+                    changed = true;
+                }
+            }
+        }
+
+        for y in (0..h).rev() {
+            for x in (0..w).rev() {
+                let idx = y * w + x;
+                if pinned[idx] { continue; }
+                if let Some(c) = clamp_toward(terrain[idx] as i32, terrain, idx, x, y, w, h, &neighbours) {
+                    terrain[idx] = c;
+                    changed = true;
+                }
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+}
+
 // ── Field post-processing ─────────────────────────────────────────────────────
 
 /// Normalise `field` in-place to [0, 1].

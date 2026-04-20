@@ -45,8 +45,8 @@ sol:
         iron: 20
         chemicals: 35
         gold: 100
-      outfitter: [laser, proton_beam, laser_turret, proton_beam_turret, ir_missile, space_mine]
-      shipyard: [shuttle, corvette, fighter, frigate, surplus_carrier, courier, asteroid_miner, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier]
+      outfitter: [laser, proton_beam, ir_missile, space_mine]
+      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier]
     moon:
       planet_type: rocky
       faction: Federation
@@ -232,7 +232,6 @@ sol:
       fed_patrol: 1.0
       fed_destroyer: 0.25
       fed_missile_cruiser: 0.125
-      fed_carrier: 0.1
       shuttle: 1.5
       hauler: 2.0
       freighter: 1.0
@@ -260,7 +259,7 @@ kepler_22:
         electronics: 120
         food: 30
         water: 20
-      outfitter: [proton_beam, proton_beam_turret, ir_missile, space_mine]
+      outfitter: [proton_beam, ir_missile, space_mine]
       shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, courier, hauler]
     kepler_22_station:
       planet_type: rocky
@@ -285,7 +284,6 @@ kepler_22:
     types:
       fed_patrol: 3.0
       fed_destroyer: 1.0
-      fed_carrier: 0.125
       hauler: 2.0
       courier: 1.0
       asteroid_miner: 2.0
@@ -456,7 +454,7 @@ barnard:
         water: 12
         iron: 20
       outfitter: [ir_missile, space_mine]
-      shipyard: [courier, freighter, bulk_carrier, surplus_carrier]
+      shipyard: [courier, freighter, bulk_carrier]
   astroid_fields:
     -
       location: [0., 0.]
@@ -496,7 +494,6 @@ alpha_centauri:
     types:
       pirate_corvette: 3.0
       pirate_missile_boat: 2.0
-      pirate_carrier: 0.5
       asteroid_miner: 3.0
       fed_patrol: 1.0           # Federation border sweep
       rebel_fighter: 1.0        # Rebel forward scout
@@ -518,7 +515,6 @@ drift:
     types:
       pirate_corvette: 2.0
       pirate_missile_boat: 2.0
-      pirate_carrier: 0.5
       asteroid_miner: 4.0
       fed_patrol: 1.0           # Federation sweep from barnard
       rebel_gunboat: 1.0        # Rebel probe from procyon
@@ -624,7 +620,6 @@ sirius:
       rebel_fighter: 1.0
       rebel_gunboat: 2.0
       rebel_frigate: 1.0
-      rebel_carrier: 0.125
       hauler: 2.0
       freighter: 2.0
       asteroid_miner: 3.0
@@ -645,7 +640,7 @@ rigel:
         weapons_parts: 350
         exotic_matter: 450
         water: 35
-      outfitter: [laser, proton_beam, laser_turret, proton_beam_turret, ir_missile, javelin, space_mine]
+      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
       planet_type: rocky
@@ -670,7 +665,6 @@ rigel:
     types:
       rebel_gunboat: 2.0
       rebel_frigate: 2.0
-      rebel_carrier: 0.25
       rebel_fighter: 2.0
       hauler: 1.0
       asteroid_miner: 2.0
@@ -741,8 +735,8 @@ deneb:
         electronics: 100
         food: 20
         water: 15
-      outfitter: [laser, proton_beam, laser_turret, proton_beam_turret, ir_missile, javelin, space_mine]
-      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, rebel_carrier, courier, frigate, hauler, freighter]
+      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
+      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, freighter]
     deneb_station:
       planet_type: rocky
       faction: Rebel
@@ -765,7 +759,6 @@ deneb:
     max: 6
     types:
       rebel_frigate: 2.0
-      rebel_carrier: 0.25
       rebel_gunboat: 2.0
       rebel_fighter: 2.0
       hauler: 2.0

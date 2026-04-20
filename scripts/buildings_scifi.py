@@ -28,10 +28,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-import scripts.buildings_scify as _b  # so we can monkey-patch texture functions
+import buildings as _b  # so we can monkey-patch texture functions
 
 # Re-use all atlas + template machinery from buildings.py
-from scripts.buildings_scify import (
+from buildings import (
     EXT_COLS,
     BuildingStyle,
     ColourPalette,
@@ -40,7 +40,9 @@ from scripts.buildings_scify import (
     make_medium_house,
     make_small_house,
     make_station_room,
+    make_tall_building,
     make_tower,
+    make_wide_house,
 )
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -394,12 +396,15 @@ def _post_process_base_row(
     if accent is None and not stripe:
         return
 
+    # Door tile columns (DOOR_L=3, DOOR=4, DOOR_R=5) — only apply the
+    # emissive strip, not the hazard stripe, so the door stays visible.
+    door_cols = {3, 4, 5}
     for col in range(EXT_COLS):
         x0, y0 = col * size, 4 * size
         tile = atlas.crop((x0, y0, x0 + size, y0 + size)).convert("RGB")
         img = tile.copy()
 
-        if stripe:
+        if stripe and col not in door_cols:
             yellow = (210, 180, 20)
             img = _draw_warning_stripe(img, p.wall_fill, yellow, size)
         if accent:
@@ -552,15 +557,43 @@ BUILDING_STYLES: list[BuildingStyle] = [
             _emissive=(55, 195, 235),  # cyan conduit glow at base
         ),
     ),
+    # ── Outpost — desert world ─────────────────────────────────────────────
+    # Heat-bleached composite panels, flat roofs with heat vents, amber glow
+    BuildingStyle(
+        name="outpost",
+        biome="desert",
+        wall_texture="composite",
+        roof_texture="flat_sci",
+        roughness=0.05,
+        seed=50,
+        palette=SciFiPalette(
+            roof_fill=(158, 138, 105),
+            roof_edge=(118, 100, 72),
+            roof_dark=(78, 65, 45),
+            wall_fill=(192, 172, 138),
+            wall_edge=(148, 130, 100),
+            wall_dark=(105, 90, 65),
+            window_fill=(225, 190, 105),
+            window_frame=(95, 80, 55),
+            door_fill=(128, 108, 78),
+            door_frame=(85, 72, 48),
+            door_knob=(235, 195, 65),
+            floor_fill=(172, 155, 125),
+            floor_dark=(125, 112, 88),
+            int_wall=(115, 100, 75),
+            int_dark=(72, 62, 42),
+            _emissive=(225, 170, 45),  # amber heat-vent glow
+        ),
+    ),
 ]
 
 # Template assignments for sci-fi styles
 _b._TEMPLATE_FACTORIES.update(
     {
-        "composite": [make_small_house, make_medium_house, make_large_building],
-        "cryo_panel": [make_small_house, make_medium_house, make_tower],
-        "corrugated_rust": [make_small_house, make_medium_house, make_large_building],
-        "conduit": [make_station_room, make_medium_house, make_large_building],
+        "composite": [make_small_house, make_medium_house, make_large_building, make_wide_house, make_tall_building],
+        "cryo_panel": [make_small_house, make_medium_house, make_tower, make_wide_house, make_tall_building],
+        "corrugated_rust": [make_small_house, make_medium_house, make_large_building, make_wide_house, make_tall_building],
+        "conduit": [make_station_room, make_medium_house, make_large_building, make_wide_house, make_tall_building],
     }
 )
 
@@ -587,6 +620,11 @@ def generate_all(tile_size: int, out_dir: Path) -> None:
         int_path = out_dir / f"{style.name}_building_interior.png"
         int_atlas.save(int_path)
         print(f"    → {int_path.name}  {int_atlas.size[0]}×{int_atlas.size[1]}px")
+
+        pad_atlas = _b.build_landing_pad_atlas(style, tile_size)
+        pad_path = out_dir / f"{style.name}_landing_pad.png"
+        pad_atlas.save(pad_path)
+        print(f"    → {pad_path.name}  {pad_atlas.size[0]}×{pad_atlas.size[1]}px")
 
         factories = _b._TEMPLATE_FACTORIES.get(style.wall_texture, [make_small_house])
         for factory in factories:

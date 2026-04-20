@@ -323,9 +323,6 @@ Collision codes:
 | 3 | Damaging | `Sensor` + `TerrainSensor`, deals `damage_per_sec` HP/s |
 | 4 | Trigger | `Sensor` + `TerrainSensor`, fires interaction events |
 
-Same row-major top-down layout as `terrain.ron`. Must be Y-flipped before
-passing to `spawn_collision_entities`.
-
 ### `world_manifest.ron`
 
 Contains biome metadata keyed by biome name. Each biome entry lists all
@@ -335,49 +332,20 @@ per-terrain game properties at runtime without hard-coding them.
 
 ---
 
-## Y-axis: critical coordinate flip
+## Y-axis convention
 
-**The RON data files use image convention: row 0 = top, y increases downward.**
+**All runtime data uses bottom-up convention: y=0 = bottom, y increases
+upward.** This matches `bevy_ecs_tilemap` and bevy's world coordinates,
+so no y-flips are needed in Rust code.
 
-**`bevy_ecs_tilemap` uses game convention: tile (0,0) = bottom-left, y increases upward.**
-
-This means every `terrain.ron` and `collision.ron` must be Y-flipped before
-use. Failure to flip results in the visual tilemap and collision bodies being
-mirrored vertically — the map looks correct but walls block in the wrong
-places.
-
-Correct flip when building `terrain_map` from `TerrainMapAsset`:
-
-```rust
-let terrain_map: Vec<Vec<u32>> = (0..map_h)
-    .map(|y| {
-        let src_y = map_h - 1 - y;  // flip: tilemap row 0 = last data row
-        (0..map_w)
-            .map(|x| {
-                let idx = (src_y * map_w + x) as usize;
-                terrain.data.get(idx).copied().unwrap_or(0)
-            })
-            .collect()
-    })
-    .collect();
-```
-
-Correct flip for collision (build a flipped copy before calling
-`spawn_collision_entities`):
-
-```rust
-let flipped_col = CollisionMapAsset {
-    width:  col.width,
-    height: col.height,
-    data: (0..col.height)
-        .flat_map(|y| {
-            let src_y = col.height - 1 - y;
-            let start = (src_y * col.width) as usize;
-            col.data[start..start + col.width as usize].iter().copied()
-        })
-        .collect(),
-};
-```
+- **fBm terrain maps** (generated in Rust): row-major bottom-up. Row 0 is
+  the bottom of the map, row H-1 is the top.
+- **`compute_bitmask`**: T (top) = y+1, B (bottom) = y-1.
+- **Building templates** (RON files from `buildings.py`): row 0 = base/door
+  (bottom), last row = roof (top).
+- **Atlas tile images** are still in image convention (top-down) within the
+  PNG. `bevy_ecs_tilemap` handles the UV mapping automatically — the data
+  coordinates just need to be bottom-up.
 
 ---
 
