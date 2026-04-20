@@ -22,11 +22,16 @@ pub struct CommodityData {
 
 #[derive(Resource, Deserialize, Serialize)]
 pub struct ItemUniverse {
+    #[serde(default)]
     pub weapons: HashMap<String, Weapon>,
+    #[serde(default)]
     pub ships: HashMap<String, ShipData>,
+    #[serde(default)]
     pub star_systems: HashMap<String, StarSystem>,
+    #[serde(default)]
     pub outfitter_items: HashMap<String, OutfitterItem>,
     // A map from my faction, to which factions engage me
+    #[serde(default)]
     pub enemies: HashMap<String, Vec<String>>,
     /// Cross-faction ally declarations for reward sharing.
     /// Key = faction, Value = list of factions whose rewards are shared.
@@ -480,7 +485,9 @@ pub struct StarSystem {
 pub fn item_universe_plugin(app: &mut App) {
     // Load the ItemUniverse from disk
     let mut item_universe: ItemUniverse =
-        parse_dir::<ItemUniverse>(Path::new("assets")).expect("failed to parse asset config");
+        parse_dir::<ItemUniverse>(Path::new("assets")).expect(
+            "failed to parse asset config — check that all .yaml files in assets/ are valid",
+        );
 
     item_universe.fill_display_names();
     item_universe.compute_global_averages();
@@ -525,7 +532,8 @@ fn dir_to_yaml(dir: &Path) -> Option<Value> {
 
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         let path = entry.path();
-        let stem = path.file_stem()?.to_string_lossy().into_owned();
+        let Some(stem_os) = path.file_stem() else { continue };
+        let stem = stem_os.to_string_lossy().into_owned();
 
         if path.is_dir() {
             if let Some(v) = dir_to_yaml(&path) {
@@ -535,8 +543,20 @@ fn dir_to_yaml(dir: &Path) -> Option<Value> {
             .extension()
             .map_or(false, |e| e == "yaml" || e == "yml")
         {
-            let text = std::fs::read_to_string(&path).ok()?;
-            let val: Value = serde_yaml::from_str(&text).ok()?;
+            let text = match std::fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("[item_universe] WARNING: could not read {}: {e}", path.display());
+                    continue;
+                }
+            };
+            let val = match serde_yaml::from_str::<Value>(&text) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("[item_universe] WARNING: could not parse {}: {e}", path.display());
+                    continue;
+                }
+            };
             map.insert(stem.into(), val);
         }
     }

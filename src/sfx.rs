@@ -10,6 +10,19 @@ use crate::ship::{Ship, ShipCommand, Target};
 use crate::weapons::WeaponFired;
 use crate::{PlayState, Player};
 
+// ── Surface sound effects (used by the surface module) ───────────────────
+
+/// Fire-and-forget surface sound event.  Any system can send this
+/// without needing Commands or AssetServer.
+#[derive(Event, Message, Clone)]
+pub enum SurfaceSfx {
+    Door,
+    UiOpen,
+    UiClose,
+    UiButton,
+    Footstep { surface: String, volume: f32 },
+}
+
 /// Minimum gap between consecutive "you are being targeted" warnings.
 const WARNING_COOLDOWN_SECS: f32 = 4.0;
 /// How often to scan AI ships for new lock-ons.
@@ -17,6 +30,7 @@ const WARNING_SCAN_INTERVAL_SECS: f32 = 1.0;
 
 pub fn sfx_plugin(app: &mut App) {
     app.init_resource::<ThrusterAudio>()
+        .add_message::<SurfaceSfx>()
         .add_systems(Startup, load_sfx)
         .add_systems(OnEnter(PlayState::Traveling), play_player_jump_sfx)
         .add_systems(OnEnter(PlayState::Landed), play_landing_sfx)
@@ -32,7 +46,8 @@ pub fn sfx_plugin(app: &mut App) {
                 play_warning_sfx,
             )
                 .run_if(in_state(PlayState::Flying)),
-        );
+        )
+        .add_systems(Update, play_surface_sfx);
 }
 
 #[derive(Resource, Default)]
@@ -46,6 +61,11 @@ struct SfxHandles {
     landing: Handle<AudioSource>,
     target: Handle<AudioSource>,
     warning: Handle<AudioSource>,
+    // Surface sounds
+    door: Handle<AudioSource>,
+    ui_open: Handle<AudioSource>,
+    ui_close: Handle<AudioSource>,
+    ui_button: Handle<AudioSource>,
 }
 
 impl SfxHandles {
@@ -76,6 +96,10 @@ fn load_sfx(mut commands: Commands, asset_server: Res<AssetServer>) {
         landing: asset_server.load("sounds/landing.ogg"),
         target: asset_server.load("sounds/target.ogg"),
         warning: asset_server.load("sounds/warning.ogg"),
+        door: asset_server.load("sounds/world/door.ogg"),
+        ui_open: asset_server.load("sounds/world/ui_open.ogg"),
+        ui_close: asset_server.load("sounds/world/ui_close.ogg"),
+        ui_button: asset_server.load("sounds/world/ui_button.ogg"),
     });
 }
 
@@ -316,6 +340,41 @@ fn play_warning_sfx(
             PlaybackSettings {
                 mode: PlaybackMode::Despawn,
                 volume: Volume::Linear(0.5),
+                ..default()
+            },
+        ));
+    }
+}
+
+/// Play surface sound effects dispatched via [`SurfaceSfx`] events.
+fn play_surface_sfx(
+    mut commands: Commands,
+    mut reader: MessageReader<SurfaceSfx>,
+    sfx: Option<Res<SfxHandles>>,
+    asset_server: Res<AssetServer>,
+) {
+    let Some(sfx) = sfx else { return };
+    for event in reader.read() {
+        let (handle, volume) = match event {
+            SurfaceSfx::Door => (sfx.door.clone(), 0.4),
+            SurfaceSfx::UiOpen => (sfx.ui_open.clone(), 0.5),
+            SurfaceSfx::UiClose => (sfx.ui_close.clone(), 0.5),
+            SurfaceSfx::UiButton => (sfx.ui_button.clone(), 0.5),
+            SurfaceSfx::Footstep { surface, volume } => {
+                use rand::Rng;
+                let variant = rand::thread_rng().r#gen_range(0u32..5);
+                let path = format!(
+                    "sounds/people/walking/footstep_{surface}_{variant:03}.ogg"
+                );
+                let h = asset_server.load(path);
+                (h, *volume)
+            }
+        };
+        commands.spawn((
+            AudioPlayer::<AudioSource>(handle),
+            PlaybackSettings {
+                mode: PlaybackMode::Despawn,
+                volume: Volume::Linear(volume),
                 ..default()
             },
         ));

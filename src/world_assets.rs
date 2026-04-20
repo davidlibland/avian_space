@@ -65,6 +65,12 @@ pub struct TerrainMeta {
     pub collision: u8,
     pub movement_cost: f32,
     pub damage_per_sec: f32,
+    /// RGB colour used on the surface mini-map.
+    pub map_color: (u8, u8, u8),
+    /// Footstep sound surface type (concrete, dull, grass, sand, snow).
+    pub footstep_surface: String,
+    /// Footstep volume multiplier.
+    pub footstep_volume: f32,
 }
 
 #[derive(Deserialize, Debug)]
@@ -110,6 +116,9 @@ pub struct BuildingStyleMeta {
     pub exterior_atlas: String,
     pub interior_atlas: String,
     pub landing_pad_atlas: String,
+    pub mechanic_atlas: String,
+    pub ext_tile_colors: Vec<(u8, u8, u8)>,
+    pub mechanic_tile_colors: Vec<(u8, u8, u8)>,
     pub templates: Vec<String>,
 }
 

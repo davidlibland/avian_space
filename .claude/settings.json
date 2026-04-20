@@ -39,7 +39,12 @@
       "Bash(python tilegen.py --tile-size 32 --out-dir ../assets/sprites/worlds)",
       "Bash(python buildings_scifi.py --tile-size 32 --out-dir ../assets/sprites/worlds)",
       "Bash(python combine_spritesheet.py)",
-      "Bash(grep -l \"gas_giant\" /Users/dlibland/dev/avian_space/assets/data/*.yaml)"
+      "Bash(grep -l \"gas_giant\" /Users/dlibland/dev/avian_space/assets/data/*.yaml)",
+      "Bash(python objects.py --tile-size 16 --out-dir ../assets/sprites/worlds)",
+      "Bash(ls -la /Users/dlibland/dev/avian_space/assets/sprites/worlds/*objects* /Users/dlibland/dev/avian_space/assets/sprites/worlds/objects_manifest.ron)",
+      "Bash(python3 -c \"import yaml; yaml.safe_load\\(open\\('/Users/dlibland/dev/avian_space/assets/weapons.yaml'\\)\\); print\\('OK'\\)\")",
+      "Bash(grep -r \"pub.*EventWriter\\\\|pub.*EventReader\" /Users/dlibland/.cargo/registry/src/*/bevy_ecs-*/src/)",
+      "Bash(grep \"add_message\\\\|add_event\" /Users/dlibland/dev/avian_space/src/*.rs)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds"

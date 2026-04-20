@@ -128,6 +128,30 @@ _EXT_COLLISION: dict[int, int] = {
 }
 
 
+def ext_tile_map_colors(palette: "ColourPalette") -> list[tuple[int, int, int]]:
+    """Return a map color (r,g,b) for each of the 30 ext tile slots."""
+    p = palette
+    roof = p.roof_fill
+    wall = p.wall_fill
+    win = p.window_fill
+    door = p.door_fill
+    attic = p.roof_edge
+    # Map each tile slot to the dominant colour it would appear as on a tiny map.
+    _map: dict[int, tuple[int, int, int]] = {
+        EXT.ROOF_NW: roof, EXT.ROOF_N: roof, EXT.ROOF_NE: roof,
+        EXT.ROOF_W: roof, EXT.ROOF_FILL: roof, EXT.ROOF_E: roof,
+        EXT.ROOF_SW: roof, EXT.ROOF_S: roof, EXT.ROOF_SE: roof,
+        EXT.ATTIC_W: attic, EXT.ATTIC: attic, EXT.ATTIC_E: attic,
+        EXT.WALL_NW: wall, EXT.WALL_N: wall, EXT.WALL_NE: wall,
+        EXT.WALL_W: wall, EXT.WALL_FILL: wall, EXT.WALL_E: wall,
+        EXT.WALL_SW: wall, EXT.WALL_S: wall, EXT.WALL_SE: wall,
+        EXT.WIN_W: wall, EXT.WINDOW: win, EXT.WIN_E: wall,
+        EXT.BASE_NW: wall, EXT.BASE_N: wall, EXT.BASE_NE: wall,
+        EXT.DOOR_L: door, EXT.DOOR: door, EXT.DOOR_R: door,
+    }
+    return [_map.get(i, wall) for i in range(EXT_TOTAL)]
+
+
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Data classes                                                            ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
@@ -828,6 +852,176 @@ def make_station_room(style: BuildingStyle) -> BuildingTemplate:
     )
 
 
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Mechanic shop atlas (4×3, per-biome style)                              ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
+# Layout (4 cols × 3 rows, image convention top-down):
+#
+#   Row 0 (roof):    ROOF_L   ROOF     ROOF     ROOF_R
+#   Row 1 (wall):    WALL_L   WALL     WALL     WALL_R
+#   Row 2 (base):    WALL_L   GARAGE_L GARAGE_R WALL_R
+#
+# The garage door occupies 2 tiles at the base (cols 1-2).
+# The doors are partially open, with engine and tools visible inside
+# the dark interior gap beneath the roller slats.
+MECH_COLS = 4
+MECH_ROWS = 3
+
+# ── Fixed colours for engine and tools (same across all biomes) ──────────
+_ENGINE_LIGHT = (160, 162, 168)   # space-grey highlight
+_ENGINE_MID   = (110, 112, 118)   # space-grey body
+_ENGINE_DARK  = (65, 67, 72)      # space-grey shadow
+_ENGINE_NOZZLE = (45, 45, 50)
+
+_TOOL_GREY   = (130, 130, 135)
+_TOOL_RED    = (180, 50, 40)
+_TOOL_BLACK  = (30, 30, 32)
+_TOOL_YELLOW = (210, 190, 50)
+
+
+def _draw_engine_interior(draw: ImageDraw.ImageDraw, x0: int, y0: int,
+                          w: int, h: int) -> None:
+    """Draw a rounded space-grey engine on a test stand in a rectangle."""
+    # Test stand legs
+    leg_y = y0 + h - 2
+    draw.line([(x0 + 2, y0 + h * 2 // 3), (x0 + 2, leg_y)],
+              fill=_ENGINE_DARK, width=1)
+    draw.line([(x0 + w - 3, y0 + h * 2 // 3), (x0 + w - 3, leg_y)],
+              fill=_ENGINE_DARK, width=1)
+    # Engine body (rounded rectangle via layered rects)
+    ey = y0 + 1
+    eh = h * 2 // 3
+    draw.rectangle([x0 + 2, ey + 1, x0 + w - 3, ey + eh], fill=_ENGINE_MID)
+    # Highlight on top edge (gives rounded / cylindrical look)
+    draw.rectangle([x0 + 3, ey, x0 + w - 4, ey + 2], fill=_ENGINE_LIGHT)
+    # Shadow on bottom edge
+    draw.rectangle([x0 + 3, ey + eh - 1, x0 + w - 4, ey + eh], fill=_ENGINE_DARK)
+    # Exhaust nozzle on right
+    nx = x0 + w - 3
+    draw.rectangle([nx, ey + 2, nx + 3, ey + eh // 2 + 1], fill=_ENGINE_NOZZLE)
+    # Glow dot (exhaust)
+    draw.ellipse([nx + 1, ey + 3, nx + 3, ey + 5], fill=(255, 140, 40))
+
+
+def _draw_tools_interior(draw: ImageDraw.ImageDraw, x0: int, y0: int,
+                         w: int, h: int, seed: int = 0) -> None:
+    """Draw tools and crates scattered on the floor."""
+    import random as _rnd
+    _rnd.seed(seed)
+    # Floor crates
+    for _ in range(3):
+        cx = x0 + _rnd.randint(1, w - 6)
+        cy = y0 + _rnd.randint(h // 3, h - 4)
+        cw = _rnd.randint(3, 6)
+        ch = _rnd.randint(2, 4)
+        draw.rectangle([cx, cy, cx + cw, cy + ch], fill=_TOOL_BLACK, outline=_TOOL_GREY)
+    # Wrench (lying flat)
+    wy = y0 + h // 4
+    draw.line([(x0 + 2, wy), (x0 + w // 2, wy)], fill=_TOOL_GREY, width=1)
+    draw.ellipse([x0 + 1, wy - 1, x0 + 3, wy + 1], fill=_TOOL_GREY)
+    # Red toolbox
+    tx = x0 + w * 2 // 3
+    ty = y0 + h // 2
+    draw.rectangle([tx, ty, tx + 5, ty + 3], fill=_TOOL_RED, outline=_TOOL_BLACK)
+    draw.line([(tx + 1, ty), (tx + 4, ty)], fill=_TOOL_YELLOW, width=1)
+    # Yellow hazard marking on floor
+    draw.line([(x0 + 1, y0 + h - 2), (x0 + w - 2, y0 + h - 2)],
+              fill=_TOOL_YELLOW, width=1)
+
+
+def build_mechanic_atlas(style: BuildingStyle, tile_size: int) -> Image.Image:
+    """Generate a 4×3 (12-tile) mechanic shop atlas for this building style."""
+    S = tile_size
+    p = style.palette
+    atlas = Image.new("RGBA", (MECH_COLS * S, MECH_ROWS * S), (0, 0, 0, 0))
+
+    wall = _make_wall_base(style, S, style.seed + 300)
+    roof = _make_roof_base(style, S, style.seed + 301)
+    accent = getattr(p, "_emissive", None) or p.window_fill
+
+    def paste(arr_or_img, col: int, row: int) -> None:
+        if isinstance(arr_or_img, np.ndarray):
+            img = Image.fromarray(arr_or_img, "RGB").convert("RGBA")
+        else:
+            img = arr_or_img.convert("RGBA")
+        atlas.paste(img, (col * S, row * S))
+
+    # ── Row 0: roof ──────────────────────────────────────────────────────
+    paste(_shadow_edge(_highlight_edge(roof, "top"), "left"), 0, 0)
+    paste(_highlight_edge(roof, "top"), 1, 0)
+    paste(_highlight_edge(roof, "top"), 2, 0)
+    paste(_shadow_edge(_highlight_edge(roof, "top"), "right"), 3, 0)
+
+    # ── Row 1: plain walls ───────────────────────────────────────────────
+    paste(_shadow_edge(wall, "left"), 0, 1)
+    paste(wall, 1, 1)
+    paste(wall, 2, 1)
+    paste(_shadow_edge(wall, "right"), 3, 1)
+
+    # ── Row 2: base with garage doors (cols 1-2) ────────────────────────
+    # The garage door is partially open: roller slats on top, dark interior
+    # gap below showing engine (left door) and tools (right door).
+    base = _shadow_edge(wall, "bottom", width=4, alpha=0.6)
+    paste(_shadow_edge(_shadow_edge(base, "bottom"), "left"), 0, 2)
+
+    slat_c = tuple(max(0, c - 15) for c in p.wall_edge)
+    frame_c = p.int_dark if hasattr(p, "int_dark") else (40, 40, 45)
+    floor_c = p.floor_fill
+    open_frac = 0.55  # fraction of tile height that's open
+
+    for gc, draw_interior in enumerate([_draw_engine_interior, _draw_tools_interior]):
+        door_img = Image.fromarray(base.copy())
+        draw = ImageDraw.Draw(door_img)
+        # Frame
+        draw.rectangle([0, 0, S - 1, S - 1], outline=frame_c, width=1)
+
+        open_h = int(S * open_frac)
+        closed_h = S - open_h
+
+        # Dark interior in the open gap (bottom portion)
+        draw.rectangle([2, closed_h, S - 3, S - 2], fill=(20, 22, 25))
+        # Floor strip at very bottom
+        draw.rectangle([2, S - 3, S - 3, S - 2], fill=floor_c)
+
+        # Draw engine or tools inside the dark gap
+        interior_x = 3
+        interior_y = closed_h + 1
+        interior_w = S - 6
+        interior_h = open_h - 4
+        if gc == 0:
+            draw_interior(draw, interior_x, interior_y, interior_w, interior_h)
+        else:
+            draw_interior(draw, interior_x, interior_y, interior_w, interior_h,
+                          seed=style.seed + 320)
+
+        # Roller slats on top (closed portion, drawn OVER interior)
+        for y in range(2, closed_h, 3):
+            draw.line([(2, y), (S - 3, y)], fill=slat_c, width=1)
+
+        # Accent strip at the bottom edge of the roller door
+        draw.line([(2, closed_h), (S - 3, closed_h)], fill=accent, width=1)
+
+        paste(np.array(door_img), 1 + gc, 2)
+
+    paste(_shadow_edge(_shadow_edge(base, "bottom"), "right"), 3, 2)
+
+    return atlas
+
+
+def mechanic_tile_map_colors(palette: "ColourPalette") -> list[tuple[int, int, int]]:
+    """Map colors for the 12 mechanic tiles (4 cols × 3 rows)."""
+    p = palette
+    roof = p.roof_fill
+    wall = p.wall_fill
+    door = p.door_fill
+    return [
+        roof, roof, roof, roof,          # row 0: roof
+        wall, wall, wall, wall,          # row 1: walls
+        wall, door, door, wall,          # row 2: base + garage door
+    ]
+
+
 def make_wide_house(style: BuildingStyle) -> BuildingTemplate:
     """7-wide × 4-tall wide building — market / outfitter."""
     W, H = 7, 4
@@ -1062,12 +1256,19 @@ def write_buildings_manifest(
     for s in styles:
         factories = _TEMPLATE_FACTORIES.get(s.wall_texture, [make_small_house])
         template_names = [f.__name__.replace("make_", "") for f in factories]
+        colors = ext_tile_map_colors(s.palette)
+        colors_ron = "[" + ", ".join(f"({r}, {g}, {b})" for r, g, b in colors) + "]"
+        mech_colors = mechanic_tile_map_colors(s.palette)
+        mech_ron = "[" + ", ".join(f"({r}, {g}, {b})" for r, g, b in mech_colors) + "]"
         lines += [
             f'        "{s.name}": (\n',
             f'            biome: "{s.biome}",\n',
             f'            exterior_atlas: "{s.name}_building_exterior.png",\n',
             f'            interior_atlas: "{s.name}_building_interior.png",\n',
             f'            landing_pad_atlas: "{s.name}_landing_pad.png",\n',
+            f'            mechanic_atlas: "{s.name}_mechanic.png",\n',
+            f"            ext_tile_colors: {colors_ron},\n",
+            f"            mechanic_tile_colors: {mech_ron},\n",
             "            templates: [{}],\n".format(
                 ", ".join(f'"{n}"' for n in template_names)
             ),
@@ -1238,6 +1439,12 @@ def generate_all(tile_size: int, out_dir: Path) -> None:
         pad_path = out_dir / f"{style.name}_landing_pad.png"
         pad_atlas.save(pad_path)
         print(f"    → {pad_path.name}  {pad_atlas.size[0]}×{pad_atlas.size[1]}px")
+
+        # Mechanic shop atlas
+        mech_atlas = build_mechanic_atlas(style, tile_size)
+        mech_path = out_dir / f"{style.name}_mechanic.png"
+        mech_atlas.save(mech_path)
+        print(f"    → {mech_path.name}  {mech_atlas.size[0]}×{mech_atlas.size[1]}px")
 
         # Templates
         factories = _TEMPLATE_FACTORIES.get(style.wall_texture, [make_small_house])

@@ -29,7 +29,7 @@ const WALKER_RADIUS: f32 = 6.0;
 const WALKER_DAMPING: f32 = 10.0;
 
 /// Camera scale when zoomed in on the planet surface.
-const SURFACE_CAMERA_SCALE: f32 = 0.5;
+const SURFACE_CAMERA_SCALE: f32 = 0.8;
 /// Camera scale in space (normal).
 const SPACE_CAMERA_SCALE: f32 = 1.0;
 /// How fast the camera zoom interpolates (per second).
@@ -43,11 +43,7 @@ const WORLD_WIDTH: u32 = 64;
 const WORLD_HEIGHT: u32 = 64;
 
 /// Tile size in pixels (must match the atlas tile size from tilegen.py).
-const TILE_PX: f32 = 32.0;
-
-/// Extra tiles of impassable terrain around the map border so the edge
-/// doesn't transition directly to empty space.
-const BORDER_MARGIN: u32 = 4;
+pub const TILE_PX: f32 = 32.0;
 
 // ── fBm parameters ──────────────────────────────────────────────────────
 const FBM_SCALE: f32 = 4.0;
@@ -55,7 +51,8 @@ const FBM_OCTAVES: u32 = 5;
 const FBM_LACUNARITY: f32 = 2.0;
 const FBM_GAIN: f32 = 0.5;
 /// Number of terrain types per biome (must match the atlas row count).
-const N_TERRAIN_TYPES: u32 = 5;
+/// Number of terrain types per biome (5 biome terrains + 1 void border).
+const N_TERRAIN_TYPES: u32 = 6;
 
 // ---------------------------------------------------------------------------
 // Building kinds
@@ -64,6 +61,7 @@ const N_TERRAIN_TYPES: u32 = 5;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuildingKind {
     ShipPad,
+    MechanicShop,
     Market,
     Outfitter,
     Shipyard,
@@ -75,6 +73,7 @@ impl BuildingKind {
     fn label(&self) -> &'static str {
         match self {
             BuildingKind::ShipPad => "Ship",
+            BuildingKind::MechanicShop => "Mechanic",
             BuildingKind::Market => "Market",
             BuildingKind::Outfitter => "Outfitter",
             BuildingKind::Shipyard => "Shipyard",
@@ -86,6 +85,7 @@ impl BuildingKind {
     fn color(&self) -> Color {
         match self {
             BuildingKind::ShipPad => Color::srgb(0.5, 0.5, 0.7),
+            BuildingKind::MechanicShop => Color::srgb(0.8, 0.5, 0.2),
             BuildingKind::Market => Color::srgb(0.9, 0.75, 0.2),
             BuildingKind::Outfitter => Color::srgb(0.7, 0.3, 0.3),
             BuildingKind::Shipyard => Color::srgb(0.3, 0.5, 0.8),
@@ -208,9 +208,22 @@ pub struct Building {
     pub kind: BuildingKind,
 }
 
-/// Which building (if any) the walker is currently overlapping.
+/// Marks a door sprite for depth-crossing sound detection.
+/// `walker_was_behind` tracks whether the walker was behind (higher z)
+/// the door last frame.
+#[derive(Component)]
+struct DoorSprite {
+    walker_was_behind: Option<bool>,
+}
+
+/// Which building (if any) the walker is currently overlapping,
+/// plus a count of active sensor overlaps (so exiting one of two
+/// adjacent door tiles doesn't clear the state).
 #[derive(Resource, Default)]
-pub struct NearbyBuilding(pub Option<(Entity, BuildingKind)>);
+pub struct NearbyBuilding {
+    pub current: Option<(Entity, BuildingKind)>,
+    overlap_count: u32,
+}
 
 /// Which building's egui UI is currently open. `None` = walking freely.
 #[derive(Resource, Default)]
@@ -221,10 +234,33 @@ pub struct ActiveBuildingUI(pub Option<BuildingKind>);
 #[derive(Resource)]
 struct TerrainSpeedModifier(f32);
 
+/// Per-terrain footstep data, indexed by terrain index.
+#[derive(Resource, Default)]
+struct FootstepData {
+    /// (surface_name, volume) per terrain index.
+    terrains: Vec<(String, f32)>,
+    /// Terrain index per tile, flat array (map_w × map_h, bottom-up).
+    terrain_map: Vec<u32>,
+    map_w: u32,
+    map_h: u32,
+}
+
 impl Default for TerrainSpeedModifier {
     fn default() -> Self {
         Self(1.0)
     }
+}
+
+/// The generated mini-map image handle + map dimensions, used by the HUD.
+#[derive(Resource)]
+pub struct SurfaceMiniMap {
+    pub image: Handle<Image>,
+    pub map_w: u32,
+    pub map_h: u32,
+    /// (tile_x, tile_y, BuildingKind) for each placed building.
+    pub buildings: Vec<(u32, u32, BuildingKind)>,
+    /// Landing pad center.
+    pub pad_pos: (u32, u32),
 }
 
 /// Animated camera zoom target.
@@ -246,11 +282,7 @@ impl Default for CameraZoom {
 struct BuildingLabel;
 
 /// Spawn a building label with a dark plaque behind for readability.
-fn spawn_building_label(
-    commands: &mut Commands,
-    text: &str,
-    pos: Vec3,
-) {
+fn spawn_building_label(commands: &mut Commands, text: &str, pos: Vec3) {
     let scale = Vec3::splat(0.18);
     let char_w = 28.0 * 0.6; // approximate glyph width at font_size 28
     let plaque_w = text.len() as f32 * char_w * scale.x + 4.0;
@@ -281,10 +313,6 @@ fn spawn_building_label(
     ));
 }
 
-/// Marker for the "Press E" prompt.
-#[derive(Component)]
-struct InteractPrompt;
-
 // ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
@@ -295,6 +323,7 @@ pub fn surface_plugin(app: &mut App) {
         .init_resource::<NearbyBuilding>()
         .init_resource::<ActiveBuildingUI>()
         .init_resource::<TerrainSpeedModifier>()
+        .init_resource::<FootstepData>()
         .add_systems(
             OnEnter(PlayState::Exploring),
             (setup_surface, save_on_explore),
@@ -305,10 +334,21 @@ pub fn surface_plugin(app: &mut App) {
             (
                 walker_input,
                 animate_walker,
+                play_footstep,
                 track_nearby_building,
                 track_terrain_speed,
                 building_interact,
                 update_interact_prompt,
+            )
+                .run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            Update,
+            (
+                crate::surface_objects::update_shy_objects,
+                crate::surface_objects::animate_landscape_objects,
+                crate::surface_objects::depth_sort_walker,
+                door_depth_sound,
             )
                 .chain()
                 .run_if(in_state(PlayState::Exploring)),
@@ -317,6 +357,10 @@ pub fn surface_plugin(app: &mut App) {
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
             surface_building_ui.run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            Update,
+            egui_button_click_sound.run_if(in_state(PlayState::Exploring)),
         )
         .add_systems(
             FixedUpdate,
@@ -378,15 +422,15 @@ fn building_kinds_for_planet(
 /// (dx, dy, atlas_index). Atlas is row-major top-down in the PNG,
 /// but tile placement is bottom-up (dy=+1 = up on screen).
 const PAD_TILES: [(i32, i32, usize); 9] = [
-    (-1,  1, 0),  // TL corner
-    ( 0,  1, 1),  // T  edge
-    ( 1,  1, 2),  // TR corner
-    (-1,  0, 3),  // L  edge
-    ( 0,  0, 4),  // C  center
-    ( 1,  0, 5),  // R  edge
-    (-1, -1, 6),  // BL corner
-    ( 0, -1, 7),  // B  edge
-    ( 1, -1, 8),  // BR corner
+    (-1, 1, 0),  // TL corner
+    (0, 1, 1),   // T  edge
+    (1, 1, 2),   // TR corner
+    (-1, 0, 3),  // L  edge
+    (0, 0, 4),   // C  center
+    (1, 0, 5),   // R  edge
+    (-1, -1, 6), // BL corner
+    (0, -1, 7),  // B  edge
+    (1, -1, 8),  // BR corner
 ];
 
 /// Find walkable tile positions in the collision data, suitable for placing
@@ -438,8 +482,12 @@ fn setup_surface(
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     asset_server: Res<AssetServer>,
     game_state: Res<crate::game_save::PlayerGameState>,
+    mut comms: ResMut<crate::hud::CommsChannel>,
+    mut images: ResMut<Assets<Image>>,
 ) {
-    // Bug 4 fixed: get_single() is the fallible form in Bevy 0.15+
+    comms.send("");
+    commands.insert_resource(ClearColor(Color::BLACK));
+
     if let Ok(ship_entity) = player_query.single() {
         commands.entity(ship_entity).insert(Visibility::Hidden);
     }
@@ -494,7 +542,11 @@ fn setup_surface(
             if let Some(biome_meta) = manifest.biomes.get(biome_name) {
                 (
                     biome_meta.terrains.iter().map(|t| t.collision).collect(),
-                    biome_meta.terrains.iter().map(|t| t.movement_cost).collect(),
+                    biome_meta
+                        .terrains
+                        .iter()
+                        .map(|t| t.movement_cost)
+                        .collect(),
                 )
             } else {
                 (
@@ -536,9 +588,8 @@ fn setup_surface(
         let bldg_style = bldg_manifest
             .as_ref()
             .and_then(|m| m.styles.get(style_name));
-        let ext_atlas_handle: Option<Handle<Image>> = bldg_style.map(|s| {
-            asset_server.load(format!("{WORLDS_DIR}/{}", s.exterior_atlas))
-        });
+        let ext_atlas_handle: Option<Handle<Image>> =
+            bldg_style.map(|s| asset_server.load(format!("{WORLDS_DIR}/{}", s.exterior_atlas)));
         let ext_layout: Option<Handle<TextureAtlasLayout>> = bldg_manifest.as_ref().map(|m| {
             atlas_layouts.add(TextureAtlasLayout::from_grid(
                 UVec2::new(tile_px as u32, tile_px as u32),
@@ -553,9 +604,7 @@ fn setup_surface(
                 s.templates
                     .iter()
                     .filter_map(|name| {
-                        let path = format!(
-                            "assets/{WORLDS_DIR}/buildings/{style_name}_{name}.ron"
-                        );
+                        let path = format!("assets/{WORLDS_DIR}/buildings/{style_name}_{name}.ron");
                         std::fs::read_to_string(&path)
                             .ok()
                             .and_then(|t| ron::from_str(&t).ok())
@@ -572,11 +621,33 @@ fn setup_surface(
         // Place the landing pad at the map center.
         let pad_cx = map_w / 2;
         let pad_cy = map_h / 2;
+        // Mechanic shop: random cardinal direction, 3-6 tiles from pad.
+        let (mech_x, mech_y) = {
+            use rand::{Rng, SeedableRng};
+            let mech_seed = planet_name
+                .bytes()
+                .fold(0u64, |acc, b| acc.wrapping_mul(37).wrapping_add(b as u64));
+            let mut rng = rand::rngs::StdRng::seed_from_u64(mech_seed);
+            let dist = rng.gen_range(3i32..=6);
+            let dir = rng.gen_range(0u8..4);
+            let (dx, dy) = match dir {
+                0 => (dist, 0),      // right
+                1 => (-dist - 3, 0), // left (offset by mechanic width)
+                2 => (0, dist),      // up
+                _ => (0, -dist - 2), // down (offset by mechanic height)
+            };
+            (
+                (pad_cx as i32 + dx).max(2) as u32,
+                (pad_cy as i32 + dy).max(2) as u32,
+            )
+        };
 
         let min_building_spacing = 10_u32;
         let mut placed_buildings: Vec<(u32, u32, u32, u32)> = Vec::new(); // (x, y, w, h)
         // Reserve the pad area (3x3 centered on pad_cx, pad_cy).
         placed_buildings.push((pad_cx - 1, pad_cy - 1, 3, 3));
+        // Reserve the mechanic area (4×3).
+        placed_buildings.push((mech_x, mech_y, 4, 3));
         let mut template_idx = 0;
         let mut building_assignments: Vec<(BuildingKind, u32, u32, usize)> = Vec::new(); // (kind, x, y, template_idx)
 
@@ -602,7 +673,8 @@ fn setup_surface(
                         if idx >= initial_col.len() {
                             return false;
                         }
-                        if initial_col[idx] == 1 { // Solid
+                        if initial_col[idx] == 1 {
+                            // Solid
                             return false;
                         }
                     }
@@ -615,7 +687,11 @@ fn setup_surface(
             });
 
             if let Some(&(tx, ty)) = pos {
-                let ti = if templates.is_empty() { 0 } else { (template_idx - 1) % templates.len() };
+                let ti = if templates.is_empty() {
+                    0
+                } else {
+                    (template_idx - 1) % templates.len()
+                };
                 placed_buildings.push((tx, ty, bw, bh));
                 building_assignments.push((*kind, tx, ty, ti));
             }
@@ -676,41 +752,22 @@ fn setup_surface(
             })
             .collect();
 
-        // Expand the tilemap with a border margin of solid tiles so the
-        // edge doesn't transition directly to empty space.
-        let border = BORDER_MARGIN;
-        let total_w = map_w + 2 * border;
-        let total_h = map_h + 2 * border;
-        let max_terrain = N_TERRAIN_TYPES - 1;
-        // Fully-interior tile for the highest terrain (all neighbours same).
-        let border_tex = max_terrain * lut_data.atlas_cols
-            + lut_data.lut[255] as u32;
-
-        let map_size = TilemapSize { x: total_w, y: total_h };
+        let map_size = TilemapSize { x: map_w, y: map_h };
         let mut tile_storage = TileStorage::empty(map_size);
         let tilemap_entity = commands.spawn(DespawnOnExit(PlayState::Exploring)).id();
         let tilemap_id = TilemapId(tilemap_entity);
 
-        for ty in 0..total_h {
-            for tx in 0..total_w {
-                let in_map = tx >= border && tx < border + map_w
-                          && ty >= border && ty < border + map_h;
-                let tex_idx = if in_map {
-                    let x = tx - border;
-                    let y = ty - border;
-                    crate::world_assets::tile_texture_index(
-                        &terrain_map,
-                        x as i32,
-                        y as i32,
-                        map_w as i32,
-                        map_h as i32,
-                        lut_data,
-                    )
-                } else {
-                    border_tex
-                };
-                // No y-flip: data is already bottom-up, matching TilePos.
-                let tile_pos = TilePos { x: tx, y: ty };
+        for y in 0..map_h {
+            for x in 0..map_w {
+                let tex_idx = crate::world_assets::tile_texture_index(
+                    &terrain_map,
+                    x as i32,
+                    y as i32,
+                    map_w as i32,
+                    map_h as i32,
+                    lut_data,
+                );
+                let tile_pos = TilePos { x, y };
                 let tile_entity = commands
                     .spawn(TileBundle {
                         position: tile_pos,
@@ -741,37 +798,20 @@ fn setup_surface(
             ..default()
         });
 
-        // Build expanded collision + terrain arrays that include the
-        // border margin (all solid / highest terrain).
-        let solid_code = 1u8; // CollisionType::Solid
-        let total_len = (total_w * total_h) as usize;
-        let mut expanded_col = vec![solid_code; total_len];
-        let mut expanded_terrain = vec![max_terrain; total_len];
-        // No y-flip: data is already bottom-up, matching bevy_ecs_tilemap.
-        for ty in border..border + map_h {
-            for tx in border..border + map_w {
-                let src_idx = ((ty - border) * map_w + (tx - border)) as usize;
-                let dst_idx = (ty * total_w + tx) as usize;
-                expanded_col[dst_idx] = col_data[src_idx];
-                expanded_terrain[dst_idx] = terrain_flat[src_idx];
-            }
-        }
-
-        let expanded_col_asset = crate::world_assets::CollisionMapAsset {
-            width: total_w,
-            height: total_h,
-            data: expanded_col,
+        let col_asset = crate::world_assets::CollisionMapAsset {
+            width: map_w,
+            height: map_h,
+            data: col_data.clone(),
         };
-
         let map_origin = Vec2::new(
-            -(total_w as f32 * tile_px / 2.0),
-            -(total_h as f32 * tile_px / 2.0),
+            -(map_w as f32 * tile_px / 2.0),
+            -(map_h as f32 * tile_px / 2.0),
         );
         let surface_layers = CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]);
         crate::world_assets::spawn_collision_entities(
             &mut commands,
-            &expanded_col_asset,
-            &expanded_terrain,
+            &col_asset,
+            &terrain_flat,
             &movement_costs,
             tile_px,
             map_origin,
@@ -779,14 +819,15 @@ fn setup_surface(
         );
 
         // ── Spawn landing pad (plus/cross shape, 3x3 atlas) ──────────
-        let pad_atlas_handle: Option<Handle<Image>> = bldg_style.map(|s| {
-            asset_server.load(format!("{WORLDS_DIR}/{}", s.landing_pad_atlas))
-        });
+        let pad_atlas_handle: Option<Handle<Image>> =
+            bldg_style.map(|s| asset_server.load(format!("{WORLDS_DIR}/{}", s.landing_pad_atlas)));
         let pad_layout: Option<Handle<TextureAtlasLayout>> = pad_atlas_handle.as_ref().map(|_| {
             atlas_layouts.add(TextureAtlasLayout::from_grid(
                 UVec2::new(tile_px as u32, tile_px as u32),
-                3, 3,
-                None, None,
+                3,
+                3,
+                None,
+                None,
             ))
         });
 
@@ -825,7 +866,9 @@ fn setup_surface(
             // Center tile is the interaction sensor.
             if dx == 0 && dy == 0 {
                 entity.insert((
-                    Building { kind: BuildingKind::ShipPad },
+                    Building {
+                        kind: BuildingKind::ShipPad,
+                    },
                     Sensor,
                     RigidBody::Static,
                     Collider::rectangle(tile_px, tile_px),
@@ -844,10 +887,93 @@ fn setup_surface(
             );
         }
 
+        // ── Spawn mechanic shop next to the landing pad ──────────────
+        let mech_atlas_handle: Option<Handle<Image>> =
+            bldg_style.map(|s| asset_server.load(format!("{WORLDS_DIR}/{}", s.mechanic_atlas)));
+        let mech_layout: Option<Handle<TextureAtlasLayout>> =
+            mech_atlas_handle.as_ref().map(|_| {
+                atlas_layouts.add(TextureAtlasLayout::from_grid(
+                    UVec2::new(tile_px as u32, tile_px as u32),
+                    4,
+                    3, // MECH_COLS × MECH_ROWS
+                    None,
+                    None,
+                ))
+            });
+        // Mechanic shop position was computed earlier (mech_x, mech_y).
+        // All tiles in the building share the same z based on the floor row.
+        let mech_floor_world = tile_to_world(mech_x, mech_y, map_w, map_h, tile_px);
+        let mech_z = crate::surface_objects::depth_z(mech_floor_world.y - tile_px * 0.5);
+        if let (Some(mech_img), Some(mech_lay)) = (mech_atlas_handle.as_ref(), mech_layout.as_ref())
+        {
+            // The mechanic atlas is 4×3, stored top-down in the PNG.
+            // Row 0 in the atlas = roof (top of building).
+            // We stamp bottom-up: atlas row 2 → lowest y, atlas row 0 → highest y.
+            for row in 0..3u32 {
+                for col in 0..4u32 {
+                    let atlas_row = 2 - row; // flip: bottom-up
+                    let atlas_idx = (atlas_row * 4 + col) as usize;
+                    let tx = mech_x + col;
+                    let ty = mech_y + row;
+                    let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
+
+                    // Garage door tiles (atlas row 2, cols 1-2) are sensors.
+                    let is_garage = atlas_row == 2 && (col == 1 || col == 2);
+
+                    let mut entity = commands.spawn((
+                        DespawnOnExit(PlayState::Exploring),
+                        Sprite::from_atlas_image(
+                            mech_img.clone(),
+                            TextureAtlas {
+                                layout: mech_lay.clone(),
+                                index: atlas_idx,
+                            },
+                        ),
+                        Transform::from_xyz(world_pos.x, world_pos.y, mech_z),
+                    ));
+
+                    if is_garage {
+                        entity.insert((
+                            Building {
+                                kind: BuildingKind::MechanicShop,
+                            },
+                            DoorSprite { walker_was_behind: None },
+                            Sensor,
+                            RigidBody::Static,
+                            Collider::rectangle(tile_px, tile_px),
+                            CollisionEventsEnabled,
+                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                        ));
+                    } else {
+                        entity.insert((
+                            RigidBody::Static,
+                            Collider::rectangle(tile_px, tile_px),
+                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                        ));
+                    }
+                }
+            }
+            // Mechanic label above garage door.
+            let label_world = tile_to_world(mech_x + 1, mech_y, map_w, map_h, tile_px);
+            spawn_building_label(
+                &mut commands,
+                "Mechanic",
+                Vec3::new(
+                    label_world.x + tile_px * 0.5,
+                    label_world.y + tile_px * 0.8,
+                    5.0,
+                ),
+            );
+        }
+
         // ── Spawn building sprites from pre-computed assignments ─────
         for &(kind, anchor_tx, anchor_ty, ti) in &building_assignments {
             let tmpl = templates.get(ti);
             let (bw, bh) = tmpl.map(|t| (t.width, t.height)).unwrap_or((2, 2));
+
+            // Depth-sort: all tiles in the building share z based on the floor.
+            let bldg_floor_world = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
+            let bldg_z = crate::surface_objects::depth_z(bldg_floor_world.y - tile_px * 0.5);
 
             if let (Some(tmpl), Some(ext_img), Some(ext_lay)) =
                 (tmpl, ext_atlas_handle.as_ref(), ext_layout.as_ref())
@@ -863,10 +989,8 @@ fn setup_surface(
                         let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
 
                         let is_door = tile_idx == EXT_DOOR;
-                        let collision_code = ext_collision
-                            .get(tile_idx as usize)
-                            .copied()
-                            .unwrap_or(1);
+                        let collision_code =
+                            ext_collision.get(tile_idx as usize).copied().unwrap_or(1);
 
                         let mut entity = commands.spawn((
                             DespawnOnExit(PlayState::Exploring),
@@ -877,29 +1001,24 @@ fn setup_surface(
                                     index: tile_idx as usize,
                                 },
                             ),
-                            Transform::from_xyz(world_pos.x, world_pos.y, -5.0),
+                            Transform::from_xyz(world_pos.x, world_pos.y, bldg_z),
                         ));
 
                         if is_door {
                             entity.insert((
                                 Building { kind },
+                                DoorSprite { walker_was_behind: None },
                                 Sensor,
                                 RigidBody::Static,
                                 Collider::rectangle(tile_px, tile_px),
                                 CollisionEventsEnabled,
-                                CollisionLayers::new(
-                                    GameLayer::Surface,
-                                    [GameLayer::Surface],
-                                ),
+                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
                             ));
                         } else if collision_code == 1 {
                             entity.insert((
                                 RigidBody::Static,
                                 Collider::rectangle(tile_px, tile_px),
-                                CollisionLayers::new(
-                                    GameLayer::Surface,
-                                    [GameLayer::Surface],
-                                ),
+                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
                             ));
                         }
                     }
@@ -928,6 +1047,158 @@ fn setup_surface(
                 &mut commands,
                 kind.label(),
                 Vec3::new(door_world.x, door_world.y + tile_px * 0.8, 5.0),
+            );
+        }
+
+        // ── Build mini-map image from terrain + map_colors ──────────
+        let map_colors: Vec<(u8, u8, u8)> = manifest
+            .biomes
+            .get(biome_name)
+            .map(|b| b.terrains.iter().map(|t| t.map_color).collect())
+            .unwrap_or_default();
+        {
+            let mut pixels = vec![255u8; (map_w * map_h * 4) as usize];
+            for y in 0..map_h {
+                for x in 0..map_w {
+                    // Terrain data is bottom-up (y=0 = bottom), but image
+                    // pixels are top-down (row 0 = top). Flip Y.
+                    let src = (y * map_w + x) as usize;
+                    let dst_y = map_h - 1 - y;
+                    let pi = ((dst_y * map_w + x) * 4) as usize;
+                    let t = terrain_flat[src] as usize;
+                    let (r, g, b) = map_colors.get(t).copied().unwrap_or((128, 128, 128));
+                    pixels[pi] = r;
+                    pixels[pi + 1] = g;
+                    pixels[pi + 2] = b;
+                    pixels[pi + 3] = 255;
+                }
+            }
+            // Helper: set a pixel on the mini-map (with Y-flip for image coords).
+            let set_px = |pixels: &mut [u8], x: u32, y: u32, color: [u8; 3]| {
+                if x < map_w && y < map_h {
+                    let iy = map_h - 1 - y;
+                    let pi = ((iy * map_w + x) * 4) as usize;
+                    pixels[pi] = color[0];
+                    pixels[pi + 1] = color[1];
+                    pixels[pi + 2] = color[2];
+                }
+            };
+
+            // Render full building footprints using per-tile colors.
+            let tile_colors = bldg_style
+                .map(|s| &s.ext_tile_colors)
+                .filter(|c| !c.is_empty());
+            for &(_, bx, by, ti) in &building_assignments {
+                if let Some(tmpl) = templates.get(ti) {
+                    for row in 0..tmpl.height {
+                        for col in 0..tmpl.width {
+                            let tile_idx = tmpl.tiles[row as usize][col as usize];
+                            if tile_idx == 0 {
+                                continue;
+                            }
+                            let (r, g, b) = tile_colors
+                                .and_then(|c| c.get(tile_idx as usize))
+                                .copied()
+                                .unwrap_or((180, 180, 180));
+                            set_px(&mut pixels, bx + col, by + row, [r, g, b]);
+                        }
+                    }
+                    // White dot at door.
+                    if let Some(&(dc, dr)) = tmpl.entry_points.first() {
+                        set_px(&mut pixels, bx + dc, by + dr, [255, 255, 255]);
+                    }
+                }
+            }
+            // Pad in yellow.
+            for &(dx, dy, _) in &PAD_TILES {
+                set_px(
+                    &mut pixels,
+                    (pad_cx as i32 + dx) as u32,
+                    (pad_cy as i32 + dy) as u32,
+                    [255, 220, 60],
+                );
+            }
+            // Mechanic shop.
+            if let Some(mech_colors) = bldg_style
+                .map(|s| &s.mechanic_tile_colors)
+                .filter(|c| !c.is_empty())
+            {
+                for row in 0..3u32 {
+                    for col in 0..4u32 {
+                        let atlas_row = 2 - row;
+                        let idx = (atlas_row * 4 + col) as usize;
+                        let (r, g, b) = mech_colors.get(idx).copied().unwrap_or((180, 180, 180));
+                        set_px(&mut pixels, mech_x + col, mech_y + row, [r, g, b]);
+                    }
+                }
+            }
+
+            let mut img = Image::new(
+                bevy::render::render_resource::Extent3d {
+                    width: map_w,
+                    height: map_h,
+                    depth_or_array_layers: 1,
+                },
+                bevy::render::render_resource::TextureDimension::D2,
+                pixels,
+                bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+                bevy::asset::RenderAssetUsages::MAIN_WORLD
+                    | bevy::asset::RenderAssetUsages::RENDER_WORLD,
+            );
+            img.sampler = bevy::image::ImageSampler::nearest();
+
+            let building_info: Vec<(u32, u32, BuildingKind)> = building_assignments
+                .iter()
+                .map(|&(kind, bx, by, _)| (bx, by, kind))
+                .collect();
+            let minimap_handle = images.add(img);
+            commands.insert_resource(SurfaceMiniMap {
+                image: minimap_handle,
+                map_w,
+                map_h,
+                buildings: building_info,
+                pad_pos: (pad_cx, pad_cy),
+            });
+        }
+
+        // ── Store footstep data for the walking sound system ─────────
+        {
+            let footstep_terrains: Vec<(String, f32)> = manifest
+                .biomes
+                .get(biome_name)
+                .map(|b| {
+                    b.terrains
+                        .iter()
+                        .map(|t| (t.footstep_surface.clone(), t.footstep_volume))
+                        .collect()
+                })
+                .unwrap_or_default();
+            commands.insert_resource(FootstepData {
+                terrains: footstep_terrains,
+                terrain_map: terrain_flat.clone(),
+                map_w,
+                map_h,
+            });
+        }
+
+        // ── Spawn landscape objects (plants, creatures, etc.) ─────────
+        {
+            let terrain_names: Vec<String> = manifest
+                .biomes
+                .get(biome_name)
+                .map(|b| b.terrains.iter().map(|t| t.name.clone()).collect())
+                .unwrap_or_default();
+            crate::surface_objects::spawn_landscape_objects(
+                &mut commands,
+                &asset_server,
+                &mut atlas_layouts,
+                &terrain_flat,
+                &terrain_names,
+                biome_name,
+                map_w,
+                map_h,
+                seed,
+                &placed_buildings,
             );
         }
 
@@ -981,24 +1252,16 @@ fn setup_surface(
                 index: initial_index,
             },
         ),
-        Transform::from_xyz(spawn_pos.x, spawn_pos.y, 1.0),
+        Transform::from_xyz(
+            spawn_pos.x,
+            spawn_pos.y,
+            crate::surface_objects::depth_z(spawn_pos.y - 8.0),
+        ),
     ));
 
     commands.insert_resource(walker_sheet);
 
-    commands.spawn((
-        DespawnOnExit(PlayState::Exploring),
-        InteractPrompt,
-        Text2d::new("Press E"),
-        TextFont {
-            font_size: 10.0,
-            ..default()
-        },
-        TextColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
-        Transform::from_xyz(0.0, -999.0, 6.0) // Bug 6: z above labels
-            .with_scale(Vec3::splat(0.25)),
-        Visibility::Hidden,
-    ));
+    // "Press E" prompt is now shown via the comms ticker (no floating text).
 
     if let Ok(mut cam_tf) = camera_query.single_mut() {
         // Bug 4: get_single_mut
@@ -1023,9 +1286,11 @@ fn teardown_surface(
     }
 
     // Reset surface state.
-    nearby.0 = None;
+    *nearby = NearbyBuilding::default();
     active_ui.0 = None;
     terrain_speed.0 = 1.0;
+    commands.remove_resource::<SurfaceMiniMap>();
+    commands.remove_resource::<ClearColor>();
 
     // Trigger zoom-out.
     zoom.target = SPACE_CAMERA_SCALE;
@@ -1123,11 +1388,88 @@ fn animate_walker(
     }
 }
 
+/// Play a footstep sound when the walker's animation frame advances.
+/// Play door.ogg when the walker's depth crosses a door sprite's depth
+/// (i.e. the walker visually passes in front of / behind the door).
+/// Play ui_button sound whenever a pointer click is released on an egui widget.
+fn egui_button_click_sound(
+    mut egui_contexts: EguiContexts,
+    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
+    active_ui: Res<ActiveBuildingUI>,
+) {
+    // Only when a building UI is open.
+    if active_ui.0.is_none() {
+        return;
+    }
+    let Ok(ctx) = egui_contexts.ctx_mut() else { return };
+    // Check if a pointer click was released this frame while egui had focus.
+    let clicked = ctx.input(|i| i.pointer.any_released());
+    if clicked && ctx.is_using_pointer() {
+        sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);
+    }
+}
+
+fn door_depth_sound(
+    walker_q: Query<&Transform, With<Walker>>,
+    mut doors: Query<(&Transform, &mut DoorSprite), Without<Walker>>,
+    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
+) {
+    let Ok(walker_tf) = walker_q.single() else { return };
+    let walker_z = walker_tf.translation.z;
+
+    for (door_tf, mut door) in &mut doors {
+        let door_z = door_tf.translation.z;
+        let walker_behind = walker_z > door_z; // higher z = behind
+
+        if let Some(was_behind) = door.walker_was_behind {
+            if was_behind != walker_behind {
+                sfx_writer.write(crate::sfx::SurfaceSfx::Door);
+            }
+        }
+        door.walker_was_behind = Some(walker_behind);
+    }
+}
+
+fn play_footstep(
+    walkers: Query<(&WalkerAnim, &Transform), With<Walker>>,
+    footstep_data: Res<FootstepData>,
+    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
+) {
+    let Ok((anim, tf)) = walkers.single() else { return };
+
+    if !anim.is_moving || !anim.walk_timer.just_finished() {
+        return;
+    }
+    if anim.walk_phase != 1 && anim.walk_phase != 3 {
+        return;
+    }
+    if footstep_data.terrains.is_empty() || footstep_data.map_w == 0 {
+        return;
+    }
+
+    let tile_px = TILE_PX;
+    let tx = ((tf.translation.x / tile_px) + footstep_data.map_w as f32 / 2.0) as u32;
+    let ty = ((tf.translation.y / tile_px) + footstep_data.map_h as f32 / 2.0) as u32;
+    let tx = tx.min(footstep_data.map_w.saturating_sub(1));
+    let ty = ty.min(footstep_data.map_h.saturating_sub(1));
+    let idx = (ty * footstep_data.map_w + tx) as usize;
+    let terrain_idx = footstep_data.terrain_map.get(idx).copied().unwrap_or(0) as usize;
+    let (surface, volume) = footstep_data
+        .terrains
+        .get(terrain_idx)
+        .map(|(s, v)| (s.clone(), *v))
+        .unwrap_or(("dull".into(), 0.3));
+
+    sfx_writer.write(crate::sfx::SurfaceSfx::Footstep { surface, volume });
+}
+
 // ---------------------------------------------------------------------------
 // Building Interaction
 // ---------------------------------------------------------------------------
 
-/// Track which building the walker overlaps (same pattern as track_nearby_planet).
+/// Track which building the walker overlaps.  Uses an overlap count so
+/// that exiting one of two adjacent sensor tiles (e.g. mechanic garage
+/// doors) doesn't prematurely clear the state.
 fn track_nearby_building(
     mut collision_starts: MessageReader<CollisionStart>,
     mut collision_ends: MessageReader<CollisionEnd>,
@@ -1137,7 +1479,7 @@ fn track_nearby_building(
 ) {
     for event in collision_starts.read() {
         let (a, b) = (event.collider1, event.collider2);
-        if let Some((bldg_entity, walker_present)) = match (
+        if let Some((bldg_entity, bldg)) = match (
             buildings.get(a).ok(),
             buildings.get(b).ok(),
             walkers.get(a).ok(),
@@ -1147,7 +1489,8 @@ fn track_nearby_building(
             (_, Some(bldg), Some(_), _) => Some((b, bldg)),
             _ => None,
         } {
-            nearby.0 = Some((bldg_entity, walker_present.kind));
+            nearby.current = Some((bldg_entity, bldg.kind));
+            nearby.overlap_count += 1;
         }
     }
     for event in collision_ends.read() {
@@ -1155,7 +1498,10 @@ fn track_nearby_building(
         let involves_building = buildings.contains(a) || buildings.contains(b);
         let involves_walker = walkers.contains(a) || walkers.contains(b);
         if involves_building && involves_walker {
-            nearby.0 = None;
+            nearby.overlap_count = nearby.overlap_count.saturating_sub(1);
+            if nearby.overlap_count == 0 {
+                nearby.current = None;
+            }
         }
     }
 }
@@ -1195,13 +1541,13 @@ fn building_interact(
     mut active_ui: ResMut<ActiveBuildingUI>,
     mut next_state: ResMut<NextState<PlayState>>,
     game_state: Res<crate::game_save::PlayerGameState>,
+    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
         if active_ui.0.is_some() {
-            // Close building UI.
             active_ui.0 = None;
+            sfx_writer.write(crate::sfx::SurfaceSfx::UiClose);
         } else {
-            // No building UI open — save and return to main menu.
             game_state.save();
             next_state.set(PlayState::MainMenu);
         }
@@ -1210,39 +1556,29 @@ fn building_interact(
 
     // Open building on E.
     if keyboard.just_pressed(KeyCode::KeyE) {
-        if let Some((_, kind)) = nearby.0 {
-            if kind == BuildingKind::ShipPad {
-                // Transition to Landed for Launch/Repair UI.
-                next_state.set(PlayState::Landed);
-            } else {
-                active_ui.0 = Some(kind);
-            }
+        if let Some((_, kind)) = nearby.current {
+            active_ui.0 = Some(kind);
+            sfx_writer.write(crate::sfx::SurfaceSfx::UiOpen);
         }
     }
 }
 
-/// Show/hide the "Press E" prompt based on proximity to a building.
+/// Show "Press E to enter X" in the comms ticker when near a building.
 fn update_interact_prompt(
     nearby: Res<NearbyBuilding>,
     active_ui: Res<ActiveBuildingUI>,
-    walker_query: Query<&Transform, With<Walker>>,
-    mut prompt_query: Query<
-        (&mut Transform, &mut Visibility),
-        (With<InteractPrompt>, Without<Walker>),
-    >,
+    mut comms: ResMut<crate::hud::CommsChannel>,
 ) {
-    let Ok((mut prompt_tf, mut prompt_vis)) = prompt_query.single_mut() else {
+    if !nearby.is_changed() && !active_ui.is_changed() {
         return;
-    };
-
-    if nearby.0.is_some() && active_ui.0.is_none() {
-        *prompt_vis = Visibility::Visible;
-        if let Ok(walker_tf) = walker_query.single() {
-            prompt_tf.translation.x = walker_tf.translation.x;
-            prompt_tf.translation.y = walker_tf.translation.y - 12.0;
+    }
+    if let (Some((_, kind)), None) = (&nearby.current, &active_ui.0) {
+        comms.send(format!("Press E to enter the {}", kind.label()));
+    } else if nearby.current.is_none() {
+        // Only clear if the message is a "Press E" prompt.
+        if comms.message.starts_with("Press E") {
+            comms.send("");
         }
-    } else {
-        *prompt_vis = Visibility::Hidden;
     }
 }
 
@@ -1268,6 +1604,7 @@ fn surface_building_ui(
     mut accept_writer: MessageWriter<AcceptMission>,
     mut decline_writer: MessageWriter<DeclineMission>,
     mut abandon_writer: MessageWriter<AbandonMission>,
+    mut next_state: ResMut<NextState<PlayState>>,
 ) {
     let Some(kind) = active_ui.0 else {
         return;
@@ -1348,8 +1685,53 @@ fn surface_building_ui(
                     );
                 }
                 BuildingKind::ShipPad => {
-                    // Should not reach here — ShipPad transitions to Landed state.
-                    ui.label("Return to your ship.");
+                    ui.label("Your ship is docked here.");
+                    ui.add_space(8.0);
+                    if ui.button("Launch").clicked() {
+                        active_ui.0 = None;
+                        next_state.set(PlayState::Flying);
+                    }
+                }
+                BuildingKind::MechanicShop => {
+                    if let Ok(mut ship) = player_query.single_mut() {
+                        let max_hp = ship.data.max_health;
+                        let hp = ship.health;
+                        ui.label(format!("Hull: {}/{}", hp, max_hp));
+
+                        if hp < max_hp {
+                            // Repair cost: (1 - health_frac) * 5% of ship price
+                            let damage_frac = 1.0 - (hp as f64 / max_hp as f64);
+                            let cost = (damage_frac * 0.05 * ship.data.price as f64).ceil() as i128;
+                            let cost = cost.max(1);
+
+                            ui.add_space(4.0);
+                            ui.label(format!(
+                                "Repair cost: {} credits (5% of ship value per full repair)",
+                                cost
+                            ));
+
+                            let can_afford = ship.credits >= cost;
+                            if ui
+                                .add_enabled(can_afford, bevy_egui::egui::Button::new("Repair"))
+                                .clicked()
+                            {
+                                ship.credits -= cost;
+                                ship.health = max_hp;
+                                    }
+                            if !can_afford {
+                                ui.colored_label(
+                                    bevy_egui::egui::Color32::RED,
+                                    "Not enough credits.",
+                                );
+                            }
+                        } else {
+                            ui.add_space(4.0);
+                            ui.label("Hull is at full integrity. No repairs needed.");
+                        }
+
+                        ui.add_space(4.0);
+                        ui.label(format!("Credits: {}", ship.credits));
+                    }
                 }
             }
             ui.separator();

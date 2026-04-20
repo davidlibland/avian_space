@@ -626,6 +626,11 @@ def generate_all(tile_size: int, out_dir: Path) -> None:
         pad_atlas.save(pad_path)
         print(f"    → {pad_path.name}  {pad_atlas.size[0]}×{pad_atlas.size[1]}px")
 
+        mech_atlas = _b.build_mechanic_atlas(style, tile_size)
+        mech_path = out_dir / f"{style.name}_mechanic.png"
+        mech_atlas.save(mech_path)
+        print(f"    → {mech_path.name}  {mech_atlas.size[0]}×{mech_atlas.size[1]}px")
+
         factories = _b._TEMPLATE_FACTORIES.get(style.wall_texture, [make_small_house])
         for factory in factories:
             tmpl = factory(style)

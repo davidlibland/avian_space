@@ -68,9 +68,7 @@ def reduce_to_47(mask: int) -> int:
 
 # The 47 valid reduced masks, sorted numerically.
 # Atlas column = index in this list.
-_BLOB47_SORTED: list[int] = sorted({
-    reduce_to_47(m) for m in range(256)
-})
+_BLOB47_SORTED: list[int] = sorted({reduce_to_47(m) for m in range(256)})
 assert len(_BLOB47_SORTED) == 47
 
 # 256-entry LUT: reduced_mask → atlas column (255 = unmapped)
@@ -81,13 +79,53 @@ assert sum(1 for v in BLOB47_LUT if v != 255) == 47
 
 # Verify against Boris The Brave's canonical pick_tile dict
 _PICK_TILE = {
-    0: 0, 2: 1, 8: 2, 10: 3, 11: 4, 16: 5, 18: 6,
-    22: 7, 24: 8, 26: 9, 27: 10, 30: 11, 31: 12, 64: 13,
-    66: 14, 72: 15, 74: 16, 75: 17, 80: 18, 82: 19, 86: 20,
-    88: 21, 90: 22, 91: 23, 94: 24, 95: 25, 104: 26, 106: 27,
-    107: 28, 120: 29, 122: 30, 123: 31, 126: 32, 127: 33,
-    208: 34, 210: 35, 214: 36, 216: 37, 218: 38, 219: 39,
-    222: 40, 223: 41, 248: 42, 250: 43, 251: 44, 254: 45, 255: 46,
+    0: 0,
+    2: 1,
+    8: 2,
+    10: 3,
+    11: 4,
+    16: 5,
+    18: 6,
+    22: 7,
+    24: 8,
+    26: 9,
+    27: 10,
+    30: 11,
+    31: 12,
+    64: 13,
+    66: 14,
+    72: 15,
+    74: 16,
+    75: 17,
+    80: 18,
+    82: 19,
+    86: 20,
+    88: 21,
+    90: 22,
+    91: 23,
+    94: 24,
+    95: 25,
+    104: 26,
+    106: 27,
+    107: 28,
+    120: 29,
+    122: 30,
+    123: 31,
+    126: 32,
+    127: 33,
+    208: 34,
+    210: 35,
+    214: 36,
+    216: 37,
+    218: 38,
+    219: 39,
+    222: 40,
+    223: 41,
+    248: 42,
+    250: 43,
+    251: 44,
+    254: 45,
+    255: 46,
 }
 for _mask, _expected_col in _PICK_TILE.items():
     assert BLOB47_LUT[_mask] == _expected_col, (
@@ -123,6 +161,14 @@ class TerrainSpec:
     collision: int = CC.WALKABLE
     movement_cost: float = 1.0  # multiplier (1.0 = normal, 2.0 = half speed)
     damage_per_sec: float = 0.0  # HP/s when standing on tile
+    # Mini-map colour (defaults to base if not set)
+    map_color: tuple[int, int, int] | None = None
+    # Footstep sound: surface name (concrete, dull, grass, sand, snow) + volume
+    footstep_surface: str = "dull"
+    footstep_volume: float = 0.3
+
+    def get_map_color(self) -> tuple[int, int, int]:
+        return self.map_color if self.map_color is not None else self.base
 
 
 @dataclass
@@ -292,10 +338,10 @@ def render_transition_tile(
     # direction=+1 → blend at top / left  (small ys / xs values)
     # direction=-1 → blend at bottom / right (large ys / xs values)
     for bit, axis, direction in [
-        (N, "y", +1),   # top neighbour different → blend at top edge
-        (S, "y", -1),   # bottom neighbour different → blend at bottom edge
-        (E, "x", -1),   # right neighbour different → blend at right edge
-        (W, "x", +1),   # left neighbour different → blend at left edge
+        (N, "y", +1),  # top neighbour different → blend at top edge
+        (S, "y", -1),  # bottom neighbour different → blend at bottom edge
+        (E, "x", -1),  # right neighbour different → blend at right edge
+        (W, "x", +1),  # left neighbour different → blend at left edge
     ]:
         if (mask & bit) or (bit not in neighbours):
             continue
@@ -313,10 +359,10 @@ def render_transition_tile(
     # a quarter-circle patch in that corner toward the lower terrain.
     corner_radius = 0.7  # fraction of half-tile
     for diag, card1, card2, cx, cy in [
-        (TL, T, L, 0, 0),                          # top-left
-        (TR, T, R, tile_w - 1, 0),                  # top-right
-        (BL, B, L, 0, tile_h - 1),                  # bottom-left
-        (BR, B, R, tile_w - 1, tile_h - 1),          # bottom-right
+        (TL, T, L, 0, 0),  # top-left
+        (TR, T, R, tile_w - 1, 0),  # top-right
+        (BL, B, L, 0, tile_h - 1),  # bottom-left
+        (BR, B, R, tile_w - 1, tile_h - 1),  # bottom-right
     ]:
         if (mask & diag) or not (mask & card1) or not (mask & card2):
             continue
@@ -325,7 +371,7 @@ def render_transition_tile(
         nbr = neighbours[diag].astype(np.float32)
         dx = np.abs(xs - cx).astype(np.float32) / (tile_w * 0.5)
         dy = np.abs(ys - cy).astype(np.float32) / (tile_h * 0.5)
-        dist = np.sqrt(dx ** 2 + dy ** 2) / corner_radius
+        dist = np.sqrt(dx**2 + dy**2) / corner_radius
         t = 1.0 - np.clip(dist, 0.0, 1.0)
         blend = _smoothstep(t)[:, :, np.newaxis]
         result = result * (1.0 - blend) + nbr * blend
@@ -428,6 +474,11 @@ def write_world_manifest(
                 f"                    collision: {t.collision},\n",
                 f"                    movement_cost: {t.movement_cost},\n",
                 f"                    damage_per_sec: {t.damage_per_sec},\n",
+                "                    map_color: ({}, {}, {}),\n".format(
+                    *t.get_map_color()
+                ),
+                f'                    footstep_surface: "{t.footstep_surface}",\n',
+                f"                    footstep_volume: {t.footstep_volume},\n",
                 "                ),\n",
             ]
         lines += [
@@ -893,7 +944,7 @@ INTERIOR = BiomeConfig(
             detail_w=0.20,
             micro_w=0.75,
             specular=0.02,
-            threshold=0.88,
+            threshold=1.00,
             collision=CC.SOLID,
             movement_cost=1.0,
         ),
@@ -912,12 +963,80 @@ INTERIOR = BiomeConfig(
             specular=0.10,
             grid=True,
             grid_spacing=12,
-            threshold=1.00,
+            threshold=0.88,
             collision=CC.TRIGGER,
             movement_cost=1.0,
         ),
     ],
 )
+
+# Append a "void" terrain (black, solid) to every biome.  The fBm border
+# pinning forces edges to the highest terrain index, so this automatically
+# creates a fade-to-black border around every map.
+_VOID_TERRAIN = TerrainSpec(
+    "void",
+    (8, 8, 10),
+    (12, 12, 15),
+    (2, 2, 3),
+    roughness=0.01,
+    macro_scale=8.0,
+    detail_scale=16.0,
+    micro_scale=24.0,
+    macro_w=0.05,
+    detail_w=0.20,
+    micro_w=0.75,
+    threshold=1.00,
+    collision=CC.SOLID,
+    movement_cost=1.0,
+    map_color=(8, 8, 10),
+)
+
+for _biome in [GARDEN, ICE, ROCKY, DESERT, INTERIOR]:
+    # Move the old last terrain's threshold down, append void at 1.0.
+    _biome.terrains[-1].threshold = 0.88
+    _biome.terrains.append(_VOID_TERRAIN)
+
+# ── Footstep surface assignments per terrain ─────────────────────────────
+_FOOTSTEP_MAP: dict[str, tuple[str, float]] = {
+    # Garden
+    "water": ("dull", 0.15),  # splashing (muted — player can't walk on solid water)
+    "sand": ("sand", 0.3),
+    "grass": ("grass", 0.35),
+    "forest": ("grass", 0.25),  # leaf litter
+    "mountain": ("concrete", 0.3),
+    # Ice
+    "deep_ice": ("concrete", 0.25),
+    "ice": ("snow", 0.3),
+    "snow": ("snow", 0.35),
+    "ice_rock": ("concrete", 0.3),
+    "crevasse": ("concrete", 0.2),
+    # Rocky
+    "lava": ("dull", 0.1),
+    "basalt": ("concrete", 0.35),
+    "rock": ("concrete", 0.3),
+    "dust": ("sand", 0.3),
+    "cliff": ("concrete", 0.25),
+    # Desert
+    "quicksand": ("sand", 0.2),
+    "dunes": ("sand", 0.35),
+    "hard_sand": ("sand", 0.3),
+    "sandstone": ("concrete", 0.3),
+    "mesa": ("concrete", 0.25),
+    # Interior
+    "floor": ("concrete", 0.35),
+    "plating": ("concrete", 0.4),
+    "grate": ("concrete", 0.3),
+    "conduit": ("dull", 0.25),
+    "wall": ("concrete", 0.3),
+    # Void (border)
+    "void": ("dull", 0.1),
+}
+OVERALL_STEP_VOLUME = 0.3  # global multiplier for all footstep volumes
+for _biome in [GARDEN, ICE, ROCKY, DESERT, INTERIOR]:
+    for _t in _biome.terrains:
+        if _t.name in _FOOTSTEP_MAP:
+            _t.footstep_surface, _t.footstep_volume = _FOOTSTEP_MAP[_t.name]
+            _t.footstep_volume *= OVERALL_STEP_VOLUME
 
 ALL_BIOMES = [GARDEN, ICE, ROCKY, DESERT, INTERIOR]
 

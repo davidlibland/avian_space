@@ -31,6 +31,7 @@ mod ship_anim;
 mod space;
 mod starfield;
 mod surface;
+mod surface_objects;
 mod utils;
 mod value_fn;
 mod weapons;

@@ -37,6 +37,22 @@ struct CommsText;
 #[derive(Component)]
 struct RadarDisplay;
 
+/// Marks HUD elements that should be hidden during surface exploration.
+#[derive(Component)]
+struct SpaceOnlyHud;
+
+/// Marks HUD elements that should only be visible during surface exploration.
+#[derive(Component)]
+struct SurfaceOnlyHud;
+
+/// Marks the mini-map image node so we can update it.
+#[derive(Component)]
+struct MiniMapImage;
+
+/// Marks the player dot on the mini-map.
+#[derive(Component)]
+struct MiniMapPlayerDot;
+
 #[derive(Component)]
 struct RadarDot;
 
@@ -51,7 +67,7 @@ const COMMS_LOOP_PAUSE: f32 = 1.0;
 /// display a message on the HUD ticker-tape.
 #[derive(Resource, Default)]
 pub struct CommsChannel {
-    message: String,
+    pub message: String,
     scroll_offset: f32,
     pause_timer: f32,
     /// Set to `true` by the ticker after the first full scroll pass (or
@@ -98,15 +114,30 @@ impl Plugin for HudPlugin {
             (
                 update_health_bar,
                 update_cargo_credits,
+                update_comms_ticker,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
                 update_target_display,
                 update_secondary_weapon,
-                update_comms_ticker,
             )
                 .run_if(not(in_state(crate::PlayState::Exploring))),
         )
         .add_systems(
             Update,
             (update_radar_dots, draw_target_reticle).run_if(in_state(PlayState::Flying)),
+        )
+        .add_systems(
+            Update,
+            toggle_space_hud_visibility
+                .run_if(state_changed::<PlayState>),
+        )
+        .add_systems(
+            Update,
+            update_minimap_player_dot
+                .run_if(in_state(PlayState::Exploring)),
         );
     }
 }
@@ -133,6 +164,7 @@ fn spawn_hud(mut commands: Commands) {
             radar_id = root
                 .spawn((
                     RadarDisplay,
+                    SpaceOnlyHud,
                     Node {
                         width: Val::Px(RADAR_SIZE),
                         height: Val::Px(RADAR_SIZE),
@@ -147,6 +179,48 @@ fn spawn_hud(mut commands: Commands) {
                     Transform::default(),
                 ))
                 .id();
+
+            // ── Mini-map (surface only, hidden by default) ──────────────
+            root.spawn((
+                SurfaceOnlyHud,
+                Node {
+                    width: Val::Px(RADAR_SIZE),
+                    height: Val::Px(RADAR_SIZE),
+                    border: UiRect::all(Val::Px(2.0)),
+                    overflow: Overflow::clip(),
+                    display: Display::None,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
+                BorderColor::all(Color::srgb(0.3, 0.7, 0.9)),
+                Visibility::Hidden,
+            ))
+            .with_children(|map_root| {
+                // The mini-map image (updated when entering Exploring).
+                map_root.spawn((
+                    MiniMapImage,
+                    ImageNode::default(),
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                ));
+                // Player position dot.
+                map_root.spawn((
+                    MiniMapPlayerDot,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        width: Val::Px(6.0),
+                        height: Val::Px(6.0),
+                        border_radius: BorderRadius::all(Val::Px(3.0)),
+                        left: Val::Px(RADAR_SIZE / 2.0 - 3.0),
+                        top: Val::Px(RADAR_SIZE / 2.0 - 3.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 1.0, 0.2)),
+                ));
+            });
 
             // ── Health bar ───────────────────────────────────────────────
             root.spawn((
@@ -176,6 +250,7 @@ fn spawn_hud(mut commands: Commands) {
 
             // ── Secondary weapon ─────────────────────────────────────────
             root.spawn((
+                SpaceOnlyHud,
                 Node {
                     padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
                     border_radius: BorderRadius::all(Val::Px(3.0)),
@@ -197,6 +272,7 @@ fn spawn_hud(mut commands: Commands) {
 
             // ── Target ───────────────────────────────────────────────────
             root.spawn((
+                SpaceOnlyHud,
                 Node {
                     padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
                     border_radius: BorderRadius::all(Val::Px(3.0)),
@@ -708,6 +784,35 @@ fn update_comms_ticker(
     node.left = Val::Px(4.0 - channel.scroll_offset);
 }
 
+/// Update the mini-map player dot based on walker world position.
+fn update_minimap_player_dot(
+    walker_q: Query<&Transform, With<crate::surface::Walker>>,
+    minimap: Option<Res<crate::surface::SurfaceMiniMap>>,
+    mut dot_q: Query<&mut Node, With<MiniMapPlayerDot>>,
+) {
+    let (Some(minimap), Ok(walker_tf), Ok(mut dot)) =
+        (minimap, walker_q.single(), dot_q.single_mut())
+    else {
+        return;
+    };
+    let map_w = minimap.map_w as f32;
+    let map_h = minimap.map_h as f32;
+    let tile_px = crate::surface::TILE_PX;
+    // Walker world pos → tile coords.
+    let wx = walker_tf.translation.x;
+    let wy = walker_tf.translation.y;
+    let tx = wx / tile_px + map_w / 2.0;
+    let ty = wy / tile_px + map_h / 2.0;
+    // Tile coords → pixel position in the mini-map display.
+    let display_size = RADAR_SIZE - 4.0; // account for border
+    let px = (tx / map_w * display_size).clamp(0.0, display_size - 6.0);
+    // Mini-map image is top-down (row 0 = bottom-up y=0 = bottom of map),
+    // but UI y increases downward, so flip.
+    let py = ((1.0 - ty / map_h) * display_size).clamp(0.0, display_size - 6.0);
+    dot.left = Val::Px(px);
+    dot.top = Val::Px(py);
+}
+
 fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {
     (
         Node {
@@ -721,4 +826,41 @@ fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {
         },
         BackgroundColor(color),
     )
+}
+
+/// Toggle HUD element visibility based on whether we're in Exploring state.
+/// Uses `Display::None` instead of `Visibility::Hidden` so hidden elements
+/// don't occupy layout space.
+fn toggle_space_hud_visibility(
+    state: Res<State<PlayState>>,
+    mut space_q: Query<(&mut Visibility, &mut Node), (With<SpaceOnlyHud>, Without<SurfaceOnlyHud>)>,
+    mut surface_q: Query<(&mut Visibility, &mut Node), (With<SurfaceOnlyHud>, Without<SpaceOnlyHud>)>,
+    mut minimap_q: Query<&mut ImageNode, With<MiniMapImage>>,
+    minimap_res: Option<Res<crate::surface::SurfaceMiniMap>>,
+) {
+    let exploring = *state.get() == PlayState::Exploring;
+    for (mut vis, mut node) in &mut space_q {
+        if exploring {
+            *vis = Visibility::Hidden;
+            node.display = Display::None;
+        } else {
+            *vis = Visibility::Inherited;
+            node.display = Display::Flex;
+        }
+    }
+    for (mut vis, mut node) in &mut surface_q {
+        if exploring {
+            *vis = Visibility::Inherited;
+            node.display = Display::Flex;
+        } else {
+            *vis = Visibility::Hidden;
+            node.display = Display::None;
+        }
+    }
+    // Set the mini-map image when entering Exploring.
+    if exploring {
+        if let (Some(minimap), Ok(mut img_node)) = (minimap_res, minimap_q.single_mut()) {
+            img_node.image = minimap.image.clone();
+        }
+    }
 }

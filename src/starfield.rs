@@ -54,7 +54,12 @@ impl Plugin for StarfieldPlugin {
             Update,
             (shift_starfield, wrap_starfield)
                 .chain()
-                .before(PhysicsSystems::Writeback),
+                .before(PhysicsSystems::Writeback)
+                .run_if(not(in_state(crate::PlayState::Exploring))),
+        )
+        .add_systems(
+            Update,
+            toggle_star_visibility.run_if(state_changed::<crate::PlayState>),
         )
         .add_systems(
             Update,
@@ -301,7 +306,18 @@ fn camera_follow_player(
     }
 }
 
-// ── Integration example ───────────────────────────────────────────────────────
+/// Hide stars when entering Exploring, show them again when leaving.
+fn toggle_star_visibility(
+    state: Res<State<crate::PlayState>>,
+    mut stars: Query<&mut Visibility, With<Star>>,
+) {
+    let hide = *state.get() == crate::PlayState::Exploring;
+    for mut vis in &mut stars {
+        *vis = if hide { Visibility::Hidden } else { Visibility::Inherited };
+    }
+}
+
+// ── Integration example ─────────────────���─────────────────────────────────────
 //
 // In main.rs:
 //
