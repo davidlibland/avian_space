@@ -1411,18 +1411,21 @@ fn egui_button_click_sound(
 
 fn door_depth_sound(
     walker_q: Query<&Transform, With<Walker>>,
-    mut doors: Query<(&Transform, &mut DoorSprite), Without<Walker>>,
+    mut doors: Query<(Entity, &Transform, &mut DoorSprite), Without<Walker>>,
+    nearby: Res<NearbyBuilding>,
     mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
     let Ok(walker_tf) = walker_q.single() else { return };
     let walker_z = walker_tf.translation.z;
+    let nearby_entity = nearby.current.map(|(e, _)| e);
 
-    for (door_tf, mut door) in &mut doors {
+    for (entity, door_tf, mut door) in &mut doors {
         let door_z = door_tf.translation.z;
         let walker_behind = walker_z > door_z; // higher z = behind
 
         if let Some(was_behind) = door.walker_was_behind {
-            if was_behind != walker_behind {
+            // Only play if depth flipped AND walker is colliding with this door.
+            if was_behind != walker_behind && nearby_entity == Some(entity) {
                 sfx_writer.write(crate::sfx::SurfaceSfx::Door);
             }
         }
