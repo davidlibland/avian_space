@@ -33,18 +33,8 @@ struct CivilianManifest {
 
 // ── Components ───────────────────────────────────────────────────────────
 
-/// Marks a civilian NPC entity.
-#[derive(Component)]
-pub struct Civilian;
-
 use crate::surface_character::CharacterAnim;
-
-/// The path a civilian is following (tile coordinates, consumed front-to-back).
-#[derive(Component)]
-pub struct CivilianPath {
-    waypoints: Vec<(u32, u32)>,
-    current_idx: usize,
-}
+use crate::surface_npc::{Npc, NpcBehavior, Behavior};
 
 // ── Resource ─────────────────────────────────────────────────────────────
 
@@ -117,14 +107,14 @@ pub fn setup_civilians(
 
 // ── Systems ──────────────────────────────────────────────────────────────
 
-/// Periodically spawn civilians if below the target count.
+/// Periodically spawn civilian NPCs if below the target count.
 pub fn spawn_civilians(
     mut commands: Commands,
     sprites: Option<Res<CivilianSprites>>,
     paths_res: Option<Res<SurfacePaths>>,
     mut spawn_timer: ResMut<CivilianSpawnTimer>,
     time: Res<Time>,
-    existing: Query<(), With<Civilian>>,
+    existing: Query<(), With<Npc>>,
 ) {
     let (Some(sprites), Some(paths)) = (sprites, paths_res) else { return };
     if paths.paths.is_empty() || sprites.images.is_empty() {
@@ -143,7 +133,7 @@ pub fn spawn_civilians(
 
     let rng = &mut spawn_timer.rng;
 
-    // Pick a random path.
+    // Pick a random starting path for the patrol.
     let path_keys: Vec<&(BuildingKind, BuildingKind)> = paths.paths.keys().collect();
     if path_keys.is_empty() {
         return;
@@ -159,37 +149,27 @@ pub fn spawn_civilians(
     let sprite_idx = rng.r#gen_range(0..sprites.images.len());
     let image = sprites.images[sprite_idx].clone();
 
-    // Spawn at the first waypoint.
-    let (tx, ty) = waypoints[0];
-    let tile_px = TILE_PX;
-    let world_x = (tx as f32 - 32.0) * tile_px + tile_px / 2.0; // approximate centering
-    let world_y = (ty as f32 - 32.0) * tile_px + tile_px / 2.0;
-    // Use tile_to_world logic: (tx - map_w/2) * tile_px + tile_px/2
-    // We don't have map_w here, but the waypoints from SurfacePaths are
-    // in the same coordinate system used by tile_to_world. We need map dims.
-    // Store them in SurfacePaths.
-
-    // Actually, convert tile → world using the same formula as tile_to_world.
-    // We need map_w/map_h — let's get them from the paths resource.
-    // For now, use the tile coords directly and convert in the movement system.
-
-    let start_frame = rng.r#gen_range(0u8..4);
-
-    let initial_index = start_frame as usize; // facing down, frame 0
-
     // Convert start tile to world position.
-    let map_w = crate::surface::WORLD_WIDTH;
-    let map_h = crate::surface::WORLD_HEIGHT;
-    let start_x = (tx as f32 - map_w as f32 / 2.0) * tile_px + tile_px / 2.0;
-    let start_y = (ty as f32 - map_h as f32 / 2.0) * tile_px + tile_px / 2.0;
+    let (tx, ty) = waypoints[0];
+    let start = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(tx, ty);
+
+    // Build a patrol behavior: walk this path, then pick another on completion.
+    // The NPC behavior system will auto-despawn when the queue is empty.
+    // We push two patrols so they walk two routes before despawning.
+    let mut behavior = NpcBehavior::new(sprites.walk_speed);
+    behavior.push(Behavior::Patrol {
+        waypoints,
+        current_idx: 0,
+    });
+    behavior.push(Behavior::Patrol {
+        waypoints: Vec::new(), // will pick a random path on start
+        current_idx: 0,
+    });
 
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
-        Civilian,
-        CivilianPath {
-            waypoints,
-            current_idx: 0,
-        },
+        Npc,
+        behavior,
         CharacterAnim::with_interval(0.2),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
@@ -201,60 +181,18 @@ pub fn spawn_civilians(
             image,
             TextureAtlas {
                 layout: sprites.layout.clone(),
-                index: initial_index,
+                index: 0,
             },
         ),
-        Transform::from_xyz(start_x, start_y, depth_z(start_y - 8.0)),
+        Transform::from_xyz(start.x, start.y, depth_z(start.y - 8.0)),
     ));
 }
 
-/// Move civilians along their paths by setting velocity toward the next
-/// waypoint.  Animation is handled by the shared `animate_characters` system.
-pub fn move_civilians(
-    mut commands: Commands,
-    sprites: Option<Res<CivilianSprites>>,
-    mut civilians: Query<
-        (Entity, &mut CivilianPath, &Transform, &mut LinearVelocity),
-        With<Civilian>,
-    >,
+/// Update NPC z for depth sorting.
+pub fn depth_sort_npcs(
+    mut npcs: Query<&mut Transform, (With<Npc>, Without<Walker>)>,
 ) {
-    let Some(sprites) = sprites else { return };
-
-    let tile_px = TILE_PX;
-    let speed = sprites.walk_speed;
-    let map_w = crate::surface::WORLD_WIDTH;
-    let map_h = crate::surface::WORLD_HEIGHT;
-
-    for (entity, mut path, tf, mut vel) in &mut civilians {
-        if path.current_idx >= path.waypoints.len() {
-            commands.entity(entity).despawn();
-            continue;
-        }
-
-        let (target_tx, target_ty) = path.waypoints[path.current_idx];
-        let target_x = (target_tx as f32 - map_w as f32 / 2.0) * tile_px + tile_px / 2.0;
-        let target_y = (target_ty as f32 - map_h as f32 / 2.0) * tile_px + tile_px / 2.0;
-        let target = Vec2::new(target_x, target_y);
-
-        let pos = tf.translation.truncate();
-        let diff = target - pos;
-        let dist = diff.length();
-
-        if dist < 2.0 {
-            path.current_idx += 1;
-            vel.0 = Vec2::ZERO;
-            continue;
-        }
-
-        vel.0 = (diff / dist) * speed;
-    }
-}
-
-/// Update civilian z for depth sorting (like the walker).
-pub fn depth_sort_civilians(
-    mut civilians: Query<&mut Transform, (With<Civilian>, Without<Walker>)>,
-) {
-    for mut tf in &mut civilians {
+    for mut tf in &mut npcs {
         tf.translation.z = depth_z(tf.translation.y - 8.0);
     }
 }

@@ -863,7 +863,10 @@ fn land_ship(
         }
         let full_size = image_size(sprite, &images);
         let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
-        commands.entity(entity).insert((
+        let Ok(mut ec) = commands.get_entity(entity) else {
+            continue;
+        };
+        ec.insert((
             AILanding { planet_entity },
             Sensor,
             mass,

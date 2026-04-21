@@ -285,8 +285,8 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_objects::depth_sort_walker,
                 door_depth_sound,
                 crate::surface_civilians::spawn_civilians,
-                crate::surface_civilians::move_civilians,
-                crate::surface_civilians::depth_sort_civilians,
+                crate::surface_npc::run_npc_behaviors,
+                crate::surface_civilians::depth_sort_npcs,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )
@@ -1127,6 +1127,13 @@ fn setup_surface(
                 map_h,
             );
             commands.insert_resource(surface_paths);
+
+            // Store the cost map for runtime pathfinding (seek/flee/patrol).
+            commands.insert_resource(crate::surface_pathfinding::SurfaceCostMap {
+                data: cost_map,
+                width: map_w,
+                height: map_h,
+            });
         }
 
         // ── Store footstep data for the walking sound system ─────────
@@ -1270,6 +1277,7 @@ fn teardown_surface(
     terrain_speed.0 = 1.0;
     commands.remove_resource::<SurfaceMiniMap>();
     commands.remove_resource::<crate::surface_pathfinding::SurfacePaths>();
+    commands.remove_resource::<crate::surface_pathfinding::SurfaceCostMap>();
     commands.remove_resource::<ClearColor>();
 
     // Trigger zoom-out.

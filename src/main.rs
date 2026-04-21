@@ -34,6 +34,7 @@ mod starfield;
 mod surface;
 mod surface_character;
 mod surface_civilians;
+mod surface_npc;
 mod surface_objects;
 mod surface_pathfinding;
 mod surface_terrain;

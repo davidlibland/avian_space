@@ -1,15 +1,51 @@
 //! Pathfinding on the surface tilemap for AI characters.
 //!
-//! After buildings are placed, computes shortest paths between all pairs
-//! of building doors (+ landing pad) on the walkable tile grid.  If any
-//! pair is disconnected, signals that the map should be regenerated.
+//! Provides:
+//! - Pre-computed building-to-building paths (`SurfacePaths`)
+//! - A stored cost map (`SurfaceCostMap`) for runtime pathfinding
+//! - `find_path()` for arbitrary tile-to-tile pathfinding
+//! - `find_path_to_entity()` helper for "seek/flee" behaviors
 
 use bevy::prelude::*;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
-use crate::surface::BuildingKind;
+use crate::surface::{BuildingKind, TILE_PX, WORLD_WIDTH, WORLD_HEIGHT};
 
 // ── Public types ─────────────────────────────────────────────────────────
+
+/// The cost map for the current surface, stored as a resource so any
+/// system can request a path at runtime.
+#[derive(Resource)]
+pub struct SurfaceCostMap {
+    pub data: Vec<f32>,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl SurfaceCostMap {
+    /// Find a path from `start` to `goal` in tile coordinates.
+    /// Returns `None` if unreachable.
+    pub fn find_path(&self, start: (u32, u32), goal: (u32, u32)) -> Option<Vec<(u32, u32)>> {
+        dijkstra_path(start, goal, &self.data, self.width, self.height)
+    }
+
+    /// Convert a world position to a tile coordinate.
+    pub fn world_to_tile(world_pos: Vec2) -> (u32, u32) {
+        let tx = ((world_pos.x / TILE_PX) + WORLD_WIDTH as f32 / 2.0)
+            .clamp(0.0, WORLD_WIDTH as f32 - 1.0) as u32;
+        let ty = ((world_pos.y / TILE_PX) + WORLD_HEIGHT as f32 / 2.0)
+            .clamp(0.0, WORLD_HEIGHT as f32 - 1.0) as u32;
+        (tx, ty)
+    }
+
+    /// Convert a tile coordinate to a world position (tile center).
+    pub fn tile_to_world(tx: u32, ty: u32) -> Vec2 {
+        Vec2::new(
+            (tx as f32 - WORLD_WIDTH as f32 / 2.0) * TILE_PX + TILE_PX / 2.0,
+            (ty as f32 - WORLD_HEIGHT as f32 / 2.0) * TILE_PX + TILE_PX / 2.0,
+        )
+    }
+}
 
 /// All pre-computed paths between building doors on the current surface.
 /// Inserted as a resource when the surface is set up.
