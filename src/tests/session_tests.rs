@@ -161,6 +161,183 @@ fn mission_catalog_roundtrip_merges_with_base() {
     assert!(restored.defs.contains_key("procedural_1"));
 }
 
+#[test]
+fn mission_catalog_to_save_excludes_base_defs() {
+    let iu = basic_universe();
+    let mut catalog = MissionCatalog::new_session(&iu);
+    catalog
+        .defs
+        .insert("procedural_1".to_string(), sample_mission_def("procedural_1"));
+
+    let saved = catalog.to_save();
+    // Base def should NOT be in the save snapshot.
+    assert!(
+        !saved.0.contains_key("base_quest"),
+        "Base defs should be excluded from save"
+    );
+    // Procedural def should be saved.
+    assert!(saved.0.contains_key("procedural_1"));
+}
+
+#[test]
+fn mission_catalog_base_keys_populated() {
+    let iu = basic_universe();
+    let catalog = MissionCatalog::new_session(&iu);
+    assert!(catalog.base_keys.contains("base_quest"));
+    assert_eq!(catalog.base_keys.len(), iu.missions.len());
+}
+
+#[test]
+fn mission_catalog_from_save_preserves_base_keys() {
+    let iu = basic_universe();
+    let mut saved = HashMap::new();
+    saved.insert("procedural_1".to_string(), sample_mission_def("procedural_1"));
+    let catalog = MissionCatalog::from_save(MissionCatalogSave(saved), &iu);
+
+    assert!(catalog.base_keys.contains("base_quest"));
+    assert!(!catalog.base_keys.contains("procedural_1"));
+}
+
+// ── prune_dead_chains ────────────────────────────────────────────────────
+
+#[test]
+fn prune_keeps_active_procedural_missions() {
+    let iu = basic_universe();
+    let mut catalog = MissionCatalog::new_session(&iu);
+    catalog
+        .defs
+        .insert("proc_active".to_string(), sample_mission_def("active"));
+
+    let mut log = MissionLog::default();
+    log.set(
+        "proc_active",
+        MissionStatus::Active(ObjectiveProgress::default()),
+    );
+
+    catalog.prune_dead_chains(&log);
+    assert!(catalog.defs.contains_key("proc_active"));
+    assert!(catalog.defs.contains_key("base_quest")); // base always kept
+}
+
+#[test]
+fn prune_removes_completed_procedural_missions() {
+    let iu = basic_universe();
+    let mut catalog = MissionCatalog::new_session(&iu);
+    catalog
+        .defs
+        .insert("proc_done".to_string(), sample_mission_def("done"));
+
+    let mut log = MissionLog::default();
+    log.set("proc_done", MissionStatus::Completed);
+
+    catalog.prune_dead_chains(&log);
+    assert!(
+        !catalog.defs.contains_key("proc_done"),
+        "Completed procedural mission should be pruned"
+    );
+    assert!(catalog.defs.contains_key("base_quest")); // base always kept
+}
+
+#[test]
+fn prune_removes_unaccepted_available_missions() {
+    let iu = basic_universe();
+    let mut catalog = MissionCatalog::new_session(&iu);
+    catalog
+        .defs
+        .insert("proc_avail".to_string(), sample_mission_def("offered"));
+
+    let mut log = MissionLog::default();
+    log.set("proc_avail", MissionStatus::Available);
+
+    catalog.prune_dead_chains(&log);
+    assert!(
+        !catalog.defs.contains_key("proc_avail"),
+        "Available procedural mission with no active chain should be pruned"
+    );
+}
+
+#[test]
+fn prune_keeps_chain_with_active_member() {
+    use crate::missions::types::Precondition;
+
+    let iu = basic_universe();
+    let mut catalog = MissionCatalog::new_session(&iu);
+
+    // Stage 1: active
+    catalog
+        .defs
+        .insert("stage1".to_string(), sample_mission_def("stage1"));
+
+    // Stage 2: locked, depends on stage1
+    let mut stage2_def = sample_mission_def("stage2");
+    stage2_def.preconditions = vec![Precondition::Completed {
+        mission: "stage1".to_string(),
+    }];
+    catalog.defs.insert("stage2".to_string(), stage2_def);
+
+    let mut log = MissionLog::default();
+    log.set(
+        "stage1",
+        MissionStatus::Active(ObjectiveProgress::default()),
+    );
+    // stage2 is Locked (default — not in log)
+
+    catalog.prune_dead_chains(&log);
+    assert!(
+        catalog.defs.contains_key("stage1"),
+        "Active mission should be kept"
+    );
+    assert!(
+        catalog.defs.contains_key("stage2"),
+        "Locked mission in chain with active member should be kept"
+    );
+}
+
+#[test]
+fn prune_removes_entire_dead_chain() {
+    use crate::missions::types::Precondition;
+
+    let iu = basic_universe();
+    let mut catalog = MissionCatalog::new_session(&iu);
+
+    // Stage 1: completed
+    catalog
+        .defs
+        .insert("stage1".to_string(), sample_mission_def("stage1"));
+
+    // Stage 2: completed, depends on stage1
+    let mut stage2_def = sample_mission_def("stage2");
+    stage2_def.preconditions = vec![Precondition::Completed {
+        mission: "stage1".to_string(),
+    }];
+    catalog.defs.insert("stage2".to_string(), stage2_def);
+
+    let mut log = MissionLog::default();
+    log.set("stage1", MissionStatus::Completed);
+    log.set("stage2", MissionStatus::Completed);
+
+    catalog.prune_dead_chains(&log);
+    assert!(!catalog.defs.contains_key("stage1"));
+    assert!(!catalog.defs.contains_key("stage2"));
+}
+
+#[test]
+fn prune_never_removes_base_defs() {
+    let iu = basic_universe();
+    let catalog_before = MissionCatalog::new_session(&iu);
+    let base_count = catalog_before.defs.len();
+
+    let mut catalog = catalog_before;
+    let log = MissionLog::default(); // all missions Locked
+
+    catalog.prune_dead_chains(&log);
+    assert_eq!(
+        catalog.defs.len(),
+        base_count,
+        "Base defs should never be pruned"
+    );
+}
+
 // ── PlayerUnlocks to_save / from_save ────────────────────────────────────
 
 #[test]

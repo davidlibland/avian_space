@@ -48,7 +48,9 @@
       "Bash(ls /Users/dlibland/dev/avian_space/assets/sprites/people/*.png)",
       "WebFetch(domain:crates.io)",
       "WebFetch(domain:github.com)",
-      "Bash(grep -n \"MissionOffers\" /Users/dlibland/dev/avian_space/src/game_save.rs /Users/dlibland/dev/avian_space/src/missions/*.rs)"
+      "Bash(grep -n \"MissionOffers\" /Users/dlibland/dev/avian_space/src/game_save.rs /Users/dlibland/dev/avian_space/src/missions/*.rs)",
+      "Bash(grep -n \"defs.remove\\\\|defs.retain\\\\|defs.clear\" /Users/dlibland/dev/avian_space/src/missions/*.rs)",
+      "Bash(grep -rn \"MissionStatus::Completed\\\\|MissionStatus::Failed\" /Users/dlibland/dev/avian_space/src/missions/*.rs)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds"

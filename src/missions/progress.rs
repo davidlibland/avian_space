@@ -667,6 +667,9 @@ pub fn roll_offers_on_land(
 ) {
     let mut rng = rand::thread_rng();
     for PlayerLandedOnPlanet { planet } in reader.read() {
+        // Remove procedural defs that are no longer part of any active chain.
+        catalog.prune_dead_chains(&log);
+
         // Static missions currently Available.
         let mut tab: Vec<(String, f32)> = Vec::new();
         let mut bar: Vec<(String, f32)> = Vec::new();

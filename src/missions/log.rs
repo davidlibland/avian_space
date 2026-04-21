@@ -58,37 +58,104 @@ impl SessionResource for MissionLog {
 /// populated from `ItemUniverse.missions`; at runtime, procedural templates
 /// append freshly-rolled instances. Single source of truth for all
 /// mission-def lookups inside this module.
+///
+/// `base_keys` tracks which IDs came from the static `ItemUniverse` data.
+/// These are excluded from saves (they're restored by `new_session`) and
+/// from pruning.
 #[derive(Resource, Default, Debug)]
 pub struct MissionCatalog {
     pub defs: HashMap<String, MissionDef>,
+    /// IDs that originate from `ItemUniverse.missions` (never pruned or saved).
+    pub base_keys: HashSet<String>,
 }
 
-/// Save snapshot for MissionCatalog — only the defs for currently-active
-/// missions (base/static defs are re-loaded from ItemUniverse on restore).
+/// Save snapshot for MissionCatalog — only procedural defs (base defs are
+/// re-loaded from `ItemUniverse` on restore).
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct MissionCatalogSave(pub HashMap<String, MissionDef>);
+
+impl MissionCatalog {
+    /// Remove procedural defs that are no longer needed.
+    ///
+    /// A procedural def is **needed** if it is part of a chain where at least
+    /// one member is currently `Active`.  "Part of a chain" means it is
+    /// Active itself, or is reachable from an Active mission by following
+    /// precondition references (`Completed { mission }` / `Failed { mission }`).
+    ///
+    /// Everything else — completed chains, failed chains, offered-but-never-
+    /// accepted missions — is pruned.  Fresh procedural missions are rolled on
+    /// each landing, so dropped Available/Locked defs are naturally replaced.
+    ///
+    /// Call this at the start of `roll_offers_on_land`, after
+    /// `update_locked_to_available` has already fired.
+    pub fn prune_dead_chains(&mut self, log: &MissionLog) {
+        use super::types::Precondition;
+
+        // 1. Seed: procedural defs whose status is Active.
+        let mut needed: HashSet<String> = self
+            .defs
+            .keys()
+            .filter(|id| !self.base_keys.contains(*id))
+            .filter(|id| matches!(log.status(id), MissionStatus::Active(_)))
+            .cloned()
+            .collect();
+
+        // 2. Expand: any procedural def whose preconditions reference a needed
+        //    ID is itself needed (handles multi-stage chains).
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for (id, def) in &self.defs {
+                if needed.contains(id) || self.base_keys.contains(id) {
+                    continue;
+                }
+                let refs_needed = def.preconditions.iter().any(|p| match p {
+                    Precondition::Completed { mission } | Precondition::Failed { mission } => {
+                        needed.contains(mission)
+                    }
+                    _ => false,
+                });
+                if refs_needed {
+                    needed.insert(id.clone());
+                    changed = true;
+                }
+            }
+        }
+
+        // 3. Remove procedural defs that aren't needed.
+        self.defs
+            .retain(|id, _| self.base_keys.contains(id) || needed.contains(id));
+    }
+}
 
 impl SessionResource for MissionCatalog {
     type SaveData = MissionCatalogSave;
     const SAVE_KEY: Option<&'static str> = Some("active_mission_defs");
 
     fn new_session(universe: &ItemUniverse) -> Self {
+        let base_keys = universe.missions.keys().cloned().collect();
         Self {
             defs: universe.missions.clone(),
+            base_keys,
         }
     }
 
     fn to_save(&self) -> Self::SaveData {
-        // We save ALL defs; on load we merge them back on top of the base set.
-        // In practice only active (procedural) defs that aren't in the base set
-        // matter — but including everything is safe and simpler.
-        MissionCatalogSave(self.defs.clone())
+        // Only save procedural defs — base defs are restored from ItemUniverse.
+        MissionCatalogSave(
+            self.defs
+                .iter()
+                .filter(|(id, _)| !self.base_keys.contains(*id))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        )
     }
 
     fn from_save(data: Self::SaveData, universe: &ItemUniverse) -> Self {
+        let base_keys = universe.missions.keys().cloned().collect();
         let mut defs = universe.missions.clone();
         defs.extend(data.0);
-        Self { defs }
+        Self { defs, base_keys }
     }
 }
 
