@@ -39,8 +39,8 @@ const CAMERA_ZOOM_SPEED: f32 = 4.0;
 const WORLDS_DIR: &str = "sprites/worlds";
 
 /// World dimensions in tiles. Small for testing; increase for production.
-const WORLD_WIDTH: u32 = 64;
-const WORLD_HEIGHT: u32 = 64;
+pub const WORLD_WIDTH: u32 = 64;
+pub const WORLD_HEIGHT: u32 = 64;
 
 /// Tile size in pixels (must match the atlas tile size from tilegen.py).
 pub const TILE_PX: f32 = 32.0;
@@ -58,7 +58,7 @@ const N_TERRAIN_TYPES: u32 = 6;
 // Building kinds
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuildingKind {
     ShipPad,
     MechanicShop,
@@ -104,39 +104,10 @@ impl BuildingKind {
 pub struct Walker;
 
 // ---------------------------------------------------------------------------
-// Walker animation
+// Walker sprite loading
 // ---------------------------------------------------------------------------
-//
-// Sprite sheet layout (RPG Maker VX standard):
-//   3 columns (still, w1, w2) x 4 rows (down, left, right, up)
-//   Atlas index = row * 3 + column
 
-/// Number of columns (frames) per direction in the sprite sheet.
-const SPRITE_COLS: usize = 3;
-
-/// Direction the walker is facing. Row index in the sprite sheet.
-#[derive(Clone, Copy, Default, Debug)]
-enum Facing {
-    #[default]
-    Down = 0,
-    Left = 1,
-    Right = 2,
-    Up = 3,
-}
-
-/// Which animation frame to display. Column index in the sprite sheet.
-#[derive(Clone, Copy, Default, Debug)]
-enum WalkFrame {
-    #[default]
-    Still = 0,
-    W1 = 1,
-    W2 = 2,
-}
-
-/// Compute the texture atlas index from facing direction and walk frame.
-fn sprite_index(facing: Facing, frame: WalkFrame) -> usize {
-    facing as usize * SPRITE_COLS + frame as usize
-}
+use crate::surface_character::{CharacterAnim, SPRITE_COLS};
 
 /// Loaded sprite sheet for the walker character.
 #[derive(Resource)]
@@ -154,51 +125,12 @@ impl WalkerSheet {
         let image = asset_server.load(format!("sprites/people/{gender}.png"));
         let layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::new(16, 16),
-            SPRITE_COLS as u32, // columns
-            4,                  // rows
-            None,               // padding
-            None,               // offset
+            SPRITE_COLS as u32,
+            4,
+            None,
+            None,
         ));
         Self { image, layout }
-    }
-}
-
-/// Per-walker animation state.
-#[derive(Component)]
-struct WalkerAnim {
-    facing: Facing,
-    /// Walk cycle phase: still → w1 → still → w2 → still → w1 → ...
-    walk_phase: u8, // 0=still, 1=w1, 2=still, 3=w2
-    walk_timer: Timer,
-    is_moving: bool,
-}
-
-impl Default for WalkerAnim {
-    fn default() -> Self {
-        Self {
-            facing: Facing::Down,
-            walk_phase: 0,
-            walk_timer: Timer::from_seconds(0.15, TimerMode::Repeating),
-            is_moving: false,
-        }
-    }
-}
-
-impl WalkerAnim {
-    fn current_frame(&self) -> WalkFrame {
-        if !self.is_moving {
-            WalkFrame::Still
-        } else {
-            match self.walk_phase {
-                1 => WalkFrame::W1,
-                3 => WalkFrame::W2,
-                _ => WalkFrame::Still, // phases 0 and 2
-            }
-        }
-    }
-
-    fn atlas_index(&self) -> usize {
-        sprite_index(self.facing, self.current_frame())
     }
 }
 
@@ -328,12 +260,15 @@ pub fn surface_plugin(app: &mut App) {
             OnEnter(PlayState::Exploring),
             (setup_surface, save_on_explore),
         )
-        .add_systems(OnExit(PlayState::Exploring), teardown_surface)
+        .add_systems(
+            OnExit(PlayState::Exploring),
+            (teardown_surface, crate::surface_civilians::cleanup_civilians),
+        )
         .add_systems(
             Update,
             (
                 walker_input,
-                animate_walker,
+                crate::surface_character::animate_characters,
                 play_footstep,
                 track_nearby_building,
                 track_terrain_speed,
@@ -349,8 +284,10 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_objects::animate_landscape_objects,
                 crate::surface_objects::depth_sort_walker,
                 door_depth_sound,
+                crate::surface_civilians::spawn_civilians,
+                crate::surface_civilians::move_civilians,
+                crate::surface_civilians::depth_sort_civilians,
             )
-                .chain()
                 .run_if(in_state(PlayState::Exploring)),
         )
         .add_systems(Update, animate_camera_zoom)
@@ -373,8 +310,11 @@ pub fn surface_plugin(app: &mut App) {
 // ---------------------------------------------------------------------------
 
 /// Save the game when entering the Exploring state.
-fn save_on_explore(game_state: Res<crate::game_save::PlayerGameState>) {
-    game_state.save();
+fn save_on_explore(
+    game_state: Res<crate::game_save::PlayerGameState>,
+    session_data: Res<crate::session::SessionSaveData>,
+) {
+    crate::game_save::write_save(&game_state, &session_data);
 }
 
 // ---------------------------------------------------------------------------
@@ -526,17 +466,6 @@ fn setup_surface(
             .bytes()
             .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
 
-        let mut terrain_flat = crate::fbm::generate_terrain_map(
-            map_w,
-            map_h,
-            N_TERRAIN_TYPES,
-            FBM_SCALE,
-            FBM_OCTAVES,
-            FBM_LACUNARITY,
-            FBM_GAIN,
-            seed,
-        );
-
         // Derive collision and movement cost maps from terrain + manifest.
         let (collision_codes, movement_costs): (Vec<u8>, Vec<f32>) =
             if let Some(biome_meta) = manifest.biomes.get(biome_name) {
@@ -555,11 +484,11 @@ fn setup_surface(
                 )
             };
 
-        // Find the lowest walkable terrain index for this biome.
-        let walkable_terrain: u32 = collision_codes
-            .iter()
-            .position(|&c| c == 0) // CollisionType::Walkable
-            .unwrap_or(0) as u32;
+        // Generate initial terrain+collision for building placement.
+        let initial_terrain = crate::fbm::generate_terrain_map(
+            map_w, map_h, N_TERRAIN_TYPES,
+            FBM_SCALE, FBM_OCTAVES, FBM_LACUNARITY, FBM_GAIN, seed,
+        );
 
         // ── Pre-tilemap building placement ─────────────────────────────
         // Find building positions on the initial terrain, then force
@@ -567,7 +496,7 @@ fn setup_surface(
         // the tilemap.
         let building_kinds = building_kinds_for_planet(&planet_name, &item_universe, system_name);
 
-        let initial_col: Vec<u8> = terrain_flat
+        let initial_col: Vec<u8> = initial_terrain
             .iter()
             .map(|&t| *collision_codes.get(t as usize).unwrap_or(&0))
             .collect();
@@ -697,47 +626,64 @@ fn setup_surface(
             }
         }
 
-        // Force tiles within 2 of each building floor plan (and the
-        // landing pad, which is the first entry) to walkable terrain,
-        // then re-clamp.
-        {
-            let w = map_w as usize;
-            let h = map_h as usize;
-            let margin = 2_i32;
-            let mut pinned = vec![false; w * h];
+        // ── Constrain terrain: force walkable near buildings + force paths ──
+        // Build door positions for pathfinding.
+        let mut door_positions: Vec<(BuildingKind, (u32, u32))> = Vec::new();
+        door_positions.push((BuildingKind::ShipPad, (pad_cx, pad_cy)));
+        door_positions.push((BuildingKind::MechanicShop, (mech_x + 1, mech_y)));
+        for &(kind, bx, by, ti) in &building_assignments {
+            if let Some(tmpl) = templates.get(ti) {
+                if let Some(&(dc, dr)) = tmpl.entry_points.first() {
+                    door_positions.push((kind, (bx + dc, by + dr)));
+                }
+            }
+        }
 
-            for &(bx, by, bw, bh) in &placed_buildings {
-                for dy in -margin..(bh as i32 + margin) {
-                    for dx in -margin..(bw as i32 + margin) {
-                        let x = bx as i32 + dx;
-                        let y = by as i32 + dy;
-                        if x >= 0 && y >= 0 && x < w as i32 && y < h as i32 {
-                            let idx = y as usize * w + x as usize;
-                            terrain_flat[idx] = walkable_terrain;
-                            pinned[idx] = true;
-                        }
+        // Build a set of solid building tiles for pathfinding.
+        // Only non-transparent, non-door tiles block movement.
+        let mut solid_building_tiles: std::collections::HashSet<(u32, u32)> =
+            std::collections::HashSet::new();
+
+        // Template buildings: mark each non-zero tile as solid (except doors).
+        for &(_, bx, by, ti) in &building_assignments {
+            if let Some(tmpl) = templates.get(ti) {
+                let door_set: std::collections::HashSet<(u32, u32)> = tmpl
+                    .entry_points
+                    .iter()
+                    .map(|&(dc, dr)| (bx + dc, by + dr))
+                    .collect();
+                for row in 0..tmpl.height {
+                    for col in 0..tmpl.width {
+                        let tile_idx = tmpl.tiles[row as usize][col as usize];
+                        if tile_idx == 0 { continue; } // transparent
+                        let pos = (bx + col, by + row);
+                        if door_set.contains(&pos) { continue; } // door
+                        solid_building_tiles.insert(pos);
                     }
                 }
             }
-
-            // Also pin the border tiles so they don't get pulled down.
-            for x in 0..w {
-                pinned[x] = true;
-                pinned[(h - 1) * w + x] = true;
-            }
-            for y in 0..h {
-                pinned[y * w] = true;
-                pinned[y * w + (w - 1)] = true;
-            }
-
-            crate::fbm::clamp_terrain_indices(&mut terrain_flat, w, h, &pinned);
         }
 
-        // Re-derive collision from the modified terrain.
-        let col_data: Vec<u8> = terrain_flat
-            .iter()
-            .map(|&t| *collision_codes.get(t as usize).unwrap_or(&0))
-            .collect();
+        // Mechanic building: all tiles except garage doors are solid.
+        for row in 0..3u32 {
+            for col in 0..4u32 {
+                let atlas_row = 2 - row;
+                let is_garage = atlas_row == 2 && (col == 1 || col == 2);
+                if !is_garage {
+                    solid_building_tiles.insert((mech_x + col, mech_y + row));
+                }
+            }
+        }
+
+        // Apply terrain constraints + ensure connectivity.
+        let generated = crate::surface_terrain::generate_constrained_terrain(
+            map_w, map_h, N_TERRAIN_TYPES, seed,
+            FBM_SCALE, FBM_OCTAVES, FBM_LACUNARITY, FBM_GAIN,
+            &collision_codes, &movement_costs,
+            &placed_buildings, &door_positions, &solid_building_tiles,
+        );
+        let terrain_flat = generated.terrain;
+        let col_data = generated.collision;
 
         // Build the 2D terrain map for bitmask computation.
         // Bottom-up convention: y=0 = bottom, matching bevy_ecs_tilemap.
@@ -807,7 +753,7 @@ fn setup_surface(
             -(map_w as f32 * tile_px / 2.0),
             -(map_h as f32 * tile_px / 2.0),
         );
-        let surface_layers = CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]);
+        let surface_layers = CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]);
         crate::world_assets::spawn_collision_entities(
             &mut commands,
             &col_asset,
@@ -873,7 +819,7 @@ fn setup_surface(
                     RigidBody::Static,
                     Collider::rectangle(tile_px, tile_px),
                     CollisionEventsEnabled,
-                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
                 ));
             }
         }
@@ -942,13 +888,13 @@ fn setup_surface(
                             RigidBody::Static,
                             Collider::rectangle(tile_px, tile_px),
                             CollisionEventsEnabled,
-                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
                         ));
                     } else {
                         entity.insert((
                             RigidBody::Static,
                             Collider::rectangle(tile_px, tile_px),
-                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
                         ));
                     }
                 }
@@ -1012,13 +958,13 @@ fn setup_surface(
                                 RigidBody::Static,
                                 Collider::rectangle(tile_px, tile_px),
                                 CollisionEventsEnabled,
-                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
                             ));
                         } else if collision_code == 1 {
                             entity.insert((
                                 RigidBody::Static,
                                 Collider::rectangle(tile_px, tile_px),
-                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
                             ));
                         }
                     }
@@ -1032,7 +978,7 @@ fn setup_surface(
                     Collider::rectangle(tile_px * 2.0, tile_px * 2.0),
                     Sensor,
                     CollisionEventsEnabled,
-                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
                     Transform::from_xyz(world_pos.x, world_pos.y, 0.0),
                 ));
             }
@@ -1161,6 +1107,28 @@ fn setup_surface(
             });
         }
 
+        // ── Compute paths between buildings for AI characters ─────────
+        // (door_positions and pathfinding_rects were built above for the
+        // terrain constraint step — reuse them here.)
+        {
+            let cost_map = crate::surface_pathfinding::build_cost_map(
+                &col_data,
+                &terrain_flat,
+                &movement_costs,
+                &solid_building_tiles,
+                map_w,
+                map_h,
+            );
+
+            let surface_paths = crate::surface_pathfinding::compute_all_paths(
+                &door_positions,
+                &cost_map,
+                map_w,
+                map_h,
+            );
+            commands.insert_resource(surface_paths);
+        }
+
         // ── Store footstep data for the walking sound system ─────────
         {
             let footstep_terrains: Vec<(String, f32)> = manifest
@@ -1180,6 +1148,14 @@ fn setup_surface(
                 map_h,
             });
         }
+
+        // ── Setup civilian NPCs ─────────────────────────────────────────
+        crate::surface_civilians::setup_civilians(
+            &mut commands,
+            &asset_server,
+            &mut atlas_layouts,
+            seed,
+        );
 
         // ── Spawn landscape objects (plants, creatures, etc.) ─────────
         {
@@ -1231,16 +1207,19 @@ fn setup_surface(
         &mut atlas_layouts,
         game_state.gender.sprite_dir(),
     );
-    let initial_index = sprite_index(Facing::Down, WalkFrame::Still);
+    let initial_index = crate::surface_character::sprite_index(
+        crate::surface_character::Facing::Down,
+        crate::surface_character::WalkFrame::Still,
+    );
 
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Walker,
-        WalkerAnim::default(),
+        CharacterAnim::default(),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
         Collider::circle(WALKER_RADIUS),
-        CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface]),
+        CollisionLayers::new(GameLayer::Character, [GameLayer::Surface]),
         CollisionEventsEnabled,
         LinearDamping(WALKER_DAMPING),
         MaxLinearSpeed(WALK_SPEED),
@@ -1290,6 +1269,7 @@ fn teardown_surface(
     active_ui.0 = None;
     terrain_speed.0 = 1.0;
     commands.remove_resource::<SurfaceMiniMap>();
+    commands.remove_resource::<crate::surface_pathfinding::SurfacePaths>();
     commands.remove_resource::<ClearColor>();
 
     // Trigger zoom-out.
@@ -1338,73 +1318,39 @@ fn walker_input(
     vel.0 = dir.normalize_or_zero() * speed;
 }
 
-// ---------------------------------------------------------------------------
-// Walker Animation
-// ---------------------------------------------------------------------------
-
-/// Velocity threshold below which the walker is considered stationary.
-const MOVE_THRESHOLD: f32 = 5.0;
-
-/// Update walker facing direction, walk timer, and set the atlas index.
-fn animate_walker(
-    time: Res<Time>,
-    mut walkers: Query<(&LinearVelocity, &mut WalkerAnim, &mut Sprite), With<Walker>>,
-) {
-    let Ok((vel, mut anim, mut sprite)) = walkers.single_mut() else {
-        return;
-    };
-
-    let speed = vel.0.length();
-    if speed > MOVE_THRESHOLD {
-        anim.is_moving = true;
-        // Pick facing from the dominant axis.
-        if vel.x.abs() > vel.y.abs() {
-            anim.facing = if vel.x > 0.0 {
-                Facing::Right
-            } else {
-                Facing::Left
-            };
-        } else {
-            anim.facing = if vel.y > 0.0 {
-                Facing::Up
-            } else {
-                Facing::Down
-            };
-        }
-        // Tick the walk timer and advance through 4 phases:
-        // still → w1 → still → w2 → ...
-        anim.walk_timer.tick(time.delta());
-        if anim.walk_timer.just_finished() {
-            anim.walk_phase = (anim.walk_phase + 1) % 4;
-        }
-    } else {
-        anim.is_moving = false;
-        anim.walk_phase = 0;
-        anim.walk_timer.reset();
-    }
-
-    if let Some(atlas) = &mut sprite.texture_atlas {
-        atlas.index = anim.atlas_index();
-    }
-}
+// Walker animation is handled by the shared `animate_characters` system
+// in surface_character.rs.  The walker just needs `CharacterAnim` +
+// `LinearVelocity` + `Sprite` — same as civilians.
 
 /// Play a footstep sound when the walker's animation frame advances.
 /// Play door.ogg when the walker's depth crosses a door sprite's depth
 /// (i.e. the walker visually passes in front of / behind the door).
-/// Play ui_button sound whenever a pointer click is released on an egui widget.
+/// Play ui_open/ui_close when ActiveBuildingUI changes, and ui_button
+/// on mouse clicks while a building UI is open.
 fn egui_button_click_sound(
-    mut egui_contexts: EguiContexts,
-    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
     active_ui: Res<ActiveBuildingUI>,
+    mut prev_ui: Local<Option<BuildingKind>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
-    // Only when a building UI is open.
-    if active_ui.0.is_none() {
-        return;
+    let current = active_ui.0;
+
+    // Detect open/close transitions.
+    if active_ui.is_changed() {
+        match (*prev_ui, current) {
+            (None, Some(_)) => {
+                sfx_writer.write(crate::sfx::SurfaceSfx::UiOpen);
+            }
+            (Some(_), None) => {
+                sfx_writer.write(crate::sfx::SurfaceSfx::UiClose);
+            }
+            _ => {}
+        }
+        *prev_ui = current;
     }
-    let Ok(ctx) = egui_contexts.ctx_mut() else { return };
-    // Check if a pointer click was released this frame while egui had focus.
-    let clicked = ctx.input(|i| i.pointer.any_released());
-    if clicked && ctx.is_using_pointer() {
+
+    // Play button click sound on any mouse press while a UI is open.
+    if current.is_some() && mouse.just_released(MouseButton::Left) {
         sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);
     }
 }
@@ -1434,7 +1380,7 @@ fn door_depth_sound(
 }
 
 fn play_footstep(
-    walkers: Query<(&WalkerAnim, &Transform), With<Walker>>,
+    walkers: Query<(&CharacterAnim, &Transform), With<Walker>>,
     footstep_data: Res<FootstepData>,
     mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
@@ -1544,14 +1490,13 @@ fn building_interact(
     mut active_ui: ResMut<ActiveBuildingUI>,
     mut next_state: ResMut<NextState<PlayState>>,
     game_state: Res<crate::game_save::PlayerGameState>,
-    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
+    session_data: Res<crate::session::SessionSaveData>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
         if active_ui.0.is_some() {
             active_ui.0 = None;
-            sfx_writer.write(crate::sfx::SurfaceSfx::UiClose);
         } else {
-            game_state.save();
+            crate::game_save::write_save(&game_state, &session_data);
             next_state.set(PlayState::MainMenu);
         }
         return;
@@ -1561,7 +1506,6 @@ fn building_interact(
     if keyboard.just_pressed(KeyCode::KeyE) {
         if let Some((_, kind)) = nearby.current {
             active_ui.0 = Some(kind);
-            sfx_writer.write(crate::sfx::SurfaceSfx::UiOpen);
         }
     }
 }

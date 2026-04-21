@@ -31,30 +31,32 @@ import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
 from PIL import Image, ImageDraw
-
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Data types                                                              ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
+
 @dataclass
 class ObjectType:
     """One kind of landscape object (e.g. 'swaying_grass')."""
+
     name: str
-    n_frames: int           # animation frames (rows in the sheet)
-    n_variants: int = 4     # visual variations (columns)
-    tile_w: int = 16        # sprite width
-    tile_h: int = 16        # sprite height
+    n_frames: int  # animation frames (rows in the sheet)
+    n_variants: int = 4  # visual variations (columns)
+    tile_w: int = 16  # sprite width
+    tile_h: int = 16  # sprite height
     # Which terrains this object can appear on (within its biome).
     terrains: list[str] = field(default_factory=list)
     # Spawning parameters
-    density: float = 0.15       # base probability per tile (before fBm modulation)
-    min_distance: float = 2.0   # minimum distance between instances (Poisson disk)
-    max_per_tile: int = 1       # how many can share a single tile
-    y_offset: float = 0.0       # pixel offset for depth-sorting (positive = visually lower)
-    shy: bool = False           # if True, frame 0 = hidden; resets to frame 0 on player proximity
+    density: float = 0.15  # base probability per tile (before fBm modulation)
+    min_distance: float = 2.0  # minimum distance between instances (Poisson disk)
+    max_per_tile: int = 1  # how many can share a single tile
+    y_offset: float = 0.0  # pixel offset for depth-sorting (positive = visually lower)
+    shy: bool = (
+        False  # if True, frame 0 = hidden; resets to frame 0 on player proximity
+    )
     # Draw function: (img, draw, variant, frame, tile_w, tile_h) -> None
     draw_fn: object = None  # assigned after definition
 
@@ -62,6 +64,7 @@ class ObjectType:
 @dataclass
 class BiomeObjects:
     """All object types for one biome."""
+
     biome: str
     objects: list[ObjectType]
 
@@ -69,6 +72,7 @@ class BiomeObjects:
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Drawing helpers                                                         ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
+
 
 def _clear(w: int, h: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -89,8 +93,15 @@ def _bob(frame: int, n_frames: int, amplitude: float = 1.0) -> float:
 
 # ── Garden biome objects ─────────────────────────────────────────────────
 
-def draw_seaweed(img: Image.Image, draw: ImageDraw.ImageDraw,
-                 variant: int, frame: int, w: int, h: int) -> None:
+
+def draw_seaweed(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Swaying seaweed strand."""
     colors = [(30, 120, 60), (25, 100, 50), (40, 130, 70), (20, 90, 45)]
     c = colors[variant % len(colors)]
@@ -103,11 +114,19 @@ def draw_seaweed(img: Image.Image, draw: ImageDraw.ImageDraw,
         draw.line([(x, y), (x, y)], fill=c, width=1)
     # Leaf tips
     tip_c = tuple(min(255, v + 30) for v in c)
-    draw.ellipse([cx + int(sx) - 1, h // 4 - 1, cx + int(sx) + 1, h // 4 + 1], fill=tip_c)
+    draw.ellipse(
+        [cx + int(sx) - 1, h // 4 - 1, cx + int(sx) + 1, h // 4 + 1], fill=tip_c
+    )
 
 
-def draw_fish(img: Image.Image, draw: ImageDraw.ImageDraw,
-              variant: int, frame: int, w: int, h: int) -> None:
+def draw_fish(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Small fish that jumps in an arc."""
     colors = [(180, 140, 60), (160, 80, 40), (100, 160, 180), (200, 120, 80)]
     c = colors[variant % len(colors)]
@@ -127,8 +146,14 @@ def draw_fish(img: Image.Image, draw: ImageDraw.ImageDraw,
         draw.line([(x - 1, y + 2), (x + 1, y + 2)], fill=splash, width=1)
 
 
-def draw_ripple(img: Image.Image, draw: ImageDraw.ImageDraw,
-                variant: int, frame: int, w: int, h: int) -> None:
+def draw_ripple(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Expanding ripple ring."""
     n = 4
     t = frame / max(n - 1, 1)
@@ -141,8 +166,14 @@ def draw_ripple(img: Image.Image, draw: ImageDraw.ImageDraw,
         draw.ellipse([cx - r, cy - r // 2, cx + r, cy + r // 2], outline=c, width=1)
 
 
-def draw_grass_tuft(img: Image.Image, draw: ImageDraw.ImageDraw,
-                    variant: int, frame: int, w: int, h: int) -> None:
+def draw_grass_tuft(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Small grass tuft swaying in wind."""
     greens = [(60, 140, 50), (70, 155, 55), (50, 125, 45), (65, 150, 60)]
     c = greens[variant % len(greens)]
@@ -158,8 +189,14 @@ def draw_grass_tuft(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.line([(cx - 3, h - 1), (cx + 3, h - 1)], fill=(50, 100, 40), width=1)
 
 
-def draw_bush(img: Image.Image, draw: ImageDraw.ImageDraw,
-              variant: int, frame: int, w: int, h: int) -> None:
+def draw_bush(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Small bush with subtle sway."""
     greens = [(35, 90, 30), (40, 100, 35), (30, 80, 25), (45, 95, 40)]
     c = greens[variant % len(greens)]
@@ -174,8 +211,14 @@ def draw_bush(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.line([(cx, h - 3), (cx, h - 1)], fill=(80, 55, 30), width=1)
 
 
-def draw_rock(img: Image.Image, draw: ImageDraw.ImageDraw,
-              variant: int, frame: int, w: int, h: int) -> None:
+def draw_rock(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Static rock with flat bottom and craggy edges."""
     greys = [(130, 125, 118), (110, 108, 100), (145, 140, 130), (95, 92, 85)]
     c = greys[variant % len(greys)]
@@ -188,6 +231,7 @@ def draw_rock(img: Image.Image, draw: ImageDraw.ImageDraw,
 
     # Craggy outline: irregular polygon
     import random as _rnd
+
     _rnd.seed(variant * 1000 + 42)
     pts = []
     # Top arc (craggy)
@@ -204,15 +248,20 @@ def draw_rock(img: Image.Image, draw: ImageDraw.ImageDraw,
 
     draw.polygon(pts, fill=c, outline=dark)
     # Highlight along top
-    draw.line([(pts[2][0], pts[2][1]), (pts[4][0], pts[4][1])],
-              fill=highlight, width=1)
+    draw.line([(pts[2][0], pts[2][1]), (pts[4][0], pts[4][1])], fill=highlight, width=1)
     # Crack
     crack_c = tuple(max(0, v - 40) for v in c)
     draw.line([(cx - 1, top_y + 3), (cx + 1, base_y - 2)], fill=crack_c, width=1)
 
 
-def draw_tree(img: Image.Image, draw: ImageDraw.ImageDraw,
-              variant: int, frame: int, w: int, h: int) -> None:
+def draw_tree(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Tree with swaying canopy."""
     greens = [(30, 85, 25), (25, 75, 20), (35, 95, 30), (28, 80, 22)]
     c = greens[variant % len(greens)]
@@ -229,8 +278,14 @@ def draw_tree(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.ellipse([cx - r + 2 + int(sx), top, cx + int(sx), h // 3], fill=highlight)
 
 
-def draw_sand_critter(img: Image.Image, draw: ImageDraw.ImageDraw,
-                      variant: int, frame: int, w: int, h: int) -> None:
+def draw_sand_critter(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Small animal popping head out of sand.
     Frame 0 = just the sand mound (hidden/shy state)."""
     n = 6
@@ -262,8 +317,14 @@ def draw_sand_critter(img: Image.Image, draw: ImageDraw.ImageDraw,
         draw.point((cx + 1, head_y - 1), fill=(20, 20, 20))
 
 
-def draw_ice_chunk(img: Image.Image, draw: ImageDraw.ImageDraw,
-                   variant: int, frame: int, w: int, h: int) -> None:
+def draw_ice_chunk(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Jagged ice chunk with glint."""
     blues = [(170, 200, 230), (185, 215, 240), (155, 190, 225), (195, 225, 248)]
     c = blues[variant % len(blues)]
@@ -271,9 +332,12 @@ def draw_ice_chunk(img: Image.Image, draw: ImageDraw.ImageDraw,
     cx, cy = w // 2, h // 2
     # Angular ice shape
     pts = [
-        (cx - 3, cy + 3), (cx - 4, cy - 1),
-        (cx - 1, cy - 4 - variant % 2), (cx + 2, cy - 3),
-        (cx + 4, cy), (cx + 3, cy + 3),
+        (cx - 3, cy + 3),
+        (cx - 4, cy - 1),
+        (cx - 1, cy - 4 - variant % 2),
+        (cx + 2, cy - 3),
+        (cx + 4, cy),
+        (cx + 3, cy + 3),
     ]
     draw.polygon(pts, fill=c, outline=dark)
     # Glint animation
@@ -282,8 +346,14 @@ def draw_ice_chunk(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.point((gx, gy), fill=(255, 255, 255))
 
 
-def draw_icy_plant(img: Image.Image, draw: ImageDraw.ImageDraw,
-                   variant: int, frame: int, w: int, h: int) -> None:
+def draw_icy_plant(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Frosty crystal plant."""
     c = (140, 180, 210)
     sx = _sway(frame, 4, 0.5)
@@ -302,8 +372,14 @@ def draw_icy_plant(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.point((cx, h - 1), fill=(100, 140, 170))
 
 
-def draw_lava_bubble(img: Image.Image, draw: ImageDraw.ImageDraw,
-                     variant: int, frame: int, w: int, h: int) -> None:
+def draw_lava_bubble(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Bubbling lava pool."""
     n = 5
     t = frame / max(n - 1, 1)
@@ -322,8 +398,14 @@ def draw_lava_bubble(img: Image.Image, draw: ImageDraw.ImageDraw,
             draw.point((cx + dx, h // 2 + dy), fill=(255, 160, 40))
 
 
-def draw_lava_spurt(img: Image.Image, draw: ImageDraw.ImageDraw,
-                    variant: int, frame: int, w: int, h: int) -> None:
+def draw_lava_spurt(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Lava spurting upward."""
     n = 6
     t = frame / max(n - 1, 1)
@@ -340,8 +422,14 @@ def draw_lava_spurt(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.ellipse([cx - 2, h - 3, cx + 2, h - 1], fill=(200, 80, 20))
 
 
-def draw_cactus(img: Image.Image, draw: ImageDraw.ImageDraw,
-                variant: int, frame: int, w: int, h: int) -> None:
+def draw_cactus(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Desert cactus (minimal sway)."""
     greens = [(60, 110, 45), (55, 100, 40), (65, 120, 50), (50, 95, 38)]
     c = greens[variant % len(greens)]
@@ -365,8 +453,14 @@ def draw_cactus(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.line([(cx - 2, h - 1), (cx + 2, h - 1)], fill=(160, 140, 100), width=1)
 
 
-def draw_conifer(img: Image.Image, draw: ImageDraw.ImageDraw,
-                 variant: int, frame: int, w: int, h: int) -> None:
+def draw_conifer(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Coniferous tree (triangular, slight sway)."""
     greens = [(20, 65, 18), (18, 58, 15), (25, 72, 22), (22, 60, 20)]
     c = greens[variant % len(greens)]
@@ -387,8 +481,15 @@ def draw_conifer(img: Image.Image, draw: ImageDraw.ImageDraw,
 
 # ── Large multi-tile objects ──────────────────────────────────────────────
 
-def draw_tall_tree(img: Image.Image, draw: ImageDraw.ImageDraw,
-                   variant: int, frame: int, w: int, h: int) -> None:
+
+def draw_tall_tree(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Large deciduous tree, 2 tiles tall. Trunk from bottom, canopy on top."""
     greens = [(35, 95, 30), (30, 85, 25), (40, 105, 35), (32, 90, 28)]
     c = greens[variant % len(greens)]
@@ -402,39 +503,71 @@ def draw_tall_tree(img: Image.Image, draw: ImageDraw.ImageDraw,
     trunk_w = max(2, w // 6)
 
     # Trunk
-    draw.rectangle([cx - trunk_w, trunk_top, cx + trunk_w, trunk_bottom],
-                   fill=(75, 50, 28))
+    draw.rectangle(
+        [cx - trunk_w, trunk_top, cx + trunk_w, trunk_bottom], fill=(75, 50, 28)
+    )
     # Trunk bark lines
     for by in range(trunk_top + 2, trunk_bottom, h // 8):
-        draw.line([(cx - trunk_w + 1, by), (cx + trunk_w - 1, by)],
-                  fill=(60, 38, 18), width=1)
+        draw.line(
+            [(cx - trunk_w + 1, by), (cx + trunk_w - 1, by)], fill=(60, 38, 18), width=1
+        )
     # Roots
-    draw.line([(cx - trunk_w - 2, trunk_bottom), (cx - trunk_w, trunk_top + h // 5)],
-              fill=(65, 42, 22), width=1)
-    draw.line([(cx + trunk_w + 2, trunk_bottom), (cx + trunk_w, trunk_top + h // 5)],
-              fill=(65, 42, 22), width=1)
+    draw.line(
+        [(cx - trunk_w - 2, trunk_bottom), (cx - trunk_w, trunk_top + h // 5)],
+        fill=(65, 42, 22),
+        width=1,
+    )
+    draw.line(
+        [(cx + trunk_w + 2, trunk_bottom), (cx + trunk_w, trunk_top + h // 5)],
+        fill=(65, 42, 22),
+        width=1,
+    )
 
     # Canopy: layered circles (keep within margins)
     canopy_cy = h // 4 + margin + int(sx * 0.3)
     canopy_rx = min(w // 3 + variant, w // 2 - margin - 2)
     canopy_ry = min(h // 4, canopy_cy - margin)
     # Shadow layer
-    draw.ellipse([cx - canopy_rx - 1 + int(sx), canopy_cy - canopy_ry + 1,
-                  cx + canopy_rx + 1 + int(sx), canopy_cy + canopy_ry + 1],
-                 fill=dark)
+    draw.ellipse(
+        [
+            cx - canopy_rx - 1 + int(sx),
+            canopy_cy - canopy_ry + 1,
+            cx + canopy_rx + 1 + int(sx),
+            canopy_cy + canopy_ry + 1,
+        ],
+        fill=dark,
+    )
     # Main canopy
-    draw.ellipse([cx - canopy_rx + int(sx), canopy_cy - canopy_ry,
-                  cx + canopy_rx + int(sx), canopy_cy + canopy_ry],
-                 fill=c)
+    draw.ellipse(
+        [
+            cx - canopy_rx + int(sx),
+            canopy_cy - canopy_ry,
+            cx + canopy_rx + int(sx),
+            canopy_cy + canopy_ry,
+        ],
+        fill=c,
+    )
     # Highlight
     highlight = tuple(min(255, v + 25) for v in c)
-    draw.ellipse([cx - canopy_rx // 2 + int(sx), canopy_cy - canopy_ry,
-                  cx + canopy_rx // 2 + int(sx), canopy_cy - canopy_ry // 2],
-                 fill=highlight)
+    draw.ellipse(
+        [
+            cx - canopy_rx // 2 + int(sx),
+            canopy_cy - canopy_ry,
+            cx + canopy_rx // 2 + int(sx),
+            canopy_cy - canopy_ry // 2,
+        ],
+        fill=highlight,
+    )
 
 
-def draw_tall_conifer(img: Image.Image, draw: ImageDraw.ImageDraw,
-                      variant: int, frame: int, w: int, h: int) -> None:
+def draw_tall_conifer(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Tall conifer, 3 tiles. Multiple triangular layers."""
     greens = [(18, 62, 15), (15, 55, 12), (22, 70, 18), (20, 58, 16)]
     c = greens[variant % len(greens)]
@@ -462,12 +595,20 @@ def draw_tall_conifer(img: Image.Image, draw: ImageDraw.ImageDraw,
 
     # Snow cap on top for some variants
     if variant % 3 == 0:
-        draw.ellipse([cx - 2 + int(sx * 0.3), margin, cx + 2 + int(sx * 0.3), margin + 3],
-                     fill=(220, 235, 248))
+        draw.ellipse(
+            [cx - 2 + int(sx * 0.3), margin, cx + 2 + int(sx * 0.3), margin + 3],
+            fill=(220, 235, 248),
+        )
 
 
-def draw_large_rock(img: Image.Image, draw: ImageDraw.ImageDraw,
-                    variant: int, frame: int, w: int, h: int) -> None:
+def draw_large_rock(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Large boulder with flat bottom and craggy edges."""
     greys = [(120, 115, 105), (105, 100, 92), (135, 128, 118), (90, 85, 78)]
     c = greys[variant % len(greys)]
@@ -481,6 +622,7 @@ def draw_large_rock(img: Image.Image, draw: ImageDraw.ImageDraw,
 
     # Craggy irregular polygon
     import random as _rnd
+
     _rnd.seed(variant * 2000 + 77)
     pts = []
     for i in range(9):
@@ -497,13 +639,15 @@ def draw_large_rock(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.polygon(pts, fill=c, outline=dark)
 
     # Secondary bump on top
-    bump_pts = [(cx - rw // 3, top_y + 2), (cx, top_y - 2 + _rnd.randint(0, 2)),
-                (cx + rw // 3, top_y + 2)]
+    bump_pts = [
+        (cx - rw // 3, top_y + 2),
+        (cx, top_y - 2 + _rnd.randint(0, 2)),
+        (cx + rw // 3, top_y + 2),
+    ]
     draw.polygon(bump_pts, fill=c, outline=dark)
 
     # Highlight
-    draw.line([(pts[3][0], pts[3][1]), (pts[5][0], pts[5][1])],
-              fill=highlight, width=1)
+    draw.line([(pts[3][0], pts[3][1]), (pts[5][0], pts[5][1])], fill=highlight, width=1)
 
     # Cracks
     crack_c = tuple(max(0, v - 45) for v in c)
@@ -511,8 +655,14 @@ def draw_large_rock(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.line([(cx + 1, top_y + 8), (cx + 4, base_y - 5)], fill=crack_c, width=1)
 
 
-def draw_ice_spire(img: Image.Image, draw: ImageDraw.ImageDraw,
-                   variant: int, frame: int, w: int, h: int) -> None:
+def draw_ice_spire(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Tall ice spire, 2 tiles. Glinting crystal."""
     blues = [(160, 195, 230), (175, 210, 240), (145, 185, 225), (190, 220, 248)]
     c = blues[variant % len(blues)]
@@ -525,8 +675,11 @@ def draw_ice_spire(img: Image.Image, draw: ImageDraw.ImageDraw,
     pts = [(cx, margin), (cx - base_w, h - 2), (cx + base_w, h - 2)]
     draw.polygon(pts, fill=c, outline=dark)
     # Highlight stripe
-    draw.line([(cx - 1, h // 4), (cx - 1, h * 3 // 4)],
-              fill=tuple(min(255, v + 35) for v in c), width=1)
+    draw.line(
+        [(cx - 1, h // 4), (cx - 1, h * 3 // 4)],
+        fill=tuple(min(255, v + 35) for v in c),
+        width=1,
+    )
     # Animated glint
     gx = cx + (frame % 3) - 1
     gy = h // 5 + (frame * 3) % (h // 2)
@@ -537,8 +690,15 @@ def draw_ice_spire(img: Image.Image, draw: ImageDraw.ImageDraw,
 
 # ── Creatures (appear across biomes) ─────────────────────────────────────
 
-def draw_alien_peek(img: Image.Image, draw: ImageDraw.ImageDraw,
-                    variant: int, frame: int, w: int, h: int) -> None:
+
+def draw_alien_peek(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Small alien creature peeking from behind a rock/plant.
     Frame 0 = just the rock (hidden/shy state)."""
     n = 5
@@ -581,17 +741,26 @@ def draw_alien_peek(img: Image.Image, draw: ImageDraw.ImageDraw,
 
         # Blink on one frame
         if frame == 3 and n > 3:
-            draw.line([(head_x - 1, head_y - 1), (head_x + 1, head_y - 1)], fill=bc, width=1)
+            draw.line(
+                [(head_x - 1, head_y - 1), (head_x + 1, head_y - 1)], fill=bc, width=1
+            )
 
         # Antennae for some variants
         if variant % 2 == 0:
-            draw.line([(head_x - 1, head_y - 2), (head_x - 2, head_y - 4)],
-                      fill=bc, width=1)
+            draw.line(
+                [(head_x - 1, head_y - 2), (head_x - 2, head_y - 4)], fill=bc, width=1
+            )
             draw.point((head_x - 2, head_y - 4), fill=ec)
 
 
-def draw_hole_creature(img: Image.Image, draw: ImageDraw.ImageDraw,
-                       variant: int, frame: int, w: int, h: int) -> None:
+def draw_hole_creature(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Creature popping out of a hole in the ground.
     Frame 0 = just the hole (hidden/shy state)."""
     n = 6
@@ -632,12 +801,20 @@ def draw_hole_creature(img: Image.Image, draw: ImageDraw.ImageDraw,
         # Look around: head shifts left/right
         if 0.4 < t < 0.6:
             look_dir = 1 if frame % 2 == 0 else -1
-            draw.point((cx + look_dir * 2, head_y - 1),
-                       fill=tuple(min(255, v + 30) for v in bc))
+            draw.point(
+                (cx + look_dir * 2, head_y - 1),
+                fill=tuple(min(255, v + 30) for v in bc),
+            )
 
 
-def draw_rat(img: Image.Image, draw: ImageDraw.ImageDraw,
-             variant: int, frame: int, w: int, h: int) -> None:
+def draw_rat(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Station rat scurrying along.
     Frame 0 = hidden (no rat visible)."""
     n = 5
@@ -671,12 +848,20 @@ def draw_rat(img: Image.Image, draw: ImageDraw.ImageDraw,
 
 
 # Objects that appear on interior biome terrains
-def draw_floor_vent(img: Image.Image, draw: ImageDraw.ImageDraw,
-                    variant: int, frame: int, w: int, h: int) -> None:
+def draw_floor_vent(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Steam vent in the floor."""
     # Vent grate
     cx, cy = w // 2, h // 2
-    draw.rectangle([cx - 3, cy - 1, cx + 3, cy + 1], fill=(60, 62, 68), outline=(40, 42, 48))
+    draw.rectangle(
+        [cx - 3, cy - 1, cx + 3, cy + 1], fill=(60, 62, 68), outline=(40, 42, 48)
+    )
     draw.line([(cx - 2, cy), (cx + 2, cy)], fill=(45, 47, 52), width=1)
     # Steam puff (animated)
     n = 4
@@ -689,8 +874,14 @@ def draw_floor_vent(img: Image.Image, draw: ImageDraw.ImageDraw,
         draw.ellipse([cx - r, puff_y - r, cx + r, puff_y + r], fill=c)
 
 
-def draw_wall_pipe(img: Image.Image, draw: ImageDraw.ImageDraw,
-                   variant: int, frame: int, w: int, h: int) -> None:
+def draw_wall_pipe(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Pipes along the wall (static with drip animation)."""
     pipe_c = (75, 80, 88)
     # Horizontal pipe
@@ -707,8 +898,14 @@ def draw_wall_pipe(img: Image.Image, draw: ImageDraw.ImageDraw,
         draw.point((jx, drip_y), fill=(100, 180, 220))
 
 
-def draw_display_kiosk(img: Image.Image, draw: ImageDraw.ImageDraw,
-                       variant: int, frame: int, w: int, h: int) -> None:
+def draw_display_kiosk(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Small display terminal or kiosk with flickering screen."""
     body_c = (55, 58, 65)
     cx = w // 2
@@ -725,12 +922,21 @@ def draw_display_kiosk(img: Image.Image, draw: ImageDraw.ImageDraw,
     draw.rectangle([sx + 1, sy + 1, sx + sw - 1, sy + sh - 1], fill=sc)
     # Scan line
     scan_y = sy + 1 + (frame * 2) % max(1, sh - 2)
-    draw.line([(sx + 1, scan_y), (sx + sw - 1, scan_y)],
-              fill=tuple(min(255, v + 50) for v in sc), width=1)
+    draw.line(
+        [(sx + 1, scan_y), (sx + sw - 1, scan_y)],
+        fill=tuple(min(255, v + 50) for v in sc),
+        width=1,
+    )
 
 
-def draw_machine(img: Image.Image, draw: ImageDraw.ImageDraw,
-                 variant: int, frame: int, w: int, h: int) -> None:
+def draw_machine(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Small machine with spinning element."""
     body_c = (65, 68, 75)
     dark = (42, 45, 52)
@@ -743,16 +949,23 @@ def draw_machine(img: Image.Image, draw: ImageDraw.ImageDraw,
     gx = cx + int(math.cos(angle) * r)
     gy = cy + int(math.sin(angle) * r)
     indicator = [(180, 60, 40), (60, 180, 60), (60, 60, 180), (180, 180, 40)]
-    draw.ellipse([gx - 1, gy - 1, gx + 1, gy + 1],
-                 fill=indicator[variant % len(indicator)])
+    draw.ellipse(
+        [gx - 1, gy - 1, gx + 1, gy + 1], fill=indicator[variant % len(indicator)]
+    )
     # Status LED
     led_colors = [(255, 50, 30), (50, 255, 50), (50, 150, 255), (255, 200, 30)]
     led = led_colors[(variant + frame) % len(led_colors)]
     draw.point((cx + 3, cy - 1), fill=led)
 
 
-def draw_sewage(img: Image.Image, draw: ImageDraw.ImageDraw,
-                variant: int, frame: int, w: int, h: int) -> None:
+def draw_sewage(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    variant: int,
+    frame: int,
+    w: int,
+    h: int,
+) -> None:
     """Fluorescent green sewage puddle with bubbles."""
     green = (40, 200, 60)
     dark_green = (25, 140, 35)
@@ -769,8 +982,9 @@ def draw_sewage(img: Image.Image, draw: ImageDraw.ImageDraw,
     by = cy - int(t * 3)
     br = 1 if t < 0.7 else 0
     if br > 0:
-        draw.ellipse([bx - br, by - br, bx + br, by + br],
-                     outline=(80, 255, 100), width=1)
+        draw.ellipse(
+            [bx - br, by - br, bx + br, by + br], outline=(80, 255, 100), width=1
+        )
     # Glow
     glow = (60, 220, 80, int(100 * (1.0 - t)))
     draw.ellipse([cx - 2, cy - 1, cx + 2, cy + 1], fill=glow)
@@ -783,161 +997,434 @@ def draw_sewage(img: Image.Image, draw: ImageDraw.ImageDraw,
 GARDEN_OBJECTS = BiomeObjects(
     biome="garden",
     objects=[
-        ObjectType("seaweed", n_frames=4, terrains=["water"],
-                   density=0.20, min_distance=1.5, max_per_tile=2, y_offset=4.0,
-                   draw_fn=draw_seaweed),
-        ObjectType("fish", n_frames=5, terrains=["water"],
-                   density=0.06, min_distance=4.0, max_per_tile=1, y_offset=0.0,
-                   draw_fn=draw_fish),
-        ObjectType("ripple", n_frames=4, terrains=["water"],
-                   density=0.10, min_distance=2.0, max_per_tile=2, y_offset=0.0,
-                   draw_fn=draw_ripple),
-        ObjectType("grass_tuft", n_frames=4, terrains=["sand", "grass"],
-                   density=0.40, min_distance=0.8, max_per_tile=3, y_offset=6.0,
-                   draw_fn=draw_grass_tuft),
-        ObjectType("bush", n_frames=4, terrains=["grass", "forest"],
-                   density=0.18, min_distance=2.0, max_per_tile=1, y_offset=4.0,
-                   draw_fn=draw_bush),
-        ObjectType("rock", n_frames=1, terrains=["sand", "grass", "mountain"],
-                   density=0.10, min_distance=2.5, max_per_tile=2, y_offset=6.0,
-                   draw_fn=draw_rock),
-        ObjectType("tree", n_frames=4, terrains=["grass", "forest"],
-                   density=0.18, min_distance=2.5, max_per_tile=1, y_offset=8.0,
-                   draw_fn=draw_tree),
-        ObjectType("conifer", n_frames=4, terrains=["forest", "mountain"],
-                   density=0.18, min_distance=2.5, max_per_tile=1, y_offset=8.0,
-                   draw_fn=draw_conifer),
-        ObjectType("tall_tree", n_frames=4, tile_h=32,
-                   terrains=["grass", "forest"],
-                   density=0.12, min_distance=3.0, max_per_tile=1, y_offset=14.0,
-                   draw_fn=draw_tall_tree),
-        ObjectType("tall_conifer", n_frames=4, tile_h=48,
-                   terrains=["forest", "mountain"],
-                   density=0.08, min_distance=4.0, max_per_tile=1, y_offset=22.0,
-                   draw_fn=draw_tall_conifer),
-        ObjectType("large_rock", n_frames=1, tile_h=32,
-                   terrains=["grass", "mountain", "sand"],
-                   density=0.04, min_distance=5.0, max_per_tile=1, y_offset=12.0,
-                   draw_fn=draw_large_rock),
-        ObjectType("alien_peek", n_frames=5, terrains=["grass", "forest", "sand"],
-                   density=0.03, min_distance=8.0, max_per_tile=1, y_offset=-4.0,
-                   shy=True, draw_fn=draw_alien_peek),
-        ObjectType("hole_creature", n_frames=6, terrains=["grass", "sand"],
-                   density=0.03, min_distance=8.0, max_per_tile=1, y_offset=-6.0,
-                   shy=True, draw_fn=draw_hole_creature),
+        ObjectType(
+            "seaweed",
+            n_frames=4,
+            terrains=["water"],
+            density=0.20,
+            min_distance=1.5,
+            max_per_tile=2,
+            y_offset=4.0,
+            draw_fn=draw_seaweed,
+        ),
+        ObjectType(
+            "fish",
+            n_frames=5,
+            terrains=["water"],
+            density=0.06,
+            min_distance=4.0,
+            max_per_tile=1,
+            y_offset=0.0,
+            draw_fn=draw_fish,
+        ),
+        ObjectType(
+            "ripple",
+            n_frames=4,
+            terrains=["water"],
+            density=0.10,
+            min_distance=2.0,
+            max_per_tile=2,
+            y_offset=0.0,
+            draw_fn=draw_ripple,
+        ),
+        ObjectType(
+            "grass_tuft",
+            n_frames=4,
+            terrains=["sand", "grass"],
+            density=0.70,
+            min_distance=0.8,
+            max_per_tile=3,
+            y_offset=6.0,
+            draw_fn=draw_grass_tuft,
+        ),
+        ObjectType(
+            "bush",
+            n_frames=4,
+            terrains=["grass", "forest"],
+            density=0.36,
+            min_distance=2.0,
+            max_per_tile=1,
+            y_offset=4.0,
+            draw_fn=draw_bush,
+        ),
+        ObjectType(
+            "rock",
+            n_frames=1,
+            terrains=["sand", "grass", "mountain"],
+            density=0.10,
+            min_distance=2.5,
+            max_per_tile=2,
+            y_offset=6.0,
+            draw_fn=draw_rock,
+        ),
+        ObjectType(
+            "tree",
+            n_frames=4,
+            terrains=["grass", "forest"],
+            density=0.36,
+            min_distance=2.5,
+            max_per_tile=1,
+            y_offset=8.0,
+            draw_fn=draw_tree,
+        ),
+        ObjectType(
+            "conifer",
+            n_frames=4,
+            terrains=["forest", "mountain"],
+            density=0.36,
+            min_distance=2.5,
+            max_per_tile=1,
+            y_offset=8.0,
+            draw_fn=draw_conifer,
+        ),
+        ObjectType(
+            "tall_tree",
+            n_frames=4,
+            tile_h=32,
+            terrains=["grass", "forest"],
+            density=0.24,
+            min_distance=3.0,
+            max_per_tile=1,
+            y_offset=14.0,
+            draw_fn=draw_tall_tree,
+        ),
+        ObjectType(
+            "tall_conifer",
+            n_frames=4,
+            tile_h=48,
+            terrains=["forest", "mountain"],
+            density=0.24,
+            min_distance=4.0,
+            max_per_tile=1,
+            y_offset=22.0,
+            draw_fn=draw_tall_conifer,
+        ),
+        ObjectType(
+            "large_rock",
+            n_frames=1,
+            tile_h=32,
+            terrains=["grass", "mountain", "sand"],
+            density=0.04,
+            min_distance=5.0,
+            max_per_tile=1,
+            y_offset=12.0,
+            draw_fn=draw_large_rock,
+        ),
+        ObjectType(
+            "alien_peek",
+            n_frames=5,
+            terrains=["grass", "forest", "sand"],
+            density=0.03,
+            min_distance=8.0,
+            max_per_tile=1,
+            y_offset=-4.0,
+            shy=True,
+            draw_fn=draw_alien_peek,
+        ),
+        ObjectType(
+            "hole_creature",
+            n_frames=6,
+            terrains=["grass", "sand"],
+            density=0.03,
+            min_distance=8.0,
+            max_per_tile=1,
+            y_offset=-6.0,
+            shy=True,
+            draw_fn=draw_hole_creature,
+        ),
     ],
 )
 
 ICE_OBJECTS = BiomeObjects(
     biome="ice",
     objects=[
-        ObjectType("ice_chunk", n_frames=3, terrains=["deep_ice", "ice", "snow"],
-                   density=0.12, min_distance=2.5, max_per_tile=2, y_offset=4.0,
-                   draw_fn=draw_ice_chunk),
-        ObjectType("icy_plant", n_frames=4, terrains=["snow", "ice"],
-                   density=0.10, min_distance=2.0, max_per_tile=2, y_offset=4.0,
-                   draw_fn=draw_icy_plant),
-        ObjectType("rock", n_frames=1, terrains=["ice_rock", "snow"],
-                   density=0.08, min_distance=3.0, max_per_tile=2, y_offset=6.0,
-                   draw_fn=draw_rock),
-        ObjectType("ice_spire", n_frames=3, tile_h=32,
-                   terrains=["deep_ice", "ice", "ice_rock"],
-                   density=0.05, min_distance=4.0, max_per_tile=1, y_offset=14.0,
-                   draw_fn=draw_ice_spire),
-        ObjectType("large_rock", n_frames=1, tile_h=32,
-                   terrains=["ice_rock", "snow"],
-                   density=0.04, min_distance=5.0, max_per_tile=1, y_offset=12.0,
-                   draw_fn=draw_large_rock),
-        ObjectType("alien_peek", n_frames=5, terrains=["snow", "ice"],
-                   density=0.02, min_distance=10.0, max_per_tile=1, y_offset=-4.0,
-                   shy=True, draw_fn=draw_alien_peek),
+        ObjectType(
+            "ice_chunk",
+            n_frames=3,
+            terrains=["deep_ice", "ice", "snow"],
+            density=0.12,
+            min_distance=2.5,
+            max_per_tile=2,
+            y_offset=4.0,
+            draw_fn=draw_ice_chunk,
+        ),
+        ObjectType(
+            "icy_plant",
+            n_frames=4,
+            terrains=["snow", "ice"],
+            density=0.10,
+            min_distance=2.0,
+            max_per_tile=2,
+            y_offset=4.0,
+            draw_fn=draw_icy_plant,
+        ),
+        ObjectType(
+            "rock",
+            n_frames=1,
+            terrains=["ice_rock", "snow"],
+            density=0.08,
+            min_distance=3.0,
+            max_per_tile=2,
+            y_offset=6.0,
+            draw_fn=draw_rock,
+        ),
+        ObjectType(
+            "ice_spire",
+            n_frames=3,
+            tile_h=32,
+            terrains=["deep_ice", "ice", "ice_rock"],
+            density=0.05,
+            min_distance=4.0,
+            max_per_tile=1,
+            y_offset=14.0,
+            draw_fn=draw_ice_spire,
+        ),
+        ObjectType(
+            "large_rock",
+            n_frames=1,
+            tile_h=32,
+            terrains=["ice_rock", "snow"],
+            density=0.04,
+            min_distance=5.0,
+            max_per_tile=1,
+            y_offset=12.0,
+            draw_fn=draw_large_rock,
+        ),
+        ObjectType(
+            "alien_peek",
+            n_frames=5,
+            terrains=["snow", "ice"],
+            density=0.02,
+            min_distance=10.0,
+            max_per_tile=1,
+            y_offset=-4.0,
+            shy=True,
+            draw_fn=draw_alien_peek,
+        ),
     ],
 )
 
 ROCKY_OBJECTS = BiomeObjects(
     biome="rocky",
     objects=[
-        ObjectType("lava_bubble", n_frames=5, terrains=["lava"],
-                   density=0.18, min_distance=2.0, max_per_tile=2, y_offset=2.0,
-                   draw_fn=draw_lava_bubble),
-        ObjectType("lava_spurt", n_frames=6, terrains=["lava"],
-                   density=0.08, min_distance=3.5, max_per_tile=1, y_offset=0.0,
-                   draw_fn=draw_lava_spurt),
-        ObjectType("rock", n_frames=1, terrains=["basalt", "rock", "dust"],
-                   density=0.10, min_distance=2.5, max_per_tile=2, y_offset=6.0,
-                   draw_fn=draw_rock),
-        ObjectType("large_rock", n_frames=1, tile_h=32,
-                   terrains=["basalt", "rock", "cliff"],
-                   density=0.05, min_distance=4.0, max_per_tile=1, y_offset=12.0,
-                   draw_fn=draw_large_rock),
-        ObjectType("bush", n_frames=4, terrains=["dust", "rock"],
-                   density=0.08, min_distance=3.0, max_per_tile=1, y_offset=4.0,
-                   draw_fn=draw_bush),
-        ObjectType("hole_creature", n_frames=6, terrains=["basalt", "dust"],
-                   density=0.03, min_distance=8.0, max_per_tile=1, y_offset=-6.0,
-                   shy=True, draw_fn=draw_hole_creature),
+        ObjectType(
+            "lava_bubble",
+            n_frames=5,
+            terrains=["lava"],
+            density=0.18,
+            min_distance=2.0,
+            max_per_tile=2,
+            y_offset=2.0,
+            draw_fn=draw_lava_bubble,
+        ),
+        ObjectType(
+            "lava_spurt",
+            n_frames=6,
+            terrains=["lava"],
+            density=0.08,
+            min_distance=3.5,
+            max_per_tile=1,
+            y_offset=0.0,
+            draw_fn=draw_lava_spurt,
+        ),
+        ObjectType(
+            "rock",
+            n_frames=1,
+            terrains=["basalt", "rock", "dust"],
+            density=0.10,
+            min_distance=2.5,
+            max_per_tile=2,
+            y_offset=6.0,
+            draw_fn=draw_rock,
+        ),
+        ObjectType(
+            "large_rock",
+            n_frames=1,
+            tile_h=32,
+            terrains=["basalt", "rock", "cliff"],
+            density=0.05,
+            min_distance=4.0,
+            max_per_tile=1,
+            y_offset=12.0,
+            draw_fn=draw_large_rock,
+        ),
+        ObjectType(
+            "bush",
+            n_frames=4,
+            terrains=["dust", "rock"],
+            density=0.08,
+            min_distance=3.0,
+            max_per_tile=1,
+            y_offset=4.0,
+            draw_fn=draw_bush,
+        ),
+        ObjectType(
+            "hole_creature",
+            n_frames=6,
+            terrains=["basalt", "dust"],
+            density=0.03,
+            min_distance=8.0,
+            max_per_tile=1,
+            y_offset=-6.0,
+            shy=True,
+            draw_fn=draw_hole_creature,
+        ),
     ],
 )
 
 DESERT_OBJECTS = BiomeObjects(
     biome="desert",
     objects=[
-        ObjectType("sand_critter", n_frames=6, terrains=["dunes", "hard_sand"],
-                   density=0.04, min_distance=6.0, max_per_tile=1, y_offset=-4.0,
-                   shy=True, draw_fn=draw_sand_critter),
-        ObjectType("cactus", n_frames=4, terrains=["dunes", "hard_sand"],
-                   density=0.08, min_distance=4.0, max_per_tile=1, y_offset=6.0,
-                   draw_fn=draw_cactus),
-        ObjectType("grass_tuft", n_frames=4, terrains=["hard_sand", "dunes"],
-                   density=0.25, min_distance=1.0, max_per_tile=3, y_offset=6.0,
-                   draw_fn=draw_grass_tuft),
-        ObjectType("rock", n_frames=1, terrains=["hard_sand", "sandstone"],
-                   density=0.08, min_distance=3.0, max_per_tile=2, y_offset=6.0,
-                   draw_fn=draw_rock),
-        ObjectType("large_rock", n_frames=1, tile_h=32,
-                   terrains=["sandstone", "mesa"],
-                   density=0.04, min_distance=5.0, max_per_tile=1, y_offset=12.0,
-                   draw_fn=draw_large_rock),
-        ObjectType("alien_peek", n_frames=5, terrains=["dunes", "hard_sand"],
-                   density=0.02, min_distance=10.0, max_per_tile=1, y_offset=-4.0,
-                   shy=True, draw_fn=draw_alien_peek),
+        ObjectType(
+            "sand_critter",
+            n_frames=6,
+            terrains=["dunes", "hard_sand"],
+            density=0.04,
+            min_distance=6.0,
+            max_per_tile=1,
+            y_offset=-4.0,
+            shy=True,
+            draw_fn=draw_sand_critter,
+        ),
+        ObjectType(
+            "cactus",
+            n_frames=4,
+            terrains=["dunes", "hard_sand"],
+            density=0.08,
+            min_distance=4.0,
+            max_per_tile=1,
+            y_offset=6.0,
+            draw_fn=draw_cactus,
+        ),
+        ObjectType(
+            "grass_tuft",
+            n_frames=4,
+            terrains=["hard_sand", "dunes"],
+            density=0.25,
+            min_distance=1.0,
+            max_per_tile=3,
+            y_offset=6.0,
+            draw_fn=draw_grass_tuft,
+        ),
+        ObjectType(
+            "rock",
+            n_frames=1,
+            terrains=["hard_sand", "sandstone"],
+            density=0.08,
+            min_distance=3.0,
+            max_per_tile=2,
+            y_offset=6.0,
+            draw_fn=draw_rock,
+        ),
+        ObjectType(
+            "large_rock",
+            n_frames=1,
+            tile_h=32,
+            terrains=["sandstone", "mesa"],
+            density=0.04,
+            min_distance=5.0,
+            max_per_tile=1,
+            y_offset=12.0,
+            draw_fn=draw_large_rock,
+        ),
+        ObjectType(
+            "alien_peek",
+            n_frames=5,
+            terrains=["dunes", "hard_sand"],
+            density=0.02,
+            min_distance=10.0,
+            max_per_tile=1,
+            y_offset=-4.0,
+            shy=True,
+            draw_fn=draw_alien_peek,
+        ),
     ],
 )
 
 INTERIOR_OBJECTS = BiomeObjects(
     biome="interior",
     objects=[
-        ObjectType("floor_vent", n_frames=4, terrains=["floor", "plating", "grate"],
-                   density=0.06, min_distance=4.0, max_per_tile=1, y_offset=2.0,
-                   draw_fn=draw_floor_vent),
-        ObjectType("wall_pipe", n_frames=4, terrains=["plating", "grate"],
-                   density=0.08, min_distance=3.0, max_per_tile=1, y_offset=0.0,
-                   draw_fn=draw_wall_pipe),
-        ObjectType("display_kiosk", n_frames=4, terrains=["floor", "plating"],
-                   density=0.05, min_distance=5.0, max_per_tile=1, y_offset=4.0,
-                   draw_fn=draw_display_kiosk),
-        ObjectType("machine", n_frames=4, terrains=["plating", "grate"],
-                   density=0.06, min_distance=4.0, max_per_tile=1, y_offset=4.0,
-                   draw_fn=draw_machine),
-        ObjectType("sewage", n_frames=4, terrains=["grate", "conduit"],
-                   density=0.08, min_distance=3.0, max_per_tile=2, y_offset=2.0,
-                   draw_fn=draw_sewage),
-        ObjectType("rat", n_frames=5, terrains=["floor", "plating", "grate"],
-                   density=0.03, min_distance=8.0, max_per_tile=1, y_offset=6.0,
-                   shy=True, draw_fn=draw_rat),
+        ObjectType(
+            "floor_vent",
+            n_frames=4,
+            terrains=["floor", "plating", "grate"],
+            density=0.06,
+            min_distance=4.0,
+            max_per_tile=1,
+            y_offset=2.0,
+            draw_fn=draw_floor_vent,
+        ),
+        ObjectType(
+            "wall_pipe",
+            n_frames=4,
+            terrains=["plating", "grate"],
+            density=0.08,
+            min_distance=3.0,
+            max_per_tile=1,
+            y_offset=0.0,
+            draw_fn=draw_wall_pipe,
+        ),
+        ObjectType(
+            "display_kiosk",
+            n_frames=4,
+            terrains=["floor", "plating"],
+            density=0.05,
+            min_distance=5.0,
+            max_per_tile=1,
+            y_offset=4.0,
+            draw_fn=draw_display_kiosk,
+        ),
+        ObjectType(
+            "machine",
+            n_frames=4,
+            terrains=["plating", "grate"],
+            density=0.06,
+            min_distance=4.0,
+            max_per_tile=1,
+            y_offset=4.0,
+            draw_fn=draw_machine,
+        ),
+        ObjectType(
+            "sewage",
+            n_frames=4,
+            terrains=["grate", "conduit"],
+            density=0.08,
+            min_distance=3.0,
+            max_per_tile=2,
+            y_offset=2.0,
+            draw_fn=draw_sewage,
+        ),
+        ObjectType(
+            "rat",
+            n_frames=5,
+            terrains=["floor", "plating", "grate"],
+            density=0.03,
+            min_distance=8.0,
+            max_per_tile=1,
+            y_offset=6.0,
+            shy=True,
+            draw_fn=draw_rat,
+        ),
     ],
 )
 
-ALL_BIOME_OBJECTS = [GARDEN_OBJECTS, ICE_OBJECTS, ROCKY_OBJECTS,
-                     DESERT_OBJECTS, INTERIOR_OBJECTS]
+ALL_BIOME_OBJECTS = [
+    GARDEN_OBJECTS,
+    ICE_OBJECTS,
+    ROCKY_OBJECTS,
+    DESERT_OBJECTS,
+    INTERIOR_OBJECTS,
+]
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Atlas assembly                                                          ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-def build_objects_atlas(biome_objs: BiomeObjects,
-                        tile_size: int) -> tuple[Image.Image, list[dict]]:
+
+def build_objects_atlas(
+    biome_objs: BiomeObjects, tile_size: int
+) -> tuple[Image.Image, list[dict]]:
     """
     Build a combined sprite sheet for all objects in a biome.
 
@@ -971,20 +1458,22 @@ def build_objects_atlas(biome_objs: BiomeObjects,
                     obj.draw_fn(tile_img, tile_draw, var, frame, tw, th)
                 atlas.paste(tile_img, (px, py), tile_img)
 
-        meta.append({
-            "name": obj.name,
-            "y_px": y_offset_px,            # pixel offset in the atlas
-            "n_frames": obj.n_frames,
-            "n_variants": obj.n_variants,
-            "tile_w": tw,
-            "tile_h": th,
-            "terrains": obj.terrains,
-            "density": obj.density,
-            "min_distance": obj.min_distance,
-            "max_per_tile": obj.max_per_tile,
-            "y_offset": obj.y_offset,
-            "shy": obj.shy,
-        })
+        meta.append(
+            {
+                "name": obj.name,
+                "y_px": y_offset_px,  # pixel offset in the atlas
+                "n_frames": obj.n_frames,
+                "n_variants": obj.n_variants,
+                "tile_w": tw,
+                "tile_h": th,
+                "terrains": obj.terrains,
+                "density": obj.density,
+                "min_distance": obj.min_distance,
+                "max_per_tile": obj.max_per_tile,
+                "y_offset": obj.y_offset,
+                "shy": obj.shy,
+            }
+        )
         y_offset_px += obj.n_frames * th
 
     return atlas, meta
@@ -994,8 +1483,10 @@ def build_objects_atlas(biome_objs: BiomeObjects,
 # ║  RON manifest                                                           ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
-def write_objects_manifest(all_meta: dict[str, list[dict]],
-                           tile_size: int, out_dir: Path) -> None:
+
+def write_objects_manifest(
+    all_meta: dict[str, list[dict]], tile_size: int, out_dir: Path
+) -> None:
     """Write objects_manifest.ron with biome → terrain → object lookup."""
     lines = [
         "// objects_manifest.ron — auto-generated by objects.py\n",
@@ -1021,7 +1512,9 @@ def write_objects_manifest(all_meta: dict[str, list[dict]],
             lines.append(f"                    min_distance: {obj['min_distance']},\n")
             lines.append(f"                    max_per_tile: {obj['max_per_tile']},\n")
             lines.append(f"                    y_offset: {obj['y_offset']},\n")
-            lines.append(f"                    shy: {'true' if obj['shy'] else 'false'},\n")
+            lines.append(
+                f"                    shy: {'true' if obj['shy'] else 'false'},\n"
+            )
             lines.append("                ),\n")
         lines.append("            ],\n")
         lines.append("        ),\n")
@@ -1033,6 +1526,7 @@ def write_objects_manifest(all_meta: dict[str, list[dict]],
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  Main                                                                    ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
+
 
 def generate_all(tile_size: int, out_dir: Path) -> None:
     """Generate all object atlases and manifest."""
@@ -1057,8 +1551,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate animated landscape object sprites"
     )
-    parser.add_argument("--tile-size", type=int, default=16,
-                        help="Sprite size in pixels (default 16)")
+    parser.add_argument(
+        "--tile-size", type=int, default=16, help="Sprite size in pixels (default 16)"
+    )
     parser.add_argument("--out-dir", type=str, default="output")
     args = parser.parse_args()
 

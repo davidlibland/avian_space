@@ -4,6 +4,7 @@
 use bevy::prelude::*;
 
 use crate::PlayState;
+use crate::session::SessionResourceExt;
 
 #[cfg(test)]
 mod tests;
@@ -15,18 +16,17 @@ pub mod types;
 pub mod ui;
 
 pub use events::*;
-pub use log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
-pub use types::{MissionDef, MissionTarget, MissionTemplate};
-pub use ui::{
-    missions_ui_plugin, render_active_missions, render_bar_tab, render_missions_tab, MissionToast,
+pub use log::{
+    MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, PlayerUnlocks,
 };
+pub use types::{MissionDef, MissionTarget, MissionTemplate};
+pub use ui::{missions_ui_plugin, render_bar_tab, render_missions_tab};
 
 pub fn missions_plugin(app: &mut App) {
-    app.init_resource::<MissionLog>()
-        .init_resource::<MissionCatalog>()
-        .init_resource::<MissionOffers>()
-        .init_resource::<MissionToast>()
-        .init_resource::<PlayerUnlocks>()
+    app.init_session_resource::<MissionLog>()
+        .init_session_resource::<MissionCatalog>()
+        .init_session_resource::<MissionOffers>()
+        .init_session_resource::<PlayerUnlocks>()
         .add_message::<PlayerLandedOnPlanet>()
         .add_message::<PlayerEnteredSystem>()
         .add_message::<PickupCollected>()
@@ -37,7 +37,6 @@ pub fn missions_plugin(app: &mut App) {
         .add_message::<MissionStarted>()
         .add_message::<MissionCompleted>()
         .add_message::<MissionFailed>()
-        .add_systems(Startup, progress::init_catalog)
         .add_systems(
             Update,
             (

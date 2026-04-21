@@ -6,6 +6,7 @@ use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::ship::Target;
 use crate::utils::safe_despawn;
+use crate::session::SessionResourceExt;
 use crate::{CurrentStarSystem, PlayState, Player, Ship};
 
 const RADAR_SIZE: f32 = 144.0;
@@ -76,6 +77,12 @@ pub struct CommsChannel {
     pub cycle_complete: bool,
 }
 
+impl crate::session::SessionResource for CommsChannel {
+    type SaveData = ();
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+}
+
 impl CommsChannel {
     pub fn send(&mut self, msg: impl Into<String>) {
         self.message = msg.into();
@@ -107,7 +114,7 @@ impl Plugin for HudPlugin {
         app.insert_resource(RadarConfig {
             range: self.radar_range,
         })
-        .init_resource::<CommsChannel>()
+        .init_session_resource::<CommsChannel>()
         .add_systems(Startup, spawn_hud)
         .add_systems(
             Update,

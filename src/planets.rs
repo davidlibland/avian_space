@@ -11,6 +11,7 @@ use crate::missions::PlayerLandedOnPlanet;
 use crate::planet_ui::LandedContext;
 use crate::ship::{ShipHostility, Target};
 use crate::ship_anim::{self, ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, image_size};
+use crate::session::SessionResourceExt;
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player, Ship};
 
 use std::collections::HashMap;
@@ -46,12 +47,18 @@ pub struct Planet(pub String);
 #[derive(Resource, Default)]
 pub struct NearbyPlanet(pub Option<Entity>);
 
+impl crate::session::SessionResource for NearbyPlanet {
+    type SaveData = ();
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+}
+
 /// Marker: the player ship is in the landing scale-down animation.
 #[derive(Component)]
 pub struct PlayerLanding;
 
 pub fn planets_plugin(app: &mut App) {
-    app.init_resource::<NearbyPlanet>()
+    app.init_session_resource::<NearbyPlanet>()
         .add_systems(OnEnter(PlayState::Flying), spawn_planets)
         .add_systems(
             Update,

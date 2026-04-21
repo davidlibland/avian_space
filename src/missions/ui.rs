@@ -171,6 +171,12 @@ pub struct MissionToast {
     pub text: Option<String>,
 }
 
+impl crate::session::SessionResource for MissionToast {
+    type SaveData = ();
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+}
+
 /// Egui overlay that surfaces the latest mission success/failure message.
 /// Runs every frame in `EguiPrimaryContextPass`; registered only in
 /// non-headless mode (see `missions_ui_plugin`).
@@ -200,6 +206,12 @@ pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionTo
 
 #[derive(Resource, Default)]
 pub struct MissionLogOpen(pub bool);
+
+impl crate::session::SessionResource for MissionLogOpen {
+    type SaveData = ();
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+}
 
 fn toggle_mission_log(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -250,7 +262,9 @@ fn render_mission_log(
 
 pub fn missions_ui_plugin(app: &mut App) {
     use bevy_egui::EguiPrimaryContextPass;
-    app.init_resource::<MissionLogOpen>()
+    use crate::session::SessionResourceExt;
+    app.init_session_resource::<MissionToast>()
+        .init_session_resource::<MissionLogOpen>()
         .add_systems(
             Update,
             toggle_mission_log.run_if(in_state(crate::PlayState::Flying)),

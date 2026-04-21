@@ -1,5 +1,6 @@
 use crate::game_save::{Gender, PlayerGameState, list_saves, load_save};
 use crate::item_universe::ItemUniverse;
+use crate::session::PendingSessionLoad;
 use crate::{CurrentStarSystem, PlayState};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
@@ -20,6 +21,7 @@ fn refresh_saves(mut menu_state: ResMut<MainMenuState>) {
 }
 
 fn main_menu_ui(
+    mut commands: Commands,
     mut egui_contexts: EguiContexts,
     mut menu_state: ResMut<MainMenuState>,
     mut game_state: ResMut<PlayerGameState>,
@@ -64,6 +66,8 @@ fn main_menu_ui(
                         *game_state =
                             PlayerGameState::new_pilot(&name, gender, &item_universe);
                         current_system.0 = game_state.current_star_system.clone();
+                        // No PendingSessionLoad — session resources start fresh
+                        // via their new_session() defaults.
                         next_state.set(PlayState::Flying);
                     }
                 });
@@ -84,7 +88,13 @@ fn main_menu_ui(
                         {
                             if let Some(save) = load_save(save_name) {
                                 current_system.0 = save.current_star_system.clone();
-                                *game_state = PlayerGameState::from_save(save, &item_universe);
+                                // Store the resources map for session resources to
+                                // consume on entering Flying.
+                                commands.insert_resource(PendingSessionLoad {
+                                    resources: save.resources.clone(),
+                                });
+                                *game_state =
+                                    PlayerGameState::from_save(&save, &item_universe);
                                 next_state.set(PlayState::Flying);
                             }
                         }

@@ -1,6 +1,5 @@
 use crate::item_universe::ItemUniverse;
-use crate::missions::types::{MissionDef, MissionStatus};
-use crate::missions::{MissionCatalog, MissionLog, PlayerUnlocks};
+use crate::session::{PendingSessionLoad, SessionSaveData};
 use crate::ship::{Ship, ship_bundle_from_pilot};
 use crate::{CurrentStarSystem, PlayState, Player};
 use bevy::prelude::*;
@@ -30,6 +29,11 @@ impl Gender {
 
 // ── Serialisable save ────────────────────────────────────────────────────────
 
+/// On-disk format for a pilot save file.
+///
+/// Ship and pilot-identity fields live at the top level (managed by
+/// `PlayerGameState`).  Everything else — missions, unlocks, etc. — lives in
+/// the `resources` map, keyed by each `SessionResource::SAVE_KEY`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct PilotSave {
     pub pilot_name: String,
@@ -40,27 +44,24 @@ pub struct PilotSave {
     pub health: i32,
     pub cargo: HashMap<String, u16>,
     pub credits: i128,
-    /// weapon_type → count owned
+    /// weapon_type → (count, ammo_quantity)
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
     pub enemies: HashMap<String, f32>,
     #[serde(default)]
     pub visited_systems: HashSet<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub reserved_cargo: HashMap<String, u16>,
-    /// id → status for every non-default status (Active/Completed/Failed).
+    /// Per-resource save data, keyed by `SessionResource::SAVE_KEY`.
+    /// Populated automatically by the session-resource infrastructure.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub mission_statuses: HashMap<String, MissionStatus>,
-    /// Defs for currently-Active missions only; merged into MissionCatalog on load.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub active_mission_defs: HashMap<String, MissionDef>,
-    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
-    pub unlocks: HashSet<String>,
+    pub resources: HashMap<String, serde_yaml::Value>,
 }
 
 // ── In-memory resource ───────────────────────────────────────────────────────
 
-/// Mirrors the player's persistent state; synced from ECS every frame.
-/// Also the source of truth when spawning / restoring the player ship.
+/// The player's ship + identity state.  Synced from the live ECS `Ship`
+/// component every frame.  Session resources (missions, unlocks, …) are
+/// managed independently via the `SessionResource` trait.
 #[derive(Resource, Clone, Default)]
 pub struct PlayerGameState {
     pub pilot_name: String,
@@ -69,9 +70,6 @@ pub struct PlayerGameState {
     pub player_ship: Ship,
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
     pub visited_systems: HashSet<String>,
-    pub mission_statuses: HashMap<String, MissionStatus>,
-    pub active_mission_defs: HashMap<String, MissionDef>,
-    pub unlocks: HashSet<String>,
 }
 
 impl PlayerGameState {
@@ -90,13 +88,10 @@ impl PlayerGameState {
             player_ship: Ship::from_ship_data(starting_ship_data, &starting_ship),
             weapon_loadout: HashMap::new(),
             visited_systems,
-            mission_statuses: HashMap::new(),
-            active_mission_defs: HashMap::new(),
-            unlocks: HashSet::new(),
         }
     }
 
-    pub fn from_save(save: PilotSave, item_universe: &ItemUniverse) -> Self {
+    pub fn from_save(save: &PilotSave, item_universe: &ItemUniverse) -> Self {
         let ship_data = item_universe
             .ships
             .get(&save.ship_type)
@@ -153,18 +148,15 @@ impl PlayerGameState {
             weapon_systems: Default::default(),
             enemies: save.enemies.clone(),
         };
-        let mut visited_systems = save.visited_systems;
+        let mut visited_systems = save.visited_systems.clone();
         visited_systems.insert(save.current_star_system.clone());
         Self {
-            pilot_name: save.pilot_name,
+            pilot_name: save.pilot_name.clone(),
             gender: save.gender,
-            current_star_system: save.current_star_system,
+            current_star_system: save.current_star_system.clone(),
             player_ship: ship,
-            weapon_loadout: save.weapon_loadout,
+            weapon_loadout: save.weapon_loadout.clone(),
             visited_systems,
-            mission_statuses: save.mission_statuses,
-            active_mission_defs: save.active_mission_defs,
-            unlocks: save.unlocks,
         }
     }
 
@@ -172,7 +164,7 @@ impl PlayerGameState {
         PathBuf::from("pilots").join(format!("{}.yaml", self.pilot_name))
     }
 
-    fn to_save(&self) -> PilotSave {
+    pub(crate) fn to_save(&self, session_data: &SessionSaveData) -> PilotSave {
         PilotSave {
             pilot_name: self.pilot_name.clone(),
             gender: self.gender,
@@ -185,28 +177,28 @@ impl PlayerGameState {
             enemies: self.player_ship.enemies.clone(),
             visited_systems: self.visited_systems.clone(),
             reserved_cargo: self.player_ship.reserved_cargo.clone(),
-            mission_statuses: self.mission_statuses.clone(),
-            active_mission_defs: self.active_mission_defs.clone(),
-            unlocks: self.unlocks.clone(),
+            resources: session_data.resources.clone(),
         }
     }
+}
 
-    pub fn save(&self) {
-        if self.pilot_name.is_empty() {
-            return;
-        }
-        let path = self.save_path();
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        match serde_yaml::to_string(&self.to_save()) {
-            Ok(s) => {
-                if let Err(e) = std::fs::write(&path, &s) {
-                    error!("Failed to write pilot save to {path:?}: {e}");
-                }
+/// Write the current game state + session resource data to disk.
+pub fn write_save(game_state: &PlayerGameState, session_data: &SessionSaveData) {
+    if game_state.pilot_name.is_empty() {
+        return;
+    }
+    let path = game_state.save_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let save = game_state.to_save(session_data);
+    match serde_yaml::to_string(&save) {
+        Ok(s) => {
+            if let Err(e) = std::fs::write(&path, &s) {
+                error!("Failed to write pilot save to {path:?}: {e}");
             }
-            Err(e) => error!("Failed to serialise pilot save: {e}"),
         }
+        Err(e) => error!("Failed to serialise pilot save: {e}"),
     }
 }
 
@@ -235,16 +227,13 @@ pub fn load_save(pilot_name: &str) -> Option<PilotSave> {
     serde_yaml::from_str(&data).ok()
 }
 
-// ── Systems ───────────────────────────────────────────────────────────────────
+// ── Systems ──────────────────────────────────────────────────────────────────
 
-/// Syncs ECS Player data → PlayerGameState each frame.
+/// Syncs the live ECS Ship component → PlayerGameState each frame.
 fn sync_player_state(
     player_query: Query<&Ship, With<Player>>,
     mut game_state: ResMut<PlayerGameState>,
     current_system: Res<CurrentStarSystem>,
-    mission_log: Res<MissionLog>,
-    mission_catalog: Res<MissionCatalog>,
-    unlocks: Res<PlayerUnlocks>,
 ) {
     if let Ok(ship) = player_query.single() {
         game_state.weapon_loadout = ship
@@ -256,46 +245,6 @@ fn sync_player_state(
     }
     game_state.current_star_system = current_system.0.clone();
     game_state.visited_systems.insert(current_system.0.clone());
-
-    // Mission state: keep only non-default statuses; preserve defs for the
-    // subset that are Active (the only ones whose defs we need across loads).
-    game_state.mission_statuses = mission_log
-        .statuses
-        .iter()
-        .filter(|(_, s)| !matches!(s, MissionStatus::Locked))
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-    game_state.unlocks = unlocks.0.clone();
-    game_state.active_mission_defs = mission_log
-        .statuses
-        .iter()
-        .filter_map(|(id, status)| {
-            matches!(status, MissionStatus::Active(_))
-                .then(|| mission_catalog.defs.get(id).map(|d| (id.clone(), d.clone())))
-                .flatten()
-        })
-        .collect();
-}
-
-/// Runs once on the first Flying entry of a pilot session — restores saved
-/// mission state into the ECS resources. Gated on `player_query.is_empty()`
-/// so it only fires when the player ship is about to be spawned (i.e. after
-/// pilot selection), not on every Landed → Flying transition.
-fn restore_mission_state_on_load(
-    player_query: Query<Entity, With<Player>>,
-    game_state: Res<PlayerGameState>,
-    mut mission_log: ResMut<MissionLog>,
-    mut mission_catalog: ResMut<MissionCatalog>,
-    mut unlocks: ResMut<PlayerUnlocks>,
-) {
-    if !player_query.is_empty() || game_state.pilot_name.is_empty() {
-        return;
-    }
-    mission_log.statuses = game_state.mission_statuses.clone();
-    for (id, def) in &game_state.active_mission_defs {
-        mission_catalog.defs.insert(id.clone(), def.clone());
-    }
-    unlocks.0 = game_state.unlocks.clone();
 }
 
 /// Spawns the player ship on the first entry into Flying (from the main menu).
@@ -318,26 +267,55 @@ fn spawn_player_on_enter_flying(
     commands.spawn((Player, bundle));
 }
 
-/// Saves to disk whenever the player lands on a planet.
-fn save_pilot(game_state: Res<PlayerGameState>) {
-    game_state.save();
+/// Saves to disk whenever the player lands on / takes off from a planet.
+fn save_pilot(game_state: Res<PlayerGameState>, session_data: Res<SessionSaveData>) {
+    write_save(&game_state, &session_data);
 }
 
-// ── Plugin ────────────────────────────────────────────────────────────────────
+/// Despawn the player entity and reset PlayerGameState when returning to the
+/// main menu.  Session resources are reset independently by their own
+/// `init_session_resource` registrations.
+fn cleanup_on_enter_menu(
+    mut commands: Commands,
+    player_query: Query<Entity, With<Player>>,
+    mut game_state: ResMut<PlayerGameState>,
+    mut session_data: ResMut<SessionSaveData>,
+) {
+    for entity in &player_query {
+        crate::utils::safe_despawn(&mut commands, entity);
+    }
+    *game_state = PlayerGameState::default();
+    session_data.resources.clear();
+}
+
+/// Remove the `PendingSessionLoad` resource after session resources have
+/// consumed it on the first Flying entry.
+fn consume_pending_load(mut commands: Commands, pending: Option<Res<PendingSessionLoad>>) {
+    if pending.is_some() {
+        commands.remove_resource::<PendingSessionLoad>();
+    }
+}
+
+// ── Plugin ───────────────────────────────────────────────────────────────────
 
 pub fn game_save_plugin(app: &mut App) {
     app.init_resource::<PlayerGameState>()
-        .add_systems(Update, sync_player_state)
+        .add_systems(
+            Update,
+            sync_player_state.run_if(not(in_state(PlayState::MainMenu))),
+        )
         .add_systems(
             OnEnter(PlayState::Flying),
-            (restore_mission_state_on_load, spawn_player_on_enter_flying).chain(),
+            // consume_pending_load runs last so session resources can read it.
+            (spawn_player_on_enter_flying, consume_pending_load).chain(),
         )
+        .add_systems(OnEnter(PlayState::MainMenu), cleanup_on_enter_menu)
         // Save when landing/taking off
         .add_systems(OnEnter(PlayState::Landed), save_pilot)
         .add_systems(OnExit(PlayState::Landed), save_pilot);
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 #[path = "tests/game_save_tests.rs"]

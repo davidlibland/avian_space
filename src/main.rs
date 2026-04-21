@@ -25,13 +25,18 @@ mod pickups;
 mod ppo;
 mod rl_collection;
 mod rl_obs;
+mod session;
 mod sfx;
 mod ship;
 mod ship_anim;
 mod space;
 mod starfield;
 mod surface;
+mod surface_character;
+mod surface_civilians;
 mod surface_objects;
+mod surface_pathfinding;
+mod surface_terrain;
 mod utils;
 mod value_fn;
 mod weapons;
@@ -80,8 +85,11 @@ pub enum GameLayer {
     Planet,
     Radar,
     Pickup,
-    /// Walkable planet surface: walker + building walls/doors.
+    /// Static surface geometry: building walls, terrain colliders.
     Surface,
+    /// Characters on the surface (walker + civilians).  Collides with
+    /// Surface but not with other Characters.
+    Character,
     #[default]
     Other,
 }
@@ -216,6 +224,9 @@ fn main() {
     // ── Physics ──────────────────────────────────────────────────────────
     app.add_plugins(PhysicsPlugins::default().with_length_unit(20.0));
 
+    // ── Data loading (must come before plugins that use init_session_resource) ──
+    app.add_plugins((item_universe_plugin, session::session_plugin));
+
     // ── Rendering-dependent plugins (skipped in headless) ────────────────
     if headless {
         app.add_plugins(starfield::ToroidalWrapPlugin::default());
@@ -239,10 +250,9 @@ fn main() {
     app.add_plugins(explosions_plugin);
     app.add_plugins(world_assets::WorldAssetsPlugin);
 
-    // ── Game-logic plugins (always loaded) ───────────────────────────────
+    // ── Game-logic plugins ──────────────────────────────────────────────
     app.add_plugins((
         space::space_plugin,    // consolidated space-flight systems
-        item_universe_plugin,   // data loading (shared across states)
         planets_plugin,         // planet spawning (shared)
         RLCollectionPlugin {
             mode: app_mode,
@@ -450,10 +460,11 @@ fn set_arrival_velocity(
 fn escape_to_menu(
     keyboard: Res<ButtonInput<KeyCode>>,
     game_state: Res<game_save::PlayerGameState>,
+    session_data: Res<session::SessionSaveData>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
-        game_state.save();
+        game_save::write_save(&game_state, &session_data);
         next_state.set(PlayState::MainMenu);
     }
 }

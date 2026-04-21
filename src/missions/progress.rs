@@ -11,11 +11,6 @@ use crate::rl_collection::RLAgent;
 use crate::ship::{Ship, Target, ship_bundle};
 use crate::{CurrentStarSystem, GameLayer, Player};
 
-/// Startup: copy the static missions from ItemUniverse into the catalog.
-pub fn init_catalog(universe: Res<ItemUniverse>, mut catalog: ResMut<MissionCatalog>) {
-    catalog.defs = universe.missions.clone();
-}
-
 /// Run on startup (and on any mission status change) to:
 ///   • flip Locked → Available when preconditions are met
 ///   • auto-start Auto-offered missions that are now Available

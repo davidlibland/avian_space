@@ -4,6 +4,7 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use egui::{Align2, Color32, FontId, Pos2, Sense, Stroke};
 use std::collections::HashSet;
 
+use crate::session::SessionResourceExt;
 use crate::{
     CurrentStarSystem, PlayState, TravelContext, TravelPhase,
     game_save::PlayerGameState, item_universe::ItemUniverse,
@@ -21,13 +22,19 @@ const NODE_R: f32 = 3.5;   // visual dot radius
 const CLICK_R: f32 = 12.0; // invisible click hit radius
 
 #[derive(Resource, Default)]
-struct JumpUiOpen {
+pub struct JumpUiOpen {
     open: bool,
     scroll_initialized: bool,
 }
 
+impl crate::session::SessionResource for JumpUiOpen {
+    type SaveData = ();
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+}
+
 pub fn jump_ui_plugin(app: &mut App) {
-    app.init_resource::<JumpUiOpen>()
+    app.init_session_resource::<JumpUiOpen>()
         .add_systems(
             Update,
             toggle_jump_ui.run_if(in_state(PlayState::Flying)),

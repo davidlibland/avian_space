@@ -171,10 +171,118 @@ mines asteroids, fights hostile ships, and completes missions.
   optimizer, and buffer files. Supports `--fresh` for new runs vs. resuming
   the latest.
 
-- **game_save.rs** — Player save/load system. Serialises pilot state (ship,
-  cargo, credits, weapons, mission progress, unlocks) to YAML files in
-  `pilots/`. Syncs ECS state to the `PlayerGameState` resource each frame
-  and restores it on load.
+- **session.rs** — Session-resource infrastructure. See the **Session
+  Resources** section below for full details.
+
+- **game_save.rs** — Player save/load system. `PlayerGameState` holds only
+  pilot identity and the Ship component mirror; all other per-pilot state
+  (missions, unlocks, UI) is managed by the `SessionResource` trait.
+  Serialises to YAML files in `pilots/`; the save file has top-level ship
+  fields plus a `resources` map populated by session resources.
+
+## Session Resources
+
+Any ECS `Resource` whose lifetime is tied to a single pilot session should
+implement the `SessionResource` trait (defined in `session.rs`) and be
+registered with `app.init_session_resource::<R>()` instead of
+`app.init_resource::<R>()`.
+
+### What the trait provides
+
+Registering via `init_session_resource` gives three behaviours for free:
+
+1. **Reset** — the resource is re-initialised via `new_session(universe)` when
+   entering `MainMenu` (i.e. on pilot switch, escape, or death).
+2. **Save** — if the resource declares a `SAVE_KEY`, its `to_save()` output is
+   serialised into the pilot save file's `resources` map every time the
+   resource changes.
+3. **Load** — on entering `Flying` after pilot selection, saved data is fed
+   back through `from_save(data, universe)`.
+
+### The trait
+
+```rust
+pub trait SessionResource: Resource + Send + Sync + 'static {
+    /// Serialisable snapshot type.  Use `()` for ephemeral resources.
+    type SaveData: Serialize + Deserialize + Default;
+
+    /// Key in the save file's `resources` map.  `None` = not persisted.
+    const SAVE_KEY: Option<&'static str> = None;
+
+    /// Fresh state for a brand-new pilot.
+    fn new_session(universe: &ItemUniverse) -> Self;
+
+    /// Snapshot live state for saving (only called when SAVE_KEY is Some).
+    fn to_save(&self) -> Self::SaveData { Default::default() }
+
+    /// Restore from a saved snapshot.
+    fn from_save(data: Self::SaveData, universe: &ItemUniverse) -> Self;
+}
+```
+
+### Adding a new session resource
+
+1. Implement `SessionResource` on your struct (in the file that defines it).
+2. Call `app.init_session_resource::<YourResource>()` in the owning plugin.
+
+That's it — reset, save, and load are handled automatically.
+
+**Ephemeral example** (reset on pilot switch, not saved):
+
+```rust
+impl SessionResource for CommsChannel {
+    type SaveData = ();
+    fn new_session(_: &ItemUniverse) -> Self { Self::default() }
+    fn from_save(_: (), _: &ItemUniverse) -> Self { Self::default() }
+}
+```
+
+**Persisted example** (saved to disk):
+
+```rust
+impl SessionResource for MissionLog {
+    type SaveData = MissionLogSave;
+    const SAVE_KEY: Option<&'static str> = Some("mission_statuses");
+
+    fn new_session(_: &ItemUniverse) -> Self { Self::default() }
+
+    fn to_save(&self) -> Self::SaveData {
+        MissionLogSave(self.statuses.iter()
+            .filter(|(_, s)| !matches!(s, MissionStatus::Locked))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect())
+    }
+
+    fn from_save(data: Self::SaveData, _: &ItemUniverse) -> Self {
+        Self { statuses: data.0 }
+    }
+}
+```
+
+### What is NOT a session resource
+
+- **`PlayerGameState`** — the Ship component mirror. It manages pilot
+  identity and the live ship sync; it is reset by its own `OnEnter(MainMenu)`
+  system in `game_save.rs`.  Ship data lives at the top level of the save
+  file, not in the `resources` map.
+- **Static config** — `ItemUniverse`, asset handles, audio resources.  These
+  are global and never reset.
+- **Engine/physics** — Bevy and Avian2D internals.
+
+### Current session resources
+
+| Resource | Module | Persisted | Key |
+|---|---|---|---|
+| `MissionLog` | missions/log | Yes | `mission_statuses` |
+| `MissionCatalog` | missions/log | Yes | `active_mission_defs` |
+| `PlayerUnlocks` | missions/log | Yes | `unlocks` |
+| `MissionOffers` | missions/log | No | — |
+| `MissionToast` | missions/ui | No | — |
+| `MissionLogOpen` | missions/ui | No | — |
+| `CommsChannel` | hud | No | — |
+| `JumpUiOpen` | jump_ui | No | — |
+| `NearbyPlanet` | planets | No | — |
+| `LandedContext` | planet_ui | No | — |
 
 ## Missions
 
@@ -194,7 +302,9 @@ mines asteroids, fights hostile ships, and completes missions.
 
 - **missions/log.rs** — `MissionLog` (per-player status map),
   `MissionCatalog` (all known mission defs), `MissionOffers` (ephemeral
-  per-landing offers), and `PlayerUnlocks` (named unlock flags).
+  per-landing offers), and `PlayerUnlocks` (named unlock flags). All four
+  implement `SessionResource` for automatic reset and (where appropriate)
+  save/load.
 
 - **missions/progress.rs** — Mission state machine: precondition checking,
   Locked-to-Available transitions, auto-start for Auto missions, objective

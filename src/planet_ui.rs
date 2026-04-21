@@ -1,6 +1,7 @@
 use crate::{
     CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse, ship::BuyShip,
 };
+use crate::session::SessionResourceExt;
 use crate::ship_anim::{ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp, image_size};
 use avian2d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
@@ -8,7 +9,7 @@ use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 
 pub fn planet_ui_plugin(app: &mut App) {
     app.add_plugins(EguiPlugin::default())
-        .insert_resource(LandedContext::default())
+        .init_session_resource::<LandedContext>()
         .add_systems(
             EguiPrimaryContextPass,
             ship_pad_ui.run_if(in_state(PlayState::Landed)),
@@ -22,6 +23,12 @@ pub fn planet_ui_plugin(app: &mut App) {
 pub struct LandedContext {
     /// Name of the planet the player is docked at.
     pub planet_name: Option<String>,
+}
+
+impl crate::session::SessionResource for LandedContext {
+    type SaveData = ();
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
 }
 
 /// Ship-pad UI shown during `Landed` state — just Repair + Launch.

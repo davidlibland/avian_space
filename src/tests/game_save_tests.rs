@@ -1,4 +1,5 @@
 use super::*;
+use crate::session::SessionSaveData;
 
 fn sample_save() -> PilotSave {
     PilotSave {
@@ -15,9 +16,7 @@ fn sample_save() -> PilotSave {
         enemies: HashMap::from([("Trader".to_string(), 1.0)]),
         visited_systems: HashSet::new(),
         reserved_cargo: HashMap::new(),
-        mission_statuses: HashMap::new(),
-        active_mission_defs: HashMap::new(),
-        unlocks: HashSet::new(),
+        resources: HashMap::new(),
     }
 }
 
@@ -126,7 +125,8 @@ fn to_save_captures_state() {
         .insert("missile".to_string(), (1, Some(4)));
     state.current_star_system = "proxima".to_string();
 
-    let save = state.to_save();
+    let session_data = SessionSaveData::default();
+    let save = state.to_save(&session_data);
     assert_eq!(save.pilot_name, "Rex");
     assert_eq!(save.health, 42);
     assert_eq!(save.credits, 7_777);
@@ -139,7 +139,7 @@ fn to_save_captures_state() {
 fn from_save_restores_all_fields() {
     let save = sample_save();
     let iu = basic_item_universe();
-    let state = PlayerGameState::from_save(save.clone(), &iu);
+    let state = PlayerGameState::from_save(&save, &iu);
 
     assert_eq!(state.pilot_name, save.pilot_name);
     assert_eq!(state.current_star_system, save.current_star_system);
@@ -153,7 +153,7 @@ fn from_save_restores_all_fields() {
 #[test]
 fn from_save_target_is_none() {
     // Entity handles must never be persisted.
-    let state = PlayerGameState::from_save(sample_save(), &basic_item_universe());
+    let state = PlayerGameState::from_save(&sample_save(), &basic_item_universe());
     assert!(state.player_ship.nav_target.is_none());
     assert!(state.player_ship.weapons_target.is_none());
 }
@@ -162,7 +162,8 @@ fn from_save_target_is_none() {
 
 #[test]
 fn state_to_save_and_back() {
-    let mut original = PlayerGameState::new_pilot("Lyra", Gender::default(), &basic_item_universe());
+    let mut original =
+        PlayerGameState::new_pilot("Lyra", Gender::default(), &basic_item_universe());
     original.player_ship.health = 60;
     original.player_ship.credits = 12_345;
     original.player_ship.cargo.insert("fuel".to_string(), 4);
@@ -171,9 +172,10 @@ fn state_to_save_and_back() {
         .insert("plasma".to_string(), (3, None));
     original.current_star_system = "tau_ceti".to_string();
 
-    let save = original.to_save();
+    let session_data = SessionSaveData::default();
+    let save = original.to_save(&session_data);
     let iu = basic_item_universe();
-    let restored = PlayerGameState::from_save(save, &iu);
+    let restored = PlayerGameState::from_save(&save, &iu);
 
     assert_eq!(restored.pilot_name, original.pilot_name);
     assert_eq!(restored.current_star_system, original.current_star_system);
@@ -183,14 +185,15 @@ fn state_to_save_and_back() {
     assert_eq!(restored.weapon_loadout, original.weapon_loadout);
 }
 
-// ── save() guard ──────────────────────────────────────────────────────────
+// ── write_save guard ─────────────────────────────────────────────────────
 
 #[test]
-fn save_is_noop_for_unnamed_pilot() {
+fn write_save_is_noop_for_unnamed_pilot() {
     // Should not panic or create any files.
     let state = PlayerGameState::default();
+    let session_data = SessionSaveData::default();
     assert!(state.pilot_name.is_empty());
-    state.save(); // must not panic
+    write_save(&state, &session_data); // must not panic
 }
 
 // ── Filesystem roundtrip ──────────────────────────────────────────────────
@@ -210,3 +213,4 @@ fn yaml_file_roundtrip() {
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_dir(&tmp);
 }
+

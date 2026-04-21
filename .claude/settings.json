@@ -44,7 +44,11 @@
       "Bash(ls -la /Users/dlibland/dev/avian_space/assets/sprites/worlds/*objects* /Users/dlibland/dev/avian_space/assets/sprites/worlds/objects_manifest.ron)",
       "Bash(python3 -c \"import yaml; yaml.safe_load\\(open\\('/Users/dlibland/dev/avian_space/assets/weapons.yaml'\\)\\); print\\('OK'\\)\")",
       "Bash(grep -r \"pub.*EventWriter\\\\|pub.*EventReader\" /Users/dlibland/.cargo/registry/src/*/bevy_ecs-*/src/)",
-      "Bash(grep \"add_message\\\\|add_event\" /Users/dlibland/dev/avian_space/src/*.rs)"
+      "Bash(grep \"add_message\\\\|add_event\" /Users/dlibland/dev/avian_space/src/*.rs)",
+      "Bash(ls /Users/dlibland/dev/avian_space/assets/sprites/people/*.png)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(grep -n \"MissionOffers\" /Users/dlibland/dev/avian_space/src/game_save.rs /Users/dlibland/dev/avian_space/src/missions/*.rs)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds"
