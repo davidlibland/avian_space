@@ -144,6 +144,12 @@ fn format_objective(obj: &Objective, progress: &ObjectiveProgress) -> String {
                 quantity, commodity, system, have, quantity
             )
         }
+        Objective::MeetNpc { planet, npc_name, .. } => {
+            format!("Meet {} on {}.", npc_name, planet)
+        }
+        Objective::CatchNpc { planet, npc_name, .. } => {
+            format!("Catch {} on {}.", npc_name, planet)
+        }
         Objective::DestroyShips {
             system,
             count,

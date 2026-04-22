@@ -328,6 +328,26 @@ impl Ship {
     pub fn remaining_item_space(&self) -> i32 {
         return (self.data.item_space as i32 - self.consumed_item_space()).max(0);
     }
+    /// Compute the trade-in value of this ship: 80% of the ship price plus
+    /// 80% of all equipped weapons/outfitter items.
+    pub fn trade_in_value(&self, item_universe: &ItemUniverse) -> i128 {
+        let ship_value = self.data.price * 80 / 100;
+        let weapon_value: i128 = self
+            .weapon_systems
+            .iter_all()
+            .map(|(wtype, ws)| {
+                let unit_price = item_universe
+                    .outfitter_items
+                    .get(wtype)
+                    .map(|item| item.price())
+                    .unwrap_or(0);
+                unit_price * ws.number as i128
+            })
+            .sum::<i128>()
+            * 80
+            / 100;
+        ship_value + weapon_value
+    }
     fn current_cargo(&self) -> u16 {
         self.cargo.values().sum()
     }
@@ -852,36 +872,56 @@ fn handle_buy_ship(
         let Some(new_data) = item_universe.ships.get(&event.ship_type) else {
             continue;
         };
-        if ship.credits < new_data.price {
+        let trade_in = ship.trade_in_value(&item_universe);
+        let net_cost = new_data.price - trade_in;
+        if ship.credits < net_cost {
             continue;
         }
-        ship.credits -= new_data.price;
+        ship.credits -= net_cost;
 
         // Replace the ship component, preserving credits and cargo (capped to new space).
         let mut new_ship = Ship::from_ship_data(new_data, &event.ship_type);
         new_ship.weapon_systems = WeaponSystems::build(&new_data.base_weapons, &item_universe);
         new_ship.credits = ship.credits;
-        for (commodity, qty) in &ship.cargo {
+        // Transfer reserved (mission) cargo first so it always fits.
+        for (commodity, &reserved_qty) in &ship.reserved_cargo {
             let space_left = new_ship
                 .data
                 .cargo_space
                 .saturating_sub(new_ship.cargo.values().sum::<u16>());
-            let transfer = (*qty).min(space_left);
+            let transfer = reserved_qty.min(space_left);
             if transfer > 0 {
                 *new_ship.cargo.entry(commodity.clone()).or_insert(0) += transfer;
+                new_ship
+                    .reserved_cargo
+                    .insert(commodity.clone(), transfer);
+                let src_qty = ship.cargo.get(commodity).copied().unwrap_or(0);
                 let src_cost = ship.cargo_cost.get(commodity).copied().unwrap_or(0);
-                if *qty > 0 {
-                    let cost_transfer = src_cost * transfer as i128 / *qty as i128;
+                if src_qty > 0 {
+                    let cost_transfer = src_cost * transfer as i128 / src_qty as i128;
                     *new_ship.cargo_cost.entry(commodity.clone()).or_insert(0) += cost_transfer;
                 }
             }
         }
-        // Preserve any locked mission cargo (clamped to what transferred).
-        for (commodity, &qty) in &ship.reserved_cargo {
-            let held = new_ship.cargo.get(commodity).copied().unwrap_or(0);
-            let locked = qty.min(held);
-            if locked > 0 {
-                new_ship.reserved_cargo.insert(commodity.clone(), locked);
+        // Then transfer remaining (unreserved) cargo, capped to new space.
+        for (commodity, &qty) in &ship.cargo {
+            let reserved = ship.reserved_cargo.get(commodity).copied().unwrap_or(0);
+            let unreserved = qty.saturating_sub(reserved);
+            if unreserved == 0 {
+                continue;
+            }
+            let space_left = new_ship
+                .data
+                .cargo_space
+                .saturating_sub(new_ship.cargo.values().sum::<u16>());
+            let transfer = unreserved.min(space_left);
+            if transfer > 0 {
+                *new_ship.cargo.entry(commodity.clone()).or_insert(0) += transfer;
+                let src_cost = ship.cargo_cost.get(commodity).copied().unwrap_or(0);
+                if qty > 0 {
+                    let cost_transfer = src_cost * transfer as i128 / qty as i128;
+                    *new_ship.cargo_cost.entry(commodity.clone()).or_insert(0) += cost_transfer;
+                }
             }
         }
         *ship = new_ship;

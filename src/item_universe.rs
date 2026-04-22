@@ -51,6 +51,10 @@ pub struct ItemUniverse {
     /// Average price of each commodity across all planets in all star systems.
     #[serde(skip)]
     pub global_average_price: HashMap<String, f64>,
+    /// Minimum price of each commodity across all planets. Used as the
+    /// sell-anywhere price when a planet doesn't normally trade a commodity.
+    #[serde(skip)]
+    pub global_minimum_price: HashMap<String, i128>,
     /// system → commodity → planet name with the highest price (best place to sell).
     #[serde(skip)]
     pub system_commodity_best_planet_to_sell: HashMap<String, HashMap<String, String>>,
@@ -146,12 +150,17 @@ impl ItemUniverse {
 
     fn compute_global_averages(&mut self) {
         let mut sums: HashMap<String, (f64, u32)> = HashMap::new();
+        let mut mins: HashMap<String, i128> = HashMap::new();
         for system in self.star_systems.values() {
             for planet in system.planets.values() {
                 for (commodity, &price) in &planet.commodities {
                     let entry = sums.entry(commodity.clone()).or_insert((0.0, 0));
                     entry.0 += price as f64;
                     entry.1 += 1;
+                    let min_entry = mins.entry(commodity.clone()).or_insert(price);
+                    if price < *min_entry {
+                        *min_entry = price;
+                    }
                 }
             }
         }
@@ -159,6 +168,7 @@ impl ItemUniverse {
             .into_iter()
             .map(|(k, (sum, count))| (k, sum / count as f64))
             .collect();
+        self.global_minimum_price = mins;
     }
 
     fn compute_trade_maps(&mut self) {

@@ -31,6 +31,20 @@ pub struct ShipDestroyed {
     pub mission_target: Option<super::MissionTarget>,
 }
 
+/// Player met an NPC on a planet surface (adjacent + interaction or auto).
+#[derive(Event, Message, Clone, Debug)]
+pub struct NpcMet {
+    pub planet: String,
+    pub mission_id: String,
+}
+
+/// Player caught a fleeing NPC on a planet surface.
+#[derive(Event, Message, Clone, Debug)]
+pub struct NpcCaught {
+    pub planet: String,
+    pub mission_id: String,
+}
+
 // ── Mission-specific events (UI <-> logic) ─────────────────────────────────
 
 #[derive(Event, Message, Clone, Debug)]

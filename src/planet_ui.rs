@@ -209,6 +209,48 @@ pub fn render_trade_tab(
                 ui.end_row();
             }
         });
+
+    // Show cargo items that this planet doesn't trade, sell-only at minimum price.
+    let mut extra_cargo: Vec<(String, u16)> = ship
+        .cargo
+        .iter()
+        .filter(|(k, v)| **v > 0 && !planet.commodities.contains_key(*k))
+        .map(|(k, v)| (k.clone(), *v))
+        .collect();
+    extra_cargo.sort_by(|a, b| a.0.cmp(&b.0));
+    if !extra_cargo.is_empty() {
+        ui.separator();
+        ui.label("Other cargo (sell only):");
+        egui::Grid::new("trade_extra_grid")
+            .num_columns(4)
+            .striped(true)
+            .show(ui, |ui| {
+                ui.strong("Commodity");
+                ui.strong("Sell Price");
+                ui.strong("Cargo");
+                ui.label("");
+                ui.end_row();
+                for (commodity, qty) in &extra_cargo {
+                    let sell_price = item_universe
+                        .global_minimum_price
+                        .get(commodity)
+                        .copied()
+                        .unwrap_or(1);
+                    let commodity_display = item_universe
+                        .commodities
+                        .get(commodity)
+                        .map(|c| c.display_name.as_str())
+                        .unwrap_or(commodity);
+                    ui.label(commodity_display);
+                    ui.label(sell_price.to_string());
+                    ui.label(qty.to_string());
+                    if ui.button("Sell").clicked() {
+                        ship.sell_cargo(commodity, 1, sell_price);
+                    }
+                    ui.end_row();
+                }
+            });
+    }
 }
 
 /// Render the Outfitter tab content into an egui Ui.
@@ -330,15 +372,21 @@ pub fn render_shipyard_tab(
                         })
                     })
                     .collect();
+                let trade_in = ship.trade_in_value(item_universe);
                 for (ship_type, data) in ships {
                     let is_current = ship_type == ship.ship_type;
-                    let can_afford = ship.credits >= data.price;
+                    let net_cost = data.price - trade_in;
+                    let can_afford = ship.credits >= net_cost;
                     if is_current {
                         ui.strong(&data.display_name);
                     } else {
                         ui.label(&data.display_name);
                     }
-                    ui.label(format!("${}", data.price));
+                    if is_current {
+                        ui.label(format!("${}", data.price));
+                    } else {
+                        ui.label(format!("${} (net ${})", data.price, net_cost));
+                    }
                     ui.label(format!("{}", data.max_speed as i32));
                     ui.label(format!("{}", data.max_health));
                     ui.label(format!("{}", data.cargo_space));

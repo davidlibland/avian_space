@@ -622,6 +622,60 @@ pub fn advance_destroy_collect(
     }
 }
 
+pub fn advance_meet_npc_objectives(
+    mut reader: MessageReader<NpcMet>,
+    mut log: ResMut<MissionLog>,
+    catalog: Res<MissionCatalog>,
+    unlocks: Res<PlayerUnlocks>,
+    player_q: Query<&Ship, With<Player>>,
+    mut completed: MessageWriter<MissionCompleted>,
+    mut failed: MessageWriter<MissionFailed>,
+) {
+    let ship = player_q.single().ok();
+    for NpcMet { planet, mission_id } in reader.read() {
+        if !matches!(log.status(mission_id), MissionStatus::Active(_)) {
+            continue;
+        }
+        if let Some(def) = catalog.defs.get(mission_id) {
+            if let Objective::MeetNpc { planet: target, .. } = &def.objective {
+                if target == planet {
+                    resolve_active_mission(
+                        mission_id, def, ship, &unlocks,
+                        &mut log, &mut completed, &mut failed,
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub fn advance_catch_npc_objectives(
+    mut reader: MessageReader<NpcCaught>,
+    mut log: ResMut<MissionLog>,
+    catalog: Res<MissionCatalog>,
+    unlocks: Res<PlayerUnlocks>,
+    player_q: Query<&Ship, With<Player>>,
+    mut completed: MessageWriter<MissionCompleted>,
+    mut failed: MessageWriter<MissionFailed>,
+) {
+    let ship = player_q.single().ok();
+    for NpcCaught { planet, mission_id } in reader.read() {
+        if !matches!(log.status(mission_id), MissionStatus::Active(_)) {
+            continue;
+        }
+        if let Some(def) = catalog.defs.get(mission_id) {
+            if let Objective::CatchNpc { planet: target, .. } = &def.objective {
+                if target == planet {
+                    resolve_active_mission(
+                        mission_id, def, ship, &unlocks,
+                        &mut log, &mut completed, &mut failed,
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Force `weapons_target` to the player for any mission target with
 /// `always_targets_player: true`.
 pub fn force_target_player(
@@ -1040,6 +1094,120 @@ fn instantiate_template(
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
             };
             vec![(gen_id(template_id, rng), def)]
+        }
+        MissionTemplate::CatchThief {
+            stage1_briefing, stage1_success_text, stage1_failure_text,
+            stage2_briefing, stage2_success_text, stage2_failure_text,
+            stage3_briefing, stage3_success_text, stage3_failure_text,
+            offer, preconditions: _,
+            ship_type_pool, target_name, commodity_pool,
+            quantity_range, pay_range,
+        } => {
+            if ship_type_pool.is_empty() || commodity_pool.is_empty() {
+                return Vec::new();
+            }
+            // Pick system with planets.
+            let systems: Vec<(String, String)> = universe
+                .star_systems
+                .iter()
+                .filter(|(_, sys)| !sys.planets.is_empty())
+                .map(|(id, sys)| (id.clone(), sys.display_name.clone()))
+                .collect();
+            if systems.is_empty() { return Vec::new(); }
+            let (sys_id, sys_display) = systems[rng.gen_range(0..systems.len())].clone();
+
+            let ship_type = ship_type_pool[rng.gen_range(0..ship_type_pool.len())].clone();
+            let commodity = commodity_pool[rng.gen_range(0..commodity_pool.len())].clone();
+            let quantity = rand_in_range_u16(rng, *quantity_range);
+            let pay = rand_in_range_i128(rng, *pay_range);
+
+            // Pick two distinct planets: one to deliver goods, one for the chase.
+            let all_planets: Vec<(String, String)> = universe
+                .star_systems
+                .iter()
+                .flat_map(|(_, sys)| {
+                    sys.planets.iter().map(|(pid, p)| (pid.clone(), p.display_name.clone()))
+                })
+                .filter(|(pid, _)| pid != offer_planet)
+                .collect();
+            if all_planets.len() < 2 { return Vec::new(); }
+            let deliver_idx = rng.gen_range(0..all_planets.len());
+            let mut chase_idx = rng.gen_range(0..all_planets.len() - 1);
+            if chase_idx >= deliver_idx { chase_idx += 1; }
+            let (deliver_planet, deliver_display) = all_planets[deliver_idx].clone();
+            let (chase_planet, chase_display) = all_planets[chase_idx].clone();
+
+            let stage1_id = gen_id(template_id, rng);
+            let stage2_id = gen_id(template_id, rng);
+            let stage3_id = gen_id(template_id, rng);
+
+            let vars = [
+                ("{system}", sys_id.clone()),
+                ("{system_display}", sys_display),
+                ("{ship_type}", ship_type.clone()),
+                ("{target_name}", target_name.clone()),
+                ("{commodity}", commodity.clone()),
+                ("{quantity}", quantity.to_string()),
+                ("{pay}", pay.to_string()),
+                ("{deliver_planet}", deliver_planet.clone()),
+                ("{deliver_planet_display}", deliver_display),
+                ("{chase_planet}", chase_planet.clone()),
+                ("{chase_planet_display}", chase_display),
+            ];
+
+            // Stage 1: Destroy ship + collect stolen goods.
+            let s1 = MissionDef {
+                briefing: subst(stage1_briefing, &vars),
+                success_text: subst(stage1_success_text, &vars),
+                failure_text: subst(stage1_failure_text, &vars),
+                preconditions: Vec::new(),
+                offer: offer.clone(),
+                start_effects: Vec::new(),
+                objective: Objective::DestroyShips {
+                    system: sys_id,
+                    ship_type,
+                    count: 1,
+                    target_name: target_name.clone(),
+                    hostile: true,
+                    collect: Some(CollectRequirement { commodity: commodity.clone(), quantity }),
+                },
+                requires: Vec::new(),
+                completion_effects: Vec::new(),
+            };
+
+            // Stage 2: Deliver the stolen goods.
+            let s2 = MissionDef {
+                briefing: subst(stage2_briefing, &vars),
+                success_text: subst(stage2_success_text, &vars),
+                failure_text: subst(stage2_failure_text, &vars),
+                preconditions: vec![Precondition::Completed { mission: stage1_id.clone() }],
+                offer: OfferKind::Auto,
+                start_effects: Vec::new(),
+                objective: Objective::LandOnPlanet { planet: deliver_planet },
+                requires: vec![CompletionRequirement::HasCargo { commodity: commodity.clone(), quantity }],
+                completion_effects: vec![
+                    CompletionEffect::RemoveCargo { commodity, quantity },
+                ],
+            };
+
+            // Stage 3: Catch the thief on a planet.
+            let s3 = MissionDef {
+                briefing: subst(stage3_briefing, &vars),
+                success_text: subst(stage3_success_text, &vars),
+                failure_text: subst(stage3_failure_text, &vars),
+                preconditions: vec![Precondition::Completed { mission: stage2_id.clone() }],
+                offer: OfferKind::Auto,
+                start_effects: Vec::new(),
+                objective: Objective::CatchNpc {
+                    planet: chase_planet,
+                    npc_name: target_name.clone(),
+                    building: None,
+                },
+                requires: Vec::new(),
+                completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+            };
+
+            vec![(stage1_id, s1), (stage2_id, s2), (stage3_id, s3)]
         }
     }
 }

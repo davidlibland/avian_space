@@ -104,12 +104,11 @@ fn dijkstra_path(
     dist[idx(start.0, start.1)] = 0.0;
     heap.push(State { cost: 0.0, pos: start });
 
-    const DIRS: [(i32, i32); 8] = [
-        (-1, -1), (0, -1), (1, -1),
-        (-1,  0),          (1,  0),
-        (-1,  1), (0,  1), (1,  1),
+    // Cardinal directions only — diagonal movement through tight gaps
+    // is unreliable with physics-based character colliders.
+    const DIRS: [(i32, i32); 4] = [
+        (0, -1), (-1, 0), (1, 0), (0, 1),
     ];
-    const SQRT2: f32 = 1.414;
 
     while let Some(State { cost, pos: (cx, cy) }) = heap.pop() {
         if (cx, cy) == goal {
@@ -141,18 +140,7 @@ fn dijkstra_path(
                 continue; // impassable
             }
 
-            // For diagonal moves, block if either adjacent cardinal tile
-            // is impassable.  This prevents corner-cutting through walls.
-            if dx != 0 && dy != 0 {
-                let adj_x = idx(nx, cy as u32); // horizontal neighbour
-                let adj_y = idx(cx as u32, ny); // vertical neighbour
-                if cost_map[adj_x] == f32::INFINITY || cost_map[adj_y] == f32::INFINITY {
-                    continue;
-                }
-            }
-
-            let step = if dx != 0 && dy != 0 { SQRT2 } else { 1.0 };
-            let new_cost = cost + step * tile_cost;
+            let new_cost = cost + tile_cost;
             if new_cost < dist[ni] {
                 dist[ni] = new_cost;
                 parent[ni] = Some((cx, cy));

@@ -111,7 +111,9 @@ fn objective_system<'a>(obj: &'a Objective, item_universe: &'a ItemUniverse) -> 
         Objective::TravelToSystem { system } => Some(system.as_str()),
         Objective::CollectPickups { system, .. } => Some(system.as_str()),
         Objective::DestroyShips { system, .. } => Some(system.as_str()),
-        Objective::LandOnPlanet { planet } => {
+        Objective::LandOnPlanet { planet }
+        | Objective::MeetNpc { planet, .. }
+        | Objective::CatchNpc { planet, .. } => {
             // Scan all systems for the planet.
             item_universe
                 .star_systems

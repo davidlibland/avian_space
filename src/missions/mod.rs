@@ -19,7 +19,7 @@ pub use events::*;
 pub use log::{
     MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, PlayerUnlocks,
 };
-pub use types::{MissionDef, MissionTarget, MissionTemplate, NpcApproach, OfferKind};
+pub use types::{MissionDef, MissionStatus, MissionTarget, MissionTemplate, NpcApproach, Objective, OfferKind};
 pub use ui::{missions_ui_plugin, render_bar_tab, render_missions_tab};
 
 pub fn missions_plugin(app: &mut App) {
@@ -37,6 +37,8 @@ pub fn missions_plugin(app: &mut App) {
         .add_message::<MissionStarted>()
         .add_message::<MissionCompleted>()
         .add_message::<MissionFailed>()
+        .add_message::<NpcMet>()
+        .add_message::<NpcCaught>()
         .add_systems(
             Update,
             (
@@ -49,6 +51,8 @@ pub fn missions_plugin(app: &mut App) {
                 progress::advance_collect_objectives,
                 progress::advance_destroy_objectives,
                 progress::advance_destroy_collect,
+                progress::advance_meet_npc_objectives,
+                progress::advance_catch_npc_objectives,
                 progress::finalize_completions,
                 progress::finalize_failures,
                 progress::despawn_targets_on_failure,

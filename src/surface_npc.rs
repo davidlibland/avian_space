@@ -113,14 +113,6 @@ pub struct Npc;
 #[derive(Component)]
 pub struct NpcMarker;
 
-/// Currently-interacting NPC (if any).  Set when the player presses E
-/// while adjacent to an NPC with `OfferMission` behavior.
-#[derive(Resource, Default)]
-pub struct ActiveNpcInteraction {
-    pub entity: Option<Entity>,
-    /// The mission ID being offered.
-    pub mission_id: Option<String>,
-}
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -145,7 +137,11 @@ pub fn run_npc_behaviors(
     cost_map: Option<Res<SurfaceCostMap>>,
     surface_paths: Option<Res<SurfacePaths>>,
     mut npcs: Query<(Entity, &mut NpcBehavior, &Transform, &mut LinearVelocity), (With<Npc>, Without<Walker>)>,
+    landed_context: Res<crate::planet_ui::LandedContext>,
+    mut npc_met_writer: MessageWriter<crate::missions::NpcMet>,
+    mut npc_caught_writer: MessageWriter<crate::missions::NpcCaught>,
 ) {
+    let planet_name = landed_context.planet_name.clone().unwrap_or_default();
     let walker_pos = walker_q.single().ok().map(|t| t.translation.truncate());
 
     for (entity, mut npc, tf, mut vel) in &mut npcs {
@@ -265,17 +261,20 @@ pub fn run_npc_behaviors(
                 }
             }
 
-            Behavior::FleePlayer { mission_id: _, path, current_idx, repath_timer } => {
+            Behavior::FleePlayer { mission_id, path, current_idx, repath_timer } => {
                 let Some(wp) = walker_pos else {
                     vel.0 = Vec2::ZERO;
                     continue;
                 };
 
-                // If player caught us (adjacent), complete.
+                // If player caught us (adjacent), fire event and complete.
                 let dist_to_player = (pos - wp).length();
                 if dist_to_player < ADJACENT_DIST_TILES * TILE_PX {
                     vel.0 = Vec2::ZERO;
-                    // TODO: complete mission objective
+                    npc_caught_writer.write(crate::missions::NpcCaught {
+                        planet: planet_name.clone(),
+                        mission_id: mission_id.clone(),
+                    });
                     npc.queue.pop_front();
                     continue;
                 }
@@ -336,7 +335,7 @@ pub fn run_npc_behaviors(
                 vel.0 = Vec2::ZERO;
             }
 
-            Behavior::AwaitPlayer { .. } => {
+            Behavior::AwaitPlayer { mission_id } => {
                 let Some(wp) = walker_pos else {
                     vel.0 = Vec2::ZERO;
                     continue;
@@ -346,7 +345,10 @@ pub fn run_npc_behaviors(
 
                 let dist_to_player = (pos - wp).length();
                 if dist_to_player < ADJACENT_DIST_TILES * TILE_PX {
-                    // TODO: complete mission objective
+                    npc_met_writer.write(crate::missions::NpcMet {
+                        planet: planet_name.clone(),
+                        mission_id: mission_id.clone(),
+                    });
                     npc.queue.pop_front();
                 }
             }
@@ -362,118 +364,7 @@ pub fn run_npc_behaviors(
     }
 }
 
-// ── NPC interaction (E-press when adjacent) ──────────────────────────────
-
-/// Detect E-press when the player is adjacent to an NPC with `OfferMission`
-/// or `AwaitPlayer`.  Opens the interaction UI.
-pub fn npc_interact(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    walker_q: Query<&Transform, With<Walker>>,
-    npcs: Query<(Entity, &NpcBehavior, &Transform), (With<Npc>, Without<Walker>)>,
-    mut interaction: ResMut<ActiveNpcInteraction>,
-) {
-    // Close on Escape.
-    if keyboard.just_pressed(KeyCode::Escape) {
-        interaction.entity = None;
-        interaction.mission_id = None;
-        return;
-    }
-
-    if !keyboard.just_pressed(KeyCode::KeyE) {
-        return;
-    }
-
-    // If already interacting, close.
-    if interaction.entity.is_some() {
-        interaction.entity = None;
-        interaction.mission_id = None;
-        return;
-    }
-
-    let Ok(walker_tf) = walker_q.single() else { return };
-    let wp = walker_tf.translation.truncate();
-
-    // Find the nearest NPC with OfferMission that's adjacent.
-    for (entity, npc, tf) in &npcs {
-        let dist = (tf.translation.truncate() - wp).length();
-        if dist > ADJACENT_DIST_TILES * TILE_PX {
-            continue;
-        }
-        // Check if the front behavior is OfferMission.
-        if let Some(Behavior::OfferMission { mission_id }) = npc.queue.front() {
-            interaction.entity = Some(entity);
-            interaction.mission_id = Some(mission_id.clone());
-            return;
-        }
-    }
-}
-
-/// Render the mission offer UI for the currently-interacting NPC.
-pub fn npc_mission_offer_ui(
-    mut egui_contexts: bevy_egui::EguiContexts,
-    mut interaction: ResMut<ActiveNpcInteraction>,
-    catalog: Res<crate::missions::MissionCatalog>,
-    player_q: Query<&crate::ship::Ship, With<Walker>>,
-    mut accept_writer: MessageWriter<crate::missions::AcceptMission>,
-    mut decline_writer: MessageWriter<crate::missions::DeclineMission>,
-    mut npcs: Query<&mut NpcBehavior, With<Npc>>,
-    mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
-) {
-    let Some(npc_entity) = interaction.entity else { return };
-    let Some(mission_id) = interaction.mission_id.clone() else { return };
-    let Some(def) = catalog.defs.get(&mission_id) else {
-        interaction.entity = None;
-        interaction.mission_id = None;
-        return;
-    };
-
-    let Ok(ctx) = egui_contexts.ctx_mut() else { return };
-    let free_cargo = player_q.single().map(|s| s.remaining_cargo_space()).unwrap_or(0);
-    let required = def.required_cargo_space();
-    let has_space = free_cargo >= required;
-
-    bevy_egui::egui::Window::new("Mission Offer")
-        .collapsible(false)
-        .resizable(true)
-        .anchor(bevy_egui::egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
-            ui.label(&def.briefing);
-            if required > 0 {
-                ui.label(format!(
-                    "Cargo required: {} units (you have {} free)",
-                    required, free_cargo
-                ));
-            }
-            ui.separator();
-            ui.horizontal(|ui| {
-                ui.add_enabled_ui(has_space, |ui| {
-                    let btn = ui.button("Accept");
-                    if btn.clicked() {
-                        accept_writer.write(crate::missions::AcceptMission(mission_id.clone()));
-                        // Pop the OfferMission behavior so the NPC moves on.
-                        if let Ok(mut npc) = npcs.get_mut(npc_entity) {
-                            npc.queue.pop_front();
-                        }
-                        interaction.entity = None;
-                        interaction.mission_id = None;
-                        sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);
-                    }
-                    if !has_space {
-                        btn.on_hover_text("Not enough free cargo space.");
-                    }
-                });
-                if ui.button("Decline").clicked() {
-                    decline_writer.write(crate::missions::DeclineMission(mission_id.clone()));
-                    if let Ok(mut npc) = npcs.get_mut(npc_entity) {
-                        npc.queue.pop_front();
-                    }
-                    interaction.entity = None;
-                    interaction.mission_id = None;
-                    sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);
-                }
-            });
-        });
-}
+// NPC interaction (E-press chat, mission offers) is in surface_npc_chat.rs.
 
 /// Update the "!" marker position to float above the NPC.
 pub fn update_npc_markers(
@@ -482,11 +373,16 @@ pub fn update_npc_markers(
 ) {
     for (mut marker_tf, mut vis, child_of) in &mut markers {
         if let Ok((_, npc)) = npcs.get(child_of.parent()) {
-            // Show marker only if front behavior is OfferMission.
-            let is_offer = matches!(npc.queue.front(), Some(Behavior::OfferMission { .. }));
-            *vis = if is_offer { Visibility::Inherited } else { Visibility::Hidden };
-            // Float above the NPC.
-            marker_tf.translation.y = 12.0;
+            // Show marker for any mission-relevant behavior.
+            let show = matches!(
+                npc.queue.front(),
+                Some(Behavior::OfferMission { .. })
+                | Some(Behavior::AwaitPlayer { .. })
+                | Some(Behavior::FleePlayer { .. })
+                | Some(Behavior::SeekPlayer { .. })
+            );
+            *vis = if show { Visibility::Inherited } else { Visibility::Hidden };
+            marker_tf.translation.y = 14.0;
             marker_tf.translation.z = 0.1;
         }
     }
@@ -561,7 +457,99 @@ pub fn spawn_mission_npc(
             Text2d::new("!"),
             TextFont { font_size: 20.0, ..default() },
             TextColor(Color::srgb(1.0, 0.9, 0.2)),
-            Transform::from_xyz(0.0, 12.0, 0.1).with_scale(Vec3::splat(0.3)),
+            Transform::from_xyz(0.0, 14.0, 0.1).with_scale(Vec3::splat(0.6)),
+        ));
+    });
+}
+
+/// What kind of objective NPC to spawn.
+pub enum ObjectiveKind {
+    Meet { seek: bool },
+    Catch,
+}
+
+/// Spawn an NPC for a MeetNpc or CatchNpc mission objective.
+pub fn spawn_objective_npc(
+    commands: &mut Commands,
+    sprites: &crate::surface_civilians::CivilianSprites,
+    mission_id: &str,
+    door_tile: (u32, u32),
+    speed: f32,
+    kind: ObjectiveKind,
+) {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    let sprite_idx = rng.r#gen_range(0..sprites.images.len());
+    let image = sprites.images[sprite_idx].clone();
+    let start = SurfaceCostMap::tile_to_world(door_tile.0, door_tile.1);
+
+    // Marker: "?" blue for meet, "!" red for catch.
+    let (marker_text, marker_color) = match &kind {
+        ObjectiveKind::Meet { .. } => ("?", Color::srgb(0.3, 0.8, 1.0)),
+        ObjectiveKind::Catch => ("!", Color::srgb(1.0, 0.3, 0.2)),
+    };
+
+    let mut behavior = NpcBehavior::new(speed);
+    match kind {
+        ObjectiveKind::Meet { seek } => {
+            if seek {
+                behavior.push(Behavior::SeekPlayer {
+                    path: Vec::new(),
+                    current_idx: 0,
+                    repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
+                });
+            }
+            behavior.push(Behavior::AwaitPlayer {
+                mission_id: mission_id.to_string(),
+            });
+        }
+        ObjectiveKind::Catch => {
+            behavior.push(Behavior::FleePlayer {
+                mission_id: mission_id.to_string(),
+                path: Vec::new(),
+                current_idx: 0,
+                repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
+            });
+        }
+    }
+    // After objective, patrol away then despawn.
+    behavior.push(Behavior::Patrol {
+        waypoints: Vec::new(),
+        current_idx: 0,
+    });
+    behavior.push(Behavior::Despawn {
+        timer: Timer::from_seconds(3.0, TimerMode::Once),
+    });
+
+    let npc_entity = commands.spawn((
+        DespawnOnExit(crate::PlayState::Exploring),
+        Npc,
+        behavior,
+        crate::surface_character::CharacterAnim::with_interval(0.18),
+        RigidBody::Dynamic,
+        LockedAxes::ROTATION_LOCKED,
+        Collider::circle(4.0),
+        CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+        LinearDamping(10.0),
+        LinearVelocity(Vec2::ZERO),
+        Sprite::from_atlas_image(
+            image,
+            TextureAtlas {
+                layout: sprites.layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 8.0)),
+    )).id();
+
+    commands.entity(npc_entity).with_children(|parent| {
+        parent.spawn((
+            NpcMarker,
+            Text2d::new(marker_text),
+            TextFont { font_size: 20.0, ..default() },
+            TextColor(marker_color),
+            Transform::from_xyz(0.0, 14.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
     });
 }

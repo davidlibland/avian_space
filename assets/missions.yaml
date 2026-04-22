@@ -248,7 +248,7 @@ merchant_story_3:
 
 pirate_bounty_sol:
   briefing: "A Federation officer jogs over from the shipyard, waving you down. 'Pilot — we need you. There's a pirate corvette tearing through merchant convoys in Sol. Weak ship, but they've hit three transports this week alone. Destroy them — 25,000 credits, enough to pick up a fighter if that's your thing.'"
-  success_text: "The officer raises a glass. 'One less pirate. 25,000 credits, as promised.'"
+  success_text: "As the corvette breaks apart, your sensors pick up a faint thruster signature — an escape pod, accelerating hard toward the outer system. The officer's voice crackles over comms: 'Don't let them disappear. Our intel says the pod is heading for Triton. Land there and apprehend the pirate before they find a new ship.'"
   failure_text: "The officer shakes her head. 'They got away. Maybe next time.'"
   preconditions: []
   offer:
@@ -269,6 +269,25 @@ pirate_bounty_sol:
       credits: 25000
     - kind: grant_unlock
       name: fighter_license
+
+pirate_escape_pod:
+  briefing: "Land on Triton (in sol) and apprehend the pirate before they find a new ship.'"
+  success_text: "You corner the pirate in a frozen alley on Triton. They raise their hands. 'Alright, alright. You got me.' The Federation transfers 15,000 credits and a commendation to your account."
+  failure_text: "The pirate slipped away in the ice fields. They'll be someone else's problem now."
+  preconditions:
+    - kind: completed
+      mission: pirate_bounty_sol
+  offer:
+    kind: auto
+  start_effects: []
+  objective:
+    kind: catch_npc
+    planet: triton
+    npc_name: "the escaped pirate"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 15000
 
 # ── Bounty Hunter storyline ────────────────────────────────────────────────
 # Escalating combat missions that unlock the corvette, frigate, and IR

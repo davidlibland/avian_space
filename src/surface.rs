@@ -256,7 +256,7 @@ pub fn surface_plugin(app: &mut App) {
         .init_resource::<ActiveBuildingUI>()
         .init_resource::<TerrainSpeedModifier>()
         .init_resource::<FootstepData>()
-        .init_resource::<crate::surface_npc::ActiveNpcInteraction>()
+        .init_resource::<crate::surface_npc_chat::NpcChatState>()
         .add_systems(
             OnEnter(PlayState::Exploring),
             (setup_surface, save_on_explore, spawn_mission_npcs).chain(),
@@ -287,7 +287,7 @@ pub fn surface_plugin(app: &mut App) {
                 door_depth_sound,
                 crate::surface_civilians::spawn_civilians,
                 crate::surface_npc::run_npc_behaviors,
-                crate::surface_npc::npc_interact,
+                crate::surface_npc_chat::npc_chat_interact,
                 crate::surface_npc::update_npc_markers,
                 crate::surface_civilians::depth_sort_npcs,
             )
@@ -295,7 +295,7 @@ pub fn surface_plugin(app: &mut App) {
         )
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
-            crate::surface_npc::npc_mission_offer_ui
+            crate::surface_npc_chat::npc_chat_ui
                 .run_if(in_state(PlayState::Exploring)),
         )
         .add_systems(Update, animate_camera_zoom)
@@ -334,6 +334,7 @@ fn spawn_mission_npcs(
     cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
     mission_offers: Res<crate::missions::MissionOffers>,
     mission_catalog: Res<crate::missions::MissionCatalog>,
+    mission_log: Res<crate::missions::MissionLog>,
     landed_context: Res<crate::planet_ui::LandedContext>,
 ) {
     let (Some(sprites), Some(paths), Some(cost_map)) = (sprites, paths, cost_map) else {
@@ -341,10 +342,11 @@ fn spawn_mission_npcs(
     };
     let planet_name = landed_context.planet_name.as_deref().unwrap_or("");
 
-    let Some(bar_ids) = mission_offers.bar.get(planet_name) else { return };
-    if bar_ids.is_empty() {
-        return;
-    }
+    let bar_ids: Vec<String> = mission_offers
+        .bar
+        .get(planet_name)
+        .cloned()
+        .unwrap_or_default();
 
     // Collect all door tiles from precomputed paths (deduped).
     let door_tiles: Vec<(u32, u32)> = {
@@ -373,9 +375,9 @@ fn spawn_mission_npcs(
     use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    for mission_id in bar_ids {
+    for mission_id in &bar_ids {
         // Look up the mission def for NpcOffer config.
-        let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id) {
+        let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str()) {
             match &def.offer {
                 crate::missions::OfferKind::NpcOffer { building, approach, .. } => {
                     let seek = *approach == crate::missions::NpcApproach::Seek;
@@ -418,6 +420,93 @@ fn spawn_mission_npcs(
             sprites.walk_speed,
             seek,
         );
+    }
+
+    // ── Spawn NPCs for active MeetNpc / CatchNpc objectives ─────────
+    // Log pirate_escape_pod status specifically.
+    if let Some(def) = mission_catalog.defs.get("pirate_escape_pod") {
+        eprintln!(
+            "[objective_npcs] pirate_escape_pod found in catalog, status={:?}, objective={:?}",
+            mission_log.status("pirate_escape_pod"),
+            def.objective,
+        );
+    } else {
+        eprintln!("[objective_npcs] pirate_escape_pod NOT in catalog");
+    }
+    eprintln!(
+        "[objective_npcs] pirate_bounty_sol status={:?}",
+        mission_log.status("pirate_bounty_sol"),
+    );
+
+    for (mission_id, def) in &mission_catalog.defs {
+        let status = mission_log.status(mission_id);
+        // Log all missions with NPC objectives to help debug spawning.
+        match &def.objective {
+            crate::missions::Objective::MeetNpc { planet, .. }
+            | crate::missions::Objective::CatchNpc { planet, .. } => {
+                eprintln!(
+                    "[objective_npcs] mission={:?} status={:?} planet={:?} current={:?}",
+                    mission_id, status, planet, planet_name
+                );
+            }
+            _ => {}
+        }
+        if !matches!(status, crate::missions::MissionStatus::Active(_)) {
+            continue;
+        }
+        match &def.objective {
+            crate::missions::Objective::MeetNpc { planet, building, approach, .. }
+                if planet == planet_name =>
+            {
+                let door = building
+                    .as_ref()
+                    .and_then(|name| building_door.get(&name.to_lowercase()))
+                    .copied()
+                    .unwrap_or_else(|| door_tiles[rng.r#gen_range(0..door_tiles.len())]);
+                let seek = *approach == crate::missions::NpcApproach::Seek;
+                let spawn_tile = if !seek {
+                    find_nearby_tile(door, &cost_map, &paths, &mut rng)
+                } else {
+                    door
+                };
+                let world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(spawn_tile.0, spawn_tile.1);
+                eprintln!(
+                    "[objective_npcs] SPAWNING MeetNpc for {:?} at tile ({},{}) world ({:.0},{:.0}) seek={}",
+                    mission_id, spawn_tile.0, spawn_tile.1, world_pos.x, world_pos.y, seek
+                );
+                crate::surface_npc::spawn_objective_npc(
+                    &mut commands,
+                    &sprites,
+                    mission_id,
+                    spawn_tile,
+                    sprites.walk_speed,
+                    crate::surface_npc::ObjectiveKind::Meet { seek },
+                );
+            }
+            crate::missions::Objective::CatchNpc { planet, building, .. }
+                if planet == planet_name =>
+            {
+                let door = building
+                    .as_ref()
+                    .and_then(|name| building_door.get(&name.to_lowercase()))
+                    .copied()
+                    .unwrap_or_else(|| door_tiles[rng.r#gen_range(0..door_tiles.len())]);
+                let world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(door.0, door.1);
+                eprintln!(
+                    "[objective_npcs] SPAWNING CatchNpc for {:?} at tile ({},{}) world ({:.0},{:.0})",
+                    mission_id, door.0, door.1, world_pos.x, world_pos.y
+                );
+                crate::surface_npc::spawn_objective_npc(
+                    &mut commands,
+                    &sprites,
+                    mission_id,
+                    door,
+                    sprites.walk_speed * 1.2,
+                    crate::surface_npc::ObjectiveKind::Catch,
+                );
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1414,7 +1503,7 @@ fn teardown_surface(
     mut nearby: ResMut<NearbyBuilding>,
     mut active_ui: ResMut<ActiveBuildingUI>,
     mut terrain_speed: ResMut<TerrainSpeedModifier>,
-    mut npc_interaction: ResMut<crate::surface_npc::ActiveNpcInteraction>,
+    mut npc_chat: ResMut<crate::surface_npc_chat::NpcChatState>,
 ) {
     // Show the player ship again.
     if let Ok(ship_entity) = player_query.single() {
@@ -1425,7 +1514,7 @@ fn teardown_surface(
     *nearby = NearbyBuilding::default();
     active_ui.0 = None;
     terrain_speed.0 = 1.0;
-    *npc_interaction = crate::surface_npc::ActiveNpcInteraction::default();
+    *npc_chat = crate::surface_npc_chat::NpcChatState::default();
     commands.remove_resource::<SurfaceMiniMap>();
     commands.remove_resource::<crate::surface_pathfinding::SurfacePaths>();
     commands.remove_resource::<crate::surface_pathfinding::SurfaceCostMap>();
@@ -1650,7 +1739,13 @@ fn building_interact(
     mut next_state: ResMut<NextState<PlayState>>,
     game_state: Res<crate::game_save::PlayerGameState>,
     session_data: Res<crate::session::SessionSaveData>,
+    npc_chat: Res<crate::surface_npc_chat::NpcChatState>,
 ) {
+    // Don't process building keys while NPC chat is open.
+    if npc_chat.entity.is_some() {
+        return;
+    }
+
     if keyboard.just_pressed(KeyCode::Escape) {
         if active_ui.0.is_some() {
             active_ui.0 = None;

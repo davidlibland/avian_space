@@ -107,6 +107,29 @@ pub enum Objective {
         system: String,
         quantity: u16,
     },
+    /// Player must meet an NPC on a planet surface.  The NPC either seeks
+    /// the player or waits at a location.  Completes when adjacent.
+    MeetNpc {
+        planet: String,
+        /// Display name shown in objective text (e.g. "the informant").
+        npc_name: String,
+        /// Which building the NPC starts near.
+        #[serde(default)]
+        building: Option<String>,
+        /// Whether the NPC walks toward the player or waits.
+        #[serde(default)]
+        approach: NpcApproach,
+    },
+    /// Player must catch a fleeing NPC on a planet surface.  The NPC runs
+    /// away; objective completes when the player gets adjacent.
+    CatchNpc {
+        planet: String,
+        /// Display name (e.g. "the pirate").
+        npc_name: String,
+        /// Which building the NPC starts near.
+        #[serde(default)]
+        building: Option<String>,
+    },
     /// Player must destroy a group of ships in a specific system. The ships
     /// are spawned when the player enters the system with this mission active
     /// and tagged with `MissionTarget`. Optionally also collect cargo from
@@ -245,6 +268,29 @@ pub enum MissionTemplate {
         /// Display name for targets in the HUD / objective text.
         target_name: String,
     },
+    /// Three-stage thief pursuit:
+    /// 1. Destroy the thief's ship + collect stolen goods.
+    /// 2. Deliver the goods to a planet.
+    /// 3. Catch the fleeing thief (who escaped via pod) on a nearby planet.
+    CatchThief {
+        stage1_briefing: String,
+        stage1_success_text: String,
+        stage1_failure_text: String,
+        stage2_briefing: String,
+        stage2_success_text: String,
+        stage2_failure_text: String,
+        stage3_briefing: String,
+        stage3_success_text: String,
+        stage3_failure_text: String,
+        offer: OfferKind,
+        #[serde(default)]
+        preconditions: Vec<Precondition>,
+        ship_type_pool: Vec<String>,
+        target_name: String,
+        commodity_pool: Vec<String>,
+        quantity_range: (u16, u16),
+        pay_range: (i64, i64),
+    },
 }
 
 impl MissionTemplate {
@@ -254,6 +300,7 @@ impl MissionTemplate {
             MissionTemplate::CollectFromAsteroidField { preconditions, .. } => preconditions,
             MissionTemplate::CollectThenDeliver { preconditions, .. } => preconditions,
             MissionTemplate::BountyHunt { preconditions, .. } => preconditions,
+            MissionTemplate::CatchThief { preconditions, .. } => preconditions,
         }
     }
 }
