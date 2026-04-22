@@ -263,7 +263,10 @@ pub fn surface_plugin(app: &mut App) {
         )
         .add_systems(
             OnExit(PlayState::Exploring),
-            (teardown_surface, crate::surface_civilians::cleanup_civilians),
+            (
+                teardown_surface,
+                crate::surface_civilians::cleanup_civilians,
+            ),
         )
         .add_systems(
             Update,
@@ -295,8 +298,7 @@ pub fn surface_plugin(app: &mut App) {
         )
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
-            crate::surface_npc_chat::npc_chat_ui
-                .run_if(in_state(PlayState::Exploring)),
+            crate::surface_npc_chat::npc_chat_ui.run_if(in_state(PlayState::Exploring)),
         )
         .add_systems(Update, animate_camera_zoom)
         .add_systems(
@@ -352,8 +354,12 @@ fn spawn_mission_npcs(
     let door_tiles: Vec<(u32, u32)> = {
         let mut set = std::collections::HashSet::new();
         for p in paths.paths.values() {
-            if let Some(&first) = p.first() { set.insert(first); }
-            if let Some(&last) = p.last() { set.insert(last); }
+            if let Some(&first) = p.first() {
+                set.insert(first);
+            }
+            if let Some(&last) = p.last() {
+                set.insert(last);
+            }
         }
         set.into_iter().collect()
     };
@@ -379,7 +385,9 @@ fn spawn_mission_npcs(
         // Look up the mission def for NpcOffer config.
         let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str()) {
             match &def.offer {
-                crate::missions::OfferKind::NpcOffer { building, approach, .. } => {
+                crate::missions::OfferKind::NpcOffer {
+                    building, approach, ..
+                } => {
                     let seek = *approach == crate::missions::NpcApproach::Seek;
 
                     // Resolve building name to a door tile.
@@ -423,41 +431,19 @@ fn spawn_mission_npcs(
     }
 
     // ── Spawn NPCs for active MeetNpc / CatchNpc objectives ─────────
-    // Log pirate_escape_pod status specifically.
-    if let Some(def) = mission_catalog.defs.get("pirate_escape_pod") {
-        eprintln!(
-            "[objective_npcs] pirate_escape_pod found in catalog, status={:?}, objective={:?}",
-            mission_log.status("pirate_escape_pod"),
-            def.objective,
-        );
-    } else {
-        eprintln!("[objective_npcs] pirate_escape_pod NOT in catalog");
-    }
-    eprintln!(
-        "[objective_npcs] pirate_bounty_sol status={:?}",
-        mission_log.status("pirate_bounty_sol"),
-    );
 
     for (mission_id, def) in &mission_catalog.defs {
         let status = mission_log.status(mission_id);
-        // Log all missions with NPC objectives to help debug spawning.
-        match &def.objective {
-            crate::missions::Objective::MeetNpc { planet, .. }
-            | crate::missions::Objective::CatchNpc { planet, .. } => {
-                eprintln!(
-                    "[objective_npcs] mission={:?} status={:?} planet={:?} current={:?}",
-                    mission_id, status, planet, planet_name
-                );
-            }
-            _ => {}
-        }
         if !matches!(status, crate::missions::MissionStatus::Active(_)) {
             continue;
         }
         match &def.objective {
-            crate::missions::Objective::MeetNpc { planet, building, approach, .. }
-                if planet == planet_name =>
-            {
+            crate::missions::Objective::MeetNpc {
+                planet,
+                building,
+                approach,
+                ..
+            } if planet == planet_name => {
                 let door = building
                     .as_ref()
                     .and_then(|name| building_door.get(&name.to_lowercase()))
@@ -469,10 +455,9 @@ fn spawn_mission_npcs(
                 } else {
                     door
                 };
-                let world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(spawn_tile.0, spawn_tile.1);
-                eprintln!(
-                    "[objective_npcs] SPAWNING MeetNpc for {:?} at tile ({},{}) world ({:.0},{:.0}) seek={}",
-                    mission_id, spawn_tile.0, spawn_tile.1, world_pos.x, world_pos.y, seek
+                let world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(
+                    spawn_tile.0,
+                    spawn_tile.1,
                 );
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
@@ -483,19 +468,16 @@ fn spawn_mission_npcs(
                     crate::surface_npc::ObjectiveKind::Meet { seek },
                 );
             }
-            crate::missions::Objective::CatchNpc { planet, building, .. }
-                if planet == planet_name =>
-            {
+            crate::missions::Objective::CatchNpc {
+                planet, building, ..
+            } if planet == planet_name => {
                 let door = building
                     .as_ref()
                     .and_then(|name| building_door.get(&name.to_lowercase()))
                     .copied()
                     .unwrap_or_else(|| door_tiles[rng.r#gen_range(0..door_tiles.len())]);
-                let world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(door.0, door.1);
-                eprintln!(
-                    "[objective_npcs] SPAWNING CatchNpc for {:?} at tile ({},{}) world ({:.0},{:.0})",
-                    mission_id, door.0, door.1, world_pos.x, world_pos.y
-                );
+                let world_pos =
+                    crate::surface_pathfinding::SurfaceCostMap::tile_to_world(door.0, door.1);
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
                     &sprites,
@@ -519,7 +501,9 @@ fn find_nearby_tile(
     rng: &mut impl rand::Rng,
 ) -> (u32, u32) {
     // Find a precomputed path that starts at this door.
-    let candidates: Vec<&Vec<(u32, u32)>> = paths.paths.values()
+    let candidates: Vec<&Vec<(u32, u32)>> = paths
+        .paths
+        .values()
         .filter(|p| p.first() == Some(&door) && p.len() > 2)
         .collect();
 
@@ -715,8 +699,14 @@ fn setup_surface(
 
         // Generate initial terrain+collision for building placement.
         let initial_terrain = crate::fbm::generate_terrain_map(
-            map_w, map_h, N_TERRAIN_TYPES,
-            FBM_SCALE, FBM_OCTAVES, FBM_LACUNARITY, FBM_GAIN, seed,
+            map_w,
+            map_h,
+            N_TERRAIN_TYPES,
+            FBM_SCALE,
+            FBM_OCTAVES,
+            FBM_LACUNARITY,
+            FBM_GAIN,
+            seed,
         );
 
         // ── Pre-tilemap building placement ─────────────────────────────
@@ -893,9 +883,13 @@ fn setup_surface(
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
                         let tile_idx = tmpl.tiles[row as usize][col as usize];
-                        if tile_idx == 0 { continue; } // transparent
+                        if tile_idx == 0 {
+                            continue;
+                        } // transparent
                         let pos = (bx + col, by + row);
-                        if door_set.contains(&pos) { continue; } // door
+                        if door_set.contains(&pos) {
+                            continue;
+                        } // door
                         solid_building_tiles.insert(pos);
                     }
                 }
@@ -915,10 +909,19 @@ fn setup_surface(
 
         // Apply terrain constraints + ensure connectivity.
         let generated = crate::surface_terrain::generate_constrained_terrain(
-            map_w, map_h, N_TERRAIN_TYPES, seed,
-            FBM_SCALE, FBM_OCTAVES, FBM_LACUNARITY, FBM_GAIN,
-            &collision_codes, &movement_costs,
-            &placed_buildings, &door_positions, &solid_building_tiles,
+            map_w,
+            map_h,
+            N_TERRAIN_TYPES,
+            seed,
+            FBM_SCALE,
+            FBM_OCTAVES,
+            FBM_LACUNARITY,
+            FBM_GAIN,
+            &collision_codes,
+            &movement_costs,
+            &placed_buildings,
+            &door_positions,
+            &solid_building_tiles,
         );
         let terrain_flat = generated.terrain;
         let col_data = generated.collision;
@@ -991,7 +994,10 @@ fn setup_surface(
             -(map_w as f32 * tile_px / 2.0),
             -(map_h as f32 * tile_px / 2.0),
         );
-        let surface_layers = CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]);
+        let surface_layers = CollisionLayers::new(
+            GameLayer::Surface,
+            [GameLayer::Surface, GameLayer::Character],
+        );
         crate::world_assets::spawn_collision_entities(
             &mut commands,
             &col_asset,
@@ -1057,7 +1063,10 @@ fn setup_surface(
                     RigidBody::Static,
                     Collider::rectangle(tile_px, tile_px),
                     CollisionEventsEnabled,
-                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
+                    CollisionLayers::new(
+                        GameLayer::Surface,
+                        [GameLayer::Surface, GameLayer::Character],
+                    ),
                 ));
             }
         }
@@ -1121,18 +1130,26 @@ fn setup_surface(
                             Building {
                                 kind: BuildingKind::MechanicShop,
                             },
-                            DoorSprite { walker_was_behind: None },
+                            DoorSprite {
+                                walker_was_behind: None,
+                            },
                             Sensor,
                             RigidBody::Static,
                             Collider::rectangle(tile_px, tile_px),
                             CollisionEventsEnabled,
-                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
+                            CollisionLayers::new(
+                                GameLayer::Surface,
+                                [GameLayer::Surface, GameLayer::Character],
+                            ),
                         ));
                     } else {
                         entity.insert((
                             RigidBody::Static,
                             Collider::rectangle(tile_px, tile_px),
-                            CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
+                            CollisionLayers::new(
+                                GameLayer::Surface,
+                                [GameLayer::Surface, GameLayer::Character],
+                            ),
                         ));
                     }
                 }
@@ -1191,18 +1208,26 @@ fn setup_surface(
                         if is_door {
                             entity.insert((
                                 Building { kind },
-                                DoorSprite { walker_was_behind: None },
+                                DoorSprite {
+                                    walker_was_behind: None,
+                                },
                                 Sensor,
                                 RigidBody::Static,
                                 Collider::rectangle(tile_px, tile_px),
                                 CollisionEventsEnabled,
-                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
+                                CollisionLayers::new(
+                                    GameLayer::Surface,
+                                    [GameLayer::Surface, GameLayer::Character],
+                                ),
                             ));
                         } else if collision_code == 1 {
                             entity.insert((
                                 RigidBody::Static,
                                 Collider::rectangle(tile_px, tile_px),
-                                CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
+                                CollisionLayers::new(
+                                    GameLayer::Surface,
+                                    [GameLayer::Surface, GameLayer::Character],
+                                ),
                             ));
                         }
                     }
@@ -1216,7 +1241,10 @@ fn setup_surface(
                     Collider::rectangle(tile_px * 2.0, tile_px * 2.0),
                     Sensor,
                     CollisionEventsEnabled,
-                    CollisionLayers::new(GameLayer::Surface, [GameLayer::Surface, GameLayer::Character]),
+                    CollisionLayers::new(
+                        GameLayer::Surface,
+                        [GameLayer::Surface, GameLayer::Character],
+                    ),
                     Transform::from_xyz(world_pos.x, world_pos.y, 0.0),
                 ));
             }
@@ -1609,7 +1637,9 @@ fn door_depth_sound(
     nearby: Res<NearbyBuilding>,
     mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
-    let Ok(walker_tf) = walker_q.single() else { return };
+    let Ok(walker_tf) = walker_q.single() else {
+        return;
+    };
     let walker_z = walker_tf.translation.z;
     let nearby_entity = nearby.current.map(|(e, _)| e);
 
@@ -1632,7 +1662,9 @@ fn play_footstep(
     footstep_data: Res<FootstepData>,
     mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
-    let Ok((anim, tf)) = walkers.single() else { return };
+    let Ok((anim, tf)) = walkers.single() else {
+        return;
+    };
 
     if !anim.is_moving || !anim.walk_timer.just_finished() {
         return;
@@ -1918,7 +1950,7 @@ fn surface_building_ui(
                             {
                                 ship.credits -= cost;
                                 ship.health = max_hp;
-                                    }
+                            }
                             if !can_afford {
                                 ui.colored_label(
                                     bevy_egui::egui::Color32::RED,

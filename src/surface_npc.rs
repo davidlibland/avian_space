@@ -46,6 +46,15 @@ pub enum Behavior {
         repath_timer: Timer,
     },
 
+    /// Follow the player indefinitely.  Never completes on its own —
+    /// the NPC stays near the player until despawned or the behavior is
+    /// externally popped.  Uses the same pathfinding logic as SeekPlayer.
+    FollowPlayer {
+        path: Vec<(u32, u32)>,
+        current_idx: usize,
+        repath_timer: Timer,
+    },
+
     /// Run away from the player.  Completes when the player gets adjacent
     /// (i.e. the player "caught" the NPC).
     FleePlayer {
@@ -261,6 +270,58 @@ pub fn run_npc_behaviors(
                 }
             }
 
+            Behavior::FollowPlayer { path, current_idx, repath_timer } => {
+                let Some(wp) = walker_pos else {
+                    vel.0 = Vec2::ZERO;
+                    continue;
+                };
+
+                let dist_to_player = (pos - wp).length();
+
+                // When adjacent, just stop and wait (don't pop the behavior).
+                if dist_to_player < ADJACENT_DIST_TILES * TILE_PX {
+                    vel.0 = Vec2::ZERO;
+                    // Keep repathing so we follow if the player moves away.
+                    repath_timer.tick(time.delta());
+                    continue;
+                }
+
+                // Same seek logic as SeekPlayer.
+                repath_timer.tick(time.delta());
+                let needs_repath = path.is_empty()
+                    || *current_idx >= path.len()
+                    || repath_timer.just_finished();
+                if needs_repath {
+                    if let Some(cm) = cost_map.as_ref() {
+                        let start = find_nearest_walkable(pos, cm);
+                        let goal = find_nearest_walkable(wp, cm);
+                        if let Some(new_path) = cm.find_path(start, goal) {
+                            let skip = new_path.iter()
+                                .position(|&(tx, ty)| {
+                                    let wp = SurfaceCostMap::tile_to_world(tx, ty);
+                                    (wp - pos).length() > TILE_PX * 0.5
+                                })
+                                .unwrap_or(0);
+                            *path = new_path;
+                            *current_idx = skip;
+                        }
+                    }
+                }
+
+                if *current_idx < path.len() {
+                    let (tx, ty) = path[*current_idx];
+                    let target = SurfaceCostMap::tile_to_world(tx, ty);
+                    let diff = target - pos;
+                    if diff.length() < WAYPOINT_ARRIVE_DIST {
+                        *current_idx += 1;
+                    } else {
+                        vel.0 = diff.normalize() * speed;
+                    }
+                } else {
+                    vel.0 = (wp - pos).normalize_or_zero() * speed;
+                }
+            }
+
             Behavior::FleePlayer { mission_id, path, current_idx, repath_timer } => {
                 let Some(wp) = walker_pos else {
                     vel.0 = Vec2::ZERO;
@@ -380,6 +441,7 @@ pub fn update_npc_markers(
                 | Some(Behavior::AwaitPlayer { .. })
                 | Some(Behavior::FleePlayer { .. })
                 | Some(Behavior::SeekPlayer { .. })
+                | Some(Behavior::FollowPlayer { .. })
             );
             *vis = if show { Visibility::Inherited } else { Visibility::Hidden };
             marker_tf.translation.y = 14.0;
@@ -513,14 +575,26 @@ pub fn spawn_objective_npc(
             });
         }
     }
-    // After objective, patrol away then despawn.
-    behavior.push(Behavior::Patrol {
-        waypoints: Vec::new(),
-        current_idx: 0,
-    });
-    behavior.push(Behavior::Despawn {
-        timer: Timer::from_seconds(3.0, TimerMode::Once),
-    });
+    // After objective: caught NPCs follow the player, others patrol away.
+    match &kind {
+        ObjectiveKind::Catch => {
+            // Follow the player after being caught (like an escort).
+            behavior.push(Behavior::FollowPlayer {
+                path: Vec::new(),
+                current_idx: 0,
+                repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
+            });
+        }
+        _ => {
+            behavior.push(Behavior::Patrol {
+                waypoints: Vec::new(),
+                current_idx: 0,
+            });
+            behavior.push(Behavior::Despawn {
+                timer: Timer::from_seconds(3.0, TimerMode::Once),
+            });
+        }
+    }
 
     let npc_entity = commands.spawn((
         DespawnOnExit(crate::PlayState::Exploring),

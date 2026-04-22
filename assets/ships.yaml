@@ -4,10 +4,9 @@ shuttle:
   torque: 20.0
   max_health: 30
   cargo_space: 10
-  item_space: 16
+  item_space: 6
   base_weapons:
     "laser": [1, null]
-    "space_mine": [1, 5]
   radius: 10.0
   price: 5000
   sprite_path: sprites/ships/shuttle.png
@@ -20,7 +19,7 @@ fighter:
   torque: 35.0
   max_health: 75
   cargo_space: 4
-  item_space: 4
+  item_space: 8
   base_weapons:
     laser: [2, null]
   radius: 12.0
@@ -69,7 +68,7 @@ corvette:
   torque: 50.0
   max_health: 90
   cargo_space: 2
-  item_space: 20
+  item_space: 9
   base_weapons:
     proton_beam: [1, null]
   radius: 9.0
@@ -101,10 +100,9 @@ courier:
   torque: 28.0
   max_health: 45
   cargo_space: 18
-  item_space: 16
+  item_space: 6
   base_weapons:
     laser: [1, null]
-    space_mine: [1, 5]
   radius: 12.0
   price: 15000
   sprite_path: sprites/ships/courier.png
@@ -318,7 +316,7 @@ fed_carrier:
   sprite_path: sprites/ships/fed_carrier.png
   personality: Fighter
   faction: Federation
-  required_unlocks: [carrier_license]
+  required_unlocks: [fed_carrier_license]
 
 rebel_carrier:
   thrust: 50.0

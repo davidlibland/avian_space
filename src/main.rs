@@ -40,6 +40,7 @@ mod surface_objects;
 mod surface_pathfinding;
 mod surface_terrain;
 mod utils;
+mod validate_assets;
 mod value_fn;
 mod weapons;
 mod world_assets;

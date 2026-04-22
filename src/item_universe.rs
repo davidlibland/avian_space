@@ -111,41 +111,7 @@ impl ItemUniverse {
     }
 
     pub fn validate(&self) {
-        for (ship_name, ship_data) in &self.ships {
-            let consumed: i32 = WeaponSystems::build(&ship_data.base_weapons, self)
-                .iter_all()
-                .map(|(_, s)| s.space_consumed())
-                .sum();
-            if consumed > ship_data.item_space as i32 {
-                warn!(
-                    "Ship \"{ship_name}\" base weapons consume {consumed} item space \
-                     but ship only has {} — check assets/ships.yaml",
-                    ship_data.item_space
-                );
-            }
-        }
-        for (sys_name, system) in &self.star_systems {
-            for (planet_name, planet) in &system.planets {
-                if planet.uncolonized && !planet.commodities.is_empty() {
-                    warn!(
-                        "Planet \"{planet_name}\" in \"{sys_name}\" is uncolonized \
-                         but has commodities — these will be inaccessible"
-                    );
-                }
-                if planet.uncolonized && !planet.outfitter.is_empty() {
-                    warn!(
-                        "Planet \"{planet_name}\" in \"{sys_name}\" is uncolonized \
-                         but has an outfitter — this will be inaccessible"
-                    );
-                }
-                if planet.uncolonized && !planet.shipyard.is_empty() {
-                    warn!(
-                        "Planet \"{planet_name}\" in \"{sys_name}\" is uncolonized \
-                         but has a shipyard — this will be inaccessible"
-                    );
-                }
-            }
-        }
+        crate::validate_assets::validate(self);
     }
 
     fn compute_global_averages(&mut self) {

@@ -71,7 +71,7 @@ fed_fighter_bay:
     weapon_type: fed_fighter_bay
     ammo_price: 3000
     ammo_space: 4
-    required_unlocks: [carrier_license]
+    required_unlocks: [fed_carrier_license]
 shuttle_bay:
   !SecondaryWeapon
     price: 4000

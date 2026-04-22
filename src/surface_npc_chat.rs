@@ -150,6 +150,15 @@ pub fn npc_chat_interact(
             let lines = generate_patrol_dialogue(pilot, waypoints);
             ChatContent::Dialogue { lines, current: 0 }
         }
+        Some(Behavior::FollowPlayer { .. }) => {
+            ChatContent::Dialogue {
+                lines: vec![
+                    "I'm coming with you, don't worry.".to_string(),
+                    format!("Lead the way, {}.", pilot),
+                ],
+                current: 0,
+            }
+        }
         Some(Behavior::FleePlayer { .. }) | Some(Behavior::Despawn { .. }) | None => {
             // Can't chat with fleeing/despawning NPCs.
             return;
@@ -171,7 +180,7 @@ pub fn npc_chat_ui(
     mut egui_contexts: EguiContexts,
     mut chat: ResMut<NpcChatState>,
     catalog: Res<crate::missions::MissionCatalog>,
-    player_q: Query<&crate::ship::Ship, With<Walker>>,
+    player_q: Query<&crate::ship::Ship, With<crate::Player>>,
     mut accept_writer: MessageWriter<crate::missions::AcceptMission>,
     mut decline_writer: MessageWriter<crate::missions::DeclineMission>,
     mut npcs: Query<&mut NpcBehavior, With<Npc>>,
