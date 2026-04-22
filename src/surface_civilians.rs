@@ -41,9 +41,9 @@ use crate::surface_npc::{Npc, NpcBehavior, Behavior};
 /// Loaded civilian sprite data (inserted at surface setup).
 #[derive(Resource)]
 pub struct CivilianSprites {
-    images: Vec<Handle<Image>>,
-    layout: Handle<TextureAtlasLayout>,
-    walk_speed: f32,
+    pub images: Vec<Handle<Image>>,
+    pub layout: Handle<TextureAtlasLayout>,
+    pub walk_speed: f32,
 }
 
 /// Spawn timer — controls spawn rate to maintain TARGET_CIVILIAN_COUNT.

@@ -192,11 +192,6 @@ fn force_paths_for_connectivity(
             }
 
             // Disconnected — find cheapest crossing using high-cost solid tiles.
-            eprintln!(
-                "[terrain] Forcing path: {:?} ({},{}) → {:?} ({},{})",
-                kind_a, pos_a.0, pos_a.1, kind_b, pos_b.0, pos_b.1,
-            );
-
             let crossing = find_crossing_path(
                 pos_a, pos_b, terrain, collision_codes, movement_costs,
                 solid_building_tiles, map_w, map_h,
@@ -216,7 +211,7 @@ fn force_paths_for_connectivity(
         return;
     }
 
-    eprintln!(
+    bevy::log::debug!(
         "[terrain] Forced {} tiles to walkable for connectivity",
         forced_tiles.len()
     );

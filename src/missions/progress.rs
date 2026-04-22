@@ -659,7 +659,7 @@ pub fn despawn_targets_on_failure(
 
 pub fn roll_offers_on_land(
     mut reader: MessageReader<PlayerLandedOnPlanet>,
-    log: Res<MissionLog>,
+    mut log: ResMut<MissionLog>,
     unlocks: Res<PlayerUnlocks>,
     universe: Res<ItemUniverse>,
     mut catalog: ResMut<MissionCatalog>,
@@ -667,8 +667,9 @@ pub fn roll_offers_on_land(
 ) {
     let mut rng = rand::thread_rng();
     for PlayerLandedOnPlanet { planet } in reader.read() {
-        // Remove procedural defs that are no longer part of any active chain.
-        catalog.prune_dead_chains(&log);
+        // Remove procedural defs (and their log entries) that are no longer
+        // part of any active chain.
+        catalog.prune_dead_chains(&mut log);
 
         // Static missions currently Available.
         let mut tab: Vec<(String, f32)> = Vec::new();
@@ -679,7 +680,7 @@ pub fn roll_offers_on_land(
             }
             match &def.offer {
                 OfferKind::Tab { weight } => tab.push((id.clone(), *weight)),
-                OfferKind::Bar { planet: p, weight } if p == planet => {
+                OfferKind::NpcOffer { planet: p, weight, .. } if p == planet => {
                     bar.push((id.clone(), *weight))
                 }
                 _ => {}
@@ -709,7 +710,7 @@ pub fn roll_offers_on_land(
                         None
                     }
                 }
-                OfferKind::Bar { planet: p, weight } if p == planet => {
+                OfferKind::NpcOffer { planet: p, weight, .. } if p == planet => {
                     if rng.gen_range(0.0..1.0) < weight.clamp(0.0, 1.0) {
                         Some(&mut rolled_bar)
                     } else {

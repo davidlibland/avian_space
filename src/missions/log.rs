@@ -88,7 +88,7 @@ impl MissionCatalog {
     ///
     /// Call this at the start of `roll_offers_on_land`, after
     /// `update_locked_to_available` has already fired.
-    pub fn prune_dead_chains(&mut self, log: &MissionLog) {
+    pub fn prune_dead_chains(&mut self, log: &mut MissionLog) {
         use super::types::Precondition;
 
         // 1. Seed: procedural defs whose status is Active.
@@ -122,9 +122,11 @@ impl MissionCatalog {
             }
         }
 
-        // 3. Remove procedural defs that aren't needed.
+        // 3. Remove procedural defs and their log entries.
         self.defs
             .retain(|id, _| self.base_keys.contains(id) || needed.contains(id));
+        log.statuses
+            .retain(|id, _| self.base_keys.contains(id) || self.defs.contains_key(id));
     }
 }
 

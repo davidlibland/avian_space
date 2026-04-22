@@ -467,9 +467,11 @@ fn mission_def_yaml_roundtrip_land_with_requires() {
         success_text: "Done.".into(),
         failure_text: "Failed.".into(),
         preconditions: Vec::new(),
-        offer: OfferKind::Bar {
+        offer: OfferKind::NpcOffer {
             planet: "earth".into(),
             weight: 0.5,
+            building: None,
+            approach: Default::default(),
         },
         start_effects: vec![StartEffect::LoadCargo {
             commodity: "food".into(),

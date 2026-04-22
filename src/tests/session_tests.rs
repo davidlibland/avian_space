@@ -214,7 +214,7 @@ fn prune_keeps_active_procedural_missions() {
         MissionStatus::Active(ObjectiveProgress::default()),
     );
 
-    catalog.prune_dead_chains(&log);
+    catalog.prune_dead_chains(&mut log);
     assert!(catalog.defs.contains_key("proc_active"));
     assert!(catalog.defs.contains_key("base_quest")); // base always kept
 }
@@ -230,12 +230,45 @@ fn prune_removes_completed_procedural_missions() {
     let mut log = MissionLog::default();
     log.set("proc_done", MissionStatus::Completed);
 
-    catalog.prune_dead_chains(&log);
+    catalog.prune_dead_chains(&mut log);
     assert!(
         !catalog.defs.contains_key("proc_done"),
         "Completed procedural mission should be pruned"
     );
     assert!(catalog.defs.contains_key("base_quest")); // base always kept
+}
+
+#[test]
+fn prune_also_removes_orphaned_log_entries() {
+    let iu = basic_universe();
+    let mut catalog = MissionCatalog::new_session(&iu);
+    catalog
+        .defs
+        .insert("proc_done".to_string(), sample_mission_def("done"));
+    catalog
+        .defs
+        .insert("proc_avail".to_string(), sample_mission_def("offered"));
+
+    let mut log = MissionLog::default();
+    log.set("proc_done", MissionStatus::Completed);
+    log.set("proc_avail", MissionStatus::Available);
+    // base_quest status should survive pruning.
+    log.set("base_quest", MissionStatus::Completed);
+
+    catalog.prune_dead_chains(&mut log);
+
+    assert!(
+        !log.statuses.contains_key("proc_done"),
+        "Log entry for pruned def should be removed"
+    );
+    assert!(
+        !log.statuses.contains_key("proc_avail"),
+        "Log entry for pruned def should be removed"
+    );
+    assert!(
+        log.statuses.contains_key("base_quest"),
+        "Log entry for base mission should be kept"
+    );
 }
 
 #[test]
@@ -249,7 +282,7 @@ fn prune_removes_unaccepted_available_missions() {
     let mut log = MissionLog::default();
     log.set("proc_avail", MissionStatus::Available);
 
-    catalog.prune_dead_chains(&log);
+    catalog.prune_dead_chains(&mut log);
     assert!(
         !catalog.defs.contains_key("proc_avail"),
         "Available procedural mission with no active chain should be pruned"
@@ -282,7 +315,7 @@ fn prune_keeps_chain_with_active_member() {
     );
     // stage2 is Locked (default — not in log)
 
-    catalog.prune_dead_chains(&log);
+    catalog.prune_dead_chains(&mut log);
     assert!(
         catalog.defs.contains_key("stage1"),
         "Active mission should be kept"
@@ -316,7 +349,7 @@ fn prune_removes_entire_dead_chain() {
     log.set("stage1", MissionStatus::Completed);
     log.set("stage2", MissionStatus::Completed);
 
-    catalog.prune_dead_chains(&log);
+    catalog.prune_dead_chains(&mut log);
     assert!(!catalog.defs.contains_key("stage1"));
     assert!(!catalog.defs.contains_key("stage2"));
 }
@@ -328,9 +361,9 @@ fn prune_never_removes_base_defs() {
     let base_count = catalog_before.defs.len();
 
     let mut catalog = catalog_before;
-    let log = MissionLog::default(); // all missions Locked
+    let mut log = MissionLog::default(); // all missions Locked
 
-    catalog.prune_dead_chains(&log);
+    catalog.prune_dead_chains(&mut log);
     assert_eq!(
         catalog.defs.len(),
         base_count,

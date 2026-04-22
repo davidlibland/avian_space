@@ -256,9 +256,10 @@ pub fn surface_plugin(app: &mut App) {
         .init_resource::<ActiveBuildingUI>()
         .init_resource::<TerrainSpeedModifier>()
         .init_resource::<FootstepData>()
+        .init_resource::<crate::surface_npc::ActiveNpcInteraction>()
         .add_systems(
             OnEnter(PlayState::Exploring),
-            (setup_surface, save_on_explore),
+            (setup_surface, save_on_explore, spawn_mission_npcs).chain(),
         )
         .add_systems(
             OnExit(PlayState::Exploring),
@@ -286,8 +287,15 @@ pub fn surface_plugin(app: &mut App) {
                 door_depth_sound,
                 crate::surface_civilians::spawn_civilians,
                 crate::surface_npc::run_npc_behaviors,
+                crate::surface_npc::npc_interact,
+                crate::surface_npc::update_npc_markers,
                 crate::surface_civilians::depth_sort_npcs,
             )
+                .run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            bevy_egui::EguiPrimaryContextPass,
+            crate::surface_npc::npc_mission_offer_ui
                 .run_if(in_state(PlayState::Exploring)),
         )
         .add_systems(Update, animate_camera_zoom)
@@ -315,6 +323,138 @@ fn save_on_explore(
     session_data: Res<crate::session::SessionSaveData>,
 ) {
     crate::game_save::write_save(&game_state, &session_data);
+}
+
+/// Spawn mission-giver NPCs from NpcOffer missions.  Runs after
+/// `setup_surface` so `CivilianSprites` and `SurfacePaths` are available.
+fn spawn_mission_npcs(
+    mut commands: Commands,
+    sprites: Option<Res<crate::surface_civilians::CivilianSprites>>,
+    paths: Option<Res<crate::surface_pathfinding::SurfacePaths>>,
+    cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
+    mission_offers: Res<crate::missions::MissionOffers>,
+    mission_catalog: Res<crate::missions::MissionCatalog>,
+    landed_context: Res<crate::planet_ui::LandedContext>,
+) {
+    let (Some(sprites), Some(paths), Some(cost_map)) = (sprites, paths, cost_map) else {
+        return;
+    };
+    let planet_name = landed_context.planet_name.as_deref().unwrap_or("");
+
+    let Some(bar_ids) = mission_offers.bar.get(planet_name) else { return };
+    if bar_ids.is_empty() {
+        return;
+    }
+
+    // Collect all door tiles from precomputed paths (deduped).
+    let door_tiles: Vec<(u32, u32)> = {
+        let mut set = std::collections::HashSet::new();
+        for p in paths.paths.values() {
+            if let Some(&first) = p.first() { set.insert(first); }
+            if let Some(&last) = p.last() { set.insert(last); }
+        }
+        set.into_iter().collect()
+    };
+    if door_tiles.is_empty() {
+        return;
+    }
+
+    // Map building kind name (lowercase) → door tile.
+    // For each path (A→B), A's door is the first tile.
+    let mut building_door: std::collections::HashMap<String, (u32, u32)> =
+        std::collections::HashMap::new();
+    for (&(from, _), path) in &paths.paths {
+        if let Some(&first) = path.first() {
+            let name = format!("{:?}", from).to_lowercase();
+            building_door.entry(name).or_insert(first);
+        }
+    }
+
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    for mission_id in bar_ids {
+        // Look up the mission def for NpcOffer config.
+        let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id) {
+            match &def.offer {
+                crate::missions::OfferKind::NpcOffer { building, approach, .. } => {
+                    let seek = *approach == crate::missions::NpcApproach::Seek;
+
+                    // Resolve building name to a door tile.
+                    let door = building
+                        .as_ref()
+                        .and_then(|name| building_door.get(&name.to_lowercase()))
+                        .copied()
+                        .unwrap_or_else(|| {
+                            // No building specified or not found → random door.
+                            door_tiles[rng.r#gen_range(0..door_tiles.len())]
+                        });
+
+                    (seek, door)
+                }
+                _ => {
+                    // Fallback for non-NpcOffer (shouldn't happen in bar).
+                    let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
+                    (false, door)
+                }
+            }
+        } else {
+            let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
+            (false, door)
+        };
+
+        // For waiters, pick a tile near the door (not on it).
+        let spawn_tile = if !seek {
+            find_nearby_tile(door, &cost_map, &paths, &mut rng)
+        } else {
+            door
+        };
+
+        crate::surface_npc::spawn_mission_npc(
+            &mut commands,
+            &sprites,
+            mission_id,
+            spawn_tile,
+            sprites.walk_speed,
+            seek,
+        );
+    }
+}
+
+/// Find a walkable tile near `door` but not on it (1–10 tiles along a
+/// random path from that door).  Falls back to the door itself.
+fn find_nearby_tile(
+    door: (u32, u32),
+    cost_map: &crate::surface_pathfinding::SurfaceCostMap,
+    paths: &crate::surface_pathfinding::SurfacePaths,
+    rng: &mut impl rand::Rng,
+) -> (u32, u32) {
+    // Find a precomputed path that starts at this door.
+    let candidates: Vec<&Vec<(u32, u32)>> = paths.paths.values()
+        .filter(|p| p.first() == Some(&door) && p.len() > 2)
+        .collect();
+
+    if let Some(path) = candidates.get(rng.r#gen_range(0..candidates.len().max(1))) {
+        let max_idx = path.len().min(10);
+        let min_idx = 2.min(max_idx);
+        if min_idx < max_idx {
+            let idx = rng.r#gen_range(min_idx..max_idx);
+            return path[idx];
+        }
+    }
+
+    // Fallback: pathfind to a nearby random walkable tile.
+    let offsets: [(i32, i32); 4] = [(0, -2), (0, 2), (-2, 0), (2, 0)];
+    for &(dx, dy) in &offsets {
+        let nx = (door.0 as i32 + dx).max(0) as u32;
+        let ny = (door.1 as i32 + dy).max(0) as u32;
+        let idx = (ny * cost_map.width + nx) as usize;
+        if idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY {
+            return (nx, ny);
+        }
+    }
+
+    door // absolute fallback
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +641,15 @@ fn setup_surface(
             .map(|&t| *collision_codes.get(t as usize).unwrap_or(&0))
             .collect();
         let mut walkable_positions = find_walkable_positions(&initial_col, map_w, map_h, 5.0);
+        // Keep only positions within the inner portion of the map (closer
+        // to the landing pad) so buildings cluster near the center.
+        let max_building_radius = (map_w.min(map_h) as f32 * 0.4).max(15.0);
+        let cx = map_w as f32 / 2.0;
+        let cy = map_h as f32 / 2.0;
+        walkable_positions.retain(|&(x, y)| {
+            let dist = ((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt();
+            dist < max_building_radius
+        });
         {
             use rand::{SeedableRng, seq::SliceRandom};
             let seed = planet_name
@@ -1265,6 +1414,7 @@ fn teardown_surface(
     mut nearby: ResMut<NearbyBuilding>,
     mut active_ui: ResMut<ActiveBuildingUI>,
     mut terrain_speed: ResMut<TerrainSpeedModifier>,
+    mut npc_interaction: ResMut<crate::surface_npc::ActiveNpcInteraction>,
 ) {
     // Show the player ship again.
     if let Ok(ship_entity) = player_query.single() {
@@ -1275,6 +1425,7 @@ fn teardown_surface(
     *nearby = NearbyBuilding::default();
     active_ui.0 = None;
     terrain_speed.0 = 1.0;
+    *npc_interaction = crate::surface_npc::ActiveNpcInteraction::default();
     commands.remove_resource::<SurfaceMiniMap>();
     commands.remove_resource::<crate::surface_pathfinding::SurfacePaths>();
     commands.remove_resource::<crate::surface_pathfinding::SurfaceCostMap>();

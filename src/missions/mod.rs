@@ -19,7 +19,7 @@ pub use events::*;
 pub use log::{
     MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, PlayerUnlocks,
 };
-pub use types::{MissionDef, MissionTarget, MissionTemplate};
+pub use types::{MissionDef, MissionTarget, MissionTemplate, NpcApproach, OfferKind};
 pub use ui::{missions_ui_plugin, render_bar_tab, render_missions_tab};
 
 pub fn missions_plugin(app: &mut App) {

@@ -255,7 +255,7 @@ pub fn compute_all_paths(
                     paths.insert((kind_b, kind_a), reverse);
                 }
                 None => {
-                    eprintln!(
+                    bevy::log::debug!(
                         "[pathfinding] No path: {:?} at ({},{}) → {:?} at ({},{}), skipping",
                         kind_a, pos_a.0, pos_a.1,
                         kind_b, pos_b.0, pos_b.1,

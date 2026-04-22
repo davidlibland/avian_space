@@ -51,8 +51,31 @@ pub enum OfferKind {
     Auto,
     /// Appears in the "Missions" tab on any landed planet with given weight.
     Tab { weight: f32 },
-    /// Appears in the Bar on a specific planet with given weight.
-    Bar { planet: String, weight: f32 },
+    /// An NPC on the planet surface offers this mission.  The NPC either
+    /// seeks the player or waits near a building.
+    NpcOffer {
+        planet: String,
+        weight: f32,
+        /// Which building the NPC starts at (e.g. "bar", "market").
+        /// If absent or not present on this planet, a random building is chosen.
+        #[serde(default)]
+        building: Option<String>,
+        /// Whether the NPC walks toward the player (`seek`) or stands
+        /// still near the building (`wait`).  Defaults to `wait`.
+        #[serde(default)]
+        approach: NpcApproach,
+    },
+}
+
+/// How a mission-giver NPC approaches the player.
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum NpcApproach {
+    /// The NPC walks toward the player.
+    Seek,
+    /// The NPC stands near the building and waits.
+    #[default]
+    Wait,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]

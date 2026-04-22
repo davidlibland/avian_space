@@ -1,12 +1,14 @@
 deliver_wheat_intro:
-  briefing: "A dockworker slides into the booth across from you. 'Colony on Mars is starving. We need 10 units of food run over, fast. You take it there, we'll pay on delivery.'"
+  briefing: "A dockworker sprints toward you from the market stalls, out of breath. 'Thank god — a pilot. Mars colony is starving. 10 units of food need to get there yesterday. You take it, we pay on delivery. Please.'"
   success_text: "The governor claps you on the shoulder. The grain is already being unloaded."
   failure_text: "Word travels fast. Mars will be looking for a different pilot next time."
   preconditions: []
   offer:
-    kind: bar
+    kind: npc_offer
     planet: earth
     weight: 1.0
+    building: market
+    approach: seek
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -27,16 +29,17 @@ deliver_wheat_intro:
       credits: 1500
 
 scavenge_iron:
-  briefing: "A prospector leans over the bar. 'I need 5 units of iron — but only the clean stuff. Pull it from the asteroid fields out in Sol, no market-bought slag. Then bring it back to me on Earth.'"
+  briefing: "A grizzled prospector leans against the mechanic shop wall, chewing something. 'Need 5 units of iron — clean stuff, pulled from the asteroid fields in Sol. No market-bought slag. Bring it back to Earth and I'll make it worth your time.'"
   success_text: "You've got the ore. Head back to Earth to collect your pay."
   failure_text: "Deal's off."
   preconditions:
     - kind: completed
       mission: deliver_wheat_intro
   offer:
-    kind: bar
+    kind: npc_offer
     planet: mars
     weight: 0.5
+    building: mechanicshop
   objective:
     kind: collect_pickups
     commodity: iron
@@ -74,14 +77,15 @@ scavenge_iron_deliver:
 # showing up on mission boards.
 
 mining_story_1:
-  briefing: "A weather-beaten Mining Guild recruiter at Earth's spaceport bar waves you over. 'Kid, we're short on haulers. Go shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 4,000 credits when you do. Find me at the Mars office when you're done.'"
+  briefing: "A weather-beaten Mining Guild recruiter loiters near the shipyard, eyeing incoming pilots. She waves you over. 'Kid, we're short on haulers. Shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 4,000 credits. Find me at the Mars market when you're done.'"
   success_text: "The recruiter looks impressed. 'Go see the foreman on Mars — she's got bigger work.'"
   failure_text: "The recruiter snorts. 'Don't waste my time again.'"
   preconditions: []
   offer:
-    kind: bar
+    kind: npc_offer
     planet: earth
     weight: 1.0
+    building: shipyard
   objective:
     kind: collect_pickups
     commodity: iron
@@ -92,16 +96,17 @@ mining_story_1:
       credits: 4000
 
 mining_story_2:
-  briefing: "The foreman at Mars's miners' bar pushes a datapad across the table. '6 units of iron, pulled from the Tau Ceti belt. Federation space, but further out — you'll need to jump. 8,000 on delivery. Come see our frontier contact at Barnard Rock when you make it back.'"
-  success_text: "The foreman nods. 'Frontier work pays the best. Barnard Rock — ask for the Guild at the bar.'"
+  briefing: "The foreman is checking cargo manifests outside the Mars market. She pushes a datapad across a crate toward you. '6 units of iron, pulled from the Tau Ceti belt. Federation space, but further out — you'll need to jump. 8,000 on delivery. Come see our frontier contact at Barnard Rock when you make it back.'"
+  success_text: "The foreman nods. 'Frontier work pays the best. Barnard Rock — ask for the Guild near the market.'"
   failure_text: "The foreman just shakes her head."
   preconditions:
     - kind: completed
       mission: mining_story_1
   offer:
-    kind: bar
+    kind: npc_offer
     planet: mars
     weight: 1.0
+    building: market
   objective:
     kind: collect_pickups
     commodity: iron
@@ -112,16 +117,17 @@ mining_story_2:
       credits: 8000
 
 mining_story_3:
-  briefing: "A wiry Guild agent at Barnard Rock's bar leans across the table. 'Border work. 8 units of clean iron, pulled from the Barnard belt. Rebels and pirates both sweep through here, so keep your eyes open. 18,000 credits — and if you make it back, you'll have earned your Miner's Guild certification. The bulletin board will start showing real mining contracts after that.'"
-  success_text: "The agent slides a signed certification across the bar: 'You're Guild now. Check any mission board for mining contracts.' Your ship computer registers the new licenses."
+  briefing: "A wiry Guild agent waits outside the Barnard Rock market, arms folded. 'Border work. 8 units of clean iron, pulled from the Barnard belt. Rebels and pirates both sweep through here, so keep your eyes open. 18,000 credits — and if you make it back, you'll have earned your Miner's Guild certification. Real mining contracts will start showing up after that.'"
+  success_text: "The agent slides a signed certification across the counter: 'You're Guild now. Check any mission board for mining contracts.' Your ship computer registers the new licenses."
   failure_text: "The agent sighs. 'The border eats the unprepared.'"
   preconditions:
     - kind: completed
       mission: mining_story_2
   offer:
-    kind: bar
+    kind: npc_offer
     planet: barnard_rock
     weight: 1.0
+    building: market
   objective:
     kind: collect_pickups
     commodity: iron
@@ -142,14 +148,15 @@ mining_story_3:
 # upgrade path: shuttle → freighter → hauler → bulk_carrier.
 
 merchant_story_1:
-  briefing: "A Merchant Guild rep at Earth's spaceport bar sets down a drink. 'Short run — 8 units of food to Moon colony. Good shakedown for new pilots. 45,000 on delivery, and we'll get you certified for a real ship. Next contract is at Moon's lounge.'"
-  success_text: "The rep on Moon hands over the credits and a certification chit. 'Freighter license. Spend wisely. Come find me at Moon's bar for the next run.'"
+  briefing: "A Merchant Guild rep is haggling with a vendor near the market. He spots you and breaks away. 'You look like you need work. Short run — 8 units of food to Moon colony. Good shakedown for a new pilot. 45,000 on delivery, and we'll get you certified for a real cargo ship. Come find me at Moon's market when it's done.'"
+  success_text: "The rep on Moon hands over the credits and a certification chit. 'Freighter license. Spend wisely. Come find me at the market for the next run.'"
   failure_text: "The rep shrugs. 'The Guild's got other pilots.'"
   preconditions: []
   offer:
-    kind: bar
+    kind: npc_offer
     planet: earth
     weight: 1.0
+    building: market
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -172,16 +179,17 @@ merchant_story_1:
       name: merchant_freighter_license
 
 merchant_story_2:
-  briefing: "The Guild rep on Moon pushes over a manifest. 'Bigger run this time — 50 units of food out to tau_ceti_2, one jump from Sol. You'll want a freighter for this one. 50,000 on delivery. When it's done, head to the tau_ceti_2 bar — the Guild's regional office is there.'"
+  briefing: "The Guild rep is leaning against a stack of crates outside the Moon market. He waves you over with a manifest. 'Bigger run this time — 50 units of food out to tau_ceti_2, one jump from Sol. You'll want a freighter for this one. 50,000 on delivery. When it's done, head to the tau_ceti_2 market — the Guild's regional office is there.'"
   success_text: "The regional manager signs off the shipment and hands you a hauler license: 'Good run. We've got one more contract for you. Come back when you're ready.'"
   failure_text: "The regional manager's disappointment is palpable."
   preconditions:
     - kind: completed
       mission: merchant_story_1
   offer:
-    kind: bar
+    kind: npc_offer
     planet: moon
     weight: 1.0
+    building: market
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -204,16 +212,17 @@ merchant_story_2:
       name: merchant_hauler_license
 
 merchant_story_3:
-  briefing: "The regional manager at tau_ceti_2 unrolls a long-haul contract. '75 units of food to kepler_22b, deep in Federation space. Long jumps. You'll need a hauler for this — anything smaller and the cargo won't fit. 85,000 credits, and we'll certify you for the biggest ships the Guild sells.'"
+  briefing: "The regional manager is reviewing shipments outside the tau_ceti_2 market. She unrolls a long-haul contract. '75 units of food to kepler_22b, deep in Federation space. Long jumps. You'll need a hauler for this — anything smaller and the cargo won't fit. 85,000 credits, and we'll certify you for the biggest ships the Guild sells.'"
   success_text: "The kepler_22b quartermaster confirms receipt. 'You're one of ours now. Bulk carrier license is yours — if you can afford one.'"
   failure_text: "The contract is voided."
   preconditions:
     - kind: completed
       mission: merchant_story_2
   offer:
-    kind: bar
+    kind: npc_offer
     planet: tau_ceti_2
     weight: 1.0
+    building: market
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -238,14 +247,16 @@ merchant_story_3:
 # ── Bounty: Sol pirate ─────────────────────────────────────────────────────
 
 pirate_bounty_sol:
-  briefing: "A Federation officer leans against the Earth bar, looking tired. 'There's a pirate corvette making a nuisance of itself around Sol. Weak ship, but they keep hitting merchant convoys. Destroy them and we'll pay 25,000 credits — enough to pick up a fighter if you're thinking of going that route.'"
+  briefing: "A Federation officer jogs over from the shipyard, waving you down. 'Pilot — we need you. There's a pirate corvette tearing through merchant convoys in Sol. Weak ship, but they've hit three transports this week alone. Destroy them — 25,000 credits, enough to pick up a fighter if that's your thing.'"
   success_text: "The officer raises a glass. 'One less pirate. 25,000 credits, as promised.'"
   failure_text: "The officer shakes her head. 'They got away. Maybe next time.'"
   preconditions: []
   offer:
-    kind: bar
+    kind: npc_offer
     planet: earth
     weight: 1.0
+    building: shipyard
+    approach: seek
   objective:
     kind: destroy_ships
     system: sol
@@ -261,23 +272,26 @@ pirate_bounty_sol:
 
 # ── Bounty Hunter storyline ────────────────────────────────────────────────
 # Escalating combat missions that unlock the corvette, frigate, and IR
-# missiles. Starts at Earth bar (Sol), moves outward through progressively
-# dangerous systems. Completing the full arc grants bounty_hunter_license
-# which unlocks ongoing random bounty templates on mission boards.
+# missiles. Starts at Earth shipyard (Sol), moves outward through
+# progressively dangerous systems. Completing the full arc grants
+# bounty_hunter_license which unlocks ongoing random bounty templates on
+# mission boards.
 
 # Phase 1: Corvette path (2 missions, pays ~18k each → corvette costs 18k)
 
 bounty_story_1:
-  briefing: "The Federation officer from last time flags you down at Earth's bar. 'Nice work with that pirate. We've got reports of two more pirate corvettes raiding convoys near Alpha Centauri. Dangerous space — no planets, thick asteroid fields. Take them out and we'll pay 18,000 credits. Come see me here when it's done.'"
+  briefing: "The Federation officer from last time intercepts you near the Earth shipyard. 'Nice work with that pirate. We've got reports of two more pirate corvettes raiding convoys near Alpha Centauri. Dangerous space — no planets, thick asteroid fields. Take them out — 18,000 credits. Come find me here when it's done.'"
   success_text: "The officer nods. 'Alpha Centauri is a little safer tonight. 18,000 credits. Come back — we've got one more job before we can certify you for a real combat ship.'"
   failure_text: "The officer grimaces. 'Those pirates are still out there.'"
   preconditions:
     - kind: completed
       mission: pirate_bounty_sol
   offer:
-    kind: bar
+    kind: npc_offer
     planet: earth
     weight: 1.0
+    building: shipyard
+    approach: seek
   objective:
     kind: destroy_ships
     system: alpha_centauri
@@ -290,16 +304,18 @@ bounty_story_1:
       credits: 18000
 
 bounty_story_2:
-  briefing: "The officer slides a dossier across the bar. 'A pirate missile boat has been ambushing freighters in the Drift. Heavy hitter — mines and missiles both. Destroy it and we'll certify you for corvette-class combat vessels. 20,000 credits on top. When you're ready for the next tier, find Captain Vasquez at Barnard Station's bar.'"
+  briefing: "The officer catches you outside the shipyard, datapad in hand. 'A pirate missile boat has been ambushing freighters in the Drift. Heavy hitter — mines and missiles both. Destroy it and we'll certify you for corvette-class combat vessels. 20,000 credits on top. When you're ready for the next tier, find Captain Vasquez at Barnard Station's shipyard.'"
   success_text: "The officer hands you a corvette certification chip. 'You've earned this. Vasquez at Barnard Station has bigger targets for you.'"
   failure_text: "The officer shakes her head. 'That missile boat is still out there.'"
   preconditions:
     - kind: completed
       mission: bounty_story_1
   offer:
-    kind: bar
+    kind: npc_offer
     planet: earth
     weight: 1.0
+    building: shipyard
+    approach: seek
   objective:
     kind: destroy_ships
     system: drift
@@ -318,16 +334,18 @@ bounty_story_2:
 # Phase 2: Frigate path (2 missions, pays ~60k each → frigate costs 120k)
 
 bounty_story_3:
-  briefing: "Captain Vasquez at Barnard Station's bar sizes you up. 'You've got a reputation now. We've tracked a pirate strike group — two missile boats — operating out of the Drift. Border space, no backup. 55,000 credits if you eliminate them both. Report back here when it's done.'"
-  success_text: "Vasquez stamps your record. 'Impressive. One more target and you'll have earned a frigate certification — and access to Federation IR missiles. Come find me here.'"
+  briefing: "Captain Vasquez is inspecting a damaged hull outside the Barnard Station mechanic shop. She sizes you up. 'You've got a reputation now. We've tracked a pirate strike group — two missile boats — operating out of the Drift. Border space, no backup. 55,000 credits if you eliminate them both. Report back here when it's done.'"
+  success_text: "Vasquez stamps your record. 'Impressive. One more target and you'll have earned a frigate certification — and access to Federation IR missiles. Come find me at the mechanic shop.'"
   failure_text: "Vasquez says nothing. The dossier stays on the table."
   preconditions:
     - kind: completed
       mission: bounty_story_2
   offer:
-    kind: bar
+    kind: npc_offer
     planet: barnard_station
     weight: 1.0
+    building: mechanicshop
+    approach: seek
   objective:
     kind: destroy_ships
     system: drift
@@ -340,16 +358,18 @@ bounty_story_3:
       credits: 55000
 
 bounty_story_4:
-  briefing: "Vasquez leans forward. 'This is the big one. Three pirate missile boats have set up a forward base in Alpha Centauri. Dangerous — they're dug in among the asteroid fields. Take all three out and the Federation will certify you for frigate-class vessels and IR missile systems. 65,000 credits. And after this — the bounty board will keep you busy. Good hunting.'"
+  briefing: "Vasquez strides over from the mechanic shop, urgency in her step. 'This is the big one. Three pirate missile boats have set up a forward base in Alpha Centauri — dug in among the asteroid fields. Take all three out and the Federation will certify you for frigate-class vessels and IR missile systems. 65,000 credits. And after this — the bounty board will keep you busy. Good hunting.'"
   success_text: "Vasquez pins a frigate certification and weapons clearance to your file. 'You're one of ours now, Commander. The bounty board has a standing contract for you — check the missions tab whenever you want work.'"
   failure_text: "Vasquez stares at the tactical display. 'They're still operational.'"
   preconditions:
     - kind: completed
       mission: bounty_story_3
   offer:
-    kind: bar
+    kind: npc_offer
     planet: barnard_station
     weight: 1.0
+    building: shipyard
+    approach: seek
   objective:
     kind: destroy_ships
     system: alpha_centauri
@@ -372,16 +392,18 @@ bounty_story_4:
 # carrier ships. Completing the arc grants carrier_license.
 
 bounty_story_5:
-  briefing: "Vasquez pulls up a tactical display showing the Drift. 'Intel says a pirate carrier has set up shop in the Drift. A carrier, Commander — it launches corvettes from a flight deck. Take out the carrier itself and the escorts scatter. 90,000 credits. And be careful — those corvettes will be on you the moment you engage.'"
+  briefing: "Vasquez is pacing outside the Barnard Station mechanic shop when she spots you. 'Commander — intel just came in. A pirate carrier has set up shop in the Drift. A carrier — it launches corvettes from a flight deck. Take out the carrier itself and the escorts scatter. 90,000 credits. Be careful — those corvettes will be on you the moment you engage.'"
   success_text: "Vasquez lets out a low whistle. 'You took down a carrier. That's not something many pilots can claim. 90,000 credits — and come back when you're ready for the last one.'"
   failure_text: "Vasquez stares at the tactical display. 'That carrier is still launching raids.'"
   preconditions:
     - kind: completed
       mission: bounty_story_4
   offer:
-    kind: bar
+    kind: npc_offer
     planet: barnard_station
     weight: 1.0
+    building: mechanicshop
+    approach: seek
   objective:
     kind: destroy_ships
     system: drift
@@ -394,16 +416,18 @@ bounty_story_5:
       credits: 90000
 
 bounty_story_6:
-  briefing: "Vasquez leans back and folds her arms. 'This is the endgame. Two pirate carriers operating out of Alpha Centauri — they've been coordinating raids across the border for months. Eliminate both and the Federation will grant you carrier-class certification. 120,000 credits. This is the hardest contract we've ever posted. Good hunting, Commander.'"
+  briefing: "Vasquez intercepts you near the shipyard, arms folded. 'This is the endgame, Commander. Two pirate carriers operating out of Alpha Centauri — they've been coordinating raids across the border for months. Eliminate both and the Federation will grant you carrier-class certification. 120,000 credits. This is the hardest contract we've ever posted. Good hunting.'"
   success_text: "Vasquez stands and salutes. 'Two carriers down. The border is secure for the first time in years. 120,000 credits, carrier certification, and the respect of every Federation officer in the fleet. The bounty board will keep posting carrier-class contracts — if you're hungry for more.'"
   failure_text: "Vasquez says quietly, 'They're still out there. The border won't hold much longer.'"
   preconditions:
     - kind: completed
       mission: bounty_story_5
   offer:
-    kind: bar
+    kind: npc_offer
     planet: barnard_station
     weight: 1.0
+    building: shipyard
+    approach: seek
   objective:
     kind: destroy_ships
     system: alpha_centauri
