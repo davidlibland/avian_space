@@ -183,7 +183,7 @@ fed_missile_cruiser:
   torque: 8.0
   max_health: 280
   cargo_space: 6
-  item_space: 36
+  item_space: 56
   base_weapons:
     proton_beam: [1, null]
     ir_missile: [3, 12]
@@ -236,7 +236,7 @@ rebel_frigate:
   torque: 18.0
   max_health: 160
   cargo_space: 10
-  item_space: 37
+  item_space: 53
   base_weapons:
     laser: [3, null]
     javelin: [1, 24]
@@ -306,7 +306,7 @@ fed_carrier:
   torque: 4.0
   max_health: 500
   cargo_space: 15
-  item_space: 60
+  item_space: 76
   base_weapons:
     proton_beam_turret: [2, null]
     ir_missile: [2, 8]
@@ -324,7 +324,7 @@ rebel_carrier:
   torque: 5.0
   max_health: 400
   cargo_space: 12
-  item_space: 55
+  item_space: 76
   base_weapons:
     laser_turret: [3, null]
     javelin: [2, 16]
@@ -342,7 +342,7 @@ pirate_carrier:
   torque: 3.5
   max_health: 350
   cargo_space: 20
-  item_space: 48
+  item_space: 67
   base_weapons:
     laser_turret: [2, null]
     goose: [1, 6]

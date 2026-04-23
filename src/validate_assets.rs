@@ -383,6 +383,7 @@ fn validate_objective(
         Objective::DestroyShips {
             system,
             ship_type,
+            count,
             collect,
             ..
         } => {
@@ -405,6 +406,27 @@ fn validate_objective(
                          \"{}\" which is not defined in commodities.yaml",
                         req.commodity
                     );
+                }
+                // The `collect.quantity` units are distributed across the
+                // spawned ships by `spawn_mission_targets`; the first
+                // `quantity % count` ships carry one extra unit. Verify the
+                // per-ship share fits in the ship_type's cargo hold so the
+                // player can actually collect the full quantity.
+                if *count > 0 {
+                    if let Some(ship_data) = iu.ships.get(ship_type) {
+                        let hold = ship_data.cargo_space;
+                        let per_ship_max = req.quantity.div_ceil(*count as u16);
+                        if per_ship_max > hold {
+                            warn!(
+                                "{label} \"{id}\" objective collect requires {} units of \
+                                 \"{}\" across {} \"{ship_type}\" ships — each ship must \
+                                 carry up to {per_ship_max} units, but ship_type cargo \
+                                 hold is only {hold}. Reduce collect.quantity, raise count, \
+                                 or pick a ship with more cargo_space.",
+                                req.quantity, req.commodity, count,
+                            );
+                        }
+                    }
                 }
             }
         }

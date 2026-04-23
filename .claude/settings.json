@@ -52,7 +52,8 @@
       "Bash(grep -n \"defs.remove\\\\|defs.retain\\\\|defs.clear\" /Users/dlibland/dev/avian_space/src/missions/*.rs)",
       "Bash(grep -rn \"MissionStatus::Completed\\\\|MissionStatus::Failed\" /Users/dlibland/dev/avian_space/src/missions/*.rs)",
       "Bash(grep -A5 \"cannot borrow \\\\`log\\\\`\")",
-      "Bash(ls /Users/dlibland/dev/avian_space/src/*.rs)"
+      "Bash(ls /Users/dlibland/dev/avian_space/src/*.rs)",
+      "Bash(awk -F'name: ' '{print $2}')"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds"

@@ -454,7 +454,7 @@ pub fn spawn_mission_targets(
             count,
             target_name,
             hostile,
-            ..
+            collect,
         } = &def.objective
         else {
             continue;
@@ -470,12 +470,32 @@ pub fn spawn_mission_targets(
         if need == 0 {
             continue;
         }
-        for _ in 0..need {
+        // Distribute any `collect` requirement across only the ships we're
+        // about to spawn (the remainder). If some targets have already been
+        // destroyed and yielded partial pickups, the player still only sees
+        // these newly spawned ships, so they must carry the full outstanding
+        // requirement. We over-load rather than short-load to ensure the
+        // player can always meet the objective.
+        let (collect_per_ship, collect_remainder) = match collect {
+            Some(req) if need > 0 => {
+                let per = req.quantity / need as u16;
+                let rem = req.quantity % need as u16;
+                (per, rem)
+            }
+            _ => (0, 0),
+        };
+        for i in 0..need {
             let pos = bevy::math::Vec2::new(
                 rng.gen_range(-3000.0..3000.0),
                 rng.gen_range(-3000.0..3000.0),
             );
-            let bundle = ship_bundle(ship_type, &item_universe, system, pos);
+            let mut bundle = ship_bundle(ship_type, &item_universe, system, pos);
+            if let Some(req) = collect {
+                // First `collect_remainder` ships carry an extra unit so the
+                // total across all spawned targets equals req.quantity exactly.
+                let extra = if (i as u16) < collect_remainder { 1 } else { 0 };
+                bundle.set_mission_cargo(req.commodity.clone(), collect_per_ship + extra);
+            }
             let personality = bundle.get_personality();
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             commands

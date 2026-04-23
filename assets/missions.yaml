@@ -267,12 +267,10 @@ pirate_bounty_sol:
   completion_effects:
     - kind: pay
       credits: 25000
-    - kind: grant_unlock
-      name: fighter_license
 
 pirate_escape_pod:
-  briefing: "Land on Triton (in sol) and apprehend the pirate before they find a new ship.'"
-  success_text: "You corner the pirate in a frozen alley on Triton. They raise their hands. 'Alright, alright. You got me.' The Federation transfers 15,000 credits and a commendation to your account."
+  briefing: "Land on Triton (in sol) and apprehend the pirate before they find a new ship."
+  success_text: "You corner the pirate in a frozen alley on Triton. They raise their hands. 'Alright, alright. You got me.' The Federation transfers 15,000 credits and a fighter certification to your account — the debrief confirmed this pirate had been scouting Federation convoys for months."
   failure_text: "The pirate slipped away in the ice fields. They'll be someone else's problem now."
   preconditions:
     - kind: completed
@@ -288,6 +286,8 @@ pirate_escape_pod:
   completion_effects:
     - kind: pay
       credits: 15000
+    - kind: grant_unlock
+      name: fighter_license
 
 # ── Bounty Hunter storyline ────────────────────────────────────────────────
 # Escalating combat missions that unlock the corvette, frigate, and IR
@@ -323,8 +323,8 @@ bounty_story_1:
       credits: 18000
 
 bounty_story_2:
-  briefing: "The officer catches you outside the shipyard, datapad in hand. 'A pirate missile boat has been ambushing freighters in the Drift. Heavy hitter — mines and missiles both. Destroy it and we'll certify you for corvette-class combat vessels. 20,000 credits on top. When you're ready for the next tier, find Captain Vasquez at Barnard Station's shipyard.'"
-  success_text: "The officer hands you a corvette certification chip. 'You've earned this. Vasquez at Barnard Station has bigger targets for you.'"
+  briefing: "The officer catches you outside the shipyard, datapad in hand. 'A pirate missile boat has been ambushing freighters in the Drift. Heavy hitter — mines and missiles both. Destroy it and we can start your path to corvette-class certification. 20,000 credits on top.'"
+  success_text: "As the missile boat cracks open, an encrypted distress call spikes across the comms — a senior pirate captain, coordinating raids from the ground. The Federation officer comes on: 'That voice. We know him. He's gone to ground on Titan. Run him down before he regroups.'"
   failure_text: "The officer shakes her head. 'That missile boat is still out there.'"
   preconditions:
     - kind: completed
@@ -345,6 +345,24 @@ bounty_story_2:
   completion_effects:
     - kind: pay
       credits: 20000
+
+bounty_story_2_catch:
+  briefing: "The pirate captain is hiding in Titan's smog-choked dockside quarter. Find him before he slips offworld — our intel says he's trying to buy passage out of a bar."
+  success_text: "You pin the captain against a bulkhead in a back-alley bar. He spits, but surrenders. The Federation uploads the corvette certification and proton-beam clearance to your ship the moment he's in custody. 15,000 credits too. Vasquez at Barnard Station has the next tier whenever you're ready."
+  failure_text: "The captain vanished into Titan's underlayer. He'll be running a new crew within a month."
+  preconditions:
+    - kind: completed
+      mission: bounty_story_2
+  offer:
+    kind: auto
+  objective:
+    kind: catch_npc
+    planet: titan
+    npc_name: "the pirate captain"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 15000
     - kind: grant_unlock
       name: corvette_license
     - kind: grant_unlock
@@ -358,7 +376,7 @@ bounty_story_3:
   failure_text: "Vasquez says nothing. The dossier stays on the table."
   preconditions:
     - kind: completed
-      mission: bounty_story_2
+      mission: bounty_story_2_catch
   offer:
     kind: npc_offer
     planet: barnard_station
@@ -377,8 +395,8 @@ bounty_story_3:
       credits: 55000
 
 bounty_story_4:
-  briefing: "Vasquez strides over from the mechanic shop, urgency in her step. 'This is the big one. Three pirate missile boats have set up a forward base in Alpha Centauri — dug in among the asteroid fields. Take all three out and the Federation will certify you for frigate-class vessels and IR missile systems. 65,000 credits. And after this — the bounty board will keep you busy. Good hunting.'"
-  success_text: "Vasquez pins a frigate certification and weapons clearance to your file. 'You're one of ours now, Commander. The bounty board has a standing contract for you — check the missions tab whenever you want work.'"
+  briefing: "Vasquez strides over from the mechanic shop, urgency in her step. 'This is the big one. Three pirate missile boats have set up a forward base in Alpha Centauri — dug in among the asteroid fields. Take all three out and we can move you up to frigate-class. 65,000 credits. And after this, the bounty board will keep you busy. Good hunting.'"
+  success_text: "Vasquez reviews the combat data. 'Clean work. But — one of the boats launched a lifeboat just before it broke up. Our tracker says it burned for Barnard Rock. That's the pirate ring's commander. Get to him before local sympathizers hide him away.'"
   failure_text: "Vasquez stares at the tactical display. 'They're still operational.'"
   preconditions:
     - kind: completed
@@ -399,6 +417,24 @@ bounty_story_4:
   completion_effects:
     - kind: pay
       credits: 65000
+
+bounty_story_4_catch:
+  briefing: "The pirate commander fled to Barnard Rock. Our informants say he's bribing a mechanic to swap transponders on a hauler. Find him at the mechanic shop before he lifts off under a new name."
+  success_text: "You catch the commander crouched behind a coolant rig, half-disguised in mechanic's coveralls. He laughs bitterly: 'You got me.' The Federation's response is immediate — frigate certification, Federation IR missile clearance, and full bounty-hunter accreditation all land on your file. 25,000 credits on top. 'Commander, you're one of ours now,' Vasquez says. 'The bounty board has a standing contract for you — check it any time.'"
+  failure_text: "The commander's transponder vanished from our scopes an hour later. He's already on another ship, halfway to the Drift."
+  preconditions:
+    - kind: completed
+      mission: bounty_story_4
+  offer:
+    kind: auto
+  objective:
+    kind: catch_npc
+    planet: barnard_rock
+    npc_name: "the pirate commander"
+    building: mechanicshop
+  completion_effects:
+    - kind: pay
+      credits: 25000
     - kind: grant_unlock
       name: frigate_license
     - kind: grant_unlock
@@ -416,7 +452,7 @@ bounty_story_5:
   failure_text: "Vasquez stares at the tactical display. 'That carrier is still launching raids.'"
   preconditions:
     - kind: completed
-      mission: bounty_story_4
+      mission: bounty_story_4_catch
   offer:
     kind: npc_offer
     planet: barnard_station
@@ -435,8 +471,8 @@ bounty_story_5:
       credits: 90000
 
 bounty_story_6:
-  briefing: "Vasquez intercepts you near the shipyard, arms folded. 'This is the endgame, Commander. Two pirate carriers operating out of Alpha Centauri — they've been coordinating raids across the border for months. Eliminate both and the Federation will grant you carrier-class certification. 120,000 credits. This is the hardest contract we've ever posted. Good hunting.'"
-  success_text: "Vasquez stands and salutes. 'Two carriers down. The border is secure for the first time in years. 120,000 credits, carrier certification, and the respect of every Federation officer in the fleet. The bounty board will keep posting carrier-class contracts — if you're hungry for more.'"
+  briefing: "Vasquez intercepts you near the shipyard, arms folded. 'This is the endgame, Commander. Two pirate carriers operating out of Alpha Centauri — they've been coordinating raids across the border for months. Eliminate both and we can start the paperwork for your carrier-class certification. 120,000 credits. This is the hardest contract we've ever posted. Good hunting.'"
+  success_text: "Both carriers are wreckage. But sensors picked up a heavily shielded shuttle peeling off the flagship at the last moment — running silent for Pluto, deep in Sol's outer dark. 'That's the Pirate King,' Vasquez says quietly. 'The man who's been running all of this. Get him and it's over.'"
   failure_text: "Vasquez says quietly, 'They're still out there. The border won't hold much longer.'"
   preconditions:
     - kind: completed
@@ -457,7 +493,410 @@ bounty_story_6:
   completion_effects:
     - kind: pay
       credits: 120000
+
+bounty_story_6_catch:
+  briefing: "Track the Pirate King to Pluto. He'll be in the bar quarter — that's where every fugitive in Sol goes when they've got nowhere else. End this."
+  success_text: "The Pirate King is drinking alone in a frost-rimed bar under Pluto's thin dome. He doesn't even reach for a weapon — just raises his glass. 'Took you long enough, Commander.' Vasquez comes over comms as he's cuffed: 'The border is secure for the first time in years. Carrier certification and turret clearance are yours — the full package. 50,000 credits on top. Every Federation officer in the fleet owes you a drink. The bounty board will keep posting carrier-class contracts if you're hungry for more.'"
+  failure_text: "The Pirate King disappeared into Pluto's ice fields. He'll be rebuilding by next year."
+  preconditions:
+    - kind: completed
+      mission: bounty_story_6
+  offer:
+    kind: auto
+  objective:
+    kind: catch_npc
+    planet: pluto
+    npc_name: "the Pirate King"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 50000
     - kind: grant_unlock
       name: carrier_license
     - kind: grant_unlock
       name: turret_license
+
+# ── Espionage storyline ────────────────────────────────────────────────────
+# A 15-mission arc offered by Federation Intelligence operating out of the
+# Earth bar. Starts by hunting rebel spies who have infiltrated Federation
+# worlds, escalates to intercepting rebel weapons-tech smugglers, then
+# plunges the player into Rebel space for deep-cover meets with double
+# agents and defectors. The final missions steal the schematics for the
+# entire rebel fighter program. Completing the arc grants
+# `rebel_weapons_license` (javelin missiles) and `rebel_ship_license`
+# (rebel fighter + gunboat) — reverse-engineered from the stolen tech.
+#
+# Contains four combat missions, each with a `collect` requirement on the
+# `weapons_tech` commodity, and six NPC objectives (3 catch_npc on
+# Federation worlds, 3 meet_npc on Rebel worlds).
+
+# Phase 1: Catch rebel infiltrators on Federation planets.
+
+espionage_1:
+  briefing: "A Federation Intelligence officer nurses a drink at the back of the Earth bar. She doesn't look up until you're seated. 'You clean? Good. A Sirius Cell operative has been lifting naval dispatches out of our Earth comm-center. He made our tail yesterday and he's gone to ground on the surface. Run him down before extraction — 8,000 credits. We don't exist, and neither does this conversation.'"
+  success_text: "You corner the operative behind the market loading bays. He has a burst-transmitter in his hand — you get to it first. The officer's voice, three hours later: 'Clean work. Credits are in your account. Come back when you're ready for the next one.'"
+  failure_text: "The operative made his extraction window. Whatever he had is already on a rebel data-lance halfway to Sirius."
+  preconditions: []
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: wait
+  objective:
+    kind: catch_npc
+    planet: earth
+    npc_name: "the Sirius Cell operative"
+    building: market
+  completion_effects:
+    - kind: pay
+      credits: 8000
+
+espionage_2:
+  briefing: "The officer is back in the same booth, no small talk. 'Their next cell is on Mars — a mining-data courier, looks like he's trying to slip belt-survey records out to a freighter due in two days. He hangs around the Mars market. 12,000 credits if you pick him up before that freighter clears customs.'"
+  success_text: "The courier tries to run when he spots you — straight into a dead-end alley behind the market. He drops a data-sliver that Federation techs will spend a month decoding. 12,000 credits hits your account."
+  failure_text: "The freighter lifted on schedule. Mars mining data is on its way to rebel shipyards."
+  preconditions:
+    - kind: completed
+      mission: espionage_1
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: catch_npc
+    planet: mars
+    npc_name: "the rebel courier"
+    building: market
+  completion_effects:
+    - kind: pay
+      credits: 12000
+
+espionage_3:
+  briefing: "The officer slides a folder across the table — a dossier thick with photos. 'This one's their handler. He recruits couriers across half the Federation, and right now he's on Kepler-22b pretending to be a shipyard inspector. He's the prize, Commander. Get him and we crack the whole network. 22,000 credits.'"
+  success_text: "You catch the handler at the shipyard, flanked by two fake aides. He doesn't even struggle — just sighs like a tired professor. 'Always the new faces,' he mutters. Federation Intelligence descends on his safe-house within the hour. Your account ticks up by 22,000 credits. 'Commander,' the officer says, 'you've earned a seat at the real table. The next briefing will be different.'"
+  failure_text: "The handler slipped offworld. Every lead we had just went cold."
+  preconditions:
+    - kind: completed
+      mission: espionage_2
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: catch_npc
+    planet: kepler_22b
+    npc_name: "the rebel handler"
+    building: shipyard
+  completion_effects:
+    - kind: pay
+      credits: 22000
+
+# Phase 2: Intercept rebel weapons-tech smugglers (combat + delivery).
+
+espionage_4:
+  briefing: "'Here's the real work, Commander.' The officer pulls up a tactical display. 'The handler gave us a shipping schedule. Three rebel fighters are running stolen Federation weapons-tech through Alpha Centauri inside the next 48 hours. Destroy all three and salvage the cargo pods — we want the tech back. 30,000 credits.'"
+  success_text: "Three rebel fighters, reduced to drifting wreckage. The cargo pods are intact — four units of weapons-tech, ours again. Head to Kepler-22b for the drop."
+  failure_text: "The convoy made rebel space. That tech is already being reverse-engineered in Sirius."
+  preconditions:
+    - kind: completed
+      mission: espionage_3
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: alpha_centauri
+    ship_type: fighter
+    count: 3
+    target_name: Rebel Smuggling Wing
+    hostile: true
+    collect:
+      commodity: weapons_tech
+      quantity: 4
+  completion_effects:
+    - kind: pay
+      credits: 30000
+
+espionage_4_deliver:
+  briefing: "Run the recovered weapons-tech to Kepler-22b for technical analysis. Kepler's labs will strip it and tell us what the rebels have."
+  success_text: "The Kepler-22b technician signs for the shipment: 'This buys us six months.' 15,000 credits hit your account. The officer wants to see you back on Earth when you're ready for the next one."
+  failure_text: "The recovered weapons-tech never made it to analysis."
+  preconditions:
+    - kind: completed
+      mission: espionage_4
+  offer:
+    kind: auto
+  objective:
+    kind: land_on_planet
+    planet: kepler_22b
+  requires:
+    - kind: has_cargo
+      commodity: weapons_tech
+      quantity: 4
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_tech
+      quantity: 4
+    - kind: pay
+      credits: 15000
+
+espionage_5:
+  briefing: "The officer looks grim. 'Kepler's people looked at what you brought in. The rebels have been building a missile program off our own designs — javelin-class tech. There's a bigger shipment moving through the Drift right now — three stolen Federation corvettes running cargo, six cargo units between them. Destroy them and recover everything. 45,000 credits.'"
+  success_text: "Three corvettes, three broken hulls. Six units of weapons-tech in your hold, enough to fill a whole Kepler lab. Officer wants it back on Earth this time — she's running the analysis herself."
+  failure_text: "The corvettes escaped the Drift. Our javelin program may be lost."
+  preconditions:
+    - kind: completed
+      mission: espionage_4_deliver
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: corvette
+    count: 3
+    target_name: Rebel Weapons Convoy
+    hostile: true
+    collect:
+      commodity: weapons_tech
+      quantity: 6
+  completion_effects:
+    - kind: pay
+      credits: 45000
+
+espionage_5_deliver:
+  briefing: "Return the recovered weapons-tech to Earth for full analysis. Intelligence wants to see every circuit."
+  success_text: "The officer runs a hand over the cargo crates like she's touching a holy relic. 'This is the whole rebel missile stack, Commander. Reverse-engineered against our own designs. You've earned javelin clearance — the schematics are yours to run.' 20,000 credits, plus the rebel weapons license."
+  failure_text: "The shipment never reached Earth. The intelligence window has closed."
+  preconditions:
+    - kind: completed
+      mission: espionage_5
+  offer:
+    kind: auto
+  objective:
+    kind: land_on_planet
+    planet: earth
+  requires:
+    - kind: has_cargo
+      commodity: weapons_tech
+      quantity: 6
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_tech
+      quantity: 6
+    - kind: pay
+      credits: 20000
+    - kind: grant_unlock
+      name: rebel_weapons_license
+
+# Phase 3: Deep cover in rebel space — meet informants, smuggle secrets.
+
+espionage_6:
+  briefing: "The officer's voice drops. 'We have an asset on Procyon Prime — deep cover, two years in. She has a package we can't move through normal channels. You'll dock at the Procyon Prime bar, look for a woman drinking alone. Codeword is \"east wind.\" Get in, get the intel, get out. This is rebel space, Commander. Procyon is a rebel capital. 25,000 credits.'"
+  success_text: "The asset slides a data chit across the bar as she stands to leave. 'East wind's blowing harder every day. Tell her that.' She's gone before you can answer. 25,000 credits; the officer on Earth wants you back for debrief and the next contact."
+  failure_text: "The asset's cover is blown. We lost her."
+  preconditions:
+    - kind: completed
+      mission: espionage_5_deliver
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: meet_npc
+    planet: procyon_prime
+    npc_name: "the Procyon asset"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 25000
+
+espionage_7:
+  briefing: "'The asset's chit pointed us at a second contact — a rebel weapons engineer on Sirius-C who wants out. He's got design data for rebel fighter airframes. Meet him at the mechanic shop. He'll be the one pretending to fix a hauler. 20,000 credits on the meet, more on delivery.'"
+  success_text: "The engineer pushes a sealed data-cartridge under a greasy hauler manifold and slides it to you with his boot. 'Everything I know. Get it home.' He won't make eye contact. 20,000 credits in your account — and your cargo hold just got heavier."
+  failure_text: "The engineer missed his window. Every rebel counter-intel officer in Sirius is looking for him now."
+  preconditions:
+    - kind: completed
+      mission: espionage_6
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: meet_npc
+    planet: sirius_c
+    npc_name: "the rebel engineer"
+    building: mechanicshop
+  completion_effects:
+    - kind: pay
+      credits: 20000
+
+espionage_7_deliver:
+  briefing: "Get the engineer's data-cartridge to Kepler-22b before rebel counter-intel tracks the leak. He gave you four units' worth of schematics — guard them."
+  success_text: "Kepler's analysts look at the schematics and go quiet for a long time. 'This is half a rebel shipyard.' The officer authorizes 35,000 credits. 'We're close, Commander. One more trip into rebel space.'"
+  failure_text: "The data-cartridge was lost. A life was spent for nothing."
+  preconditions:
+    - kind: completed
+      mission: espionage_7
+  offer:
+    kind: auto
+  start_effects:
+    - kind: load_cargo
+      commodity: weapons_tech
+      quantity: 4
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: kepler_22b
+  requires:
+    - kind: has_cargo
+      commodity: weapons_tech
+      quantity: 4
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_tech
+      quantity: 4
+    - kind: pay
+      credits: 35000
+
+espionage_8:
+  briefing: "The officer is pacing when you walk in. 'We have a problem. The rebels know the engineer defected — they've pulled an undercover frigate out of the Sirius fleet yard to hunt for whoever he leaked to. That's you, Commander. We're turning this around. Engage the frigate in Sirius before it ships out, break it open, and recover whatever weapons-tech they loaded for pursuit. 70,000 credits.'"
+  success_text: "The rebel frigate folds under sustained fire. Eight units of weapons-tech drift free of the wreckage — pursuit ordnance they never got to use. Bring it home."
+  failure_text: "The frigate escaped. It will find you eventually."
+  preconditions:
+    - kind: completed
+      mission: espionage_7_deliver
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: sirius
+    ship_type: frigate
+    count: 1
+    target_name: Rebel Counter-Intel Frigate
+    hostile: true
+    collect:
+      commodity: weapons_tech
+      quantity: 6
+  completion_effects:
+    - kind: pay
+      credits: 70000
+
+espionage_8_deliver:
+  briefing: "The frigate's weapons-tech stash is worth more than the ship itself. Run it to Earth for Intelligence."
+  success_text: "The officer signs for the shipment and pours two drinks. 'Sit down, Commander. There's one more operation, and it's the one we've been building toward.' 30,000 credits land in your account."
+  failure_text: "The frigate's weapons-tech is lost."
+  preconditions:
+    - kind: completed
+      mission: espionage_8
+  offer:
+    kind: auto
+  objective:
+    kind: land_on_planet
+    planet: earth
+  requires:
+    - kind: has_cargo
+      commodity: weapons_tech
+      quantity: 6
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_tech
+      quantity: 6
+    - kind: pay
+      credits: 30000
+
+# Phase 4: The endgame — steal the complete rebel fighter program.
+
+espionage_9:
+  briefing: "The officer doesn't sit down. 'Rigel Outpost. There is a rebel chief engineer there who has the complete airframe-and-powerplant schematics for the entire rebel fighter program — not fragments, the whole thing. He's flipping. We don't know why and we don't care. You meet him at the Rigel Outpost shipyard. Get the data. 40,000 credits on meet, another 100,000 on delivery. Don't come back empty.'"
+  success_text: "The chief engineer meets you in a hangar bay under a stripped-down gunboat. He hands over a sealed schematics-core the size of your fist. 'Take it, take it. Go. They'll kill me if you stay another minute.' You go. 40,000 credits; now get out of Rigel alive."
+  failure_text: "The chief engineer was extracted by rebel counter-intel. The full rebel fighter program stays rebel."
+  preconditions:
+    - kind: completed
+      mission: espionage_8_deliver
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: meet_npc
+    planet: rigel_outpost
+    npc_name: "the rebel chief engineer"
+    building: shipyard
+  completion_effects:
+    - kind: pay
+      credits: 40000
+
+espionage_10_escape:
+  briefing: "Rebel counter-intel has the whole Sirius fleet hunting you. You'll pass through the Drift on your way home — and a rebel fighter wing will be waiting. Break through. Four rebel fighters. Pick up the escort's weapons-tech from the wreckage on your way out — it's the last piece Intelligence needs."
+  success_text: "Four rebel fighters, four debris fields. Five units of salvaged weapons-tech in the hold, plus the chief engineer's schematics-core. The Drift falls silent behind you. Earth is next."
+  failure_text: "The intercept wing caught you in the Drift. The schematics-core is rebel property again."
+  preconditions:
+    - kind: completed
+      mission: espionage_9
+  offer:
+    kind: auto
+  start_effects:
+    - kind: load_cargo
+      commodity: weapons_tech
+      quantity: 3
+      reserved: true
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: fighter
+    count: 4
+    target_name: Rebel Intercept Wing
+    hostile: true
+    collect:
+      commodity: weapons_tech
+      quantity: 5
+  completion_effects:
+    - kind: pay
+      credits: 60000
+
+espionage_final:
+  briefing: "Bring the schematics-core and the salvaged weapons-tech home to Earth. Federation Intelligence is waiting."
+  success_text: "The officer stares at the schematics-core on her desk like it's something holy. 'Commander — we just stole the entire rebel fighter program.' A senior admiral, whose face you won't remember tomorrow, walks in and hands you a full Federation clearance: rebel-ship operational license. 'You can fly their fighters now, Commander. We built ours off of theirs. The circle closes.' 100,000 credits, the rebel ship license, and the knowledge that you're the reason the border holds."
+  failure_text: "The schematics-core was lost. Years of espionage work, gone."
+  preconditions:
+    - kind: completed
+      mission: espionage_10_escape
+  offer:
+    kind: auto
+  objective:
+    kind: land_on_planet
+    planet: earth
+  requires:
+    - kind: has_cargo
+      commodity: weapons_tech
+      quantity: 8
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_tech
+      quantity: 8
+    - kind: pay
+      credits: 100000
+    - kind: grant_unlock
+      name: rebel_ship_license

@@ -566,6 +566,24 @@ impl ShipBundle {
     pub fn get_personality(&self) -> Personality {
         self.ship.data.personality.clone()
     }
+
+    /// Replace the random starting cargo with a fixed commodity and quantity.
+    /// Used when a ship is being spawned for a mission whose objective has a
+    /// `collect` requirement, so the guaranteed drop on death matches the
+    /// player's objective. Warns if the cargo hold is too small.
+    pub fn set_mission_cargo(&mut self, commodity: String, quantity: u16) {
+        let hold = self.ship.data.cargo_space;
+        if quantity > hold {
+            warn!(
+                "Mission target '{}' cargo hold ({}) is smaller than required quantity ({}) of '{}'; loading only what fits",
+                self.ship.ship_type, hold, quantity, commodity,
+            );
+        }
+        self.ship.cargo.clear();
+        self.ship.cargo_cost.clear();
+        self.ship.reserved_cargo.clear();
+        self.ship.cargo.insert(commodity, quantity.min(hold));
+    }
 }
 
 /// Fill a ship's cargo hold to a uniformly random fraction with a single
@@ -830,9 +848,17 @@ fn apply_damage(
                     location,
                     size: 20.0,
                 });
+                // Mission targets drop their full cargo deterministically so
+                // the player can always meet a `collect` objective. Regular
+                // AI ships drop a random subset (1..=qty) for loot variance.
+                let is_mission_target = mission_targets.contains(event.entity);
                 for (commodity, &qty) in &ship.cargo {
                     if qty > 0 {
-                        let drop_qty = rng.gen_range(1..=qty);
+                        let drop_qty = if is_mission_target {
+                            qty
+                        } else {
+                            rng.gen_range(1..=qty)
+                        };
                         pickup_writer.write(crate::pickups::PickupDrop {
                             location,
                             commodity: commodity.clone(),
