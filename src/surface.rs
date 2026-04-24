@@ -11,8 +11,8 @@ use bevy_egui::EguiContexts;
 
 use crate::item_universe::ItemUniverse;
 use crate::missions::{
-    AbandonMission, AcceptMission, DeclineMission, MissionCatalog, MissionLog, MissionOffers,
-    PlayerUnlocks, render_bar_tab, render_missions_tab,
+    AbandonMission, AcceptMission, MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks,
+    render_missions_tab,
 };
 use crate::planet_ui::{
     LandedContext, render_outfitter_tab, render_shipyard_tab, render_trade_tab,
@@ -66,7 +66,6 @@ pub enum BuildingKind {
     Outfitter,
     Shipyard,
     Bar,
-    MissionControl,
 }
 
 impl BuildingKind {
@@ -78,7 +77,6 @@ impl BuildingKind {
             BuildingKind::Outfitter => "Outfitter",
             BuildingKind::Shipyard => "Shipyard",
             BuildingKind::Bar => "Bar",
-            BuildingKind::MissionControl => "Missions",
         }
     }
 
@@ -90,7 +88,6 @@ impl BuildingKind {
             BuildingKind::Outfitter => Color::srgb(0.7, 0.3, 0.3),
             BuildingKind::Shipyard => Color::srgb(0.3, 0.5, 0.8),
             BuildingKind::Bar => Color::srgb(0.8, 0.4, 0.1),
-            BuildingKind::MissionControl => Color::srgb(0.3, 0.7, 0.4),
         }
     }
 }
@@ -264,9 +261,11 @@ pub fn surface_plugin(app: &mut App) {
         .add_systems(
             OnExit(PlayState::Exploring),
             (
+                save_on_explore,
                 teardown_surface,
                 crate::surface_civilians::cleanup_civilians,
-            ),
+            )
+                .chain(),
         )
         .add_systems(
             Update,
@@ -319,7 +318,6 @@ pub fn surface_plugin(app: &mut App) {
 // Save
 // ---------------------------------------------------------------------------
 
-/// Save the game when entering the Exploring state.
 fn save_on_explore(
     game_state: Res<crate::game_save::PlayerGameState>,
     session_data: Res<crate::session::SessionSaveData>,
@@ -344,8 +342,8 @@ fn spawn_mission_npcs(
     };
     let planet_name = landed_context.planet_name.as_deref().unwrap_or("");
 
-    let bar_ids: Vec<String> = mission_offers
-        .bar
+    let mission_ids: Vec<String> = mission_offers
+        .npc
         .get(planet_name)
         .cloned()
         .unwrap_or_default();
@@ -381,7 +379,7 @@ fn spawn_mission_npcs(
     use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    for mission_id in &bar_ids {
+    for mission_id in &mission_ids {
         // Look up the mission def for NpcOffer config.
         let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str()) {
             match &def.offer {
@@ -403,7 +401,7 @@ fn spawn_mission_npcs(
                     (seek, door)
                 }
                 _ => {
-                    // Fallback for non-NpcOffer (shouldn't happen in bar).
+                    // Fallback for non-NpcOffer (shouldn't happen here).
                     let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
                     (false, door)
                 }
@@ -567,7 +565,6 @@ fn building_kinds_for_planet(
         }
     }
     kinds.push(BuildingKind::Bar);
-    kinds.push(BuildingKind::MissionControl);
     kinds
 }
 
@@ -1769,8 +1766,6 @@ fn building_interact(
     nearby: Res<NearbyBuilding>,
     mut active_ui: ResMut<ActiveBuildingUI>,
     mut next_state: ResMut<NextState<PlayState>>,
-    game_state: Res<crate::game_save::PlayerGameState>,
-    session_data: Res<crate::session::SessionSaveData>,
     npc_chat: Res<crate::surface_npc_chat::NpcChatState>,
 ) {
     // Don't process building keys while NPC chat is open.
@@ -1782,7 +1777,6 @@ fn building_interact(
         if active_ui.0.is_some() {
             active_ui.0 = None;
         } else {
-            crate::game_save::write_save(&game_state, &session_data);
             next_state.set(PlayState::MainMenu);
         }
         return;
@@ -1835,7 +1829,6 @@ fn surface_building_ui(
     mission_catalog: Res<MissionCatalog>,
     unlocks: Res<PlayerUnlocks>,
     mut accept_writer: MessageWriter<AcceptMission>,
-    mut decline_writer: MessageWriter<DeclineMission>,
     mut abandon_writer: MessageWriter<AbandonMission>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
@@ -1888,21 +1881,6 @@ fn surface_building_ui(
                     }
                 }
                 BuildingKind::Bar => {
-                    let free = player_query
-                        .single()
-                        .map(|s| s.remaining_cargo_space())
-                        .unwrap_or(0);
-                    render_bar_tab(
-                        ui,
-                        planet_name,
-                        &mission_offers,
-                        &mission_catalog,
-                        free,
-                        &mut accept_writer,
-                        &mut decline_writer,
-                    );
-                }
-                BuildingKind::MissionControl => {
                     let free = player_query
                         .single()
                         .map(|s| s.remaining_cargo_space())

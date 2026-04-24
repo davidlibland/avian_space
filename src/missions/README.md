@@ -17,7 +17,7 @@ deliver_wheat_intro:
   success_text: "The governor thanks you for the delivery."
   failure_text: "The grain is spoiled. The colony goes hungry."
   preconditions: []
-  offer: { kind: bar, planet: earth, weight: 1.0 }
+  offer: { kind: npc_offer, planet: earth, weight: 1.0, building: market, approach: seek }
   start_effects:
     - { kind: load_cargo, commodity: wheat, quantity: 10, reserved: true }
   objective: { kind: land_on_planet, planet: mars }
@@ -36,11 +36,20 @@ mars_followup:
 
 ### Offer kinds
 
-- `auto`: starts as soon as preconditions are met (story beats)
-- `tab { weight: f32 }`: appears in the Missions tab with Bernoulli
-  probability `weight` when the player lands anywhere
-- `bar { planet: String, weight: f32 }`: appears in that planet's Bar with
-  probability `weight` when the player lands there
+- `auto`: starts as soon as preconditions are met (story beats /
+  auto-started followup stages)
+- `tab { weight: f32 }`: appears in the landing planet's Bar tab
+  ("Available" section) with Bernoulli probability `weight` whenever the
+  player lands. Used for repeating/random contract templates.
+- `npc_offer { planet: String, weight: f32, building?: String,
+  approach?: Seek | Wait }`: the mission offer is represented by an NPC
+  that spawns on `planet`'s surface (with Bernoulli probability `weight`
+  when the player lands there). `building` is a hint naming which
+  building's door the NPC spawns near (e.g. `market`, `bar`,
+  `mechanicshop`, `shipyard`); unrecognised or absent values spawn at a
+  random door. `approach: seek` makes the NPC walk toward the player;
+  default `wait` leaves them standing at their post. Acceptance/decline
+  happens through the dialog in `surface_npc_chat`, not through a UI tab.
 
 ### Objective kinds
 
@@ -48,6 +57,13 @@ mars_followup:
 - `land_on_planet { planet }`
 - `collect_pickups { commodity, system, quantity }` — only pickups collected
   in the named system count; purchased cargo does not
+- `meet_npc { planet, npc_name, building?, approach? }` — completes when
+  the player gets adjacent to an NPC on `planet`'s surface. Same `building`
+  / `approach` semantics as `npc_offer`.
+- `catch_npc { planet, npc_name, building? }` — like `meet_npc` but the
+  NPC runs away; the player must chase them down to complete.
+- `destroy_ships { system, ship_type, count, target_name, hostile?,
+  collect? }` — see the kill-ship section below.
 
 ### Start effects
 
@@ -102,8 +118,9 @@ Templates live in `assets/mission_templates.yaml` as
 `HashMap<String, MissionTemplate>`. Each time the player lands, every
 template is Bernoulli-rolled against its `offer.weight`; hits are
 instantiated into concrete `MissionDef`s with a fresh random id (format:
-`{template_id}__{16-hex}`) and added to the appropriate offer list (tab or
-the landing planet's bar).
+`{template_id}__{16-hex}`) and added to the appropriate offer list: tab
+entries go into the Bar tab's "Available" section, `npc_offer` entries
+seed an NPC on the landing planet's surface.
 
 ### Template kinds
 
@@ -199,8 +216,9 @@ just do the same thing with random ids generated atomically.
 ## Extending
 
 All mission state flows through `MissionLog` (per-player statuses) and
-`MissionOffers` (currently-rolled tab/bar offers). Logic is split into
-`progress.rs` systems that each react to a single event type.
+`MissionOffers` (currently-rolled tab offers and per-planet NPC offers).
+Logic is split into `progress.rs` systems that each react to a single
+event type.
 
 ### Add a new objective kind
 

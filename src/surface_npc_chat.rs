@@ -303,7 +303,7 @@ fn generate_patrol_dialogue(pilot_name: &str, _waypoints: &[(u32, u32)]) -> Vec<
         "I heard a ship landed earlier. Must be you!",
         "The views on this planet never get old.",
         "Business has been slow lately.",
-        "If you're looking for work, check the mission board.",
+        "If you're looking for work, check the bar.",
         "Safe travels, pilot.",
     ];
 

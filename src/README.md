@@ -314,8 +314,10 @@ impl SessionResource for MissionLog {
   spawning.
 
 - **missions/ui.rs** — Egui-based mission UI: active mission list with
-  abandon buttons, available mission offers with accept/decline, bar tab,
+  abandon buttons, available mission offers (accept), bar tab renderer,
   mission log overlay (I key), and completion/failure toast notifications.
+  NPC-offered missions are accepted via surface NPC dialog
+  (`surface_npc_chat`), not through this UI.
 
 - **missions/tests.rs** — Unit tests for mission types, preconditions,
   requirements, cargo space calculations, YAML round-trips, and state
@@ -327,8 +329,9 @@ impl SessionResource for MissionLog {
   pilot loading.
 
 - **planet_ui.rs** — Landed-state planet UI (egui): trade commodities,
-  outfitter (buy/sell weapons and ammo), shipyard (buy ships), bar tab, and
-  missions tab. Handles launch with take-off animation.
+  outfitter (buy/sell weapons and ammo), shipyard (buy ships), and bar tab
+  (active mission log + available tab-offered contracts). Handles launch
+  with take-off animation.
 
 - **jump_ui.rs** — Star map overlay (egui): scrollable node graph of star
   systems with visited/discovered/jumpable states, mission objective markers,

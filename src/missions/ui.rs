@@ -37,7 +37,7 @@ pub fn render_active_missions(
     }
 }
 
-/// Render the Missions tab inside the planet UI window.
+/// Render the Bar tab inside the planet UI window.
 pub fn render_missions_tab(
     ui: &mut egui::Ui,
     log: &MissionLog,
@@ -58,37 +58,8 @@ pub fn render_missions_tab(
             let Some(def) = catalog.defs.get(id) else {
                 continue;
             };
-            render_offer(ui, id, def, player_free_cargo, accept, None);
+            render_offer(ui, id, def, player_free_cargo, accept);
         }
-    }
-}
-
-/// Render the Bar tab (for the currently-landed planet).
-pub fn render_bar_tab(
-    ui: &mut egui::Ui,
-    planet_name: &str,
-    offers: &MissionOffers,
-    catalog: &MissionCatalog,
-    player_free_cargo: u16,
-    accept: &mut MessageWriter<AcceptMission>,
-    decline: &mut MessageWriter<DeclineMission>,
-) {
-    ui.heading("The Bar");
-    ui.label("Patrons hunch over drinks. Some glance up as you enter.");
-    ui.separator();
-    let Some(ids) = offers.bar.get(planet_name) else {
-        ui.label("(Nobody has work for you tonight.)");
-        return;
-    };
-    if ids.is_empty() {
-        ui.label("(Nobody has work for you tonight.)");
-        return;
-    }
-    for id in ids {
-        let Some(def) = catalog.defs.get(id) else {
-            continue;
-        };
-        render_offer(ui, id, def, player_free_cargo, accept, Some(decline));
     }
 }
 
@@ -98,7 +69,6 @@ fn render_offer(
     def: &MissionDef,
     player_free_cargo: u16,
     accept: &mut MessageWriter<AcceptMission>,
-    decline: Option<&mut MessageWriter<DeclineMission>>,
 ) {
     let required = def.required_cargo_space();
     let has_space = player_free_cargo >= required;
@@ -110,20 +80,13 @@ fn render_offer(
                 required, player_free_cargo
             ));
         }
-        ui.horizontal(|ui| {
-            ui.add_enabled_ui(has_space, |ui| {
-                let btn = ui.button("Accept");
-                if btn.clicked() {
-                    accept.write(AcceptMission(id.to_string()));
-                }
-                if !has_space {
-                    btn.on_hover_text("Not enough free cargo space.");
-                }
-            });
-            if let Some(decline) = decline {
-                if ui.button("Decline").clicked() {
-                    decline.write(DeclineMission(id.to_string()));
-                }
+        ui.add_enabled_ui(has_space, |ui| {
+            let btn = ui.button("Accept");
+            if btn.clicked() {
+                accept.write(AcceptMission(id.to_string()));
+            }
+            if !has_space {
+                btn.on_hover_text("Not enough free cargo space.");
             }
         });
     });

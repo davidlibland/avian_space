@@ -20,7 +20,7 @@ pub use log::{
     MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, PlayerUnlocks,
 };
 pub use types::{MissionDef, MissionStatus, MissionTarget, MissionTemplate, NpcApproach, Objective, OfferKind};
-pub use ui::{missions_ui_plugin, render_bar_tab, render_missions_tab};
+pub use ui::{missions_ui_plugin, render_missions_tab};
 
 pub fn missions_plugin(app: &mut App) {
     app.init_session_resource::<MissionLog>()

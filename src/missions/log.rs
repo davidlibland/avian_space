@@ -46,9 +46,7 @@ impl SessionResource for MissionLog {
     }
 
     fn from_save(data: Self::SaveData, _universe: &ItemUniverse) -> Self {
-        Self {
-            statuses: data.0,
-        }
+        Self { statuses: data.0 }
     }
 }
 
@@ -200,8 +198,8 @@ impl SessionResource for PlayerUnlocks {
 pub struct MissionOffers {
     /// Missions offered in the tab of the currently-landed planet.
     pub tab: Vec<String>,
-    /// planet → list of mission ids currently available in that planet's bar.
-    pub bar: HashMap<String, Vec<String>>,
+    /// planet → list of mission ids currently available by npc's on the planet.
+    pub npc: HashMap<String, Vec<String>>,
 }
 
 impl SessionResource for MissionOffers {

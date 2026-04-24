@@ -1,14 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
+use super::{PendingSessionLoad, SessionResource, SessionSaveData};
 use crate::game_save::{Gender, PilotSave, PlayerGameState};
 use crate::item_universe::{ItemUniverse, StarSystem};
+use crate::missions::types::{MissionDef, MissionStatus, Objective, ObjectiveProgress, OfferKind};
 use crate::missions::{
     MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, PlayerUnlocks,
 };
-use crate::missions::types::{
-    MissionDef, MissionStatus, Objective, ObjectiveProgress, OfferKind,
-};
-use super::{PendingSessionLoad, SessionResource, SessionSaveData};
 use crate::ship::{Personality, ShipData};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -102,13 +100,19 @@ fn sample_mission_def(name: &str) -> MissionDef {
 #[test]
 fn mission_log_filters_locked_on_save() {
     let mut log = MissionLog::default();
-    log.set("quest_a", MissionStatus::Active(ObjectiveProgress::default()));
+    log.set(
+        "quest_a",
+        MissionStatus::Active(ObjectiveProgress::default()),
+    );
     log.set("quest_b", MissionStatus::Locked);
     log.set("quest_c", MissionStatus::Completed);
 
     let saved = log.to_save();
     // Locked statuses should be stripped.
-    assert!(!saved.0.contains_key("quest_b"), "Locked status should not be saved");
+    assert!(
+        !saved.0.contains_key("quest_b"),
+        "Locked status should not be saved"
+    );
     assert_eq!(saved.0.len(), 2);
     assert!(saved.0.contains_key("quest_a"));
     assert!(saved.0.contains_key("quest_c"));
@@ -118,7 +122,10 @@ fn mission_log_filters_locked_on_save() {
 fn mission_log_roundtrip() {
     let iu = basic_universe();
     let mut log = MissionLog::default();
-    log.set("quest_a", MissionStatus::Active(ObjectiveProgress::default()));
+    log.set(
+        "quest_a",
+        MissionStatus::Active(ObjectiveProgress::default()),
+    );
     log.set("quest_b", MissionStatus::Completed);
     log.set("quest_c", MissionStatus::Failed);
 
@@ -147,9 +154,10 @@ fn mission_catalog_roundtrip_merges_with_base() {
 
     // Simulate a catalog that has base + a procedural mission.
     let mut catalog = MissionCatalog::new_session(&iu);
-    catalog
-        .defs
-        .insert("procedural_1".to_string(), sample_mission_def("procedural_1"));
+    catalog.defs.insert(
+        "procedural_1".to_string(),
+        sample_mission_def("procedural_1"),
+    );
 
     let saved = catalog.to_save();
     let yaml = serde_yaml::to_string(&saved).unwrap();
@@ -165,9 +173,10 @@ fn mission_catalog_roundtrip_merges_with_base() {
 fn mission_catalog_to_save_excludes_base_defs() {
     let iu = basic_universe();
     let mut catalog = MissionCatalog::new_session(&iu);
-    catalog
-        .defs
-        .insert("procedural_1".to_string(), sample_mission_def("procedural_1"));
+    catalog.defs.insert(
+        "procedural_1".to_string(),
+        sample_mission_def("procedural_1"),
+    );
 
     let saved = catalog.to_save();
     // Base def should NOT be in the save snapshot.
@@ -191,7 +200,10 @@ fn mission_catalog_base_keys_populated() {
 fn mission_catalog_from_save_preserves_base_keys() {
     let iu = basic_universe();
     let mut saved = HashMap::new();
-    saved.insert("procedural_1".to_string(), sample_mission_def("procedural_1"));
+    saved.insert(
+        "procedural_1".to_string(),
+        sample_mission_def("procedural_1"),
+    );
     let catalog = MissionCatalog::from_save(MissionCatalogSave(saved), &iu);
 
     assert!(catalog.base_keys.contains("base_quest"));
@@ -403,7 +415,7 @@ fn ephemeral_new_session_is_default() {
     let iu = basic_universe();
     let offers = MissionOffers::new_session(&iu);
     assert!(offers.tab.is_empty());
-    assert!(offers.bar.is_empty());
+    assert!(offers.npc.is_empty());
 }
 
 // ── Full pipeline: session data → PilotSave YAML → session data ─────────
@@ -414,7 +426,10 @@ fn full_pipeline_roundtrip() {
 
     // 1. Build session resource state.
     let mut log = MissionLog::default();
-    log.set("quest_a", MissionStatus::Active(ObjectiveProgress::default()));
+    log.set(
+        "quest_a",
+        MissionStatus::Active(ObjectiveProgress::default()),
+    );
     log.set("quest_b", MissionStatus::Completed);
 
     let mut catalog = MissionCatalog::new_session(&iu);
@@ -447,17 +462,18 @@ fn full_pipeline_roundtrip() {
     // 4. Deserialise back.
     let loaded: PilotSave = serde_yaml::from_str(&yaml).unwrap();
     assert_eq!(loaded.pilot_name, "TestPilot");
-    assert!(!loaded.resources.is_empty(), "resources map should be populated");
+    assert!(
+        !loaded.resources.is_empty(),
+        "resources map should be populated"
+    );
 
     // 5. Simulate PendingSessionLoad → restore each resource.
     let pending = PendingSessionLoad {
         resources: loaded.resources,
     };
 
-    let log_data: MissionLogSave = serde_yaml::from_value(
-        pending.resources.get("mission_statuses").unwrap().clone(),
-    )
-    .unwrap();
+    let log_data: MissionLogSave =
+        serde_yaml::from_value(pending.resources.get("mission_statuses").unwrap().clone()).unwrap();
     let restored_log = MissionLog::from_save(log_data, &iu);
     assert_eq!(
         restored_log.status("quest_a"),
@@ -468,17 +484,19 @@ fn full_pipeline_roundtrip() {
     assert_eq!(restored_log.status("quest_c"), MissionStatus::Locked);
 
     let catalog_data: MissionCatalogSave = serde_yaml::from_value(
-        pending.resources.get("active_mission_defs").unwrap().clone(),
+        pending
+            .resources
+            .get("active_mission_defs")
+            .unwrap()
+            .clone(),
     )
     .unwrap();
     let restored_catalog = MissionCatalog::from_save(catalog_data, &iu);
     assert!(restored_catalog.defs.contains_key("base_quest"));
     assert!(restored_catalog.defs.contains_key("dynamic_1"));
 
-    let unlocks_data: HashSet<String> = serde_yaml::from_value(
-        pending.resources.get("unlocks").unwrap().clone(),
-    )
-    .unwrap();
+    let unlocks_data: HashSet<String> =
+        serde_yaml::from_value(pending.resources.get("unlocks").unwrap().clone()).unwrap();
     let restored_unlocks = PlayerUnlocks::from_save(unlocks_data, &iu);
     assert!(restored_unlocks.has("warp_drive"));
 }
@@ -538,7 +556,10 @@ fn missing_resource_key_falls_back_to_default() {
         .and_then(|v| serde_yaml::from_value::<MissionLogSave>(v.clone()).ok())
         .unwrap_or_default();
     let log = MissionLog::from_save(data, &iu);
-    assert!(log.statuses.is_empty(), "Missing key should produce empty log");
+    assert!(
+        log.statuses.is_empty(),
+        "Missing key should produce empty log"
+    );
 }
 
 #[test]
@@ -576,10 +597,8 @@ fn partial_save_loads_independently() {
     let pending = PendingSessionLoad { resources };
 
     // Unlocks should restore.
-    let unlocks_data: HashSet<String> = serde_yaml::from_value(
-        pending.resources.get("unlocks").unwrap().clone(),
-    )
-    .unwrap();
+    let unlocks_data: HashSet<String> =
+        serde_yaml::from_value(pending.resources.get("unlocks").unwrap().clone()).unwrap();
     let unlocks = PlayerUnlocks::from_save(unlocks_data, &iu);
     assert!(unlocks.has("shields"));
 

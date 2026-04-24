@@ -53,7 +53,18 @@
       "Bash(grep -rn \"MissionStatus::Completed\\\\|MissionStatus::Failed\" /Users/dlibland/dev/avian_space/src/missions/*.rs)",
       "Bash(grep -A5 \"cannot borrow \\\\`log\\\\`\")",
       "Bash(ls /Users/dlibland/dev/avian_space/src/*.rs)",
-      "Bash(awk -F'name: ' '{print $2}')"
+      "Bash(awk -F'name: ' '{print $2}')",
+      "Bash(xargs ls *)",
+      "Bash(awk '/^[a-z_]+:/ {mission=$0} /building: bar/ {print mission}' /Users/dlibland/dev/avian_space/assets/missions.yaml)",
+      "Bash(awk '/^[a-z_]+:/ {mission=$1} /building: bar/ {print mission}' /Users/dlibland/dev/avian_space/assets/missions.yaml)",
+      "Bash(awk '/^[a-z_]+:/ {current=$0; gsub\\(/:/, \"\", current\\)} /building: bar/ {print current}' /Users/dlibland/dev/avian_space/assets/missions.yaml)",
+      "Bash(awk '/^pirate_escape_pod/{flag=1} flag{print} /^[a-z_]+:/ && !/^pirate_escape_pod/{flag=0}' /Users/dlibland/dev/avian_space/assets/missions.yaml)",
+      "Bash(awk ' *)",
+      "Bash(awk 'NR>=1825 && NR<=1950' /Users/dlibland/dev/avian_space/src/surface.rs)",
+      "Bash(awk '/rolled_bar|offers\\\\.bar|\\\\.bar\\\\.|\\\\bbar\\\\b/ {print NR\": \"$0}' /Users/dlibland/dev/avian_space/src/missions/progress.rs)",
+      "Bash(awk '/bar/ {print NR\": \"$0}' /Users/dlibland/dev/avian_space/src/missions/log.rs /Users/dlibland/dev/avian_space/src/missions/progress.rs)",
+      "Bash(awk 'NR>=1 && NR<=50')",
+      "Bash(awk '/^fn building_interact\\\\\\(/,/^fn [a-z]/' /Users/dlibland/dev/avian_space/src/surface.rs)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds"

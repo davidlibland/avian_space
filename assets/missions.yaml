@@ -74,7 +74,7 @@ scavenge_iron_deliver:
 # asteroid mining across the Federation core and border systems. The final
 # stage grants the mining license (unlocks the asteroid_miner in shipyards)
 # plus an ongoing mining-template unlock so paid mining contracts keep
-# showing up on mission boards.
+# showing up in the bar.
 
 mining_story_1:
   briefing: "A weather-beaten Mining Guild recruiter loiters near the shipyard, eyeing incoming pilots. She waves you over. 'Kid, we're short on haulers. Shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 4,000 credits. Find me at the Mars market when you're done.'"
@@ -118,7 +118,7 @@ mining_story_2:
 
 mining_story_3:
   briefing: "A wiry Guild agent waits outside the Barnard Rock market, arms folded. 'Border work. 8 units of clean iron, pulled from the Barnard belt. Rebels and pirates both sweep through here, so keep your eyes open. 18,000 credits — and if you make it back, you'll have earned your Miner's Guild certification. Real mining contracts will start showing up after that.'"
-  success_text: "The agent slides a signed certification across the counter: 'You're Guild now. Check any mission board for mining contracts.' Your ship computer registers the new licenses."
+  success_text: "The agent slides a signed certification across the counter: 'You're Guild now. Check any bar for mining contracts.' Your ship computer registers the new licenses."
   failure_text: "The agent sighs. 'The border eats the unprepared.'"
   preconditions:
     - kind: completed
@@ -293,8 +293,8 @@ pirate_escape_pod:
 # Escalating combat missions that unlock the corvette, frigate, and IR
 # missiles. Starts at Earth shipyard (Sol), moves outward through
 # progressively dangerous systems. Completing the full arc grants
-# bounty_hunter_license which unlocks ongoing random bounty templates on
-# mission boards.
+# bounty_hunter_license which unlocks ongoing random bounty templates in
+# any bar.
 
 # Phase 1: Corvette path (2 missions, pays ~18k each → corvette costs 18k)
 

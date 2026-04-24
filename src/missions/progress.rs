@@ -1,6 +1,7 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 use rand::Rng;
+use rand::seq::SliceRandom;
 
 use super::events::*;
 use super::log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
@@ -154,7 +155,7 @@ pub fn handle_ui_actions(
 
 fn remove_from_offers(offers: &mut MissionOffers, id: &str) {
     offers.tab.retain(|m| m != id);
-    for v in offers.bar.values_mut() {
+    for v in offers.npc.values_mut() {
         v.retain(|m| m != id);
     }
 }
@@ -660,8 +661,13 @@ pub fn advance_meet_npc_objectives(
             if let Objective::MeetNpc { planet: target, .. } = &def.objective {
                 if target == planet {
                     resolve_active_mission(
-                        mission_id, def, ship, &unlocks,
-                        &mut log, &mut completed, &mut failed,
+                        mission_id,
+                        def,
+                        ship,
+                        &unlocks,
+                        &mut log,
+                        &mut completed,
+                        &mut failed,
                     );
                 }
             }
@@ -687,8 +693,13 @@ pub fn advance_catch_npc_objectives(
             if let Objective::CatchNpc { planet: target, .. } = &def.objective {
                 if target == planet {
                     resolve_active_mission(
-                        mission_id, def, ship, &unlocks,
-                        &mut log, &mut completed, &mut failed,
+                        mission_id,
+                        def,
+                        ship,
+                        &unlocks,
+                        &mut log,
+                        &mut completed,
+                        &mut failed,
                     );
                 }
             }
@@ -747,21 +758,21 @@ pub fn roll_offers_on_land(
 
         // Static missions currently Available.
         let mut tab: Vec<(String, f32)> = Vec::new();
-        let mut bar: Vec<(String, f32)> = Vec::new();
+        let mut npc: Vec<(String, f32)> = Vec::new();
         for (id, def) in &catalog.defs {
             if !matches!(log.status(id), MissionStatus::Available) {
                 continue;
             }
             match &def.offer {
                 OfferKind::Tab { weight } => tab.push((id.clone(), *weight)),
-                OfferKind::NpcOffer { planet: p, weight, .. } if p == planet => {
-                    bar.push((id.clone(), *weight))
-                }
+                OfferKind::NpcOffer {
+                    planet: p, weight, ..
+                } if p == planet => npc.push((id.clone(), *weight)),
                 _ => {}
             }
         }
         let mut rolled_tab = roll(&tab, &mut rng);
-        let mut rolled_bar = roll(&bar, &mut rng);
+        let mut rolled_npc = roll(&npc, &mut rng);
 
         // Procedurally generate mission instances from templates.
         for (template_id, template) in &universe.mission_templates {
@@ -784,9 +795,11 @@ pub fn roll_offers_on_land(
                         None
                     }
                 }
-                OfferKind::NpcOffer { planet: p, weight, .. } if p == planet => {
+                OfferKind::NpcOffer {
+                    planet: p, weight, ..
+                } if p == planet => {
                     if rng.gen_range(0.0..1.0) < weight.clamp(0.0, 1.0) {
-                        Some(&mut rolled_bar)
+                        Some(&mut rolled_npc)
                     } else {
                         None
                     }
@@ -801,8 +814,14 @@ pub fn roll_offers_on_land(
             }
         }
 
+        const MAX_TAB_OFFERS: usize = 5;
+        if rolled_tab.len() > MAX_TAB_OFFERS {
+            rolled_tab.partial_shuffle(&mut rng, MAX_TAB_OFFERS);
+            rolled_tab.truncate(MAX_TAB_OFFERS);
+        }
+
         offers.tab = rolled_tab;
-        offers.bar.insert(planet.clone(), rolled_bar);
+        offers.npc.insert(planet.clone(), rolled_npc);
     }
 }
 
@@ -1116,12 +1135,22 @@ fn instantiate_template(
             vec![(gen_id(template_id, rng), def)]
         }
         MissionTemplate::CatchThief {
-            stage1_briefing, stage1_success_text, stage1_failure_text,
-            stage2_briefing, stage2_success_text, stage2_failure_text,
-            stage3_briefing, stage3_success_text, stage3_failure_text,
-            offer, preconditions: _,
-            ship_type_pool, target_name, commodity_pool,
-            quantity_range, pay_range,
+            stage1_briefing,
+            stage1_success_text,
+            stage1_failure_text,
+            stage2_briefing,
+            stage2_success_text,
+            stage2_failure_text,
+            stage3_briefing,
+            stage3_success_text,
+            stage3_failure_text,
+            offer,
+            preconditions: _,
+            ship_type_pool,
+            target_name,
+            commodity_pool,
+            quantity_range,
+            pay_range,
         } => {
             if ship_type_pool.is_empty() || commodity_pool.is_empty() {
                 return Vec::new();
@@ -1133,7 +1162,9 @@ fn instantiate_template(
                 .filter(|(_, sys)| !sys.planets.is_empty())
                 .map(|(id, sys)| (id.clone(), sys.display_name.clone()))
                 .collect();
-            if systems.is_empty() { return Vec::new(); }
+            if systems.is_empty() {
+                return Vec::new();
+            }
             let (sys_id, sys_display) = systems[rng.gen_range(0..systems.len())].clone();
 
             let ship_type = ship_type_pool[rng.gen_range(0..ship_type_pool.len())].clone();
@@ -1146,14 +1177,20 @@ fn instantiate_template(
                 .star_systems
                 .iter()
                 .flat_map(|(_, sys)| {
-                    sys.planets.iter().map(|(pid, p)| (pid.clone(), p.display_name.clone()))
+                    sys.planets
+                        .iter()
+                        .map(|(pid, p)| (pid.clone(), p.display_name.clone()))
                 })
                 .filter(|(pid, _)| pid != offer_planet)
                 .collect();
-            if all_planets.len() < 2 { return Vec::new(); }
+            if all_planets.len() < 2 {
+                return Vec::new();
+            }
             let deliver_idx = rng.gen_range(0..all_planets.len());
             let mut chase_idx = rng.gen_range(0..all_planets.len() - 1);
-            if chase_idx >= deliver_idx { chase_idx += 1; }
+            if chase_idx >= deliver_idx {
+                chase_idx += 1;
+            }
             let (deliver_planet, deliver_display) = all_planets[deliver_idx].clone();
             let (chase_planet, chase_display) = all_planets[chase_idx].clone();
 
@@ -1189,7 +1226,10 @@ fn instantiate_template(
                     count: 1,
                     target_name: target_name.clone(),
                     hostile: true,
-                    collect: Some(CollectRequirement { commodity: commodity.clone(), quantity }),
+                    collect: Some(CollectRequirement {
+                        commodity: commodity.clone(),
+                        quantity,
+                    }),
                 },
                 requires: Vec::new(),
                 completion_effects: Vec::new(),
@@ -1200,14 +1240,22 @@ fn instantiate_template(
                 briefing: subst(stage2_briefing, &vars),
                 success_text: subst(stage2_success_text, &vars),
                 failure_text: subst(stage2_failure_text, &vars),
-                preconditions: vec![Precondition::Completed { mission: stage1_id.clone() }],
+                preconditions: vec![Precondition::Completed {
+                    mission: stage1_id.clone(),
+                }],
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
-                objective: Objective::LandOnPlanet { planet: deliver_planet },
-                requires: vec![CompletionRequirement::HasCargo { commodity: commodity.clone(), quantity }],
-                completion_effects: vec![
-                    CompletionEffect::RemoveCargo { commodity, quantity },
-                ],
+                objective: Objective::LandOnPlanet {
+                    planet: deliver_planet,
+                },
+                requires: vec![CompletionRequirement::HasCargo {
+                    commodity: commodity.clone(),
+                    quantity,
+                }],
+                completion_effects: vec![CompletionEffect::RemoveCargo {
+                    commodity,
+                    quantity,
+                }],
             };
 
             // Stage 3: Catch the thief on a planet.
@@ -1215,7 +1263,9 @@ fn instantiate_template(
                 briefing: subst(stage3_briefing, &vars),
                 success_text: subst(stage3_success_text, &vars),
                 failure_text: subst(stage3_failure_text, &vars),
-                preconditions: vec![Precondition::Completed { mission: stage2_id.clone() }],
+                preconditions: vec![Precondition::Completed {
+                    mission: stage2_id.clone(),
+                }],
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
                 objective: Objective::CatchNpc {
