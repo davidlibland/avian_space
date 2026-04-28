@@ -64,7 +64,10 @@
       "Bash(awk '/rolled_bar|offers\\\\.bar|\\\\.bar\\\\.|\\\\bbar\\\\b/ {print NR\": \"$0}' /Users/dlibland/dev/avian_space/src/missions/progress.rs)",
       "Bash(awk '/bar/ {print NR\": \"$0}' /Users/dlibland/dev/avian_space/src/missions/log.rs /Users/dlibland/dev/avian_space/src/missions/progress.rs)",
       "Bash(awk 'NR>=1 && NR<=50')",
-      "Bash(awk '/^fn building_interact\\\\\\(/,/^fn [a-z]/' /Users/dlibland/dev/avian_space/src/surface.rs)"
+      "Bash(awk '/^fn building_interact\\\\\\(/,/^fn [a-z]/' /Users/dlibland/dev/avian_space/src/surface.rs)",
+      "Bash(python scripts/analyze_rewards.py experiments/run_21/tb)",
+      "Bash(pip show *)",
+      "Bash(python scripts/monitor_training.py experiments/run_21/tb)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds"
