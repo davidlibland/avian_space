@@ -369,6 +369,7 @@ fn test_slot_block_extraction() {
             torque: 10.0,
             is_hostile: 1.0,
             should_engage: 1.0,
+            is_ally: -1.0,
             personality: Personality::Fighter,
             distressed: 0.0,
             primary_weapon_range: 0.0,

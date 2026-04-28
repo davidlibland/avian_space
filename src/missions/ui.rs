@@ -236,7 +236,10 @@ pub fn missions_ui_plugin(app: &mut App) {
         .init_session_resource::<MissionLogOpen>()
         .add_systems(
             Update,
-            toggle_mission_log.run_if(in_state(crate::PlayState::Flying)),
+            (
+                toggle_mission_log.run_if(in_state(crate::PlayState::Flying)),
+                drain_completion_toasts,
+            ),
         )
         .add_systems(
             EguiPrimaryContextPass,

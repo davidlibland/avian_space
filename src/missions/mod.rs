@@ -56,7 +56,6 @@ pub fn missions_plugin(app: &mut App) {
                 progress::finalize_completions,
                 progress::finalize_failures,
                 progress::despawn_targets_on_failure,
-                ui::drain_completion_toasts,
             )
                 .chain(),
         )

@@ -102,9 +102,9 @@ pub const SLOT_VALUE: usize = TYPE_BLOCK_START; // 16
 /// Offset of entity-kind features (after value).
 pub const SLOT_TYPE_SPECIFIC: usize = TYPE_BLOCK_START + 1; // 17
 /// Number of entity-kind feature floats (padded to max across all types).
-pub const TYPE_SPECIFIC_SIZE: usize = 15;
+pub const TYPE_SPECIFIC_SIZE: usize = 16;
 /// Total size of block 4 (value + type_specific).
-pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 16
+pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 17
 
 // ── Ship type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ─────
 pub const SHIP_IS_HOSTILE: usize = 4;
@@ -119,6 +119,10 @@ pub const SHIP_IS_TARGETING_ME: usize = 12;
 pub const SHIP_THRUST: usize = 13;
 /// Ship's primary shots-per-second (1 / effective_cooldown).
 pub const SHIP_PRIMARY_FIRE_RATE: usize = 14;
+/// 1.0 if the other ship's faction is in the observer's `allies` list,
+/// -1.0 otherwise. Distinct from `should_engage`/`is_hostile`, which are
+/// per-encounter hostility flags rather than faction alliance.
+pub const SHIP_IS_ALLY: usize = 15;
 
 // ── Planet type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ───
 pub const PLANET_CARGO_PROFIT_VALUE: usize = 0;
@@ -134,7 +138,7 @@ pub const TYPE_IDX_PLANET: usize = 2;
 pub const TYPE_IDX_PICKUP: usize = 3;
 
 /// Floats per entity slot (sum of all blocks).
-pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE; // = 26
+pub const SLOT_SIZE: usize = TYPE_ONEHOT_SIZE + 1 + CORE_FEAT_SIZE + TYPE_BLOCK_SIZE; // = 27
 
 // ── Self-state block offsets ─────────────────────────────────────────────
 // Offsets within the self-state block. Must be kept contiguous; `SELF_SIZE`
@@ -257,6 +261,9 @@ pub struct ShipSlotData {
     pub is_hostile: f32,
     /// 1.0 = should_engage, 0.0 = unknown / neutral, -1.0 = friendly.
     pub should_engage: f32,
+    /// 1.0 = ally (other ship's faction is in observer's `allies` list),
+    /// -1.0 = not ally / unknown faction.
+    pub is_ally: f32,
     pub personality: Personality,
     /// Distressed level (1.0 = just hit, decays toward 0).
     pub distressed: f32,
@@ -827,6 +834,7 @@ fn encode_slot(
             ts[SHIP_IS_TARGETING_ME] = ship.is_targeting_me;
             ts[SHIP_THRUST] = ship.thrust;
             ts[SHIP_PRIMARY_FIRE_RATE] = ship.primary_fire_rate;
+            ts[SHIP_IS_ALLY] = ship.is_ally;
         }
         EntityKind::Planet(planet) => {
             ts[0] = planet.cargo_profit_value;

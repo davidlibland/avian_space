@@ -4,7 +4,7 @@
 #
 # "Federation: [Merchant]" means Federation ships get a fraction of nearby
 # Merchant ships' rewards — incentivising Fighters to protect traders.
-Federation: ["Merchant"]
-Rebel: ["Merchant"]
-Merchant: []
-Pirate: []
+Federation: ["Merchant", "Federation"]
+Rebel: ["Merchant", "Rebel"]
+Merchant: ["Merchant"]
+Pirate: ["Pirate"]

@@ -838,6 +838,10 @@ fn build_all_observations(
                     } else {
                         -1.0
                     };
+                    let is_ally = match other_ship.data.faction.as_ref() {
+                        Some(f) if ship.allies.contains(f) => 1.0,
+                        _ => -1.0,
+                    };
                     let data = item_universe.ships.get(&other_ship.ship_type);
                     let other_distressed = all_distressed.get(e).map(|d| d.level).unwrap_or(0.0);
                     // Their primary weapon's range + fire rate (first primary, if any).
@@ -869,6 +873,7 @@ fn build_all_observations(
                         torque: data.map(|d| d.torque as f32).unwrap_or(0.0),
                         is_hostile,
                         should_engage,
+                        is_ally,
                         personality: data.map(|d| d.personality.clone()).unwrap_or_default(),
                         distressed: other_distressed,
                         primary_weapon_range: other_primary_range,

@@ -18,7 +18,7 @@ fighter:
   max_speed: 200.0
   torque: 35.0
   max_health: 75
-  cargo_space: 4
+  cargo_space: 8
   item_space: 8
   base_weapons:
     laser: [2, null]
@@ -67,7 +67,7 @@ corvette:
   max_speed: 280.0
   torque: 50.0
   max_health: 90
-  cargo_space: 2
+  cargo_space: 10
   item_space: 9
   base_weapons:
     proton_beam: [1, null]
@@ -81,7 +81,7 @@ frigate:
   max_speed: 130.0
   torque: 18.0
   max_health: 220
-  cargo_space: 12
+  cargo_space: 20
   item_space: 30
   base_weapons:
     proton_beam: [2, null]
