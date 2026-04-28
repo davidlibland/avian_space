@@ -14,6 +14,7 @@ use burn::{
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 
+use crate::config::{PpoConfig, RewardConfig};
 use crate::consts::{N_REWARD_TYPES, REWARD_TYPE_NAMES};
 use crate::gae;
 use crate::model::{
@@ -28,37 +29,13 @@ use super::buffer::ValueReplayBuffer;
 use super::loss::{compute_log_probs_and_entropy, ppo_clipped_loss};
 use super::persistence::{load_rl_buffer, load_step_counter, save_all_checkpoints};
 
-// ---------------------------------------------------------------------------
-// PPO hyperparameters
-// ---------------------------------------------------------------------------
-
-const PPO_GAMMA: f32 = 0.99;
-const PPO_LAMBDA: f32 = 0.95;
-const PPO_CLIP_EPS: f32 = 0.1;
-const PPO_ENTROPY_COEFF: f32 = 0.01;
-/// Coefficient on the behavioural-cloning auxiliary loss during PPO.
-const PPO_BC_COEFF: f32 = 0.01;
-const PPO_POLICY_LR: f64 = 3e-4;
-const PPO_VALUE_LR: f64 = 1e-3;
-const PPO_POLICY_EPOCHS: usize = 2;
-const PPO_VALUE_EPOCHS: usize = 4;
-const PPO_MINI_BATCH_SIZE: usize = 512;
-const PPO_MIN_SEGMENTS: usize = 16;
-const PPO_MAX_SEGMENTS: usize = 64;
-const PPO_WEIGHT_SYNC_INTERVAL: usize = 1;
-const PPO_SAVE_INTERVAL: usize = 30;
-const PPO_HUBER_DELTA: f32 = 1.0;
-const PPO_VALUE_BURNIN_EV_THRESHOLD: f32 = 0.3;
-
-const VALUE_REPLAY_CAPACITY: usize = 8192;
-const VALUE_REPLAY_FRACTION: f32 = 0.25;
-const VALUE_REPLAY_EXTRA_BATCHES: usize = 4;
-
 /// Spawn the PPO training thread.
 pub fn spawn_ppo_training_thread(
     rl_rx: mpsc::Receiver<Segment>,
     inference_net: Arc<Mutex<InferenceNet>>,
     experiment: crate::experiments::ExperimentSetup,
+    ppo: PpoConfig,
+    rewards: RewardConfig,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let device: <TrainBackend as Backend>::Device = Default::default();
@@ -103,7 +80,8 @@ pub fn spawn_ppo_training_thread(
             Vec::new()
         };
         let mut rng = thread_rng();
-        let mut value_replay = ValueReplayBuffer::new(VALUE_REPLAY_CAPACITY);
+        let mut value_replay = ValueReplayBuffer::new(ppo.value_replay_capacity);
+        let reward_type_weights = rewards.reward_type_weights();
 
         let bc_loss_fn =
             burn::nn::loss::CrossEntropyLossConfig::new().init::<TrainBackend>(&device);
@@ -111,22 +89,22 @@ pub fn spawn_ppo_training_thread(
         let tb_dir = format!("{}/tb", experiment.run_dir);
         std::fs::create_dir_all(&tb_dir).ok();
         let mut writer = SummaryWriter::new(&tb_dir);
-        writer.add_scalar("hparams/gamma", PPO_GAMMA, 0);
-        writer.add_scalar("hparams/lambda", PPO_LAMBDA, 0);
-        writer.add_scalar("hparams/clip_eps", PPO_CLIP_EPS, 0);
-        writer.add_scalar("hparams/entropy_coeff", PPO_ENTROPY_COEFF, 0);
-        writer.add_scalar("hparams/policy_lr", PPO_POLICY_LR as f32, 0);
-        writer.add_scalar("hparams/value_lr", PPO_VALUE_LR as f32, 0);
-        writer.add_scalar("hparams/policy_epochs", PPO_POLICY_EPOCHS as f32, 0);
-        writer.add_scalar("hparams/value_epochs", PPO_VALUE_EPOCHS as f32, 0);
-        writer.add_scalar("hparams/mini_batch_size", PPO_MINI_BATCH_SIZE as f32, 0);
+        writer.add_scalar("hparams/gamma", ppo.gamma, 0);
+        writer.add_scalar("hparams/lambda", ppo.lambda, 0);
+        writer.add_scalar("hparams/clip_eps", ppo.clip_eps, 0);
+        writer.add_scalar("hparams/entropy_coeff", ppo.entropy_coeff, 0);
+        writer.add_scalar("hparams/policy_lr", ppo.policy_lr as f32, 0);
+        writer.add_scalar("hparams/value_lr", ppo.value_lr as f32, 0);
+        writer.add_scalar("hparams/policy_epochs", ppo.policy_epochs as f32, 0);
+        writer.add_scalar("hparams/value_epochs", ppo.value_epochs as f32, 0);
+        writer.add_scalar("hparams/mini_batch_size", ppo.mini_batch_size as f32, 0);
 
         println!("[ppo] Training thread started, waiting for segments...");
         let mut t_wait_start = Instant::now();
 
         loop {
             // ── Phase 1: Collect segments ─────────────────────────────────
-            if segments.len() < PPO_MIN_SEGMENTS {
+            if segments.len() < ppo.min_segments {
                 match rl_rx.recv_timeout(Duration::from_millis(100)) {
                     Ok(seg) => segments.push(seg),
                     Err(mpsc::RecvTimeoutError::Timeout) => continue,
@@ -150,11 +128,11 @@ pub fn spawn_ppo_training_thread(
             while let Ok(seg) = rl_rx.try_recv() {
                 segments.push(seg);
             }
-            if segments.len() < PPO_MIN_SEGMENTS {
+            if segments.len() < ppo.min_segments {
                 continue;
             }
-            if segments.len() > PPO_MAX_SEGMENTS {
-                let excess = segments.len() - PPO_MAX_SEGMENTS;
+            if segments.len() > ppo.max_segments {
+                let excess = segments.len() - ppo.max_segments;
                 segments.drain(..excess);
             }
 
@@ -425,7 +403,7 @@ pub fn spawn_ppo_training_thread(
                 &device,
             );
 
-            for epoch in 0..PPO_VALUE_EPOCHS {
+            for epoch in 0..ppo.value_epochs {
                 let values = value_fn::batch_value_inference(
                     inner.value_net.as_ref().unwrap(),
                     &batch.self_flat,
@@ -440,8 +418,9 @@ pub fn spawn_ppo_training_thread(
                     &batch.dones,
                     &values,
                     &batch.segment_infos,
-                    PPO_GAMMA,
-                    PPO_LAMBDA,
+                    ppo.gamma,
+                    ppo.lambda,
+                    &reward_type_weights,
                 );
 
                 let n = total_steps as f32;
@@ -539,7 +518,7 @@ pub fn spawn_ppo_training_thread(
                     );
                 }
 
-                let skip_policy = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
+                let skip_policy = first_epoch_explained_var < ppo.value_burnin_ev_threshold;
 
                 let all_returns_flat: Vec<f32> = gae_result
                     .head_returns
@@ -558,7 +537,7 @@ pub fn spawn_ppo_training_thread(
                     (0..6).map(|_| None).collect();
                 let mut policy_mbs_this_epoch = 0usize;
 
-                for mb_indices in indices.chunks(PPO_MINI_BATCH_SIZE) {
+                for mb_indices in indices.chunks(ppo.mini_batch_size) {
                     let mb = mb_indices.len();
 
                     let mut mb_actions = Vec::with_capacity(mb);
@@ -582,7 +561,7 @@ pub fn spawn_ppo_training_thread(
                     let proj_t = all_proj.clone().select(0, idx_t.clone());
                     let targets = all_returns.clone().select(0, idx_t);
 
-                    if !skip_policy && epoch < PPO_POLICY_EPOCHS {
+                    if !skip_policy && epoch < ppo.policy_epochs {
                         let (policy_grads, (policy_loss_s, entropy_s, bc_loss_s, diag)) = {
                             let net = inner.policy_net.as_ref().unwrap();
                             let (action_logits, nav_target_logits, wep_target_logits) =
@@ -644,13 +623,13 @@ pub fn spawn_ppo_training_thread(
                                 new_lp,
                                 &mb_old_lp,
                                 &mb_adv,
-                                PPO_CLIP_EPS,
+                                ppo.clip_eps,
                                 &device,
                             );
                             let entropy_bonus = -(entropy.mean());
                             let total_policy_loss = policy_loss.clone()
-                                + entropy_bonus.clone() * PPO_ENTROPY_COEFF
-                                + bc_loss.clone() * PPO_BC_COEFF;
+                                + entropy_bonus.clone() * ppo.entropy_coeff
+                                + bc_loss.clone() * ppo.bc_coeff;
 
                             let raw = total_policy_loss.backward();
                             let grads = GradientsParams::from_grads(raw, net);
@@ -667,13 +646,13 @@ pub fn spawn_ppo_training_thread(
                         epoch_bc_batches += 1;
                         let net = inner.policy_net.take().unwrap();
                         inner.policy_net =
-                            Some(inner.policy_optim.step(PPO_POLICY_LR, net, policy_grads));
+                            Some(inner.policy_optim.step(ppo.policy_lr, net, policy_grads));
                     }
 
                     let value_grads = {
                         let vnet = inner.value_net.as_ref().unwrap();
                         let (value_out, _, _) = vnet.forward(self_t, obj_t, proj_t);
-                        let vloss = value_fn::huber_value_loss(value_out, targets, PPO_HUBER_DELTA);
+                        let vloss = value_fn::huber_value_loss(value_out, targets, ppo.huber_delta);
 
                         epoch_value_loss += f32::from(vloss.clone().into_scalar());
 
@@ -681,7 +660,7 @@ pub fn spawn_ppo_training_thread(
                         GradientsParams::from_grads(raw, vnet)
                     };
                     let vnet = inner.value_net.take().unwrap();
-                    inner.value_net = Some(inner.value_optim.step(PPO_VALUE_LR, vnet, value_grads));
+                    inner.value_net = Some(inner.value_optim.step(ppo.value_lr, vnet, value_grads));
 
                     total_mini_batches += 1;
                 }
@@ -700,8 +679,8 @@ pub fn spawn_ppo_training_thread(
 
             // ── Phase 5b: Extra value training from replay buffer ────────
             if value_replay.len() > 0 {
-                let replay_mb_size = (PPO_MINI_BATCH_SIZE as f32 * VALUE_REPLAY_FRACTION) as usize;
-                for _ in 0..VALUE_REPLAY_EXTRA_BATCHES {
+                let replay_mb_size = (ppo.mini_batch_size as f32 * ppo.value_replay_fraction) as usize;
+                for _ in 0..ppo.value_replay_extra_batches {
                     if let Some((r_self, r_obj, r_proj, r_ret)) =
                         value_replay.sample(replay_mb_size.max(1), &mut rng)
                     {
@@ -729,27 +708,27 @@ pub fn spawn_ppo_training_thread(
                                 &device,
                             );
                             let vloss =
-                                value_fn::huber_value_loss(value_out, targets, PPO_HUBER_DELTA);
+                                value_fn::huber_value_loss(value_out, targets, ppo.huber_delta);
                             let raw = vloss.backward();
                             GradientsParams::from_grads(raw, vnet)
                         };
                         let vnet = inner.value_net.take().unwrap();
                         inner.value_net =
-                            Some(inner.value_optim.step(PPO_VALUE_LR, vnet, value_grads));
+                            Some(inner.value_optim.step(ppo.value_lr, vnet, value_grads));
                     }
                 }
             }
 
             update_cycle += 1;
 
-            if update_cycle % PPO_WEIGHT_SYNC_INTERVAL == 0 {
+            if update_cycle % ppo.weight_sync_interval == 0 {
                 let bytes = model::training_net_to_bytes(inner.policy_net.as_ref().unwrap());
                 if let Ok(mut lock) = inference_net.lock() {
                     lock.load_bytes(bytes);
                 }
             }
 
-            if update_cycle % PPO_SAVE_INTERVAL == 0 {
+            if update_cycle % ppo.save_interval == 0 {
                 save_all_checkpoints(
                     &inner,
                     &segments,
@@ -887,7 +866,7 @@ pub fn spawn_ppo_training_thread(
                 }
             }
 
-            let policy_skipped = first_epoch_explained_var < PPO_VALUE_BURNIN_EV_THRESHOLD;
+            let policy_skipped = first_epoch_explained_var < ppo.value_burnin_ev_threshold;
             writer.add_scalar(
                 "train/value_burnin",
                 policy_skipped as u8 as f32,

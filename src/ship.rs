@@ -792,6 +792,7 @@ fn apply_damage(
     mut ship_destroyed_writer: MessageWriter<crate::missions::ShipDestroyed>,
     mission_targets: Query<&crate::missions::MissionTarget>,
     model_mode: Res<crate::ModelMode>,
+    reward_cfg: Res<crate::config::RewardConfig>,
 ) {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -810,7 +811,7 @@ fn apply_damage(
         // approaches the full damage magnitude (strong pressure to disengage).
         if rl_agents.contains(event.entity) {
             let dmg_frac = event.damage as f32 / ship.data.max_health.max(1) as f32;
-            let penalty = -crate::consts::HEALTH_DAMAGE_PENALTY * dmg_frac * (1.0 - h_frac_before);
+            let penalty = -reward_cfg.health_damage_penalty * dmg_frac * (1.0 - h_frac_before);
             rl_reward_writer.write(RLReward {
                 entity: event.entity,
                 reward: penalty,
@@ -918,9 +919,7 @@ fn handle_buy_ship(
             let transfer = reserved_qty.min(space_left);
             if transfer > 0 {
                 *new_ship.cargo.entry(commodity.clone()).or_insert(0) += transfer;
-                new_ship
-                    .reserved_cargo
-                    .insert(commodity.clone(), transfer);
+                new_ship.reserved_cargo.insert(commodity.clone(), transfer);
                 let src_qty = ship.cargo.get(commodity).copied().unwrap_or(0);
                 let src_cost = ship.cargo_cost.get(commodity).copied().unwrap_or(0);
                 if src_qty > 0 {
@@ -969,8 +968,8 @@ fn score_hits(
     rl_agents: Query<&RLAgent>,
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut combat_stats: ResMut<CombatHitStats>,
+    reward_cfg: Res<crate::config::RewardConfig>,
 ) {
-    use crate::consts::*;
     for event in reader.read() {
         match event {
             ScoreHit::OnShip { source, target } => {
@@ -1020,23 +1019,28 @@ fn score_hits(
 
                     let r = if is_engaged && on_target {
                         combat_stats.good_hits += 1;
-                        COMBAT_HIT_ENGAGED_TARGETED
+                        reward_cfg.combat_hit_engaged_targeted
                     } else if is_engaged {
                         combat_stats.good_hits += 1;
-                        COMBAT_HIT_ENGAGED_UNTARGETED
+                        reward_cfg.combat_hit_engaged_untargeted
                     } else {
                         // Adaptive neutral penalty: c = -p * r / (EPS + (1-p))
                         // bounded in [-r / EPS, 0].
                         combat_stats.neutral_hits += 1;
-                        // let p = combat_stats.good_fraction();
-                        // let c = -p * COMBAT_HIT_ENGAGED_UNTARGETED / (COMBAT_HIT_EPS + (1.0 - p));
-                        // c.clamp(-COMBAT_HIT_ENGAGED_UNTARGETED / COMBAT_HIT_EPS, 0.0)
-                        -COMBAT_HIT_ENGAGED_UNTARGETED
+                        let p = combat_stats.good_fraction();
+                        let c = -p * reward_cfg.combat_hit_engaged_untargeted
+                            / (reward_cfg.combat_hit_eps + (1.0 - p));
+                        c.clamp(
+                            -reward_cfg.combat_hit_engaged_untargeted / reward_cfg.combat_hit_eps,
+                            0.0,
+                        )
                     };
 
                     let personality_scale = match agent.personality {
-                        Personality::Fighter => COMBAT_PERSONALITY_FIGHTER,
-                        Personality::Miner | Personality::Trader => COMBAT_PERSONALITY_OTHER,
+                        Personality::Fighter => reward_cfg.combat_personality_fighter,
+                        Personality::Miner | Personality::Trader => {
+                            reward_cfg.combat_personality_other
+                        }
                     };
 
                     rl_reward_writer.write(RLReward {
@@ -1048,7 +1052,7 @@ fn score_hits(
                         let h_frac = ss.health as f32 / ss.data.max_health.max(1) as f32;
                         rl_reward_writer.write(RLReward {
                             entity: *source,
-                            reward: HEALTH_BONUS_PER_EVENT * h_frac,
+                            reward: reward_cfg.health_bonus_per_event * h_frac,
                             reward_type: crate::consts::REWARD_HEALTH_GATED,
                         });
                     }
@@ -1057,8 +1061,8 @@ fn score_hits(
             ScoreHit::OnAsteroid { source, .. } => {
                 if let Ok(agent) = rl_agents.get(*source) {
                     let reward = match agent.personality {
-                        Personality::Miner => ASTEROID_HIT_MINER,
-                        Personality::Fighter | Personality::Trader => ASTEROID_HIT_OTHER,
+                        Personality::Miner => reward_cfg.asteroid_hit_miner,
+                        Personality::Fighter | Personality::Trader => reward_cfg.asteroid_hit_other,
                     };
                     rl_reward_writer.write(RLReward {
                         entity: *source,
@@ -1069,7 +1073,7 @@ fn score_hits(
                         let h_frac = ss.health as f32 / ss.data.max_health.max(1) as f32;
                         rl_reward_writer.write(RLReward {
                             entity: *source,
-                            reward: HEALTH_BONUS_PER_EVENT * h_frac,
+                            reward: reward_cfg.health_bonus_per_event * h_frac,
                             reward_type: crate::consts::REWARD_HEALTH_GATED,
                         });
                     }

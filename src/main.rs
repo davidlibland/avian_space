@@ -17,6 +17,7 @@ mod planet_ui;
 mod planets;
 use planets::planets_plugin;
 mod ai_ships;
+mod config;
 mod consts;
 mod gae;
 mod model;
@@ -128,7 +129,7 @@ pub struct TravelContext {
 }
 
 /// Top-level AI control / training mode selected via command-line flags.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, clap::ValueEnum)]
 pub enum AppMode {
     /// AI ships use rule-based control only; no training thread.
     Classic,
@@ -140,35 +141,102 @@ pub enum AppMode {
     RLTraining,
 }
 
+/// Default path searched for a training config file when `--config` is not
+/// supplied.  When this file exists it is loaded; when it does not, defaults
+/// from [`config::TrainingConfig::default`] are used silently.
+const DEFAULT_CONFIG_PATH: &str = "training_config.yaml";
+
 /// Parsed command-line arguments.
+#[derive(clap::Parser, Debug)]
+#[command(about = "avian_space — RL-trained space combat sandbox")]
 pub struct AppArgs {
+    /// AI control / training mode.
+    #[arg(long, value_enum, default_value_t = AppMode::BCTraining)]
     pub mode: AppMode,
-    /// When true, ignore any existing checkpoint and start a fresh run.
+
+    /// Shorthand: --classic ⇒ --mode classic.
+    #[arg(long, conflicts_with_all = ["inference", "bc_training", "rl_training", "mode"])]
+    classic: bool,
+    /// Shorthand: --inference ⇒ --mode inference.
+    #[arg(long, conflicts_with_all = ["classic", "bc_training", "rl_training", "mode"])]
+    inference: bool,
+    /// Shorthand: --bc-training / --bc ⇒ --mode bc-training.
+    #[arg(long = "bc-training", alias = "bc",
+          conflicts_with_all = ["classic", "inference", "rl_training", "mode"])]
+    bc_training: bool,
+    /// Shorthand: --rl-training / --rl ⇒ --mode rl-training.
+    #[arg(long = "rl-training", alias = "rl",
+          conflicts_with_all = ["classic", "inference", "bc_training", "mode"])]
+    rl_training: bool,
+
+    /// Ignore any existing checkpoint and start a fresh run.
+    #[arg(long)]
     pub fresh: bool,
-    /// When true, run without a window or renderer for faster training.
+    /// Run without a window or renderer for faster training.
+    #[arg(long)]
     pub headless: bool,
+
+    /// Path to a YAML training config (reward weights + PPO hyperparameters).
+    /// When omitted, `./training_config.yaml` is loaded if present; otherwise
+    /// defaults from `consts.rs` are used.
+    #[arg(long, value_name = "PATH")]
+    pub config: Option<std::path::PathBuf>,
+
+    /// Write the default training config to PATH and exit.  Useful for
+    /// generating a starter file you can then edit.
+    #[arg(long, value_name = "PATH")]
+    pub write_default_config: Option<std::path::PathBuf>,
+}
+
+impl AppArgs {
+    /// Resolve the mode after collapsing the legacy boolean shorthands.
+    fn resolved_mode(&self) -> AppMode {
+        if self.classic {
+            AppMode::Classic
+        } else if self.inference {
+            AppMode::Inference
+        } else if self.bc_training {
+            AppMode::BCTraining
+        } else if self.rl_training {
+            AppMode::RLTraining
+        } else {
+            self.mode
+        }
+    }
 }
 
 fn parse_args() -> AppArgs {
-    let args: Vec<String> = std::env::args().collect();
-    let mut mode = AppMode::BCTraining; // default: preserves previous behaviour
-    let mut fresh = false;
-    let mut headless = false;
-    for arg in &args[1..] {
-        match arg.as_str() {
-            "--classic" => mode = AppMode::Classic,
-            "--inference" => mode = AppMode::Inference,
-            "--bc-training" | "--bc" => mode = AppMode::BCTraining,
-            "--rl-training" | "--rl" => mode = AppMode::RLTraining,
-            "--fresh" => fresh = true,
-            "--headless" => headless = true,
-            _ => {}
+    use clap::Parser;
+    AppArgs::parse()
+}
+
+/// Resolve the [`TrainingConfig`] to use given the CLI args.
+///
+/// * `--config <PATH>` set → load that path; missing-file or parse errors are fatal.
+/// * `--config` not set, default file exists → load it.
+/// * Default file missing → silently use [`config::TrainingConfig::default`].
+fn load_training_config(cli_path: Option<&std::path::Path>) -> config::TrainingConfig {
+    use std::path::Path;
+    let (path, required) = match cli_path {
+        Some(p) => (p.to_path_buf(), true),
+        None => (Path::new(DEFAULT_CONFIG_PATH).to_path_buf(), false),
+    };
+    if !path.exists() {
+        if required {
+            eprintln!("error: config file not found: {}", path.display());
+            std::process::exit(1);
         }
+        return config::TrainingConfig::default();
     }
-    AppArgs {
-        mode,
-        fresh,
-        headless,
+    match config::TrainingConfig::load_from_path(&path) {
+        Ok(cfg) => {
+            println!("[config] loaded {}", path.display());
+            cfg
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -179,11 +247,22 @@ enum ModelMode {
 }
 
 fn main() {
-    let AppArgs {
-        mode: app_mode,
-        fresh,
-        headless,
-    } = parse_args();
+    let args = parse_args();
+
+    if let Some(path) = args.write_default_config.as_ref() {
+        let cfg = config::TrainingConfig::default();
+        if let Err(e) = cfg.write_to_path(path) {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        println!("[config] wrote default training config to {}", path.display());
+        return;
+    }
+
+    let app_mode = args.resolved_mode();
+    let fresh = args.fresh;
+    let headless = args.headless;
+    let training = load_training_config(args.config.as_deref());
 
     let mut app = App::new();
 
@@ -260,6 +339,7 @@ fn main() {
         RLCollectionPlugin {
             mode: app_mode,
             fresh,
+            training: training.clone(),
         },
         game_save_plugin,
         missions_plugin,
@@ -271,6 +351,7 @@ fn main() {
         .init_resource::<TravelContext>()
         .insert_resource(CurrentStarSystem("sol".to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
+        .insert_resource(training.rewards.clone())
         .insert_resource(match app_mode {
             AppMode::BCTraining | AppMode::RLTraining => ModelMode::Training,
             AppMode::Classic | AppMode::Inference => ModelMode::Eval,

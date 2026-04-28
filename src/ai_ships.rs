@@ -892,6 +892,7 @@ fn finish_ai_landing(
     current_star_system: Res<CurrentStarSystem>,
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut commands: Commands,
+    reward_cfg: Res<crate::config::RewardConfig>,
 ) {
     let mut rng = rand::thread_rng();
     for ScaleDownFinished { entity } in reader.read() {
@@ -914,19 +915,18 @@ fn finish_ai_landing(
 
         // ── Landing reward for RLAgent ships ──────────────────
         if rl_agent.is_some() {
-            use crate::consts::*;
             let cargo_held: u16 = ship.cargo.values().sum();
             let cargo_cap = ship.data.cargo_space.max(1) as f32;
             let cargo_frac = cargo_held as f32 / cargo_cap;
             let health_frac = ship.health as f32 / ship.data.max_health.max(1) as f32;
 
             let mut reward = 0.0_f32;
-            reward += (1.0 - health_frac) * LANDING_LOW_HEALTH;
+            reward += (1.0 - health_frac) * reward_cfg.landing_low_health;
 
             match ai_ship.personality {
                 Personality::Trader => {
                     if cargo_held > 0 {
-                        reward += cargo_frac * LANDING_TRADER_CAN_SELL;
+                        reward += cargo_frac * reward_cfg.landing_trader_can_sell;
                     }
                     let can_buy = ship.remaining_cargo_space() > 0
                         && ship.credits > 0
@@ -934,7 +934,7 @@ fn finish_ai_landing(
                             .map(|pd| !pd.commodities.is_empty())
                             .unwrap_or(false);
                     if can_buy {
-                        reward += LANDING_TRADER_CAN_BUY;
+                        reward += reward_cfg.landing_trader_can_buy;
                     }
                 }
                 Personality::Fighter => {
@@ -947,24 +947,24 @@ fn finish_ai_landing(
                         })
                         .unwrap_or(false);
                     if can_rearm {
-                        reward += LANDING_FIGHTER_CAN_REARM;
+                        reward += reward_cfg.landing_fighter_can_rearm;
                     }
                     if ship.remaining_cargo_space() == 0 {
-                        reward += LANDING_FIGHTER_CARGO_FULL;
+                        reward += reward_cfg.landing_fighter_cargo_full;
                     }
                 }
                 Personality::Miner => {
                     if cargo_held > 0 {
-                        reward += cargo_frac * LANDING_MINER_CAN_SELL;
+                        reward += cargo_frac * reward_cfg.landing_miner_can_sell;
                     }
                 }
             }
 
             let targeting_mult =
                 if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
-                    LANDING_ON_TARGET_MULTIPLIER
+                    reward_cfg.landing_on_target_multiplier
                 } else {
-                    LANDING_OFF_TARGET_MULTIPLIER
+                    reward_cfg.landing_off_target_multiplier
                 };
             reward *= targeting_mult;
 
@@ -981,7 +981,7 @@ fn finish_ai_landing(
         if rl_agent.is_some() {
             rl_reward_writer.write(RLReward {
                 entity: ship_entity,
-                reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
+                reward: reward_cfg.health_bonus_per_event * h_frac_at_landing,
                 reward_type: crate::consts::REWARD_HEALTH_GATED,
             });
         }
@@ -991,7 +991,7 @@ fn finish_ai_landing(
         }
 
         let now = time.elapsed_secs();
-        let expire_at = now + crate::consts::LANDING_COOLDOWN_SECS;
+        let expire_at = now + reward_cfg.landing_cooldown_secs;
         ship.recent_landings.insert(planet_name.clone(), expire_at);
         ship.recent_landings.retain(|_, &mut t| t > now);
 
@@ -1006,7 +1006,6 @@ fn finish_ai_landing(
             }
             let credits_earned = (ship.credits - credits_before).max(0) as f32;
             if rl_agent.is_some() && credits_earned > 0.0 {
-                use crate::consts::*;
                 let credit_scale = item_universe
                     .ship_credit_scale
                     .get(&ship.ship_type)
@@ -1014,9 +1013,9 @@ fn finish_ai_landing(
                     .unwrap_or(1.0);
                 let credit_frac = credits_earned / credit_scale;
                 let personality_weight = match ai_ship.personality {
-                    Personality::Fighter => CARGO_SOLD_FIGHTER,
-                    Personality::Miner => CARGO_SOLD_MINER,
-                    Personality::Trader => CARGO_SOLD_TRADER,
+                    Personality::Fighter => reward_cfg.cargo_sold_fighter,
+                    Personality::Miner => reward_cfg.cargo_sold_miner,
+                    Personality::Trader => reward_cfg.cargo_sold_trader,
                 };
                 rl_reward_writer.write(RLReward {
                     entity: ship_entity,
@@ -1025,7 +1024,7 @@ fn finish_ai_landing(
                 });
                 rl_reward_writer.write(RLReward {
                     entity: ship_entity,
-                    reward: crate::consts::HEALTH_BONUS_PER_EVENT * h_frac_at_landing,
+                    reward: reward_cfg.health_bonus_per_event * h_frac_at_landing,
                     reward_type: crate::consts::REWARD_HEALTH_GATED,
                 });
             }

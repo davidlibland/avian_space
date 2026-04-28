@@ -21,3 +21,4 @@ naga = { version = "=26.0.0", features = ["termcolor", "wgsl-in"] }
 bevy_ecs_tilemap = "0.18"
 bevy_common_assets = { version = "0.16.0", features = ["ron"] }
 ron = "0.12.1"
+clap = { version = "4", features = ["derive"] }

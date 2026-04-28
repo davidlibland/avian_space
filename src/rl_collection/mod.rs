@@ -220,6 +220,7 @@ impl RLAgent {
 pub struct RLCollectionPlugin {
     pub mode: crate::AppMode,
     pub fresh: bool,
+    pub training: crate::config::TrainingConfig,
 }
 
 impl Plugin for RLCollectionPlugin {
@@ -247,7 +248,13 @@ impl Plugin for RLCollectionPlugin {
                 drop(rl_rx);
             }
             crate::AppMode::RLTraining => {
-                crate::ppo::spawn_ppo_training_thread(rl_rx, inference_net_arc, experiment);
+                crate::ppo::spawn_ppo_training_thread(
+                    rl_rx,
+                    inference_net_arc,
+                    experiment,
+                    self.training.ppo.clone(),
+                    self.training.rewards.clone(),
+                );
                 // BC labels now travel inline with each `Transition`, so the
                 // separate BC channel is unused during RL training.
                 drop(bc_rx);
@@ -373,11 +380,13 @@ fn rl_step(
         Res<RLSender>,
         Res<BCSender>,
         Res<RLResource>,
+        Res<crate::config::RewardConfig>,
     ),
 ) {
     let (planet_query, asteroid_query, asteroid_field_query, pickup_query, ship_query) =
         &entity_queries;
-    let (item_universe, current_system, mode, rl_sender, bc_sender, rl_resource) = &resources;
+    let (item_universe, current_system, mode, rl_sender, bc_sender, rl_resource, reward_cfg) =
+        &resources;
     if !timer.0.tick(time.delta()).just_finished() {
         return;
     }
@@ -442,6 +451,7 @@ fn rl_step(
         rl_sender,
         bc_sender,
         mode,
+        reward_cfg,
     );
 }
 
@@ -1346,12 +1356,13 @@ pub(crate) fn mix_ally_rewards(
         Entity,
         ([f32; crate::consts::N_REWARD_TYPES], Option<String>),
     >,
+    reward_cfg: &crate::config::RewardConfig,
 ) {
-    use crate::consts::*;
+    use crate::consts::{N_REWARD_TYPES, REWARD_HEALTH_RAW};
     let alpha = match personality {
-        Personality::Fighter => REWARD_SHARING_FIGHTER,
-        Personality::Miner => REWARD_SHARING_MINER,
-        Personality::Trader => REWARD_SHARING_TRADER,
+        Personality::Fighter => reward_cfg.reward_sharing_fighter,
+        Personality::Miner => reward_cfg.reward_sharing_miner,
+        Personality::Trader => reward_cfg.reward_sharing_trader,
     };
     if alpha <= 0.0 || allies.is_empty() {
         return;
@@ -1409,6 +1420,7 @@ fn store_obs_actions(
     rl_sender: &RLSender,
     bc_sender: &BCSender,
     mode: &AIPlayMode,
+    reward_cfg: &crate::config::RewardConfig,
 ) {
     // Pre-pass: snapshot accumulated_rewards and faction for every RLAgent.
     // This must happen before the mutable loop so reward sharing can read
@@ -1600,6 +1612,7 @@ fn store_obs_actions(
                 *entity,
                 &agent.personality,
                 &reward_snapshots,
+                reward_cfg,
             );
 
             let transition = Transition {

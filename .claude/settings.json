@@ -67,10 +67,12 @@
       "Bash(awk '/^fn building_interact\\\\\\(/,/^fn [a-z]/' /Users/dlibland/dev/avian_space/src/surface.rs)",
       "Bash(python scripts/analyze_rewards.py experiments/run_21/tb)",
       "Bash(pip show *)",
-      "Bash(python scripts/monitor_training.py experiments/run_21/tb)"
+      "Bash(python scripts/monitor_training.py experiments/run_21/tb)",
+      "Bash(pkill -f avian_space)"
     ],
     "additionalDirectories": [
-      "/Users/dlibland/dev/avian_space/assets/sprites/worlds"
+      "/Users/dlibland/dev/avian_space/assets/sprites/worlds",
+      "/tmp"
     ]
   },
   "hooks": {

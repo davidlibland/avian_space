@@ -78,6 +78,7 @@ fn collect_pickups(
     mut commands: Commands,
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut pickup_collected_writer: MessageWriter<PickupCollected>,
+    reward_cfg: Res<crate::config::RewardConfig>,
 ) {
     let mut collected: HashSet<Entity> = HashSet::new();
 
@@ -119,12 +120,11 @@ fn collect_pickups(
         }
         // Flat pickup reward for RLAgent ships, personality-weighted.
         if let Ok(agent) = rl_agents.get(ship_entity) {
-            use crate::consts::*;
             use crate::ship::Personality;
             let weight = match agent.personality {
-                Personality::Fighter => PICKUP_REWARD_FIGHTER,
-                Personality::Miner => PICKUP_REWARD_MINER,
-                Personality::Trader => PICKUP_REWARD_TRADER,
+                Personality::Fighter => reward_cfg.pickup_reward_fighter,
+                Personality::Miner => reward_cfg.pickup_reward_miner,
+                Personality::Trader => reward_cfg.pickup_reward_trader,
             };
             rl_reward_writer.write(RLReward {
                 entity: ship_entity,
@@ -133,7 +133,7 @@ fn collect_pickups(
             });
             rl_reward_writer.write(RLReward {
                 entity: ship_entity,
-                reward: crate::consts::HEALTH_BONUS_PER_EVENT
+                reward: reward_cfg.health_bonus_per_event
                     * (ship.health as f32 / ship.data.max_health.max(1) as f32),
                 reward_type: crate::consts::REWARD_HEALTH_GATED,
             });

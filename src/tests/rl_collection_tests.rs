@@ -54,6 +54,7 @@ fn fighter_sees_allied_merchant_rewards_mixed() {
         self_e,
         &Personality::Fighter,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     // Fighter α = 0.3, 1 ally → rewards[LANDING] += 0.3 * 10.0 / 1 = 3.0
@@ -88,6 +89,7 @@ fn non_ally_faction_no_sharing() {
         self_e,
         &Personality::Fighter,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     // No ally match → rewards unchanged.
@@ -117,6 +119,7 @@ fn no_visible_allies_no_sharing() {
         self_e,
         &Personality::Fighter,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     assert_eq!(rewards, original);
@@ -144,6 +147,7 @@ fn self_entity_excluded() {
         self_e,
         &Personality::Fighter,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     // Self is skipped → rewards unchanged.
@@ -174,6 +178,7 @@ fn health_raw_excluded() {
         self_e,
         &Personality::Fighter,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     // health_raw is excluded → all channels should remain 0.
@@ -209,6 +214,7 @@ fn miner_uses_lower_alpha() {
         self_e,
         &Personality::Miner,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     // Miner α = 0.05, 1 ally → rewards[LANDING] += 0.05 * 10.0 / 1 = 0.5
@@ -250,6 +256,7 @@ fn multiple_allies_averaged() {
         self_e,
         &Personality::Fighter,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     // Fighter α = 0.3, 2 allies, sum = 30.0
@@ -285,6 +292,7 @@ fn no_faction_ship_not_ally() {
         self_e,
         &Personality::Fighter,
         &snapshots,
+        &crate::config::RewardConfig::default(),
     );
 
     // No faction → not an ally → no sharing.

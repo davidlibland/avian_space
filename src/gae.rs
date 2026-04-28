@@ -32,12 +32,13 @@ pub struct MultiHeadGae {
 /// Compute per-head GAE advantages and value-regression targets.
 ///
 /// # Arguments
-/// * `rewards`       – per-step per-head rewards, length = total_steps
-/// * `dones`         – per-step done flags, length = total_steps
-/// * `values`        – per-head V(s_t) estimates, length = total_steps
-/// * `segment_infos` – describes each contiguous segment in the batch
-/// * `gamma`         – discount factor
-/// * `lambda`        – GAE bias-variance trade-off
+/// * `rewards`             – per-step per-head rewards, length = total_steps
+/// * `dones`               – per-step done flags, length = total_steps
+/// * `values`              – per-head V(s_t) estimates, length = total_steps
+/// * `segment_infos`       – describes each contiguous segment in the batch
+/// * `gamma`               – discount factor
+/// * `lambda`              – GAE bias-variance trade-off
+/// * `reward_type_weights` – per-head weights summed into `total_*` outputs
 pub fn compute_gae_multihead(
     rewards: &[[f32; N_REWARD_TYPES]],
     dones: &[bool],
@@ -45,6 +46,7 @@ pub fn compute_gae_multihead(
     segment_infos: &[SegmentInfo],
     gamma: f32,
     lambda: f32,
+    reward_type_weights: &[f32; N_REWARD_TYPES],
 ) -> MultiHeadGae {
     let n = rewards.len();
     let mut head_advantages = vec![[0.0_f32; N_REWARD_TYPES]; n];
@@ -69,14 +71,13 @@ pub fn compute_gae_multihead(
     }
 
     // Compute weighted totals across heads.
-    let w = &crate::consts::REWARD_TYPE_WEIGHTS;
     let total_advantages: Vec<f32> = head_advantages
         .iter()
-        .map(|a| a.iter().zip(w).map(|(v, &wt)| v * wt).sum())
+        .map(|a| a.iter().zip(reward_type_weights).map(|(v, &wt)| v * wt).sum())
         .collect();
     let total_returns: Vec<f32> = head_returns
         .iter()
-        .map(|r| r.iter().zip(w).map(|(v, &wt)| v * wt).sum())
+        .map(|r| r.iter().zip(reward_type_weights).map(|(v, &wt)| v * wt).sum())
         .collect();
 
     MultiHeadGae {
@@ -115,7 +116,8 @@ mod tests {
         let gamma = 0.99;
         let lambda = 0.95;
 
-        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, gamma, lambda);
+        let weights = crate::consts::REWARD_TYPE_WEIGHTS;
+        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, gamma, lambda, &weights);
 
         assert!((result.head_advantages[2][0] - 0.5).abs() < 1e-5);
         assert!((result.head_advantages[1][0] - 1.46525).abs() < 1e-4);
@@ -145,7 +147,8 @@ mod tests {
             bootstrap_values: bv,
         }];
 
-        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 0.99, 0.95);
+        let weights = crate::consts::REWARD_TYPE_WEIGHTS;
+        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 0.99, 0.95, &weights);
         assert!((result.head_advantages[1][0] - (-1.5)).abs() < 1e-5);
         assert!((result.head_advantages[0][0] - (-0.41575)).abs() < 1e-4);
     }
@@ -165,7 +168,8 @@ mod tests {
             SegmentInfo { start_idx: 2, end_idx: 4, bootstrap_values: [0.0; N_REWARD_TYPES] },
         ];
 
-        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 1.0, 1.0);
+        let weights = crate::consts::REWARD_TYPE_WEIGHTS;
+        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 1.0, 1.0, &weights);
         assert!((result.total_advantages[0] - 3.0).abs() < 1e-6);
         assert!((result.total_advantages[1] - 2.0).abs() < 1e-6);
         assert!((result.total_advantages[2] - 7.0).abs() < 1e-6);
@@ -187,7 +191,8 @@ mod tests {
             bootstrap_values: bv,
         }];
 
-        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 0.99, 0.95);
+        let weights = crate::consts::REWARD_TYPE_WEIGHTS;
+        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 0.99, 0.95, &weights);
         assert!((result.head_advantages[0][0] - 0.98).abs() < 1e-5);
     }
 
@@ -205,7 +210,8 @@ mod tests {
             bootstrap_values: [0.0; N_REWARD_TYPES],
         }];
 
-        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 0.99, 0.95);
+        let weights = crate::consts::REWARD_TYPE_WEIGHTS;
+        let result = compute_gae_multihead(&rewards, &dones, &values, &segments, 0.99, 0.95, &weights);
         assert!((result.head_advantages[0][0] - 1.0).abs() < 1e-6);
         assert!((result.head_advantages[0][1] - 2.0).abs() < 1e-6);
         assert!((result.total_advantages[0] - 3.0).abs() < 1e-6);
