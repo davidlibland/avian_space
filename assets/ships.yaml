@@ -66,10 +66,10 @@ corvette:
   thrust: 160.0
   max_speed: 280.0
   torque: 50.0
+  angular_drag: 5.4
   max_health: 90
   cargo_space: 10
   item_space: 9
-  # angular_drag: 8
   base_weapons:
     proton_beam: [1, null]
   radius: 9.0

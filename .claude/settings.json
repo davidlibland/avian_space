@@ -69,7 +69,8 @@
       "Bash(pip show *)",
       "Bash(python scripts/monitor_training.py experiments/run_21/tb)",
       "Bash(pkill -f avian_space)",
-      "Bash(grep -A1 \"^name = \\\\\"rand\\\\\"$\" /Users/dlibland/dev/avian_space/Cargo.lock)"
+      "Bash(grep -A1 \"^name = \\\\\"rand\\\\\"$\" /Users/dlibland/dev/avian_space/Cargo.lock)",
+      "Bash(python3 -c ' *)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds",

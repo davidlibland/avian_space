@@ -56,7 +56,7 @@ use crate::{GameLayer, PlayState};
 pub const RL_SEGMENT_LEN: usize = 128;
 
 /// Decision rate in seconds.
-const RL_STEP_PERIOD: f32 = 0.25; // 4 Hz
+pub const RL_STEP_PERIOD: f32 = 0.01; // 4 Hz
 
 const OVERRIDE_TRADER_NAV_TARGET: bool = false;
 

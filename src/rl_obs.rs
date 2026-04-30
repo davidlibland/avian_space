@@ -5,7 +5,7 @@
 /// the ship's forward direction.
 use std::f32::consts::PI;
 
-use crate::ship::{Personality, Ship};
+use crate::ship::{MAX_ANG_SPEED, Personality, Ship};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,9 +28,6 @@ const PROXIMITY_SCALE: f32 = DETECTION_RADIUS / 4.0;
 
 /// Reference ammo count for ammo normalisation.
 const MAX_AMMO_REF: f32 = 50.0;
-
-/// Maximum angular speed (Avian2D cap set in ship_bundle: 4π rad/s).
-const MAX_ANG_SPEED: f32 = 4.0 * PI;
 
 // Entity bucket sizes
 pub const K_PLANETS: usize = 2;

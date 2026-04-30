@@ -243,6 +243,21 @@ pub struct ShipData {
     pub reverse_kd: Scalar,
 }
 
+/// Hard cap on ship angular speed (rad/s). Above each ship's natural
+/// steady-state turn rate, so the cap only bites on transient overshoot
+/// (collisions, abrupt input reversals).
+pub const MAX_ANG_SPEED: Scalar = 2.5 * PI;
+
+/// Rotation accumulated in `dt` seconds when full turn input is applied from
+/// rest, under the dynamics `ω̇ = -torque - angular_drag · ω`. Returns radians.
+pub fn first_tick_rotation_rad(torque: Scalar, angular_drag: Scalar, dt: Scalar) -> Scalar {
+    if angular_drag <= 0.0 {
+        return 0.5 * torque * dt * dt;
+    }
+    let u = angular_drag * dt;
+    torque / (angular_drag * angular_drag) * (u - 1.0 + (-u).exp())
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum Target {
     Ship(Entity),
@@ -704,7 +719,7 @@ pub fn ship_bundle(
         body: RigidBody::Dynamic,
         angular_damping: AngularDamping(ship_data.angular_drag), // equivalent to angular_drag = 3.0
         max_speed: MaxLinearSpeed(ship_data.max_speed),          // Restitution::new(1.5),
-        max_angular_speed: MaxAngularSpeed(1.5 * PI),
+        max_angular_speed: MaxAngularSpeed(MAX_ANG_SPEED),
         collider: Collider::circle(ship_data.radius),
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,
@@ -740,7 +755,7 @@ pub fn ship_bundle_from_pilot(
         tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
-        max_angular_speed: MaxAngularSpeed(4.0 * PI),
+        max_angular_speed: MaxAngularSpeed(MAX_ANG_SPEED),
         sprite: Sprite::from_image(ship.data.sprite_handle.clone()),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,

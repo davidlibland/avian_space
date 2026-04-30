@@ -23,6 +23,30 @@ pub fn validate(iu: &ItemUniverse) {
     validate_weapon_carrier_bays(iu);
     validate_missions(iu);
     validate_mission_templates(iu);
+    validate_ship_steering(iu);
+}
+
+/// Maximum rotation (degrees) the RL agent should be able to commit to in a
+/// single decision step at full turn input from rest. Above this threshold,
+/// 3-level discrete steering becomes too coarse to aim precisely.
+const MAX_FIRST_TICK_DEG: f32 = 60.0;
+
+fn validate_ship_steering(iu: &ItemUniverse) {
+    use crate::rl_collection::RL_STEP_PERIOD;
+    use crate::ship::first_tick_rotation_rad;
+    for (ship_name, ship_data) in &iu.ships {
+        let rad = first_tick_rotation_rad(ship_data.torque, ship_data.angular_drag, RL_STEP_PERIOD);
+        let deg = rad.to_degrees();
+        if deg > MAX_FIRST_TICK_DEG {
+            warn!(
+                "Ship \"{ship_name}\" rotates {deg:.1}° in one RL tick \
+                 ({RL_STEP_PERIOD}s) at full turn from rest (torque={}, \
+                 angular_drag={}); exceeds {MAX_FIRST_TICK_DEG}° steering \
+                 budget — raise angular_drag in assets/ships.yaml",
+                ship_data.torque, ship_data.angular_drag,
+            );
+        }
+    }
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
