@@ -52,6 +52,13 @@ pub const VALUE_REPLAY_CAPACITY: usize = 8192;
 pub const VALUE_REPLAY_FRACTION: f32 = 0.25;
 pub const VALUE_REPLAY_EXTRA_BATCHES: usize = 4;
 
+/// Number of completed segments between training-environment system swaps.
+/// `0` disables swapping entirely (training stays in the starting system).
+pub const PPO_SYSTEM_SWAP_SEGMENTS: usize = 0;
+/// Probability that a swap targets the isolated `simulator` system instead of
+/// a randomly chosen real system.
+pub const PPO_SIMULATOR_FRACTION: f32 = 0.25;
+
 // ---------------------------------------------------------------------------
 // Reward weights
 // ---------------------------------------------------------------------------
@@ -197,6 +204,11 @@ pub struct PpoConfig {
     pub value_replay_capacity: usize,
     pub value_replay_fraction: f32,
     pub value_replay_extra_batches: usize,
+    /// Swap to a randomly chosen training system every `system_swap_segments`
+    /// completed segments.  `0` disables swapping.
+    pub system_swap_segments: usize,
+    /// Probability a swap picks the isolated `simulator` system.
+    pub simulator_fraction: f32,
 }
 
 impl Default for PpoConfig {
@@ -221,6 +233,8 @@ impl Default for PpoConfig {
             value_replay_capacity: VALUE_REPLAY_CAPACITY,
             value_replay_fraction: VALUE_REPLAY_FRACTION,
             value_replay_extra_batches: VALUE_REPLAY_EXTRA_BATCHES,
+            system_swap_segments: PPO_SYSTEM_SWAP_SEGMENTS,
+            simulator_fraction: PPO_SIMULATOR_FRACTION,
         }
     }
 }

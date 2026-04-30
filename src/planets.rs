@@ -16,7 +16,7 @@ use crate::{CurrentStarSystem, GameLayer, PlayState, Player, Ship};
 
 use std::collections::HashMap;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct PlanetData {
     pub location: Vec2,
     pub description: String,

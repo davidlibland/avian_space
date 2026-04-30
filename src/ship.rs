@@ -385,6 +385,33 @@ impl Ship {
                 .insert(commodity.to_string(), (cost_basis - cost_removed).max(0));
         }
     }
+    /// Drop a single ton of `commodity` overboard. Reserved (mission) cargo
+    /// can't be jettisoned. Returns true iff a unit was actually removed.
+    /// Cost basis is decremented proportionally so trade profit accounting
+    /// stays consistent with `sell_cargo`.
+    pub fn jettison_cargo(&mut self, commodity: &str) -> bool {
+        let held = *self.cargo.get(commodity).unwrap_or(&0u16);
+        let reserved = *self.reserved_cargo.get(commodity).unwrap_or(&0u16);
+        if held.saturating_sub(reserved) == 0 {
+            return false;
+        }
+        let cost_basis = self.cargo_cost.get(commodity).copied().unwrap_or(0);
+        let cost_removed = if held > 0 {
+            cost_basis / held as i128
+        } else {
+            0
+        };
+        *self.cargo.entry(commodity.to_string()).or_insert(0) -= 1;
+        let remaining = self.cargo.get(commodity).copied().unwrap_or(0);
+        if remaining == 0 {
+            self.cargo.remove(commodity);
+            self.cargo_cost.remove(commodity);
+        } else {
+            self.cargo_cost
+                .insert(commodity.to_string(), (cost_basis - cost_removed).max(0));
+        }
+        true
+    }
     pub fn buy_cargo(&mut self, commodity: &str, quantity_desired: u16, price: i128) {
         let quantity_desired = std::cmp::min(quantity_desired, (self.credits / price) as u16);
         let quantity_added = self.add_cargo(commodity, quantity_desired);
@@ -677,7 +704,7 @@ pub fn ship_bundle(
         body: RigidBody::Dynamic,
         angular_damping: AngularDamping(ship_data.angular_drag), // equivalent to angular_drag = 3.0
         max_speed: MaxLinearSpeed(ship_data.max_speed),          // Restitution::new(1.5),
-        max_angular_speed: MaxAngularSpeed(4.0 * PI),
+        max_angular_speed: MaxAngularSpeed(1.5 * PI),
         collider: Collider::circle(ship_data.radius),
         colider_density: ColliderDensity(2.0),
         collision_events: CollisionEventsEnabled,

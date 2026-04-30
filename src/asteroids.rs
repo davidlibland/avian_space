@@ -75,7 +75,7 @@ pub struct Asteroid {
     pub field: Entity,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct AsteroidFieldData {
     pub location: Vec2,
     pub radius: f32,

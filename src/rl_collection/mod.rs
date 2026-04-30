@@ -1,3 +1,4 @@
+use std::sync::Arc;
 /// RL trajectory collection plugin.
 ///
 /// Adds the `RLAgent` component to AI ships and collects (observation, action, reward)
@@ -23,7 +24,6 @@
 /// `rl_step` is gated by a 4 Hz timer. Between ticks, `repeat_actions` re-emits the last
 /// chosen action every Update frame so the ship keeps moving.
 use std::sync::mpsc;
-use std::sync::Arc;
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -42,8 +42,7 @@ use crate::planets::Planet;
 use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, DETECTION_RADIUS, DiscreteAction, EntityKind,
     EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_OTHER_PROJECTILES, K_PICKUPS,
-    K_PLANETS, ObsInput, PickupSlotData, PlanetSlotData, ProjectileSlotData,
-    ShipSlotData,
+    K_PLANETS, ObsInput, PickupSlotData, PlanetSlotData, ProjectileSlotData, ShipSlotData,
 };
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target};
 use crate::weapons::{FireCommand, GuidedMissile, Projectile, TracerSlots};
@@ -112,6 +111,24 @@ pub struct BCTransition {
 #[derive(Resource)]
 pub struct RLSender(pub mpsc::SyncSender<Segment>);
 
+/// Number of segments dispatched to the trainer since the last system swap.
+#[derive(Resource, Default)]
+pub struct SegmentCounter(pub usize);
+
+/// Game-thread-readable subset of the PPO config controlling environment
+/// rotation during training.  `interval == 0` disables swapping.
+#[derive(Resource, Clone, Copy)]
+pub struct SystemSwapConfig {
+    pub interval: usize,
+    pub simulator_fraction: f32,
+}
+
+/// Set when [`check_system_swap`] has bounced the play state out of `Flying`;
+/// [`complete_system_swap`] reads it to bounce back and respawn entities in the
+/// newly chosen system.
+#[derive(Resource, Default)]
+pub struct PendingSystemRespawn(pub bool);
+
 /// Sender side of the BC data channel.
 #[derive(Resource)]
 pub struct BCSender(pub mpsc::SyncSender<BCTransition>);
@@ -127,6 +144,13 @@ pub enum AIPlayMode {
     /// RLAgent ships are controlled by the RL policy (currently rule-based stub).
     RLControl,
 }
+
+/// Sampling temperature applied to policy logits during action selection.
+///
+/// Set to `1.0` during RL training (stochastic on-policy sampling required for
+/// PPO) and to `0.0` (argmax) at inference time.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct InferenceTemperature(pub f32);
 
 /// 4 Hz decision-step timer.
 #[derive(Resource)]
@@ -290,10 +314,18 @@ impl Plugin for RLCollectionPlugin {
             crate::AppMode::Inference | crate::AppMode::RLTraining => AIPlayMode::RLControl,
         };
 
+        // Stochastic sampling during RL training (required for PPO);
+        // argmax at inference time.
+        let inference_temperature = match self.mode {
+            crate::AppMode::RLTraining => InferenceTemperature(1.0),
+            _ => InferenceTemperature(0.0),
+        };
+
         app.insert_resource(RLSender(rl_tx))
             .insert_resource(BCSender(bc_tx))
             .insert_resource(rl_resource)
             .insert_resource(ai_play_mode)
+            .insert_resource(inference_temperature)
             .insert_resource(RLStepTimer(Timer::from_seconds(
                 RL_STEP_PERIOD,
                 TimerMode::Repeating,
@@ -311,6 +343,33 @@ impl Plugin for RLCollectionPlugin {
                 )
                     .run_if(in_state(PlayState::Flying)),
             );
+
+        // ── Training-only: periodic random system swap ──────────────────
+        // `simulator_fraction` is sourced from the PPO section but consumed
+        // entirely by game-thread systems; the trainer never sees it.
+        let is_training = matches!(
+            self.mode,
+            crate::AppMode::RLTraining | crate::AppMode::BCTraining
+        );
+        if is_training {
+            app.insert_resource(SystemSwapConfig {
+                interval: self.training.ppo.system_swap_segments,
+                simulator_fraction: self.training.ppo.simulator_fraction,
+            })
+            .init_resource::<SegmentCounter>()
+            .init_resource::<PendingSystemRespawn>()
+            .add_systems(
+                Update,
+                check_system_swap
+                    .after(handle_rl_ship_died)
+                    .after(handle_rl_ship_jumped)
+                    .run_if(in_state(PlayState::Flying)),
+            )
+            .add_systems(
+                Update,
+                complete_system_swap.run_if(in_state(PlayState::MainMenu)),
+            );
+        }
     }
 }
 
@@ -381,12 +440,22 @@ fn rl_step(
         Res<BCSender>,
         Res<RLResource>,
         Res<crate::config::RewardConfig>,
+        Res<InferenceTemperature>,
     ),
+    mut segment_counter: Option<ResMut<SegmentCounter>>,
 ) {
     let (planet_query, asteroid_query, asteroid_field_query, pickup_query, ship_query) =
         &entity_queries;
-    let (item_universe, current_system, mode, rl_sender, bc_sender, rl_resource, reward_cfg) =
-        &resources;
+    let (
+        item_universe,
+        current_system,
+        mode,
+        rl_sender,
+        bc_sender,
+        rl_resource,
+        reward_cfg,
+        inference_temperature,
+    ) = &resources;
     if !timer.0.tick(time.delta()).just_finished() {
         return;
     }
@@ -433,7 +502,9 @@ fn rl_step(
                 .chunks(model::POLICY_OUTPUT_DIM)
                 .zip(nav_target_logits.chunks(model::TARGET_OUTPUT_DIM))
                 .zip(wep_target_logits.chunks(model::TARGET_OUTPUT_DIM))
-                .map(|((al, ntl), wtl)| model::sample_discrete_action(al, ntl, wtl, &mut rng))
+                .map(|((al, ntl), wtl)| {
+                    model::sample_discrete_action(al, ntl, wtl, &mut rng, inference_temperature.0)
+                })
                 .collect();
             Some(actions)
         } else {
@@ -441,7 +512,7 @@ fn rl_step(
         };
 
     // ── Sub-function 3: store transitions and update agent state ───────────
-    store_obs_actions(
+    let segments_sent = store_obs_actions(
         &obs_data,
         model_actions.as_deref(),
         &mut agents,
@@ -453,6 +524,11 @@ fn rl_step(
         mode,
         reward_cfg,
     );
+    if segments_sent > 0 {
+        if let Some(c) = segment_counter.as_deref_mut() {
+            c.0 += segments_sent;
+        }
+    }
 }
 
 /// Re-emit the last chosen action every `Update` frame so the ship continues
@@ -507,7 +583,11 @@ fn repeat_actions(
 /// The event is emitted in `apply_damage` (ship.rs) before the entity is
 /// despawned. Because `Commands` are deferred, the entity is still alive when
 /// this system runs.
-fn handle_rl_ship_died(mut events: MessageReader<RLShipDied>, rl_sender: Res<RLSender>) {
+fn handle_rl_ship_died(
+    mut events: MessageReader<RLShipDied>,
+    rl_sender: Res<RLSender>,
+    mut counter: Option<ResMut<SegmentCounter>>,
+) {
     for ev in events.read() {
         let mut transitions = ev.transitions.clone();
         // Mark the last transition as terminal.
@@ -520,6 +600,9 @@ fn handle_rl_ship_died(mut events: MessageReader<RLShipDied>, rl_sender: Res<RLS
             bootstrap_value: None, // terminal — no bootstrapping needed
         };
         let _ = rl_sender.0.try_send(segment);
+        if let Some(c) = counter.as_deref_mut() {
+            c.0 += 1;
+        }
     }
 }
 
@@ -528,7 +611,11 @@ fn handle_rl_ship_died(mut events: MessageReader<RLShipDied>, rl_sender: Res<RLS
 /// Unlike death, the last transition is NOT marked as terminal (`done = false`).
 /// `bootstrap_value` is left as `None` — the jump ends the trajectory without
 /// a future-value estimate.
-fn handle_rl_ship_jumped(mut events: MessageReader<RLShipJumped>, rl_sender: Res<RLSender>) {
+fn handle_rl_ship_jumped(
+    mut events: MessageReader<RLShipJumped>,
+    rl_sender: Res<RLSender>,
+    mut counter: Option<ResMut<SegmentCounter>>,
+) {
     for ev in events.read() {
         if ev.transitions.is_empty() {
             continue;
@@ -539,6 +626,90 @@ fn handle_rl_ship_jumped(mut events: MessageReader<RLShipJumped>, rl_sender: Res
             bootstrap_value: None,
         };
         let _ = rl_sender.0.try_send(segment);
+        if let Some(c) = counter.as_deref_mut() {
+            c.0 += 1;
+        }
+    }
+}
+
+/// When the segment counter exceeds the configured swap interval, pick a
+/// new training system (with `simulator_fraction` chance of the isolated
+/// `simulator` system, otherwise uniform over the rest), flush every
+/// in-flight `RLAgent` segment as truncated, update `CurrentStarSystem`,
+/// and bounce the play state to `MainMenu` so `DespawnOnExit(Flying)` can
+/// clear ships and asteroids before re-entering Flying.
+fn check_system_swap(
+    swap_cfg: Res<SystemSwapConfig>,
+    mut counter: ResMut<SegmentCounter>,
+    mut current_system: ResMut<CurrentStarSystem>,
+    item_universe: Res<ItemUniverse>,
+    mut next_state: ResMut<NextState<PlayState>>,
+    mut pending: ResMut<PendingSystemRespawn>,
+    rl_sender: Res<RLSender>,
+    mut agents: Query<&mut RLAgent>,
+) {
+    if swap_cfg.interval == 0 || counter.0 < swap_cfg.interval {
+        return;
+    }
+    counter.0 = 0;
+
+    // Flush in-flight segment buffers as truncated trajectories so we don't
+    // lose collected experience when AI ships are despawned by
+    // `DespawnOnExit(Flying)` during the state bounce.
+    for mut agent in &mut agents {
+        if agent.segment_buffer.is_empty() {
+            continue;
+        }
+        let segment = Segment {
+            personality: agent.personality.clone(),
+            transitions: std::mem::take(&mut agent.segment_buffer),
+            bootstrap_value: None,
+        };
+        let _ = rl_sender.0.try_send(segment);
+        agent.steps_since_flush = 0;
+    }
+
+    // Pick the next system.
+    use rand::Rng;
+    use rand::seq::SliceRandom;
+    let mut rng = rand::thread_rng();
+    let roll: f32 = rng.gen_range(0.0..1.0);
+    let pick_simulator =
+        roll < swap_cfg.simulator_fraction && item_universe.star_systems.contains_key("simulator");
+    let new_system = if pick_simulator {
+        "simulator".to_string()
+    } else {
+        let candidates: Vec<&String> = item_universe
+            .star_systems
+            .keys()
+            .filter(|name| name.as_str() != "simulator")
+            .collect();
+        candidates
+            .choose(&mut rng)
+            .map(|s| (*s).clone())
+            .unwrap_or_else(|| current_system.0.clone())
+    };
+
+    println!(
+        "[training] system swap: {} → {}",
+        current_system.0, new_system
+    );
+    current_system.0 = new_system;
+    pending.0 = true;
+    next_state.set(PlayState::MainMenu);
+}
+
+/// Second half of the system-swap two-frame bounce: when we're sitting in
+/// `MainMenu` because of a pending respawn, transition back to `Flying`
+/// so `OnEnter(Flying)` re-runs and respawns asteroids + AI ships in the
+/// new `CurrentStarSystem`.
+fn complete_system_swap(
+    mut pending: ResMut<PendingSystemRespawn>,
+    mut next_state: ResMut<NextState<PlayState>>,
+) {
+    if pending.0 {
+        pending.0 = false;
+        next_state.set(PlayState::Flying);
     }
 }
 
@@ -661,8 +832,8 @@ fn build_all_observations(
             ship.cargo
                 .iter()
                 .map(|(commodity, &qty)| {
-                    let sale = pd.commodities.get(commodity).copied().unwrap_or(0) as f32
-                        * qty as f32;
+                    let sale =
+                        pd.commodities.get(commodity).copied().unwrap_or(0) as f32 * qty as f32;
                     let cost = ship.cargo_cost.get(commodity).copied().unwrap_or(0) as f32;
                     sale - cost
                 })
@@ -685,12 +856,7 @@ fn build_all_observations(
                             return None;
                         }
                         if !pd.faction.is_empty()
-                            && _self_hostility
-                                .0
-                                .get(&pd.faction)
-                                .copied()
-                                .unwrap_or(0.0)
-                                > 0.0
+                            && _self_hostility.0.get(&pd.faction).copied().unwrap_or(0.0) > 0.0
                         {
                             return None;
                         }
@@ -1264,8 +1430,7 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
     // filter: low health (needs repair), or free cargo space (can buy more).
     let low_health = obs[SELF_HEALTH_FRAC] < 0.5;
     let has_free_cargo = obs[SELF_CARGO_FRAC] < 1.0;
-    let planet_has_ammo =
-        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_HAS_AMMO] > 0.5;
+    let planet_has_ammo = |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_HAS_AMMO] > 0.5;
     let planet_profit =
         |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + PLANET_CARGO_PROFIT_VALUE];
     let planet_recently_visited =
@@ -1334,7 +1499,6 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
             .unwrap_or(no_target),
     }
 }
-
 
 /// `model_actions` — when `Some`, contains one `(DiscreteAction, log_prob)` per
 /// entry in `decisions` (same order). Used as the executed action in `RLControl`
@@ -1421,17 +1585,20 @@ fn store_obs_actions(
     bc_sender: &BCSender,
     mode: &AIPlayMode,
     reward_cfg: &crate::config::RewardConfig,
-) {
+) -> usize {
+    let mut segments_sent: usize = 0;
     // Pre-pass: snapshot accumulated_rewards and faction for every RLAgent.
     // This must happen before the mutable loop so reward sharing can read
     // allies' rewards without borrow conflicts.
-    let reward_snapshots: std::collections::HashMap<Entity, ([f32; crate::consts::N_REWARD_TYPES], Option<String>)> =
-        agents
-            .iter()
-            .map(|(e, agent, s, _, _, _, _, _, _, _, _)| {
-                (e, (agent.accumulated_rewards, s.data.faction.clone()))
-            })
-            .collect();
+    let reward_snapshots: std::collections::HashMap<
+        Entity,
+        ([f32; crate::consts::N_REWARD_TYPES], Option<String>),
+    > = agents
+        .iter()
+        .map(|(e, agent, s, _, _, _, _, _, _, _, _)| {
+            (e, (agent.accumulated_rewards, s.data.faction.clone()))
+        })
+        .collect();
 
     for (idx, (entity, obs, proj_obs, slot_targets)) in decisions.iter().enumerate() {
         let Ok((
@@ -1565,11 +1732,24 @@ fn store_obs_actions(
                              bucket_type={}",
                             entity,
                             tgt.get_entity(),
-                            if wep_idx < rl_obs::K_PLANETS { "planet" }
-                            else if wep_idx < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS { "asteroid" }
-                            else if wep_idx < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS + rl_obs::K_HOSTILE_SHIPS { "hostile_ship" }
-                            else if wep_idx < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS + rl_obs::K_HOSTILE_SHIPS + rl_obs::K_FRIENDLY_SHIPS { "friendly_ship" }
-                            else { "pickup" },
+                            if wep_idx < rl_obs::K_PLANETS {
+                                "planet"
+                            } else if wep_idx < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS {
+                                "asteroid"
+                            } else if wep_idx
+                                < rl_obs::K_PLANETS + rl_obs::K_ASTEROIDS + rl_obs::K_HOSTILE_SHIPS
+                            {
+                                "hostile_ship"
+                            } else if wep_idx
+                                < rl_obs::K_PLANETS
+                                    + rl_obs::K_ASTEROIDS
+                                    + rl_obs::K_HOSTILE_SHIPS
+                                    + rl_obs::K_FRIENDLY_SHIPS
+                            {
+                                "friendly_ship"
+                            } else {
+                                "pickup"
+                            },
                         );
                     }
                 }
@@ -1619,9 +1799,7 @@ fn store_obs_actions(
                 obs: last_obs,
                 proj_obs: last_proj.clone(),
                 action: last_action,
-                rule_based_action: agent
-                    .last_rule_based_action
-                    .unwrap_or(last_action),
+                rule_based_action: agent.last_rule_based_action.unwrap_or(last_action),
                 rewards,
                 done: false,
                 log_prob: agent.last_log_prob,
@@ -1654,6 +1832,7 @@ fn store_obs_actions(
                 };
                 let _ = rl_sender.0.try_send(segment);
                 agent.steps_since_flush = 0;
+                segments_sent += 1;
             }
         }
 
@@ -1664,6 +1843,8 @@ fn store_obs_actions(
         agent.last_rule_based_action = Some(rule_based_action);
         agent.last_log_prob = action_log_prob;
     }
+
+    segments_sent
 }
 
 // ---------------------------------------------------------------------------
@@ -1687,7 +1868,6 @@ pub fn build_rl_ship_jumped(_entity: Entity, agent: &RLAgent) -> RLShipJumped {
         transitions: agent.segment_buffer.clone(),
     }
 }
-
 
 #[cfg(test)]
 #[path = "../tests/rl_collection_tests.rs"]

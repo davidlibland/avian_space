@@ -114,6 +114,23 @@ impl ItemUniverse {
         crate::validate_assets::validate(self);
     }
 
+    /// Add a "simulator" star system that mirrors `sol` but has no jump
+    /// connections, so it cannot be reached or seen by the player on the
+    /// star map.  Used by RL training to diversify environments without
+    /// affecting normal gameplay.  No-op if `sol` is missing.
+    fn materialize_simulator_system(&mut self) {
+        if self.star_systems.contains_key("simulator") {
+            return; // already defined explicitly in YAML
+        }
+        let Some(sol) = self.star_systems.get("sol") else {
+            return;
+        };
+        let mut simulator = sol.clone();
+        simulator.connections.clear();
+        simulator.display_name = "Simulator".to_string();
+        self.star_systems.insert("simulator".to_string(), simulator);
+    }
+
     fn compute_global_averages(&mut self) {
         let mut sums: HashMap<String, (f64, u32)> = HashMap::new();
         let mut mins: HashMap<String, i128> = HashMap::new();
@@ -405,7 +422,7 @@ impl OutfitterItem {
 }
 
 /// Probability distribution + population limits for ships in a star system.
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct ShipDistribution {
     /// Minimum number of AI ships to maintain in the system.
     pub min: usize,
@@ -444,7 +461,7 @@ impl ShipDistribution {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct StarSystem {
     #[serde(default)]
     pub map_position: Vec2,
@@ -466,6 +483,7 @@ pub fn item_universe_plugin(app: &mut App) {
         );
 
     item_universe.fill_display_names();
+    item_universe.materialize_simulator_system();
     item_universe.compute_global_averages();
     item_universe.compute_trade_maps();
     item_universe.compute_planet_ammo();

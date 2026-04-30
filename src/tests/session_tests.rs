@@ -66,6 +66,7 @@ fn basic_universe() -> ItemUniverse {
         missions: HashMap::from([("base_quest".to_string(), base_mission)]),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),
+        global_minimum_price: HashMap::new(),
         system_commodity_best_planet_to_sell: HashMap::new(),
         system_planet_best_commodity_to_buy: HashMap::new(),
         planet_best_margin: HashMap::new(),

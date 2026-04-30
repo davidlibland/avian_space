@@ -540,15 +540,13 @@ fn set_arrival_velocity(
         .remove::<(Sensor, Mass, AngularInertia)>();
 }
 
-/// Save the game and return to the main menu when Escape is pressed.
+/// Return to the main menu when Escape is pressed. Progress is intentionally
+/// not saved here — saves only happen on landing/takeoff.
 fn escape_to_menu(
     keyboard: Res<ButtonInput<KeyCode>>,
-    game_state: Res<game_save::PlayerGameState>,
-    session_data: Res<session::SessionSaveData>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
-        game_save::write_save(&game_state, &session_data);
         next_state.set(PlayState::MainMenu);
     }
 }

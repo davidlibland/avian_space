@@ -431,7 +431,7 @@ fn test_coupled_gumbel_sample_identical_logits() {
     let logits = vec![0.1_f32, -0.3, 0.7, 0.0, -1.2, 0.5, 0.2, -0.4, 1.1, -0.1];
     for _ in 0..100 {
         let mut lp = 0.0;
-        let (a, b) = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp);
+        let (a, b) = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp, 1.0);
         assert_eq!(a, b, "identical logits must produce identical samples");
     }
 }
@@ -445,7 +445,7 @@ fn test_coupled_gumbel_sample_in_range() {
     let logits_b: Vec<f32> = (0..num_classes).map(|i| (i as f32) * -0.2 + 0.1).collect();
     for _ in 0..50 {
         let mut lp = 0.0;
-        let (a, b) = coupled_gumbel_sample(&logits_a, &logits_b, &mut rng, &mut lp);
+        let (a, b) = coupled_gumbel_sample(&logits_a, &logits_b, &mut rng, &mut lp, 1.0);
         assert!(a < num_classes, "a={a} out of range");
         assert!(b < num_classes, "b={b} out of range");
     }
@@ -460,7 +460,7 @@ fn test_coupled_gumbel_sample_dominated_logit() {
     logits[2] = 100.0;
     for _ in 0..50 {
         let mut lp = 0.0;
-        let (a, b) = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp);
+        let (a, b) = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp, 1.0);
         assert_eq!(a, 2, "dominant logit should win for a");
         assert_eq!(b, 2, "dominant logit should win for b");
     }
@@ -474,7 +474,7 @@ fn test_coupled_gumbel_sample_log_prob_accumulates() {
     let k = 8;
     let logits = vec![0.0_f32; k];
     let mut lp = 0.0;
-    let _ = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp);
+    let _ = coupled_gumbel_sample(&logits, &logits, &mut rng, &mut lp, 1.0);
     let expected = -2.0 * (k as f32).ln();
     assert!((lp - expected).abs() < 1e-5, "lp={lp} expected={expected}");
 }
@@ -505,7 +505,7 @@ fn test_coupled_gumbel_sample_distribution() {
     let mut count_b = vec![0u32; k];
     for _ in 0..n {
         let mut lp = 0.0;
-        let (a, b) = coupled_gumbel_sample(&logits_a, &logits_b, &mut rng, &mut lp);
+        let (a, b) = coupled_gumbel_sample(&logits_a, &logits_b, &mut rng, &mut lp, 1.0);
         count_a[a] += 1;
         count_b[b] += 1;
     }

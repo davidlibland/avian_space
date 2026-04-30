@@ -54,3 +54,9 @@ ppo:
   value_replay_capacity: 8192
   value_replay_fraction: 0.25
   value_replay_extra_batches: 4
+  # Swap the training environment to a randomly chosen system every N
+  # collected segments. 0 disables swapping (training stays in `sol`).
+  system_swap_segments: 1024
+  # Probability that a swap targets the isolated `simulator` system
+  # (a copy of sol with no jump connections).
+  simulator_fraction: 0.25
