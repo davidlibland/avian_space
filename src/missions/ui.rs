@@ -254,7 +254,9 @@ fn render_mission_log(
                     render_info_tab(ui, &ship, &game_state, &item_universe);
                 }
                 MissionLogTab::Cargo => {
-                    let location = transform.translation.xy();
+                    let forward = (transform.rotation * Vec3::Y).xy();
+                    let drop_distance = ship.data.radius + crate::pickups::PICKUP_RADIUS + 5.0;
+                    let location = transform.translation.xy() - forward * drop_distance;
                     render_cargo_tab(ui, &mut ship, location, &item_universe, &mut pickup_drop);
                 }
             }

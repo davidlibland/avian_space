@@ -45,7 +45,7 @@ sol:
         iron: 20
         chemicals: 35
         gold: 100
-      outfitter: [laser, proton_beam, ir_missile, space_mine]
+      outfitter: [laser, proton_beam, ir_missile, space_mine, javelin]
       shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
     moon:
       planet_type: rocky

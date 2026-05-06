@@ -10,7 +10,7 @@ use crate::utils::{random_velocity, safe_despawn};
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 use rand::Rng;
 
-const PICKUP_RADIUS: f32 = 15.0;
+pub const PICKUP_RADIUS: f32 = 15.0;
 
 #[derive(Component)]
 pub struct Pickup {

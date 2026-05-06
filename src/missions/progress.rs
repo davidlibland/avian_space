@@ -465,25 +465,31 @@ pub fn spawn_mission_targets(
         }
         // How many targets already exist for this mission?
         let alive = existing.iter().filter(|mt| mt.mission_id == *id).count() as u8;
-        let need = (*count)
+        let kill_need = (*count)
             .saturating_sub(progress.destroyed)
             .saturating_sub(alive);
+        let outstanding_collect = collect
+            .as_ref()
+            .map(|req| req.quantity.saturating_sub(progress.collected))
+            .unwrap_or(0);
+        // If kills are done but the collect requirement isn't, spawn a
+        // single replacement carrier so the mission isn't stuck in limbo
+        // when the player re-enters the system.
+        let scavenger_need =
+            if kill_need == 0 && alive == 0 && outstanding_collect > 0 { 1 } else { 0 };
+        let need = kill_need + scavenger_need;
         if need == 0 {
             continue;
         }
-        // Distribute any `collect` requirement across only the ships we're
-        // about to spawn (the remainder). If some targets have already been
-        // destroyed and yielded partial pickups, the player still only sees
-        // these newly spawned ships, so they must carry the full outstanding
-        // requirement. We over-load rather than short-load to ensure the
-        // player can always meet the objective.
-        let (collect_per_ship, collect_remainder) = match collect {
-            Some(req) if need > 0 => {
-                let per = req.quantity / need as u16;
-                let rem = req.quantity % need as u16;
-                (per, rem)
-            }
-            _ => (0, 0),
+        // Distribute the *outstanding* collect requirement across the ships
+        // we're about to spawn so totals stay correct on partial-progress
+        // re-entries instead of stacking up bonus cargo each visit.
+        let (collect_per_ship, collect_remainder) = if outstanding_collect > 0 {
+            let per = outstanding_collect / need as u16;
+            let rem = outstanding_collect % need as u16;
+            (per, rem)
+        } else {
+            (0, 0)
         };
         for i in 0..need {
             let pos = bevy::math::Vec2::new(

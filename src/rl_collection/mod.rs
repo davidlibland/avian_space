@@ -53,7 +53,7 @@ use crate::{GameLayer, PlayState};
 // ---------------------------------------------------------------------------
 
 /// Number of decision-steps per trajectory segment.
-pub const RL_SEGMENT_LEN: usize = 128;
+pub const RL_SEGMENT_LEN: usize = 512;
 
 /// Decision rate in seconds.
 pub const RL_STEP_PERIOD: f32 = 0.01; // 4 Hz
