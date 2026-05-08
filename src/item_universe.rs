@@ -28,6 +28,11 @@ pub struct ItemUniverse {
     pub ships: HashMap<String, ShipData>,
     #[serde(default)]
     pub star_systems: HashMap<String, StarSystem>,
+    /// Definition of the isolated "simulator" star system used by RL training.
+    /// Loaded from `assets/simulator_system.yaml` and folded into
+    /// `star_systems` under the key "simulator" by `materialize_simulator_system`.
+    #[serde(default)]
+    pub simulator_system: Option<StarSystem>,
     #[serde(default)]
     pub outfitter_items: HashMap<String, OutfitterItem>,
     // A map from my faction, to which factions engage me
@@ -114,20 +119,25 @@ impl ItemUniverse {
         crate::validate_assets::validate(self);
     }
 
-    /// Add a "simulator" star system that mirrors `sol` but has no jump
-    /// connections, so it cannot be reached or seen by the player on the
-    /// star map.  Used by RL training to diversify environments without
-    /// affecting normal gameplay.  No-op if `sol` is missing.
+    /// Fold the "simulator" star system loaded from
+    /// `assets/simulator_system.yaml` into `star_systems` under the key
+    /// "simulator". The simulator is intentionally disconnected from the
+    /// rest of the star map (no jump connections), so it cannot be reached
+    /// or seen by the player. Used by RL training to diversify environments
+    /// without affecting normal gameplay.
     fn materialize_simulator_system(&mut self) {
         if self.star_systems.contains_key("simulator") {
-            return; // already defined explicitly in YAML
+            return; // already defined explicitly in star_systems.yaml
         }
-        let Some(sol) = self.star_systems.get("sol") else {
+        let Some(mut simulator) = self.simulator_system.take() else {
             return;
         };
-        let mut simulator = sol.clone();
+        // Connections must be empty so the simulator stays unreachable from
+        // the gameplay galaxy, regardless of what the YAML file specifies.
         simulator.connections.clear();
-        simulator.display_name = "Simulator".to_string();
+        if simulator.display_name.is_empty() {
+            simulator.display_name = "Simulator".to_string();
+        }
         self.star_systems.insert("simulator".to_string(), simulator);
     }
 

@@ -229,7 +229,7 @@ sol:
     min: 15
     max: 20
     types:
-      fed_patrol: 5.0
+      fed_patrol: 2.0
       fed_destroyer: 0.25
       fed_missile_cruiser: 0.125
       shuttle: 1.5
@@ -237,10 +237,10 @@ sol:
       freighter: 1.0
       courier: 0.5
       asteroid_miner: 3.0
-      rebel_fighter: 5.0        # occasional Rebel scout near the border
+      rebel_fighter: 1.5        # occasional Rebel scout near the border
       rebel_gunboat: 0.25
       rebel_frigate: 0.25
-      pirate_corvette: 5.25
+      pirate_corvette: 3.25
       pirate_missile_boat: 0.125
 
 kepler_22:

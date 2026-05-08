@@ -37,6 +37,7 @@ use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::asteroids::{Asteroid, AsteroidField};
 use crate::item_universe::ItemUniverse;
 use crate::model::{self, RLResource};
+use crate::policy_asset::{DEFAULT_POLICY_ASSET_PATH, PolicyAsset};
 use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_obs::{
@@ -243,6 +244,13 @@ impl RLAgent {
     }
 }
 
+/// Handle to the policy asset currently being loaded for `AppMode::Inference`.
+///
+/// Inserted in [`RLCollectionPlugin::build`] for inference-mode apps and
+/// removed by [`apply_loaded_policy`] once the asset is ready.
+#[derive(Resource)]
+struct PendingPolicyHandle(Handle<PolicyAsset>);
+
 // ---------------------------------------------------------------------------
 // Plugin
 // ---------------------------------------------------------------------------
@@ -290,20 +298,13 @@ impl Plugin for RLCollectionPlugin {
                 drop(bc_rx);
             }
             crate::AppMode::Inference => {
-                // Load the checkpoint into the inference net so the game thread
-                // uses trained weights rather than a random initialisation.
-                if !experiment.is_fresh {
-                    let checkpoint_path = experiment.policy_checkpoint_path();
-                    if let Some(loaded) = model::load_inference_net(&checkpoint_path) {
-                        *inference_net_arc.lock().unwrap() = loaded;
-                        println!("[inference] Loaded policy from {checkpoint_path}");
-                    } else {
-                        eprintln!(
-                            "[inference] WARNING: no checkpoint found at {checkpoint_path} \
-                             — running with random weights!"
-                        );
-                    }
-                }
+                // Kick off an async load of the bundled policy asset; the
+                // `apply_loaded_policy` system below applies its bytes to the
+                // shared inference net once the asset is ready.
+                let asset_server = app.world().resource::<AssetServer>();
+                let handle: Handle<PolicyAsset> =
+                    asset_server.load(DEFAULT_POLICY_ASSET_PATH);
+                app.insert_resource(PendingPolicyHandle(handle));
                 drop(bc_rx);
                 drop(rl_rx);
             }
@@ -350,6 +351,11 @@ impl Plugin for RLCollectionPlugin {
                     .run_if(in_state(PlayState::Flying)),
             );
 
+        // Inference-only: apply the bundled policy asset once it loads.
+        if matches!(self.mode, crate::AppMode::Inference) {
+            app.add_systems(Update, apply_loaded_policy);
+        }
+
         // ── Training-only: periodic random system swap ──────────────────
         // `simulator_fraction` is sourced from the PPO section but consumed
         // entirely by game-thread systems; the trainer never sees it.
@@ -382,6 +388,43 @@ impl Plugin for RLCollectionPlugin {
 // ---------------------------------------------------------------------------
 // Systems
 // ---------------------------------------------------------------------------
+
+/// When the bundled `PolicyAsset` finishes loading, deserialise its bytes
+/// into the shared `InferenceNet` and drop the pending handle so this
+/// system becomes a no-op.
+fn apply_loaded_policy(
+    mut commands: Commands,
+    mut events: MessageReader<AssetEvent<PolicyAsset>>,
+    mut policy_assets: ResMut<Assets<PolicyAsset>>,
+    rl_resource: Res<RLResource>,
+    pending: Option<Res<PendingPolicyHandle>>,
+) {
+    let Some(pending) = pending else {
+        events.clear();
+        return;
+    };
+    let pending_id = pending.0.id();
+    let mut should_apply = false;
+    for event in events.read() {
+        if event.is_loaded_with_dependencies(pending_id) {
+            should_apply = true;
+        }
+    }
+    if !should_apply {
+        return;
+    }
+    let Some(asset) = policy_assets.remove(pending_id) else {
+        return;
+    };
+    match rl_resource.inference_net.lock() {
+        Ok(mut net) => {
+            net.load_bytes(asset.bytes);
+            println!("[inference] Loaded policy from {}", crate::policy_asset::DEFAULT_POLICY_ASSET_PATH);
+        }
+        Err(e) => eprintln!("[inference] failed to lock inference net: {e}"),
+    }
+    commands.remove_resource::<PendingPolicyHandle>();
+}
 
 /// Read all `RLReward` events and add them to the corresponding agent's
 /// accumulated reward.

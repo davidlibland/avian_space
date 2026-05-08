@@ -10,6 +10,7 @@ fn empty_item_universe() -> ItemUniverse {
         weapons: HashMap::new(),
         ships: HashMap::new(),
         star_systems: HashMap::new(),
+        simulator_system: None,
         outfitter_items: HashMap::new(),
         enemies: HashMap::new(),
         starting_ship: String::new(),

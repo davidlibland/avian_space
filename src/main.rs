@@ -15,6 +15,7 @@ mod main_menu;
 mod missions;
 mod planet_ui;
 mod planets;
+mod policy_asset;
 use planets::planets_plugin;
 mod ai_ships;
 mod config;
@@ -331,6 +332,7 @@ fn main() {
     // so it's needed even in headless mode (particles just won't render).
     app.add_plugins(explosions_plugin);
     app.add_plugins(world_assets::WorldAssetsPlugin);
+    app.add_plugins(policy_asset::PolicyAssetPlugin);
 
     // ── Game-logic plugins ──────────────────────────────────────────────
     app.add_plugins((

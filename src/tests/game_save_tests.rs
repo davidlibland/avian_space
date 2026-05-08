@@ -59,6 +59,7 @@ fn basic_item_universe() -> ItemUniverse {
                 ships: Default::default(),
             },
         )]),
+        simulator_system: None,
         outfitter_items: HashMap::new(),
         commodities: HashMap::new(),
         missions: HashMap::new(),

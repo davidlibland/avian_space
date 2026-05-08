@@ -1,0 +1,250 @@
+# The "simulator" star system used by RL training. It is intentionally
+# disconnected from the rest of the star map so it can never be reached or
+# seen during normal play. Tweak this file to diversify the training
+# environment without touching the gameplay galaxy in `star_systems.yaml`.
+#
+# Currently a copy of `sol` with no jump connections and ship counts
+# inflated by ~50% to push the agent through busier engagements.
+
+display_name: "Simulator"
+map_position: [0.0, 0.0]
+connections: []
+planets:
+  mercury:
+    planet_type: rocky
+    faction: Federation
+    location: [120.0, 60.0]
+    description: "A scorched rock barely above the sun. Iron ore practically falls out of the ground."
+    radius: 20.0
+    color: [0.55, 0.5, 0.45]
+    commodities:
+      iron: 3
+      silicates: 5
+      food: 65
+      water: 40
+    outfitter: []
+  venus:
+    planet_type: cloud
+    faction: Federation
+    location: [280.0, -200.0]
+    description: "Toxic atmosphere, crushing pressure, and the cheapest food in the system."
+    radius: 35.0
+    color: [0.75, 0.65, 0.3]
+    commodities:
+      food: 15
+      water: 20
+      iron: 25
+      chemicals: 6
+    outfitter: []
+  earth:
+    planet_type: habitable
+    faction: Federation
+    location: [500.0, 300.0]
+    description: "The Federation capital and home to its largest naval fleet. A major hub for trade and military contracts."
+    radius: 60.0
+    color: [0.2, 0.6, 0.3]
+    commodities:
+      food: 10
+      water: 5
+      iron: 20
+      chemicals: 35
+      gold: 100
+    outfitter: [laser, proton_beam, ir_missile, space_mine, javelin]
+    shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
+  moon:
+    planet_type: rocky
+    faction: Federation
+    location: [650.0, 380.0]
+    description: "Barren and grey, but surprisingly well-stocked with water ice."
+    radius: 22.0
+    color: [0.6, 0.6, 0.65]
+    commodities:
+      water: 7
+      iron: 20
+      food: 40
+    outfitter: []
+    shipyard: [shuttle, courier]
+  mars:
+    planet_type: desert
+    faction: Federation
+    location: [-350.0, 400.0]
+    description: "Rust-red and cold. Colonists here sell cheap iron and pay dearly for food."
+    radius: 30.0
+    color: [0.7, 0.35, 0.2]
+    commodities:
+      iron: 8
+      silicates: 10
+      food: 45
+      water: 30
+      chemicals: 18
+    outfitter: []
+  jupiter:
+    planet_type: gas_giant
+    faction: Federation
+    uncolonized: true
+    location: [-800.0, -500.0]
+    description: "The largest planet in the system. No colony can survive the crushing gravity and radiation."
+    radius: 70.0
+    color: [0.75, 0.6, 0.4]
+    commodities: {}
+    outfitter: []
+  io:
+    planet_type: rocky
+    faction: Independent
+    location: [-720.0, -430.0]
+    description: "Jupiter's volcanic moon. Sulfur and silicates are dirt-cheap; water barely exists."
+    radius: 15.0
+    color: [0.8, 0.7, 0.3]
+    commodities:
+      silicates: 3
+      chemicals: 8
+      iron: 12
+      water: 60
+    outfitter: []
+  europa:
+    planet_type: icy_dwarf
+    faction: Independent
+    location: [-880.0, -560.0]
+    description: "An ice-covered moon hiding a subsurface ocean. Water is practically free."
+    radius: 16.0
+    color: [0.7, 0.7, 0.75]
+    commodities:
+      water: 2
+      exotic_matter: 180
+      food: 55
+    outfitter: []
+  saturn:
+    planet_type: gas_giant
+    faction: Federation
+    uncolonized: true
+    location: [1000.0, -700.0]
+    description: "The ringed giant. Beautiful but uninhabitable — no solid surface to land on."
+    radius: 65.0
+    color: [0.82, 0.75, 0.55]
+    rings:
+      inner_radius: 2.30
+      outer_radius: 4.10
+      tilt_deg: 27.0
+    commodities: {}
+    outfitter: []
+  titan:
+    planet_type: cloud
+    faction: Independent
+    location: [1100.0, -620.0]
+    description: "Saturn's largest moon, shrouded in orange haze. Hydrocarbon lakes make chemicals nearly free."
+    radius: 25.0
+    color: [0.7, 0.55, 0.25]
+    commodities:
+      chemicals: 3
+      fuel_cells: 15
+      food: 50
+      water: 35
+    outfitter: []
+  enceladus:
+    planet_type: icy_dwarf
+    faction: Independent
+    location: [940.0, -770.0]
+    description: "A tiny ice moon venting geysers of water into space. The cheapest water in the system."
+    radius: 12.0
+    color: [0.85, 0.85, 0.9]
+    commodities:
+      water: 1
+      food: 60
+    outfitter: []
+  uranus:
+    planet_type: ice_giant
+    faction: Federation
+    uncolonized: true
+    location: [-500.0, -900.0]
+    description: "A pale blue-green ice giant tilted on its side. No colony — just howling winds and crushing pressure."
+    radius: 55.0
+    color: [0.6, 0.82, 0.82]
+    rings:
+      inner_radius: 2.20
+      outer_radius: 2.85
+      tilt_deg: 98.0
+      style: thin
+    commodities: {}
+    outfitter: []
+  miranda:
+    planet_type: rocky
+    faction: Independent
+    location: [-430.0, -850.0]
+    description: "Uranus's fractured moon, a patchwork of cliffs and canyons. Silicates are plentiful."
+    radius: 12.0
+    color: [0.5, 0.48, 0.45]
+    commodities:
+      silicates: 4
+      iron: 15
+      water: 45
+    outfitter: []
+  neptune:
+    planet_type: ice_giant
+    faction: Federation
+    uncolonized: true
+    location: [1300.0, 400.0]
+    description: "The deep blue ice giant at the edge of the system. Fierce winds make surface operations impossible."
+    radius: 50.0
+    color: [0.2, 0.35, 0.75]
+    commodities: {}
+    outfitter: []
+  triton:
+    planet_type: icy_dwarf
+    faction: Independent
+    location: [1380.0, 470.0]
+    description: "Neptune's captured moon, orbiting backwards. Nitrogen geysers scar the frozen surface."
+    radius: 14.0
+    color: [0.55, 0.5, 0.55]
+    commodities:
+      exotic_matter: 100
+      water: 8
+      silicates: 12
+    outfitter: []
+  pluto:
+    planet_type: icy_dwarf
+    faction: Independent
+    location: [-200.0, -1200.0]
+    description: "A distant dwarf planet at the fringe of known space. Exotic matter deposits lie untouched."
+    radius: 12.0
+    color: [0.55, 0.45, 0.4]
+    commodities:
+      exotic_matter: 80
+      water: 30
+      silicates: 20
+    outfitter: []
+  charon:
+    planet_type: rocky
+    faction: Independent
+    location: [-160.0, -1170.0]
+    description: "Pluto's binary companion. Grey and silent, but hiding pockets of water ice."
+    radius: 10.0
+    color: [0.45, 0.42, 0.4]
+    commodities:
+      water: 15
+      iron: 25
+      silicates: 8
+    outfitter: []
+astroid_fields:
+  -
+    location: [500., 300.]
+    number: 40
+    radius: 1500.
+ships:
+  # Sol uses min: 15, max: 20.  Inflated ~50% to push the agent through
+  # busier engagements during training.
+  min: 23
+  max: 30
+  types:
+    fed_patrol: 2.0
+    fed_destroyer: 0.25
+    fed_missile_cruiser: 0.125
+    shuttle: 1.5
+    hauler: 2.0
+    freighter: 1.0
+    courier: 0.5
+    asteroid_miner: 3.0
+    rebel_fighter: 1.5
+    rebel_gunboat: 0.25
+    rebel_frigate: 0.25
+    pirate_corvette: 3.25
+    pirate_missile_boat: 0.125

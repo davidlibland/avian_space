@@ -100,6 +100,7 @@ fn test_universe() -> ItemUniverse {
         weapons: HashMap::new(),
         ships,
         star_systems: HashMap::from([("sol".to_string(), system)]),
+        simulator_system: None,
         outfitter_items,
         enemies: HashMap::new(),
         starting_ship: "shuttle".to_string(),
