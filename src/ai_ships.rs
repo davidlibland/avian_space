@@ -1,16 +1,13 @@
 use std::f32::consts::PI;
 
 // Some AI for the ships
-use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
 use crate::optimal_control::{pursuit_controls_ego, turn_to_angle};
-use crate::pickups::Pickup;
 use crate::planets::Planet;
 use crate::rl_collection::{RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
-use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target, ship_bundle};
+use crate::ship::{Personality, Ship, ShipHostility, Target, ship_bundle};
 use crate::ship_anim::{self, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, ScaleUpFinished, image_size};
 use crate::utils::{angle_indicator, angle_to_hit};
-use crate::weapons::FireCommand;
 use crate::{CurrentStarSystem, GameLayer, PlayState};
 use avian2d::prelude::*;
 use bevy::prelude::*;
@@ -71,8 +68,6 @@ pub fn ai_ship_bundle(app: &mut App) {
         .add_systems(
             Update,
             (
-                classic_ai_target_selection,
-                classic_ai_control,
                 land_ship,
                 finish_ai_landing,
                 tick_ai_landed,
@@ -450,9 +445,12 @@ pub fn compute_ai_action(
             let median_speed =
                 median_sorted(unguided.iter().map(|w| w.speed).collect()).unwrap_or(max_speed);
             // 75% of median range: nudge the ship a bit closer before
-            // committing to coast+aim.
+            // committing to coast+aim. Combat behavior (coast-in-range and
+            // firing) is gated on having a weapons_target — without one, the
+            // ship is just navigating, so always pursue.
+            let has_weapons_target = ship.weapons_target.is_some();
             let firing_cutoff = 0.75 * median_range;
-            let in_firing_range = local_offset.length() < firing_cutoff;
+            let in_firing_range = has_weapons_target && local_offset.length() < firing_cutoff;
 
             // If within firing range: coast (no thrust) and aim using the
             // ballistic lead angle computed at the typical projectile speed.
@@ -491,18 +489,20 @@ pub fn compute_ai_action(
             };
 
             let mut weapons_to_fire = Vec::new();
-            for (weapon_type, _) in ship.weapon_systems.iter_all() {
-                let Some(weapon) = item_universe.weapons.get(weapon_type) else {
-                    continue;
-                };
-                if local_offset.length() < weapon.range() {
-                    let fire_angle = angle_to_hit(weapon.speed, &local_offset, &local_rel_vel);
-                    let residual = fire_angle.map(|a| {
-                        let wrapped = (a + PI).rem_euclid(2.0 * PI) - PI;
-                        wrapped - wrapped.clamp(-weapon.aimable_arc, weapon.aimable_arc)
-                    });
-                    if weapon.guided || angle_indicator(residual) > 0.5 {
-                        weapons_to_fire.push((weapon_type.clone(), Some(*target_e)));
+            if has_weapons_target {
+                for (weapon_type, _) in ship.weapon_systems.iter_all() {
+                    let Some(weapon) = item_universe.weapons.get(weapon_type) else {
+                        continue;
+                    };
+                    if local_offset.length() < weapon.range() {
+                        let fire_angle = angle_to_hit(weapon.speed, &local_offset, &local_rel_vel);
+                        let residual = fire_angle.map(|a| {
+                            let wrapped = (a + PI).rem_euclid(2.0 * PI) - PI;
+                            wrapped - wrapped.clamp(-weapon.aimable_arc, weapon.aimable_arc)
+                        });
+                        if weapon.guided || angle_indicator(residual) > 0.5 {
+                            weapons_to_fire.push((weapon_type.clone(), Some(*target_e)));
+                        }
                     }
                 }
             }
@@ -583,255 +583,6 @@ pub fn compute_ai_action(
                 reverse: 0.0,
                 weapons_to_fire: vec![],
             })
-        }
-    }
-}
-
-/// Validate and assign targets for non-RLAgent AI ships.
-///
-/// RLAgent ships are always skipped — their target selection is handled by
-/// `choose_target_slot` (BC mode) or the RL policy (RLControl mode).
-pub fn classic_ai_target_selection(
-    spatial_query: SpatialQuery,
-    mut ships: Query<
-        (Entity, &Position, &mut Ship, &AIShip, Option<&RLAgent>),
-        (Without<JumpingOut>, Without<AILanding>, Without<AILanded>),
-    >,
-    all_positions: Query<&Position>,
-    planet_marker: Query<(), With<Planet>>,
-    asteroid_marker: Query<(), With<Asteroid>>,
-    ship_marker: Query<(), With<Ship>>,
-    pickup_marker: Query<(), With<Pickup>>,
-    planet_names: Query<(Entity, &Planet)>,
-    ship_factions: Query<&ShipHostility>,
-    current_star_system: Res<CurrentStarSystem>,
-    item_universe: Res<ItemUniverse>,
-) {
-    for (entity, position, mut ship, ai_ship, rl_agent) in &mut ships {
-        // RLAgent ships handle targeting via rl_step / choose_target_slot.
-        if rl_agent.is_some() {
-            continue;
-        }
-        // 1. Validate existing target: clear if entity gone or (for combat targets) out of range.
-        if let Some(ref tgt) = ship.nav_target.clone() {
-            let target_entity = tgt.get_entity();
-            let valid = match tgt {
-                Target::Planet(_) => all_positions.get(target_entity).is_ok(),
-                Target::Ship(_) | Target::Asteroid(_) | Target::Pickup(_) => all_positions
-                    .get(target_entity)
-                    .map(|p| (p.0 - position.0).length() <= DETECTION_RADIUS)
-                    .unwrap_or(false),
-            };
-            if !valid {
-                ship.nav_target = None;
-            }
-        }
-
-        // 2. If no target, pick one.
-        if ship.nav_target.is_none() {
-            // Ships with cargo override personality and head to the best sell planet.
-            // Traders sell immediately; Miners/Fighters wait until holds are ≥75% full.
-            let cargo_used: u16 = ship.cargo.values().sum();
-            let should_sell = match ai_ship.personality {
-                Personality::Trader => cargo_used > 0,
-                _ => false, //cargo_used * 4 >= ship.data.cargo_space * 3,
-            };
-            if should_sell {
-                let system_name = &current_star_system.0;
-                if let Some(commodity_to_planet) = item_universe
-                    .system_commodity_best_planet_to_sell
-                    .get(system_name)
-                {
-                    let system_data = item_universe.star_systems.get(system_name);
-                    // Pick the sell-planet that maximises total value of our cargo.
-                    let best = ship
-                        .cargo
-                        .iter()
-                        .filter_map(|(commodity, &qty)| {
-                            let planet_name = commodity_to_planet.get(commodity)?;
-                            let price = system_data?
-                                .planets
-                                .get(planet_name)?
-                                .commodities
-                                .get(commodity)?;
-                            let planet_entity = planet_names
-                                .iter()
-                                .find(|(_, p)| &p.0 == planet_name)
-                                .map(|(e, _)| e)?;
-                            Some((planet_entity, qty as i128 * price))
-                        })
-                        .max_by_key(|(_, value)| *value);
-                    if let Some((planet_entity, _)) = best {
-                        ship.nav_target = Some(Target::Planet(planet_entity));
-                    }
-                }
-            }
-
-            // If still no target, use personality-based selection.
-            if ship.nav_target.is_none() {
-                let filter = SpatialQueryFilter::from_mask([
-                    GameLayer::Planet,
-                    GameLayer::Asteroid,
-                    GameLayer::Ship,
-                    GameLayer::Pickup,
-                ])
-                .with_excluded_entities([entity]);
-
-                let mut hits: Vec<(Entity, f32)> = spatial_query
-                    .shape_intersections(
-                        &Collider::circle(DETECTION_RADIUS),
-                        position.0,
-                        0.0,
-                        &filter,
-                    )
-                    .into_iter()
-                    .filter_map(|hit| {
-                        all_positions
-                            .get(hit)
-                            .ok()
-                            .map(|p| (hit, (p.0 - position.0).length_squared()))
-                    })
-                    .collect();
-
-                hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-                let nearest_pickup = hits
-                    .iter()
-                    .find(|(e, _)| pickup_marker.get(*e).is_ok())
-                    .copied();
-                let nearest_asteroid = hits
-                    .iter()
-                    .find(|(e, _)| asteroid_marker.get(*e).is_ok())
-                    .copied();
-                let nearest_planet = hits
-                    .iter()
-                    .find(|(e, _)| planet_marker.get(*e).is_ok())
-                    .copied();
-                let nearest_ship = hits
-                    .iter()
-                    .find(|(e, _)| {
-                        ship_marker.get(*e).is_ok()
-                            && ship_factions
-                                .get(*e)
-                                .map(|f| ship.should_engage(f))
-                                .unwrap_or(false)
-                    })
-                    .copied();
-
-                // Pickup only preempts the natural target if it's closer.
-                let pickup_closer_than = |natural: Option<(Entity, f32)>| -> Option<Target> {
-                    match (nearest_pickup, natural) {
-                        (Some((p, pd)), Some((_, nd))) if pd < nd => Some(Target::Pickup(p)),
-                        (Some((p, _)), None) => Some(Target::Pickup(p)),
-                        _ => None,
-                    }
-                };
-
-                ship.nav_target = match ai_ship.personality {
-                    Personality::Miner => {
-                        // Miners grab any nearby pickup first.
-                        nearest_pickup
-                            .map(|(e, _)| Target::Pickup(e))
-                            .or_else(|| nearest_asteroid.map(|(e, _)| Target::Asteroid(e)))
-                            .or_else(|| nearest_planet.map(|(e, _)| Target::Planet(e)))
-                    }
-                    Personality::Fighter => pickup_closer_than(nearest_ship)
-                        .or_else(|| nearest_ship.map(|(e, _)| Target::Ship(e)))
-                        .or_else(|| nearest_planet.map(|(e, _)| Target::Planet(e))),
-                    Personality::Trader => pickup_closer_than(nearest_planet)
-                        .or_else(|| nearest_planet.map(|(e, _)| Target::Planet(e))),
-                };
-            }
-
-            // Sync weapons_target: shoot at nav_target when it's a ship or
-            // asteroid, otherwise clear (nothing to shoot at for planets/pickups).
-            ship.weapons_target = match &ship.nav_target {
-                Some(t @ Target::Ship(_)) | Some(t @ Target::Asteroid(_)) => Some(t.clone()),
-                _ => None,
-            };
-        }
-    }
-}
-
-/// Compute and apply rule-based actions for AI ships.
-///
-/// Compute and apply rule-based actions for non-RLAgent AI ships.
-///
-/// RLAgent ships are always skipped — they are driven by `rl_step` and
-/// `repeat_actions`. Target selection is performed by
-/// [`classic_ai_target_selection`].
-pub fn classic_ai_control(
-    mut ship_writer: MessageWriter<ShipCommand>,
-    mut weapons_writer: MessageWriter<FireCommand>,
-    mut ships: Query<
-        (
-            Entity,
-            &Position,
-            &LinearVelocity,
-            &AngularVelocity,
-            &MaxLinearSpeed,
-            &Transform,
-            &mut Ship,
-            &AIShip,
-            Option<&RLAgent>,
-        ),
-        (Without<JumpingOut>, Without<AILanding>, Without<AILanded>),
-    >,
-    all_positions: Query<&Position>,
-    velocities: Query<&LinearVelocity>,
-    item_universe: Res<ItemUniverse>,
-) {
-    for (
-        entity,
-        position,
-        ship_vel,
-        ang_vel,
-        max_speed,
-        ship_transform,
-        mut ship,
-        _ai_ship,
-        rl_agent,
-    ) in &mut ships
-    {
-        // RLAgent ships are driven by rl_step + repeat_actions in both modes.
-        if rl_agent.is_some() {
-            continue;
-        }
-
-        // Act on the current target (assigned by classic_ai_target_selection).
-        if ship.nav_target.is_none() {
-            continue;
-        }
-        match compute_ai_action(
-            &*ship,
-            position.0,
-            ship_vel.0,
-            ang_vel.0,
-            max_speed.0,
-            ship_transform,
-            &all_positions,
-            &velocities,
-            &item_universe,
-            &mut rand::thread_rng(),
-        ) {
-            Some(action) => {
-                ship_writer.write(ShipCommand {
-                    entity,
-                    thrust: action.thrust,
-                    turn: action.turn,
-                    reverse: action.reverse,
-                });
-                for (weapon_type, fire_target) in action.weapons_to_fire {
-                    weapons_writer.write(FireCommand {
-                        ship: entity,
-                        weapon_type,
-                        target: fire_target,
-                    });
-                }
-            }
-            None => {
-                ship.nav_target = None;
-            }
         }
     }
 }

@@ -102,7 +102,8 @@ mines asteroids, fights hostile ships, and completes missions.
 - **model/mod.rs** — Top-level module for the neural network. Defines
   dimension constants (observation sizes, policy/value/target output dims,
   hidden dim), backend type aliases (`InferBackend` = NdArray CPU,
-  `TrainBackend` = Autodiff<Wgpu>), and the `RLResource` Bevy resource
+  `TrainBackend` = Autodiff<Wgpu> by default, or Autodiff<Cuda> with the
+  `cuda` cargo feature), and the `RLResource` Bevy resource
   that holds the `Arc<Mutex<InferenceNet>>` shared between game and training
   threads.
 

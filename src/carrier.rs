@@ -12,9 +12,10 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::ai_ships::AIShip;
-use crate::rl_collection::RLAgent;
-use crate::ship::{Ship, ShipHostility, Target};
+use crate::ai_ships::{AIShip, compute_ai_action};
+use crate::rl_collection::{RLAgent, RLStepSet};
+use crate::sfx::EscortSfx;
+use crate::ship::{Ship, ShipCommand, ShipHostility, Target};
 use crate::ship_anim::{self, ANIM_MIN_SCALE, ScalingUp, image_size};
 use crate::utils::safe_despawn;
 use crate::weapons::FireCommand;
@@ -50,6 +51,19 @@ struct DockingEscort {
     full_size: Vec2,
 }
 
+/// Behavioral mode of an escort. Drives target assignment in
+/// [`update_escort_modes`] and gates dock/firing systems.
+#[derive(Component, Clone)]
+pub enum EscortMode {
+    /// Stay near the mother. No engagement.
+    Escort,
+    /// Pursue and engage a specific target until it is destroyed.
+    /// Sticky: doesn't switch when the mother retargets.
+    Attack { target: Target },
+    /// Approach the mother and dock to replenish the carrier bay.
+    Dock,
+}
+
 /// Message emitted by `weapon_fire` when a carrier bay weapon fires.
 #[derive(Event, Message)]
 pub struct SpawnEscort {
@@ -70,13 +84,16 @@ pub fn carrier_plugin(app: &mut App) {
             auto_launch_carrier_bays,
             spawn_escort_ships,
             escort_launch_movement,
-            sync_escort_targets,
+            player_escort_input,
+            update_escort_modes,
+            escort_act,
             begin_escort_dock,
             cancel_escort_dock,
             animate_escort_dock,
             orphan_escorts,
         )
             .chain()
+            .before(RLStepSet)
             .run_if(in_state(PlayState::Flying)),
     );
 }
@@ -126,12 +143,21 @@ fn spawn_escort_ships(
     mut commands: Commands,
     item_universe: Res<crate::item_universe::ItemUniverse>,
     current_system: Res<crate::CurrentStarSystem>,
-    mother_ships: Query<(&Position, &LinearVelocity, &Transform)>,
+    mother_ships: Query<(&Position, &LinearVelocity, &Transform, &Ship)>,
+    player: Query<Entity, With<Player>>,
+    mut sfx_writer: MessageWriter<EscortSfx>,
     images: Res<Assets<Image>>,
 ) {
+    let player_entity = player.single().ok();
     for event in reader.read() {
-        let Ok((mother_pos, mother_vel, mother_tf)) = mother_ships.get(event.mother) else {
+        let Ok((mother_pos, mother_vel, mother_tf, mother_ship)) =
+            mother_ships.get(event.mother)
+        else {
             continue;
+        };
+        let initial_mode = match mother_ship.weapons_target.as_ref() {
+            Some(t) => EscortMode::Attack { target: t.clone() },
+            None => EscortMode::Escort,
         };
 
         let mut bundle = crate::ship::ship_bundle(
@@ -157,11 +183,11 @@ fn spawn_escort_ships(
                 AIShip {
                     personality: personality.clone(),
                 },
-                RLAgent::new(personality),
                 CarrierEscort {
                     mother: event.mother,
                     weapon_type: event.weapon_type.clone(),
                 },
+                initial_mode,
                 ScalingUp {
                     timer: Timer::from_seconds(LAUNCH_DURATION, TimerMode::Once),
                     full_size,
@@ -183,6 +209,10 @@ fn spawn_escort_ships(
                 ));
             })
             .id();
+
+        if Some(event.mother) == player_entity {
+            sfx_writer.write(EscortSfx::Launching);
+        }
     }
 }
 
@@ -216,26 +246,153 @@ fn escort_launch_movement(
 // Target sync
 // ---------------------------------------------------------------------------
 
-/// Copy the mother ship's targets to each escort.
-/// When the mother has no weapons target, escorts navigate back to her.
-/// Skips escorts that are launching or docking (they handle their own movement).
-fn sync_escort_targets(
-    mother_ships: Query<&Ship, Without<CarrierEscort>>,
+/// Handle mode transitions and apply nav/weapons targets accordingly.
+///
+/// Attack mode is sticky on its specific target. When that target is gone,
+/// the escort either acquires the mother's current weapons target (NPC) or
+/// returns to escort mode (player escorts always disengage on kill).
+fn update_escort_modes(
+    mother_ships: Query<(&Ship, Has<Player>), Without<CarrierEscort>>,
     mut escorts: Query<
-        (&CarrierEscort, &mut Ship),
-        (Without<ScalingUp>, Without<DockingEscort>),
+        (&CarrierEscort, &mut EscortMode, &mut Ship),
+        Without<DockingEscort>,
     >,
+    target_alive: Query<(), With<Position>>,
+    mut sfx_writer: MessageWriter<EscortSfx>,
 ) {
-    for (escort, mut ship) in &mut escorts {
-        let Ok(mother) = mother_ships.get(escort.mother) else {
+    for (escort, mut mode, mut ship) in &mut escorts {
+        let Ok((mother, mother_is_player)) = mother_ships.get(escort.mother) else {
             continue;
         };
-        if let Some(ref wpn) = mother.weapons_target {
-            ship.weapons_target = Some(wpn.clone());
-            ship.nav_target = Some(wpn.clone());
-        } else {
-            ship.weapons_target = None;
-            ship.nav_target = Some(Target::Ship(escort.mother));
+
+        if let EscortMode::Attack { ref target } = *mode {
+            if target_alive.get(target.get_entity()).is_err() {
+                if mother_is_player {
+                    sfx_writer.write(EscortSfx::Neutralized);
+                }
+                *mode = if mother_is_player {
+                    EscortMode::Escort
+                } else {
+                    match mother.weapons_target.as_ref() {
+                        Some(new_target) => EscortMode::Attack {
+                            target: new_target.clone(),
+                        },
+                        None => EscortMode::Dock,
+                    }
+                };
+            }
+        }
+
+        match &*mode {
+            EscortMode::Attack { target } => {
+                ship.nav_target = Some(target.clone());
+                ship.weapons_target = Some(target.clone());
+            }
+            EscortMode::Escort | EscortMode::Dock => {
+                ship.nav_target = Some(Target::Ship(escort.mother));
+                ship.weapons_target = None;
+            }
+        }
+    }
+}
+
+/// Player keybinds for commanding their own escorts:
+/// - `B`: dock — return to mother and replenish
+/// - `N`: escort — disengage and stay near
+/// - `M`: attack the player's current weapons target
+fn player_escort_input(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    player: Query<(Entity, &Ship), With<Player>>,
+    mut escorts: Query<(&CarrierEscort, &mut EscortMode)>,
+    mut sfx_writer: MessageWriter<EscortSfx>,
+) {
+    let Ok((player_entity, player_ship)) = player.single() else {
+        return;
+    };
+    let (new_mode, sfx) = if keyboard.just_pressed(KeyCode::KeyB) {
+        (Some(EscortMode::Dock), EscortSfx::Dock)
+    } else if keyboard.just_pressed(KeyCode::KeyN) {
+        (Some(EscortMode::Escort), EscortSfx::Escort)
+    } else if keyboard.just_pressed(KeyCode::KeyM) {
+        let mode = player_ship
+            .weapons_target
+            .as_ref()
+            .map(|t| EscortMode::Attack { target: t.clone() });
+        (mode, EscortSfx::Attack)
+    } else {
+        return;
+    };
+    let Some(new_mode) = new_mode else { return };
+    sfx_writer.write(sfx);
+    for (escort, mut mode) in &mut escorts {
+        if escort.mother == player_entity {
+            *mode = new_mode.clone();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic escort control
+// ---------------------------------------------------------------------------
+
+/// Drive escort thrust/turn/firing via the same rule-based policy used to
+/// generate BC labels. Escorts are excluded from the RL pipeline (no `RLAgent`),
+/// so this is the sole driver of their actions.
+fn escort_act(
+    mut escorts: Query<
+        (
+            Entity,
+            &Position,
+            &LinearVelocity,
+            &AngularVelocity,
+            &MaxLinearSpeed,
+            &Transform,
+            &mut Ship,
+        ),
+        (With<CarrierEscort>, Without<ScalingUp>),
+    >,
+    all_positions: Query<&Position>,
+    all_velocities: Query<&LinearVelocity>,
+    item_universe: Res<crate::item_universe::ItemUniverse>,
+    mut ship_writer: MessageWriter<ShipCommand>,
+    mut weapons_writer: MessageWriter<FireCommand>,
+) {
+    let mut rng = rand::thread_rng();
+    for (entity, position, ship_vel, ang_vel, max_speed, ship_transform, mut ship) in &mut escorts
+    {
+        if ship.nav_target.is_none() {
+            continue;
+        }
+        match compute_ai_action(
+            &*ship,
+            position.0,
+            ship_vel.0,
+            ang_vel.0,
+            max_speed.0,
+            ship_transform,
+            &all_positions,
+            &all_velocities,
+            &item_universe,
+            &mut rng,
+        ) {
+            Some(action) => {
+                ship_writer.write(ShipCommand {
+                    entity,
+                    thrust: action.thrust,
+                    turn: action.turn,
+                    reverse: action.reverse,
+                });
+                for (weapon_type, fire_target) in action.weapons_to_fire {
+                    weapons_writer.write(FireCommand {
+                        ship: entity,
+                        weapon_type,
+                        target: fire_target,
+                    });
+                }
+            }
+            None => {
+                ship.nav_target = None;
+            }
         }
     }
 }
@@ -244,24 +401,24 @@ fn sync_escort_targets(
 // Dock animation
 // ---------------------------------------------------------------------------
 
-/// When an escort is close enough to the mother and the mother has no combat
-/// target, begin the docking animation by adding [`DockingEscort`].
+/// When an escort in Dock mode is close enough to the mother, begin the
+/// docking animation by adding [`DockingEscort`].
 fn begin_escort_dock(
     mut commands: Commands,
     escorts: Query<
-        (Entity, &CarrierEscort, &Position, &Sprite),
+        (Entity, &CarrierEscort, &EscortMode, &Position, &Sprite),
         (Without<ScalingUp>, Without<DockingEscort>),
     >,
     mother_ships: Query<(&Ship, &Position), Without<CarrierEscort>>,
     images: Res<Assets<Image>>,
 ) {
-    for (entity, escort, escort_pos, sprite) in &escorts {
+    for (entity, escort, mode, escort_pos, sprite) in &escorts {
+        if !matches!(mode, EscortMode::Dock) {
+            continue;
+        }
         let Ok((mother, mother_pos)) = mother_ships.get(escort.mother) else {
             continue;
         };
-        if mother.weapons_target.is_some() {
-            continue;
-        }
         let dist = (escort_pos.0 - mother_pos.0).length();
         if dist < DOCK_START_RADIUS + mother.data.radius {
             let full_size = image_size(sprite, &images);
@@ -273,18 +430,14 @@ fn begin_escort_dock(
     }
 }
 
-/// If the mother gets a new weapons target while an escort is docking,
-/// cancel the dock and send the escort back to fight.
+/// If an escort leaves Dock mode mid-animation (e.g. player issued a new
+/// command), cancel the dock and let it act normally again.
 fn cancel_escort_dock(
     mut commands: Commands,
-    mut escorts: Query<(Entity, &CarrierEscort, &mut Sprite), With<DockingEscort>>,
-    mother_ships: Query<&Ship, Without<CarrierEscort>>,
+    mut escorts: Query<(Entity, &EscortMode, &mut Sprite), With<DockingEscort>>,
 ) {
-    for (entity, escort, mut sprite) in &mut escorts {
-        let Ok(mother) = mother_ships.get(escort.mother) else {
-            continue;
-        };
-        if mother.weapons_target.is_some() {
+    for (entity, mode, mut sprite) in &mut escorts {
+        if !matches!(mode, EscortMode::Dock) {
             sprite.custom_size = None;
             commands.entity(entity).remove::<DockingEscort>();
         }
@@ -299,16 +452,26 @@ fn animate_escort_dock(
         Entity,
         &CarrierEscort,
         &DockingEscort,
+        &EscortMode,
         &Position,
         &mut Sprite,
         &mut Ship,
         &mut MaxLinearSpeed,
     )>,
     mut mother_ships: Query<(&mut Ship, &Position), Without<CarrierEscort>>,
+    player: Query<Entity, With<Player>>,
+    mut sfx_writer: MessageWriter<EscortSfx>,
 ) {
-    for (entity, escort, dock, escort_pos, mut sprite, mut escort_ship, mut max_speed) in
+    let player_entity = player.single().ok();
+    for (entity, escort, dock, mode, escort_pos, mut sprite, mut escort_ship, mut max_speed) in
         &mut escorts
     {
+        // Mode may have changed mid-dock (e.g. player issued a new command);
+        // cancel_escort_dock will remove DockingEscort, but its `commands` flush
+        // is deferred — guard here to avoid finishing the dock this same frame.
+        if !matches!(mode, EscortMode::Dock) {
+            continue;
+        }
         let Ok((mut mother, mother_pos)) = mother_ships.get_mut(escort.mother) else {
             continue;
         };
@@ -331,6 +494,9 @@ fn animate_escort_dock(
             if let Some(ws) = mother.weapon_systems.find_weapon(&escort.weapon_type) {
                 ws.ammo_quantity = ws.ammo_quantity.map(|n| n + 1);
             }
+            if Some(escort.mother) == player_entity {
+                sfx_writer.write(EscortSfx::Docked);
+            }
             safe_despawn(&mut commands, entity);
         }
     }
@@ -340,19 +506,21 @@ fn animate_escort_dock(
 // Orphan handling
 // ---------------------------------------------------------------------------
 
-/// When a mother ship is destroyed, remove carrier-related components so the
-/// escort becomes an independent AI ship.
+/// When a mother ship is destroyed, strip carrier-related components and
+/// attach an [`RLAgent`] so the escort becomes an independent AI ship driven
+/// by the RL pipeline.
 fn orphan_escorts(
     mut commands: Commands,
-    mut escorts: Query<(Entity, &CarrierEscort, &mut Sprite)>,
+    mut escorts: Query<(Entity, &CarrierEscort, &AIShip, &mut Sprite)>,
     mothers: Query<(), With<Ship>>,
 ) {
-    for (entity, escort, mut sprite) in &mut escorts {
+    for (entity, escort, ai_ship, mut sprite) in &mut escorts {
         if mothers.get(escort.mother).is_err() {
             sprite.custom_size = None;
             commands
                 .entity(entity)
-                .remove::<(CarrierEscort, ScalingUp, DockingEscort)>();
+                .remove::<(CarrierEscort, EscortMode, ScalingUp, DockingEscort)>()
+                .insert(RLAgent::new(ai_ship.personality.clone()));
         }
     }
 }

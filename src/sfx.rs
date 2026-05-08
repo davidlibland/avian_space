@@ -23,6 +23,23 @@ pub enum SurfaceSfx {
     Footstep { surface: String, volume: f32 },
 }
 
+/// Fire-and-forget event for escort-related cues (player-triggered only).
+#[derive(Event, Message, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EscortSfx {
+    /// An escort just launched from the player's carrier.
+    Launching,
+    /// Player issued an attack command.
+    Attack,
+    /// Player issued an escort/disengage command.
+    Escort,
+    /// Player issued a dock command.
+    Dock,
+    /// An escort successfully completed docking with the player's carrier.
+    Docked,
+    /// An escort's attack target was destroyed or otherwise disappeared.
+    Neutralized,
+}
+
 /// Minimum gap between consecutive "you are being targeted" warnings.
 const WARNING_COOLDOWN_SECS: f32 = 4.0;
 /// How often to scan AI ships for new lock-ons.
@@ -31,6 +48,7 @@ const WARNING_SCAN_INTERVAL_SECS: f32 = 1.0;
 pub fn sfx_plugin(app: &mut App) {
     app.init_resource::<ThrusterAudio>()
         .add_message::<SurfaceSfx>()
+        .add_message::<EscortSfx>()
         .add_systems(Startup, load_sfx)
         .add_systems(OnEnter(PlayState::Traveling), play_player_jump_sfx)
         .add_systems(OnEnter(PlayState::Landed), play_landing_sfx)
@@ -44,6 +62,7 @@ pub fn sfx_plugin(app: &mut App) {
                 play_pickup_sfx,
                 play_target_change_sfx,
                 play_warning_sfx,
+                play_escort_sfx,
             )
                 .run_if(in_state(PlayState::Flying)),
         )
@@ -66,6 +85,13 @@ struct SfxHandles {
     ui_open: Handle<AudioSource>,
     ui_close: Handle<AudioSource>,
     ui_button: Handle<AudioSource>,
+    // Escort cues
+    escort_launching: Handle<AudioSource>,
+    escort_attack_mode: Handle<AudioSource>,
+    escort_escort_mode: Handle<AudioSource>,
+    escort_dock_mode: Handle<AudioSource>,
+    escort_docked: Handle<AudioSource>,
+    escort_neutralized: Handle<AudioSource>,
 }
 
 impl SfxHandles {
@@ -100,6 +126,12 @@ fn load_sfx(mut commands: Commands, asset_server: Res<AssetServer>) {
         ui_open: asset_server.load("sounds/world/ui_open.ogg"),
         ui_close: asset_server.load("sounds/world/ui_close.ogg"),
         ui_button: asset_server.load("sounds/world/ui_button.ogg"),
+        escort_launching: asset_server.load("sounds/escorts/launching.ogg"),
+        escort_attack_mode: asset_server.load("sounds/escorts/attackmode.ogg"),
+        escort_escort_mode: asset_server.load("sounds/escorts/escortmode.ogg"),
+        escort_dock_mode: asset_server.load("sounds/escorts/docking.ogg"),
+        escort_docked: asset_server.load("sounds/escorts/docked.ogg"),
+        escort_neutralized: asset_server.load("sounds/escorts/neutralized.ogg"),
     });
 }
 
@@ -337,6 +369,39 @@ fn play_warning_sfx(
         *cooldown = WARNING_COOLDOWN_SECS;
         commands.spawn((
             AudioPlayer::<AudioSource>(sfx.warning.clone()),
+            PlaybackSettings {
+                mode: PlaybackMode::Despawn,
+                volume: Volume::Linear(0.5),
+                ..default()
+            },
+        ));
+    }
+}
+
+/// Play escort cues dispatched via [`EscortSfx`] events. Dedupes per frame so
+/// that e.g. multiple escorts whose shared target dies on the same tick
+/// produce a single audible cue rather than a noisy chorus.
+fn play_escort_sfx(
+    mut commands: Commands,
+    mut reader: MessageReader<EscortSfx>,
+    sfx: Option<Res<SfxHandles>>,
+) {
+    let Some(sfx) = sfx else { return };
+    let mut seen = HashSet::new();
+    for event in reader.read() {
+        if !seen.insert(*event) {
+            continue;
+        }
+        let handle = match event {
+            EscortSfx::Launching => sfx.escort_launching.clone(),
+            EscortSfx::Attack => sfx.escort_attack_mode.clone(),
+            EscortSfx::Escort => sfx.escort_escort_mode.clone(),
+            EscortSfx::Dock => sfx.escort_dock_mode.clone(),
+            EscortSfx::Docked => sfx.escort_docked.clone(),
+            EscortSfx::Neutralized => sfx.escort_neutralized.clone(),
+        };
+        commands.spawn((
+            AudioPlayer::<AudioSource>(handle),
             PlaybackSettings {
                 mode: PlaybackMode::Despawn,
                 volume: Volume::Linear(0.5),

@@ -44,6 +44,29 @@ cargo run --features dev -- --bc-training --headless
 cargo run --features dev -- --inference --fresh
 ```
 
+### Training backend
+
+The training thread uses Burn's `wgpu` backend by default — Metal on macOS,
+Vulkan/DX12 elsewhere. On a Linux/Windows box with the CUDA toolkit installed,
+add `cuda` to the feature list to swap in Burn's native CUDA backend:
+
+```bash
+cargo run --features "dev cuda" -- --rl-training
+```
+
+This requires CUDA 12.x and `nvcc` on `PATH` (`cubecl-cuda` builds GPU kernels
+at runtime). On Ubuntu the recommended install is the `cuda-toolkit-12-4`
+package from NVIDIA's repo.
+
+### Linux build dependencies
+
+Bevy needs the standard Linux audio / windowing dev packages. On Ubuntu:
+
+```bash
+sudo apt-get install -y libwayland-dev libxkbcommon-dev libudev-dev \
+    libasound2-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev
+```
+
 ## Adding Content
 
 All game content lives in YAML files under [`assets/`](assets/):

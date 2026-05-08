@@ -12,7 +12,12 @@
 use std::sync::{Arc, Mutex};
 
 use bevy::prelude::Resource;
-use burn::backend::{Autodiff, ndarray::NdArray, wgpu::Wgpu};
+use burn::backend::{Autodiff, ndarray::NdArray};
+#[cfg(feature = "cuda")]
+use burn::backend::Cuda;
+#[cfg(not(feature = "cuda"))]
+use burn::backend::wgpu::Wgpu;
+use burn::tensor::backend::AutodiffBackend;
 
 use crate::rl_obs::{K_PROJECTILES, OBS_DIM, PROJ_SLOT_SIZE, SELF_SIZE, SLOT_SIZE};
 
@@ -81,7 +86,18 @@ pub const USE_SKIP: bool = false;
 pub type InferBackend = NdArray;
 
 /// GPU backend with autodiff, used by the background training thread.
+///
+/// Default is `wgpu` (Metal on macOS, Vulkan/DX12 elsewhere). Build with
+/// `--features cuda` on a machine with the CUDA toolkit to swap in the
+/// native CUDA backend.
+#[cfg(not(feature = "cuda"))]
 pub type TrainBackend = Autodiff<Wgpu>;
+#[cfg(feature = "cuda")]
+pub type TrainBackend = Autodiff<Cuda>;
+
+/// Inner (non-autodiff) version of [`TrainBackend`] — used for forward-only
+/// passes via `AutodiffModule::valid()`.
+pub type InnerTrainBackend = <TrainBackend as AutodiffBackend>::InnerBackend;
 
 // ---------------------------------------------------------------------------
 // Bevy resource

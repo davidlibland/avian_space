@@ -115,6 +115,12 @@ pub struct RLSender(pub mpsc::SyncSender<Segment>);
 #[derive(Resource, Default)]
 pub struct SegmentCounter(pub usize);
 
+/// SystemSet for `rl_step`. Other systems that produce per-frame state
+/// observed by the policy net (e.g. carrier escort target sync) should
+/// run `.before(RLStepSet)` so the observation reflects their writes.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RLStepSet;
+
 /// Game-thread-readable subset of the PPO config controlling environment
 /// rotation during training.  `interval == 0` disables swapping.
 #[derive(Resource, Clone, Copy)]
@@ -337,7 +343,7 @@ impl Plugin for RLCollectionPlugin {
                 Update,
                 (
                     accumulate_rewards,
-                    (rl_step, repeat_actions).chain(),
+                    (rl_step, repeat_actions).chain().in_set(RLStepSet),
                     handle_rl_ship_died,
                     handle_rl_ship_jumped,
                 )

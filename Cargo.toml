@@ -5,6 +5,10 @@ edition = "2024"
 
 [features]
 dev = ["bevy/dynamic_linking"]
+# Use the native CUDA backend for training (Linux / Windows boxes with the
+# CUDA toolkit installed). When disabled, training runs on the default `wgpu`
+# backend, which uses Metal on macOS and Vulkan on Linux.
+cuda = ["burn/cuda"]
 
 [dependencies]
 avian2d = "0.5.0"

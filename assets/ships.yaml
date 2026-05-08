@@ -16,7 +16,7 @@ shuttle:
 fighter:
   thrust: 120.0
   max_speed: 200.0
-  torque: 35.0
+  torque: 45.0
   max_health: 75
   cargo_space: 8
   item_space: 8

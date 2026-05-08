@@ -9,7 +9,9 @@ use burn::{
 };
 
 use crate::consts::N_REWARD_TYPES;
-use crate::model::{self, N_OBJECTS, OBJECT_INPUT_DIM, RLNet, SELF_INPUT_DIM, TrainBackend};
+use crate::model::{
+    self, InnerTrainBackend, N_OBJECTS, OBJECT_INPUT_DIM, RLNet, SELF_INPUT_DIM, TrainBackend,
+};
 use crate::rl_collection::Segment;
 
 // Maximum steps to forward through the value net at once (avoid OOM).
@@ -34,7 +36,7 @@ pub fn batch_value_inference(
     use burn::module::AutodiffModule;
 
     let inner_net = value_net.clone().valid();
-    let inner_device: burn::backend::wgpu::WgpuDevice = Default::default();
+    let inner_device: <InnerTrainBackend as Backend>::Device = Default::default();
     let mut values = Vec::with_capacity(total_steps);
 
     for chunk_start in (0..total_steps).step_by(VALUE_CHUNK_SIZE) {
@@ -48,15 +50,15 @@ pub fn batch_value_inference(
         let proj_offset = chunk_start * model::PROJECTILES_FLAT_DIM;
         let proj_slice = &proj_flat[proj_offset..proj_offset + b * model::PROJECTILES_FLAT_DIM];
 
-        let self_t = Tensor::<burn::backend::wgpu::Wgpu, 2>::from_data(
+        let self_t = Tensor::<InnerTrainBackend, 2>::from_data(
             TensorData::new(self_slice.to_vec(), [b, SELF_INPUT_DIM]),
             &inner_device,
         );
-        let obj_t = Tensor::<burn::backend::wgpu::Wgpu, 3>::from_data(
+        let obj_t = Tensor::<InnerTrainBackend, 3>::from_data(
             TensorData::new(obj_slice.to_vec(), [b, N_OBJECTS, OBJECT_INPUT_DIM]),
             &inner_device,
         );
-        let proj_t = Tensor::<burn::backend::wgpu::Wgpu, 3>::from_data(
+        let proj_t = Tensor::<InnerTrainBackend, 3>::from_data(
             TensorData::new(proj_slice.to_vec(), [b, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
             &inner_device,
         );
@@ -88,7 +90,7 @@ pub fn recompute_bootstrap_values(
     use burn::module::AutodiffModule;
 
     let inner_net = value_net.clone().valid();
-    let inner_device: burn::backend::wgpu::WgpuDevice = Default::default();
+    let inner_device: <InnerTrainBackend as Backend>::Device = Default::default();
 
     for seg in segments.iter_mut() {
         if seg.bootstrap_value.is_none() {
@@ -96,15 +98,15 @@ pub fn recompute_bootstrap_values(
         }
         if let Some(last_t) = seg.transitions.last() {
             let (s, o) = model::split_obs(&last_t.obs);
-            let self_t = Tensor::<burn::backend::wgpu::Wgpu, 2>::from_data(
+            let self_t = Tensor::<InnerTrainBackend, 2>::from_data(
                 TensorData::new(s.to_vec(), [1, SELF_INPUT_DIM]),
                 &inner_device,
             );
-            let obj_t = Tensor::<burn::backend::wgpu::Wgpu, 3>::from_data(
+            let obj_t = Tensor::<InnerTrainBackend, 3>::from_data(
                 TensorData::new(o.to_vec(), [1, N_OBJECTS, OBJECT_INPUT_DIM]),
                 &inner_device,
             );
-            let proj_t = Tensor::<burn::backend::wgpu::Wgpu, 3>::from_data(
+            let proj_t = Tensor::<InnerTrainBackend, 3>::from_data(
                 TensorData::new(last_t.proj_obs.clone(), [1, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
                 &inner_device,
             );

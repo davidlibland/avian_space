@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rustc --version)",
+      "Read(//usr/lib/**)",
+      "Bash(nvidia-smi)",
+      "Read(//usr/local/**)",
+      "Bash(dpkg -l)",
+      "Bash(apt list *)",
+      "Bash(cargo build *)",
+      "Bash(cargo search *)",
+      "Read(//home/dlibland/.cargo/registry/src/**)",
+      "Bash(grep -n \"cuda\\\\|CUDA\" ~/.bashrc 2>&1; echo \"---\"; ls /usr/local/cuda-12.4/bin/nvcc /usr/local/cuda-12.4/lib64 2>&1 | head)",
+      "Read(//home/dlibland/**)",
+      "Bash(/usr/local/cuda-12.4/bin/nvcc --version)",
+      "Bash(cargo check *)",
+      "Bash(python3 scripts/analyze_rewards.py experiments/run_21/tb)",
+      "Bash(conda env *)",
+      "Bash(~/miniforge3/bin/python -c \"import numpy, pandas, tbparse; print\\('ok'\\)\")",
+      "Bash(~/miniforge3/bin/pip install *)",
+      "Bash(~/miniforge3/bin/python scripts/analyze_rewards.py experiments/run_21/tb)",
+      "Bash('~/miniforge3/bin/python' -c ' *)",
+      "Bash(tee /tmp/tags.txt)",
+      "Bash(~/miniforge3/bin/python /home/dlibland/dev/avian_space/scripts/analyze_progress.py /home/dlibland/dev/avian_space/experiments/run_21/tb)",
+      "Bash(tee /tmp/progress.txt)",
+      "Bash(ffmpeg -version)",
+      "Read(//usr/bin/**)",
+      "Bash(ffmpeg -y -i /home/dlibland/dev/avian_space/assets/sounds/escorts/docked.mp3 -c:a libvorbis -q:a 5 /home/dlibland/dev/avian_space/assets/sounds/escorts/docked.ogg)",
+      "Bash(ffmpeg -y -i /home/dlibland/dev/avian_space/assets/sounds/escorts/neutralized.mp3 -c:a libvorbis -q:a 5 /home/dlibland/dev/avian_space/assets/sounds/escorts/neutralized.ogg)"
+    ]
+  }
+}
