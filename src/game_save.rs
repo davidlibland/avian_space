@@ -161,7 +161,7 @@ impl PlayerGameState {
     }
 
     fn save_path(&self) -> PathBuf {
-        PathBuf::from("pilots").join(format!("{}.yaml", self.pilot_name))
+        pilots_dir().join(format!("{}.yaml", self.pilot_name))
     }
 
     pub(crate) fn to_save(&self, session_data: &SessionSaveData) -> PilotSave {
@@ -204,8 +204,25 @@ pub fn write_save(game_state: &PlayerGameState, session_data: &SessionSaveData) 
 
 // ── File helpers (pub so main_menu can use them) ─────────────────────────────
 
+/// Where pilot save files live.
+///
+/// * With the `bundle` feature on (distributable .app build): user-writable
+///   `~/Library/Application Support/AvianSpace/pilots/`. Falls back to
+///   `./pilots/` if `$HOME` is unset.
+/// * Without the feature (dev / `cargo run`): `./pilots/` relative to CWD,
+///   matching the existing repo-local behaviour.
+fn pilots_dir() -> PathBuf {
+    #[cfg(feature = "bundle")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join("Library/Application Support/AvianSpace/pilots");
+        }
+    }
+    PathBuf::from("pilots")
+}
+
 pub fn list_saves() -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir("pilots") else {
+    let Ok(entries) = std::fs::read_dir(pilots_dir()) else {
         return vec![];
     };
     let mut names: Vec<String> = entries
@@ -222,7 +239,7 @@ pub fn list_saves() -> Vec<String> {
 }
 
 pub fn load_save(pilot_name: &str) -> Option<PilotSave> {
-    let path = PathBuf::from("pilots").join(format!("{pilot_name}.yaml"));
+    let path = pilots_dir().join(format!("{pilot_name}.yaml"));
     let data = std::fs::read_to_string(&path).ok()?;
     serde_yaml::from_str(&data).ok()
 }

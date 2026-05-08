@@ -62,7 +62,7 @@ pub fn setup_civilians(
     atlas_layouts: &mut Assets<TextureAtlasLayout>,
     seed: u64,
 ) {
-    let manifest: CivilianManifest = match std::fs::read_to_string(
+    let manifest: CivilianManifest = match crate::embedded_assets::read_to_string(
         "assets/sprites/people/civilians.ron",
     )
     .ok()

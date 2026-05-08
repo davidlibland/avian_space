@@ -111,8 +111,8 @@ pub fn spawn_landscape_objects(
     building_rects: &[(u32, u32, u32, u32)],
 ) {
     // Load manifest synchronously.
-    let manifest: ObjectsManifest = match std::fs::read_to_string(
-        format!("assets/{WORLDS_DIR}/objects_manifest.ron"),
+    let manifest: ObjectsManifest = match crate::embedded_assets::read_to_string(
+        &format!("assets/{WORLDS_DIR}/objects_manifest.ron"),
     )
     .ok()
     .and_then(|t| ron::from_str(&t).ok())

@@ -654,7 +654,7 @@ fn setup_surface(
     let biome_name = crate::world_assets::planet_type_to_biome(planet_type);
 
     let load_ron = |filename: &str| -> Option<String> {
-        std::fs::read_to_string(format!("assets/{WORLDS_DIR}/{filename}")).ok()
+        crate::embedded_assets::read_to_string(&format!("assets/{WORLDS_DIR}/{filename}")).ok()
     };
 
     let lut = load_ron("blob47_lut.ron")
@@ -759,7 +759,7 @@ fn setup_surface(
                     .iter()
                     .filter_map(|name| {
                         let path = format!("assets/{WORLDS_DIR}/buildings/{style_name}_{name}.ron");
-                        std::fs::read_to_string(&path)
+                        crate::embedded_assets::read_to_string(&path)
                             .ok()
                             .and_then(|t| ron::from_str(&t).ok())
                     })

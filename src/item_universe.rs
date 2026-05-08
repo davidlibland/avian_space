@@ -531,49 +531,8 @@ fn preload_sprites(
 
 // Parsing code:
 
-fn dir_to_yaml(dir: &Path) -> Option<Value> {
-    let mut map = Mapping::new();
-
-    for entry in std::fs::read_dir(dir).ok()?.flatten() {
-        let path = entry.path();
-        let Some(stem_os) = path.file_stem() else { continue };
-        let stem = stem_os.to_string_lossy().into_owned();
-
-        if path.is_dir() {
-            if let Some(v) = dir_to_yaml(&path) {
-                map.insert(stem.into(), v);
-            }
-        } else if path
-            .extension()
-            .map_or(false, |e| e == "yaml" || e == "yml")
-        {
-            let text = match std::fs::read_to_string(&path) {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("[item_universe] WARNING: could not read {}: {e}", path.display());
-                    continue;
-                }
-            };
-            let val = match serde_yaml::from_str::<Value>(&text) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("[item_universe] WARNING: could not parse {}: {e}", path.display());
-                    continue;
-                }
-            };
-            map.insert(stem.into(), val);
-        }
-    }
-
-    if map.is_empty() {
-        None
-    } else {
-        Some(Value::Mapping(map))
-    }
-}
-
 pub fn parse_dir<T: DeserializeOwned>(dir: &Path) -> Result<T, serde_yaml::Error> {
-    let value = dir_to_yaml(dir).unwrap_or(Value::Mapping(Mapping::new()));
+    let value = crate::embedded_assets::dir_to_yaml(dir).unwrap_or(Value::Mapping(Mapping::new()));
     serde_yaml::from_value(value)
 }
 

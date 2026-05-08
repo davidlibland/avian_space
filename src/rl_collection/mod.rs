@@ -270,22 +270,27 @@ impl Plugin for RLCollectionPlugin {
         let rl_resource = RLResource::new();
         let inference_net_arc = Arc::clone(&rl_resource.inference_net);
 
-        // Resolve the run directory once; training threads own it from here.
-        let experiment = crate::experiments::setup_experiment(self.fresh);
-
-        // Make the experiment directory available to game-thread systems.
-        app.insert_resource(crate::experiments::ExperimentDir {
-            run_dir: experiment.run_dir.clone(),
-            is_fresh: experiment.is_fresh,
-        });
-
-        // Spawn training threads only for the modes that need them.
+        // Spawn training threads only for the modes that need them. The
+        // experiment directory is only created/inserted for training modes —
+        // inference and classic don't read or write checkpoints, and creating
+        // `experiments/run_N/` from a CWD like `/` (Finder-launched .app)
+        // would fail noisily.
         match self.mode {
             crate::AppMode::BCTraining => {
+                let experiment = crate::experiments::setup_experiment(self.fresh);
+                app.insert_resource(crate::experiments::ExperimentDir {
+                    run_dir: experiment.run_dir.clone(),
+                    is_fresh: experiment.is_fresh,
+                });
                 bc::spawn_bc_training_thread(bc_rx, inference_net_arc, experiment);
                 drop(rl_rx);
             }
             crate::AppMode::RLTraining => {
+                let experiment = crate::experiments::setup_experiment(self.fresh);
+                app.insert_resource(crate::experiments::ExperimentDir {
+                    run_dir: experiment.run_dir.clone(),
+                    is_fresh: experiment.is_fresh,
+                });
                 crate::ppo::spawn_ppo_training_thread(
                     rl_rx,
                     inference_net_arc,

@@ -20,6 +20,7 @@ use planets::planets_plugin;
 mod ai_ships;
 mod config;
 mod consts;
+mod embedded_assets;
 mod gae;
 mod model;
 mod optimal_control;
@@ -208,7 +209,37 @@ impl AppArgs {
 
 fn parse_args() -> AppArgs {
     use clap::Parser;
-    AppArgs::parse()
+    let mut args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    // When launched from a macOS .app bundle (no CLI args), default to inference mode.
+    if launched_from_macos_bundle() && args.len() <= 1 {
+        args.push(std::ffi::OsString::from("--inference"));
+    }
+    AppArgs::parse_from(args)
+}
+
+/// On macOS, detect whether the running executable is inside an `.app` bundle
+/// at `Foo.app/Contents/MacOS/exe`. Used to default to inference mode when the
+/// bundle is launched from Finder (no CLI args). Asset paths are handled by
+/// the `bundle` feature (see `embedded_assets.rs`), not by chdir.
+fn launched_from_macos_bundle() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(exe) = std::env::current_exe() else {
+            return false;
+        };
+        let Some(macos_dir) = exe.parent() else {
+            return false;
+        };
+        if macos_dir.file_name().and_then(|n| n.to_str()) != Some("MacOS") {
+            return false;
+        }
+        let Some(contents) = macos_dir.parent() else {
+            return false;
+        };
+        return contents.file_name().and_then(|n| n.to_str()) == Some("Contents");
+    }
+    #[allow(unreachable_code)]
+    false
 }
 
 /// Resolve the [`TrainingConfig`] to use given the CLI args.
@@ -266,6 +297,14 @@ fn main() {
     let training = load_training_config(args.config.as_deref());
 
     let mut app = App::new();
+
+    // ── Embedded assets (bundle feature) ─────────────────────────────────
+    // Must be added BEFORE DefaultPlugins so it can register an asset source
+    // before Bevy's AssetPlugin initialises.
+    #[cfg(feature = "bundle")]
+    app.add_plugins(bevy_embedded_assets::EmbeddedAssetPlugin {
+        mode: bevy_embedded_assets::PluginMode::ReplaceDefault,
+    });
 
     // ── Core plugins (rendering vs headless) ─────────────────────────────
     if headless {
