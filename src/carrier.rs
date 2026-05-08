@@ -78,6 +78,9 @@ pub struct SpawnEscort {
 // ---------------------------------------------------------------------------
 
 pub fn carrier_plugin(app: &mut App) {
+    // Register EscortSfx here (rather than in sfx_plugin) so the producers in
+    // this module work in headless mode, where sfx_plugin isn't loaded.
+    app.add_message::<EscortSfx>();
     app.add_message::<SpawnEscort>().add_systems(
         Update,
         (

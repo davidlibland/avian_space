@@ -48,7 +48,6 @@ const WARNING_SCAN_INTERVAL_SECS: f32 = 1.0;
 pub fn sfx_plugin(app: &mut App) {
     app.init_resource::<ThrusterAudio>()
         .add_message::<SurfaceSfx>()
-        .add_message::<EscortSfx>()
         .add_systems(Startup, load_sfx)
         .add_systems(OnEnter(PlayState::Traveling), play_player_jump_sfx)
         .add_systems(OnEnter(PlayState::Landed), play_landing_sfx)
