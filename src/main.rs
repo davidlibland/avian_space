@@ -8,6 +8,7 @@ mod experiments;
 mod explosions;
 mod fbm;
 mod game_save;
+mod help_ui;
 mod hud;
 mod item_universe;
 mod jump_ui;
@@ -54,6 +55,7 @@ mod policy_tests;
 use asteroids::{Asteroid, ShatterAsteroid, build_asteroid_field};
 use explosions::explosions_plugin;
 use game_save::game_save_plugin;
+use help_ui::help_ui_plugin;
 use hud::HudPlugin;
 use item_universe::{ItemUniverse, item_universe_plugin};
 use jump_ui::jump_ui_plugin;
@@ -320,6 +322,7 @@ fn main() {
         app.add_plugins((
             planet_ui_plugin,
             jump_ui_plugin,
+            help_ui_plugin,
             StarfieldPlugin::default(),
             HudPlugin::default(),
             comms::comms_plugin,
