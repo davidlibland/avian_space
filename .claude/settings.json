@@ -81,7 +81,9 @@
       "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(d['crate_id'], d['req']\\) for d in data.get\\('dependencies',[]\\) if 'bevy' in d['crate_id'].lower\\(\\)]\")",
       "Bash(pkill -f \"avian_space.*--inference\")",
       "Bash(/Users/dlibland/dev/avian_space/scripts/build_macos_app.sh)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(SKIP_BUILD=1 /Users/dlibland/dev/avian_space/scripts/build_macos_app.sh)",
+      "Bash(codesign -dvv /Users/dlibland/dev/avian_space/target/macos/AvianSpace.app)"
     ],
     "additionalDirectories": [
       "/Users/dlibland/dev/avian_space/assets/sprites/worlds",

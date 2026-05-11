@@ -32,7 +32,7 @@ BUNDLE_ID="com.dlibland.avianspace"
 VERSION="$(grep '^version' Cargo.toml | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"
 
 if [[ "${SKIP_BUILD:-0}" != "1" ]]; then
-  echo "[1/4] cargo build --release --features bundle"
+  echo "[1/5] cargo build --release --features bundle"
   cargo build --release --features bundle
 fi
 
@@ -42,7 +42,7 @@ if [[ ! -x "${BIN_PATH}" ]]; then
   exit 1
 fi
 
-echo "[2/4] assembling ${BUNDLE_DIR}"
+echo "[2/5] assembling ${BUNDLE_DIR}"
 rm -rf "${BUNDLE_DIR}"
 mkdir -p "${BUNDLE_DIR}/Contents/MacOS"
 mkdir -p "${BUNDLE_DIR}/Contents/Resources"
@@ -50,7 +50,7 @@ mkdir -p "${BUNDLE_DIR}/Contents/Resources"
 cp "${BIN_PATH}" "${BUNDLE_DIR}/Contents/MacOS/${BIN_NAME}"
 chmod +x "${BUNDLE_DIR}/Contents/MacOS/${BIN_NAME}"
 
-echo "[3/4] (assets are embedded in the binary — nothing to copy)"
+echo "[3/5] (assets are embedded in the binary — nothing to copy)"
 
 ICON_KEY=""
 if [[ -f scripts/AppIcon.icns ]]; then
@@ -58,7 +58,7 @@ if [[ -f scripts/AppIcon.icns ]]; then
   ICON_KEY="<key>CFBundleIconFile</key><string>AppIcon</string>"
 fi
 
-echo "[4/4] writing Info.plist"
+echo "[4/5] writing Info.plist"
 cat > "${BUNDLE_DIR}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -79,6 +79,18 @@ cat > "${BUNDLE_DIR}/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+echo "[5/5] ad-hoc signing the bundle"
+# Ad-hoc signing (identity "-") doesn't satisfy notarization, but it stamps a
+# consistent self-signature across the whole bundle. Without it, recipients
+# often see Gatekeeper's "is damaged and can't be opened" error after the
+# quarantine attribute is applied during transfer; with it, the failure mode
+# becomes the recoverable "unidentified developer" path.
+codesign --force --deep --sign - "${BUNDLE_DIR}"
+codesign --verify --deep --strict "${BUNDLE_DIR}"
+
 echo
 echo "built ${BUNDLE_DIR}"
 echo "run with: open '${BUNDLE_DIR}'"
+echo
+echo "recipients on another Mac may still need to strip the quarantine attr:"
+echo "  xattr -dr com.apple.quarantine /path/to/${BUNDLE_NAME}"

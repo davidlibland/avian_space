@@ -125,6 +125,12 @@ const STAR_LAYERS: &[StarLayer] = &[
 // z-depth for stars (behind everything else)
 const STAR_Z: f32 = -10.0;
 
+/// Multiplier on the starfield's wrap radius, in window-widths. A scale of 1.0
+/// wraps at ±window_size; on ultrawide displays the camera can drift far
+/// enough between origin shifts that the wrap edge becomes visible as a black
+/// border. Doubling the radius (4× area) keeps stars on screen.
+const STARFIELD_SCALE: f32 = 2.0;
+
 // ── Systems ───────────────────────────────────────────────────────────────────
 
 fn spawn_starfield(
@@ -138,12 +144,16 @@ fn spawn_starfield(
     window_size.0.y = window.height();
 
     for layer in STAR_LAYERS {
-        let count =
-            (layer.count as f32 * window_size.x * window_size.y / (900f32).powi(2)) as usize;
+        let count = (layer.count as f32
+            * window_size.x
+            * window_size.y
+            * STARFIELD_SCALE
+            * STARFIELD_SCALE
+            / (900f32).powi(2)) as usize;
         // let count = layer.count;
         for _ in 0..count {
-            let x = rng.gen_range(-window_size.x..window_size.x);
-            let y = rng.gen_range(-window_size.y..window_size.y);
+            let x = rng.gen_range(-STARFIELD_SCALE * window_size.x..STARFIELD_SCALE * window_size.x);
+            let y = rng.gen_range(-STARFIELD_SCALE * window_size.y..STARFIELD_SCALE * window_size.y);
             let size = rng.gen_range(layer.size_range.0..layer.size_range.1);
 
             let red_shift = layer.parallax + (1.0 - layer.parallax) * 0.5;
@@ -197,15 +207,13 @@ fn shift_starfield(
 /// speed, its effective world size is `BOUNDS / parallax`; we wrap at that
 /// boundary so stars tile seamlessly within their own layer.
 fn wrap_starfield(mut query: Query<&mut Transform, With<Star>>, window_size: Res<WindowSize>) {
+    let half_x = STARFIELD_SCALE * window_size.x;
+    let half_y = STARFIELD_SCALE * window_size.y;
     for mut transform in query.iter_mut() {
-        // let diameter = 2.0 * world.size;
-
-        transform.translation.x = ((transform.translation.x + window_size.x)
-            .rem_euclid(2.0 * window_size.x))
-            - window_size.x;
-        transform.translation.y = ((transform.translation.y + window_size.y)
-            .rem_euclid(2.0 * window_size.y))
-            - window_size.y;
+        transform.translation.x =
+            (transform.translation.x + half_x).rem_euclid(2.0 * half_x) - half_x;
+        transform.translation.y =
+            (transform.translation.y + half_y).rem_euclid(2.0 * half_y) - half_y;
     }
 }
 

@@ -12,8 +12,12 @@ pub struct HelpUiOpen {
 
 impl crate::session::SessionResource for HelpUiOpen {
     type SaveData = ();
-    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
-    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
 }
 
 pub fn help_ui_plugin(app: &mut App) {
@@ -28,8 +32,7 @@ pub fn help_ui_plugin(app: &mut App) {
         )
         .add_systems(
             EguiPrimaryContextPass,
-            (help_corner_button, help_window)
-                .run_if(not(in_state(PlayState::MainMenu))),
+            (help_corner_button, help_window).run_if(not(in_state(PlayState::MainMenu))),
         );
 }
 
@@ -178,7 +181,11 @@ fn render_section(ui: &mut egui::Ui, header: &str, groups: &[Group]) {
             .min_col_width(70.0)
             .show(ui, |ui| {
                 for (key, action) in group.bindings {
-                    ui.label(RichText::new(*key).monospace().color(Color32::from_rgb(180, 230, 255)));
+                    ui.label(
+                        RichText::new(*key)
+                            .monospace()
+                            .color(Color32::from_rgb(180, 230, 255)),
+                    );
                     ui.label(*action);
                     ui.end_row();
                 }
@@ -192,28 +199,28 @@ fn flying_controls() -> Vec<Group> {
         Group {
             title: "Movement",
             bindings: &[
-                ("↑",      "Thrust forward"),
-                ("↓",      "Reverse thrust"),
-                ("← / →",  "Turn left / right"),
-                ("A",      "Intercept autopilot (hold)"),
+                ("↑", "Thrust forward"),
+                ("↓", "Retrograde turn (hold)"),
+                ("← / →", "Turn left / right"),
+                ("A", "Intercept autopilot (hold)"),
             ],
         },
         Group {
             title: "Targeting",
             bindings: &[
-                ("Tab",    "Cycle ships"),
-                ("R",      "Nearest mission / hostile ship"),
-                ("Q",      "Nearest asteroid"),
-                ("P",      "Nearest pickup"),
-                ("[ / ]",  "Cycle planets"),
+                ("Tab", "Cycle ships"),
+                ("R", "Nearest mission / hostile ship"),
+                ("Q", "Nearest asteroid"),
+                ("P", "Nearest pickup"),
+                ("[ / ]", "Cycle planets"),
             ],
         },
         Group {
             title: "Weapons",
             bindings: &[
-                ("Space",     "Fire primary (hold)"),
-                ("W",         "Cycle secondary weapon"),
-                ("L-Shift",   "Fire secondary (hold)"),
+                ("Space", "Fire primary (hold)"),
+                ("W", "Cycle secondary weapon"),
+                ("L-Shift", "Fire secondary (hold)"),
             ],
         },
         Group {
@@ -240,17 +247,17 @@ fn surface_controls() -> Vec<Group> {
         Group {
             title: "Movement",
             bindings: &[
-                ("W / ↑",  "Move forward"),
-                ("S / ↓",  "Move backward"),
-                ("A / ←",  "Strafe left"),
-                ("D / →",  "Strafe right"),
+                ("W / ↑", "Move forward"),
+                ("S / ↓", "Move backward"),
+                ("A / ←", "Move left"),
+                ("D / →", "Move right"),
             ],
         },
         Group {
             title: "Interaction",
             bindings: &[
-                ("E",      "Interact with NPC or building"),
-                ("Esc",    "Close dialogue / UI"),
+                ("E", "Interact with NPC or building"),
+                ("Esc", "Close dialogue / UI"),
             ],
         },
     ]
@@ -260,7 +267,7 @@ fn universal_controls() -> Vec<Group> {
     vec![Group {
         title: "",
         bindings: &[
-            ("F1",  "Open / close this help"),
+            ("F1", "Open / close this help"),
             ("Esc", "Close open UI, or return to main menu"),
         ],
     }]
