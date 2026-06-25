@@ -66,9 +66,11 @@ def mats():
         frog_l=B.toon_material("frog_l", C(150, 196, 110)),
         alien=B.toon_material("alien", C(140, 196, 130)),
         # ── rocky / volcanic ──
-        lava=B.glow_material("lava", C(255, 120, 36), strength=2.3),
-        lava2=B.glow_material("lava2", C(255, 188, 80), strength=2.8),
-        ember=B.glow_material("ember", C(255, 80, 36), strength=2.2),
+        # bubbles read as molten lava (same red-orange as the lava tile, just a
+        # hair brighter/raised) — no bright highlight that pops off the surface.
+        lava=B.glow_material("lava", C(214, 76, 28), strength=1.2),
+        lava2=B.glow_material("lava2", C(238, 106, 42), strength=1.4),
+        ember=B.glow_material("ember", C(200, 62, 24), strength=1.2),
         vrock=B.toon_material("vrock", C(92, 84, 80)),
         vrock_d=B.toon_material("vrock_d", C(58, 52, 50)),
         vrock_l=B.toon_material("vrock_l", C(122, 112, 106)),
@@ -274,6 +276,27 @@ def build_hole_creature(m, peek=1.0):
             B.add_sphere(f"creye{sx}", (sx * 0.06, -0.13, z + 0.04), (0.03, 0.03, 0.03), m["dark"])
 
 
+def build_giant_oak(m):                                                  # emergent canopy giant
+    B.add_cylinder("gtrunk", (0, 0, 0.85), 0.22, 1.7, m["bark"], axis="z", r2=0.16)
+    for i, (x, y, z, r, k) in enumerate(
+        [(0, 0, 2.3, 1.15, "leaf_d"), (-0.7, 0.2, 2.1, 0.7, "leaf_d"), (0.7, -0.15, 2.1, 0.7, "leaf"),
+         (0.15, 0.45, 2.85, 0.6, "leaf"), (-0.2, -0.45, 2.45, 0.65, "leaf_d"), (0.45, 0.3, 2.6, 0.55, "leaf")]):
+        B.add_sphere(f"goak{i}", (x, y, z), (r, r * 0.9, r), m[k])
+
+
+def build_tall_pine(m):                                                  # tall emergent conifer
+    B.add_cylinder("tptrunk", (0, 0, 0.5), 0.15, 1.0, m["bark"], axis="z")
+    for i, (z, r, k) in enumerate([(1.0, 1.0, "pine"), (1.6, 0.78, "pine_l"), (2.2, 0.56, "pine"),
+                                   (2.7, 0.36, "pine_l"), (3.1, 0.18, "pine")]):
+        B.add_cylinder(f"tpc{i}", (0, 0, z), r, 0.7, m[k], axis="z", r2=0.02, seg=18)
+
+
+def build_undergrowth(m):                                                # low leafy forest-floor spread
+    for i, (x, y, r) in enumerate([(0, 0, 0.22), (-0.2, 0.12, 0.16), (0.22, -0.05, 0.18),
+                                   (0.08, 0.2, 0.14), (-0.15, -0.15, 0.15)]):
+        B.add_sphere(f"ug{i}", (x, y, 0.12), (r, r * 0.85, r * 0.55), m[["leaf_d", "leaf", "leaf_d"][i % 3]])
+
+
 # ── rocky / volcanic biome ──
 def build_lava_bubble(m):
     B.add_cylinder("lcrust", (0, 0, 0.04), 0.42, 0.06, m["vrock_d"], axis="z")
@@ -289,10 +312,22 @@ def build_lava_spurt(m):
         B.add_sphere(f"ldrop{a}", (0.26 * math.cos(th), 0.26 * math.sin(th), 0.55), (0.05, 0.05, 0.05), m["ember"])
 
 
-def build_vrock(m):
-    B.add_box("vr1", (0, 0, 0.22), (0.6, 0.5, 0.42), m["vrock"], bevel=0.06)
-    B.add_box("vr2", (0.2, 0.1, 0.34), (0.3, 0.26, 0.4), m["vrock_d"], bevel=0.05)
-    B.add_box("vr3", (-0.22, -0.08, 0.16), (0.24, 0.22, 0.3), m["vrock_l"], bevel=0.05)
+def build_vrock(m):                                                      # faceted angular chunk
+    B.add_cylinder("vr1", (0, 0, 0.2), 0.42, 0.42, m["vrock"], axis="z", seg=6, r2=0.3)
+    B.add_cylinder("vr2", (0.22, 0.12, 0.34), 0.22, 0.34, m["vrock_l"], axis="z", seg=6, r2=0.12)
+    B.add_cylinder("vr3", (-0.2, -0.1, 0.16), 0.2, 0.3, m["vrock_d"], axis="z", seg=5, r2=0.14)
+
+
+def build_vrock_slab(m):                                                 # tilted layered slab
+    B.add_cylinder("vs1", (0, 0, 0.14), 0.55, 0.24, m["vrock"], axis="z", seg=6, r2=0.5)
+    B.add_cylinder("vs2", (0.05, 0.05, 0.32), 0.4, 0.2, m["vrock_l"], axis="z", seg=6, r2=0.34)
+    B.add_cylinder("vs3", (-0.1, -0.05, 0.46), 0.24, 0.16, m["vrock_d"], axis="z", seg=5, r2=0.18)
+
+
+def build_vrock_shard(m):                                                # angular pointed shard
+    B.add_cylinder("vsh1", (0, 0, 0.45), 0.26, 0.9, m["vrock"], axis="z", seg=6, r2=0.04)
+    B.add_cylinder("vsh2", (0.22, 0.06, 0.22), 0.18, 0.44, m["vrock_d"], axis="z", seg=5, r2=0.06)
+    B.add_cylinder("vsh3", (-0.18, -0.04, 0.18), 0.14, 0.36, m["vrock_l"], axis="z", seg=6, r2=0.05)
 
 
 def build_basalt_column(m):
@@ -365,8 +400,10 @@ BUILDERS = {
     "shell": build_shell, "driftwood": build_driftwood, "wildflower": build_wildflower,
     "squirrel": build_squirrel, "bird_nest": build_bird_nest, "frog": build_frog,
     "alien_peek": build_alien_peek, "hole_creature": build_hole_creature,
+    "giant_oak": build_giant_oak, "tall_pine": build_tall_pine, "undergrowth": build_undergrowth,
     # rocky
     "lava_bubble": build_lava_bubble, "lava_spurt": build_lava_spurt, "vrock": build_vrock,
+    "vrock_slab": build_vrock_slab, "vrock_shard": build_vrock_shard,
     "basalt_column": build_basalt_column, "ore_deposit": build_ore_deposit, "vboulder": build_vboulder,
     "mining_drill": build_mining_drill, "fumarole": build_fumarole, "ash_scrub": build_ash_scrub,
     "rock_dweller": build_rock_dweller, "salamander": build_salamander,
@@ -376,7 +413,9 @@ TOP = {"grass_tuft": 0.6, "oak": 2.4, "conifer": 2.4, "birch": 2.3, "willow": 2.
        "reed": 1.6, "lilypad": 0.4, "fish": 0.8, "seaweed": 1.0, "shell": 0.5, "driftwood": 0.5,
        "wildflower": 0.7, "squirrel": 0.7, "bird_nest": 0.5, "frog": 0.4, "alien_peek": 0.6,
        "hole_creature": 0.4,
-       "lava_bubble": 0.4, "lava_spurt": 0.9, "vrock": 0.7, "basalt_column": 1.4, "ore_deposit": 0.7,
+       "giant_oak": 3.5, "tall_pine": 3.3, "undergrowth": 0.5,
+       "lava_bubble": 0.4, "lava_spurt": 0.9, "vrock": 0.7, "vrock_slab": 0.7, "vrock_shard": 1.0,
+       "basalt_column": 1.4, "ore_deposit": 0.7,
        "vboulder": 1.0, "mining_drill": 1.3, "fumarole": 1.1, "ash_scrub": 0.7, "rock_dweller": 0.6,
        "salamander": 0.5}
 
@@ -384,10 +423,11 @@ TOP = {"grass_tuft": 0.6, "oak": 2.4, "conifer": 2.4, "birch": 2.3, "willow": 2.
 # (name, terrains, density, min_distance, max_per_tile, n_frames, n_variants, tile, anim, shy)
 #   anim: "sway" (rotate), "static", "peek" (emerge, shy)
 GARDEN_BAKE = [
-    ("grass_tuft", ["sand", "grass"], 0.90, 0.8, 4, 4, 3, 22, "sway", False),
+    ("grass_tuft", ["sand", "grass", "forest"], 0.95, 0.8, 5, 4, 3, 22, "sway", False),
     ("wildflower", ["grass"], 0.50, 0.8, 2, 4, 3, 22, "sway", False),
-    ("fern", ["forest"], 0.60, 0.8, 2, 4, 3, 22, "sway", False),
-    ("bush", ["grass", "forest"], 0.45, 1.5, 2, 4, 3, 26, "sway", False),
+    ("fern", ["forest"], 0.80, 0.8, 3, 4, 3, 22, "sway", False),
+    ("undergrowth", ["forest"], 0.55, 0.8, 2, 4, 3, 22, "sway", False),
+    ("bush", ["grass", "forest"], 0.50, 1.5, 2, 4, 3, 26, "sway", False),
     ("mushroom", ["forest"], 0.35, 1.0, 2, 1, 3, 20, "static", False),
     ("seaweed", ["water"], 0.18, 1.5, 2, 4, 3, 22, "sway", False),
     ("reed", ["water"], 0.14, 2.0, 1, 4, 3, 30, "sway", False),
@@ -402,6 +442,8 @@ GARDEN_BAKE = [
     ("conifer", ["forest", "mountain"], 0.50, 2.0, 1, 4, 3, 40, "sway", False),
     ("willow", ["forest"], 0.20, 2.5, 1, 4, 3, 40, "sway", False),
     ("dead_tree", ["forest"], 0.12, 3.0, 1, 4, 3, 40, "sway", False),
+    ("giant_oak", ["forest"], 0.14, 4.0, 1, 4, 3, 56, "sway", False),
+    ("tall_pine", ["forest", "mountain"], 0.14, 4.0, 1, 4, 3, 56, "sway", False),
     ("boulder", ["mountain"], 0.06, 5.0, 1, 1, 2, 36, "static", False),
     ("frog", ["water", "grass"], 0.04, 4.0, 1, 4, 2, 18, "peek", True),
     ("squirrel", ["forest"], 0.03, 6.0, 1, 5, 2, 24, "peek", True),
@@ -415,7 +457,9 @@ GARDEN_BAKE = [
 ROCKY_BAKE = [
     ("lava_bubble", ["lava"], 0.55, 0.8, 2, 4, 3, 18, "sway", False),
     ("lava_spurt", ["lava"], 0.18, 2.0, 1, 4, 2, 24, "sway", False),
-    ("vrock", ["basalt", "rock", "dust"], 0.40, 1.2, 2, 1, 3, 22, "static", False),
+    ("vrock", ["basalt", "rock", "dust"], 0.24, 1.2, 2, 1, 3, 22, "static", False),
+    ("vrock_slab", ["basalt", "rock"], 0.16, 1.5, 1, 1, 3, 24, "static", False),
+    ("vrock_shard", ["basalt", "rock", "dust"], 0.14, 2.0, 1, 1, 3, 26, "static", False),
     ("ore_deposit", ["basalt", "rock"], 0.18, 2.5, 1, 1, 3, 22, "static", False),
     ("basalt_column", ["basalt", "cliff"], 0.10, 3.0, 1, 1, 2, 38, "static", False),
     ("vboulder", ["rock", "cliff"], 0.10, 4.0, 1, 1, 2, 36, "static", False),
@@ -459,6 +503,7 @@ ORTHO_B = 4.2
 # final sprite scale per biome (px per world-unit). Rocky props are short, so
 # they need a larger scale to read as objects rather than speckle.
 PX_PER_UNIT = {"garden": 12.0, "rocky": 17.0}
+NO_SHADOW = {"lava_bubble", "lava_spurt", "fish", "seaweed"}   # sit in lava/water, not on ground
 TMP = os.path.join(OUT, "_obj_bake_tmp.png")
 
 
@@ -513,13 +558,15 @@ def bake(biome="garden"):
             ff = []
             for im in frames:
                 c = im.crop((x0, y0, x1, y1))
-                # contact shadow at the base, then downscale
-                sh = Image.new("RGBA", c.size, (0, 0, 0, 0)); dd = ImageDraw.Draw(sh)
-                ew = int((x1 - x0) * 0.5); eh = max(3, int((x1 - x0) * 0.13)); cx = (x1 - x0) // 2
-                br = int(base_row)
-                dd.ellipse([cx - ew // 2, br - eh // 2, cx + ew // 2, br + eh // 2], fill=(12, 26, 12, 120))
-                sh = sh.filter(ImageFilter.GaussianBlur(int(max(1, (x1 - x0) // 30))))
-                sh.alpha_composite(c)
+                if name in NO_SHADOW:               # in-surface (lava/water) → no ground shadow
+                    sh = c
+                else:                               # contact shadow at the base
+                    sh = Image.new("RGBA", c.size, (0, 0, 0, 0)); dd = ImageDraw.Draw(sh)
+                    ew = int((x1 - x0) * 0.5); eh = max(3, int((x1 - x0) * 0.13)); cx = (x1 - x0) // 2
+                    br = int(base_row)
+                    dd.ellipse([cx - ew // 2, br - eh // 2, cx + ew // 2, br + eh // 2], fill=(12, 26, 12, 120))
+                    sh = sh.filter(ImageFilter.GaussianBlur(int(max(1, (x1 - x0) // 30))))
+                    sh.alpha_composite(c)
                 ff.append(_jitter(sh.resize((tw, th), Image.LANCZOS), v))
             var_frames.append(ff)
         cells.append(dict(name=name, vf=var_frames, tw=tw, th=th, nf=nf, nv=nv, y_off=y_off,
