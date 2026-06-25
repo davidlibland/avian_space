@@ -65,6 +65,24 @@ def mats():
         frog=B.toon_material("frog", C(96, 160, 78)),
         frog_l=B.toon_material("frog_l", C(150, 196, 110)),
         alien=B.toon_material("alien", C(140, 196, 130)),
+        # ── rocky / volcanic ──
+        lava=B.glow_material("lava", C(255, 120, 36), strength=2.3),
+        lava2=B.glow_material("lava2", C(255, 188, 80), strength=2.8),
+        ember=B.glow_material("ember", C(255, 80, 36), strength=2.2),
+        vrock=B.toon_material("vrock", C(92, 84, 80)),
+        vrock_d=B.toon_material("vrock_d", C(58, 52, 50)),
+        vrock_l=B.toon_material("vrock_l", C(122, 112, 106)),
+        basalt=B.toon_material("basalt", C(64, 60, 62)),
+        ore=B.glow_material("ore", C(120, 230, 240), strength=2.2),
+        oremat=B.toon_material("oremat", C(150, 130, 70)),
+        rmetal=B.toon_material("rmetal", C(120, 96, 78), spec=0.8, spec_sharp=0.85),
+        rmetal_d=B.toon_material("rmetal_d", C(80, 64, 52)),
+        steam=B.toon_material("steam", C(176, 176, 182)),
+        ash=B.toon_material("ash", C(120, 122, 88)),
+        sulfur=B.toon_material("sulfur", C(206, 196, 96)),
+        crfur=B.toon_material("crfur", C(70, 60, 58)),
+        sal=B.toon_material("sal", C(220, 120, 60)),
+        sal_l=B.toon_material("sal_l", C(255, 180, 90)),
     )
 
 
@@ -256,6 +274,88 @@ def build_hole_creature(m, peek=1.0):
             B.add_sphere(f"creye{sx}", (sx * 0.06, -0.13, z + 0.04), (0.03, 0.03, 0.03), m["dark"])
 
 
+# ── rocky / volcanic biome ──
+def build_lava_bubble(m):
+    B.add_cylinder("lcrust", (0, 0, 0.04), 0.42, 0.06, m["vrock_d"], axis="z")
+    B.add_sphere("lbub", (0, 0, 0.08), (0.32, 0.32, 0.24), m["lava"], zclip=0.0)
+    B.add_sphere("lbub2", (0.06, -0.06, 0.2), (0.13, 0.13, 0.1), m["lava2"])
+
+
+def build_lava_spurt(m):
+    B.add_cylinder("lcol", (0, 0, 0.32), 0.13, 0.64, m["lava"], axis="z", r2=0.06)
+    B.add_sphere("ltop", (0, 0, 0.7), (0.17, 0.17, 0.17), m["lava2"])
+    for a in range(4):
+        th = a / 4 * 2 * math.pi
+        B.add_sphere(f"ldrop{a}", (0.26 * math.cos(th), 0.26 * math.sin(th), 0.55), (0.05, 0.05, 0.05), m["ember"])
+
+
+def build_vrock(m):
+    B.add_box("vr1", (0, 0, 0.22), (0.6, 0.5, 0.42), m["vrock"], bevel=0.06)
+    B.add_box("vr2", (0.2, 0.1, 0.34), (0.3, 0.26, 0.4), m["vrock_d"], bevel=0.05)
+    B.add_box("vr3", (-0.22, -0.08, 0.16), (0.24, 0.22, 0.3), m["vrock_l"], bevel=0.05)
+
+
+def build_basalt_column(m):
+    B.add_cylinder("bcol", (0, 0, 0.7), 0.32, 1.4, m["basalt"], axis="z", seg=6)
+    B.add_cylinder("bcol2", (0.36, 0.1, 0.5), 0.22, 1.0, m["vrock_d"], axis="z", seg=6)
+
+
+def build_ore_deposit(m):
+    B.add_box("orerk", (0, 0, 0.2), (0.5, 0.42, 0.38), m["vrock"], bevel=0.06)
+    for a, (x, y, z) in enumerate([(0, -0.1, 0.42), (0.18, 0.05, 0.38), (-0.15, 0.05, 0.36)]):
+        B.add_cylinder(f"crys{a}", (x, y, z), 0.06, 0.24, m["ore"], axis="z", r2=0.0, seg=6)
+
+
+def build_vboulder(m):
+    B.add_box("vb1", (0, 0, 0.42), (1.12, 0.86, 0.82), m["vrock"], bevel=0.12)
+    B.add_box("vb2", (0.42, 0.2, 0.22), (0.5, 0.46, 0.44), m["vrock_d"], bevel=0.1)
+    B.add_box("vb3", (-0.4, -0.16, 0.26), (0.4, 0.38, 0.5), m["vrock_l"], bevel=0.1)
+
+
+def build_mining_drill(m):
+    B.add_box("mbase", (0, 0, 0.16), (0.74, 0.62, 0.32), m["rmetal_d"], bevel=0.05)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            B.add_cylinder(f"mleg{sx}{sy}", (sx * 0.3, sy * 0.26, 0.65), 0.05, 1.05, m["rmetal"], axis="z")
+    B.add_box("mtop", (0, 0, 1.18), (0.55, 0.46, 0.12), m["rmetal_d"], bevel=0.04)
+    B.add_cylinder("mdrill", (0, 0, 0.5), 0.1, 0.95, m["rmetal"], axis="z", r2=0.02)
+    B.add_box("mmotor", (0.22, 0, 0.95), (0.32, 0.3, 0.3), m["rmetal"], bevel=0.06)
+    B.add_box("mhaz", (0, -0.32, 0.16), (0.5, 0.04, 0.12), m["lava2"], bevel=0.0)
+
+
+def build_fumarole(m):
+    B.add_cylinder("fring", (0, 0, 0.1), 0.28, 0.2, m["vrock_d"], axis="z", r2=0.16)
+    for i, (z, r) in enumerate([(0.4, 0.14), (0.66, 0.18), (0.92, 0.14)]):
+        B.add_sphere(f"steam{i}", (0.04 * i, 0, z), (r, r, r), m["steam"])
+
+
+def build_ash_scrub(m):
+    for a in range(5):
+        th = a / 5 * 2 * math.pi
+        B.add_cylinder(f"ash{a}", (0.1 * math.cos(th), 0.1 * math.sin(th), 0.2), 0.022, 0.4, m["ash"], axis="z", r2=0.0)
+
+
+def build_rock_dweller(m, peek=1.0):
+    B.add_box("rdrk", (0, 0.06, 0.14), (0.42, 0.3, 0.26), m["vrock"], bevel=0.06)
+    if peek > 0.12:
+        z = -0.05 + peek * 0.22
+        B.add_sphere("rdhead", (0, -0.12, z + 0.1), (0.13, 0.12, 0.12), m["crfur"], zclip=0.04)
+        for sx in (-1, 1):
+            B.add_sphere(f"rdeye{sx}", (sx * 0.06, -0.2, z + 0.14), (0.038, 0.042, 0.038), m["ore"])
+
+
+def build_salamander(m, peek=1.0):
+    B.add_box("salrk", (0, 0.12, 0.1), (0.42, 0.3, 0.18), m["vrock_d"], bevel=0.06)
+    if peek > 0.12:
+        z = -0.05 + peek * 0.13
+        B.add_sphere("salbody", (0, -0.04, z + 0.12), (0.22, 0.16, 0.12), m["sal"], zclip=0.04)
+        B.add_sphere("salhead", (0, -0.22, z + 0.12), (0.1, 0.1, 0.09), m["sal"])
+        for sx in (-1, 1):
+            B.add_sphere(f"saleye{sx}", (sx * 0.06, -0.29, z + 0.16), (0.025, 0.025, 0.025), m["dark"])
+        for i in range(3):
+            B.add_sphere(f"salsp{i}", (-0.06 + i * 0.08, -0.04, z + 0.2), (0.03, 0.03, 0.02), m["sal_l"])
+
+
 BUILDERS = {
     "grass_tuft": build_grass_tuft,
     "oak": build_oak, "conifer": build_conifer, "birch": build_birch, "willow": build_willow,
@@ -265,12 +365,20 @@ BUILDERS = {
     "shell": build_shell, "driftwood": build_driftwood, "wildflower": build_wildflower,
     "squirrel": build_squirrel, "bird_nest": build_bird_nest, "frog": build_frog,
     "alien_peek": build_alien_peek, "hole_creature": build_hole_creature,
+    # rocky
+    "lava_bubble": build_lava_bubble, "lava_spurt": build_lava_spurt, "vrock": build_vrock,
+    "basalt_column": build_basalt_column, "ore_deposit": build_ore_deposit, "vboulder": build_vboulder,
+    "mining_drill": build_mining_drill, "fumarole": build_fumarole, "ash_scrub": build_ash_scrub,
+    "rock_dweller": build_rock_dweller, "salamander": build_salamander,
 }
 TOP = {"grass_tuft": 0.6, "oak": 2.4, "conifer": 2.4, "birch": 2.3, "willow": 2.0, "dead_tree": 2.2,
        "bush": 0.9, "fern": 1.0, "mushroom": 0.6, "rock": 0.7, "boulder": 1.0, "alpine_scrub": 0.6,
        "reed": 1.6, "lilypad": 0.4, "fish": 0.8, "seaweed": 1.0, "shell": 0.5, "driftwood": 0.5,
        "wildflower": 0.7, "squirrel": 0.7, "bird_nest": 0.5, "frog": 0.4, "alien_peek": 0.6,
-       "hole_creature": 0.4}
+       "hole_creature": 0.4,
+       "lava_bubble": 0.4, "lava_spurt": 0.9, "vrock": 0.7, "basalt_column": 1.4, "ore_deposit": 0.7,
+       "vboulder": 1.0, "mining_drill": 1.3, "fumarole": 1.1, "ash_scrub": 0.7, "rock_dweller": 0.6,
+       "salamander": 0.5}
 
 # Garden placement + animation roster for the bake.
 # (name, terrains, density, min_distance, max_per_tile, n_frames, n_variants, tile, anim, shy)
@@ -302,6 +410,24 @@ GARDEN_BAKE = [
     ("hole_creature", ["grass", "sand"], 0.02, 8.0, 1, 5, 2, 22, "peek", True),
 ]
 
+# Rocky / volcanic: lava terrains busy with bubbles; basalt/rock = stone + ore +
+# rigs; dust the only (barely) living tiles; cliff bare.
+ROCKY_BAKE = [
+    ("lava_bubble", ["lava"], 0.55, 0.8, 2, 4, 3, 18, "sway", False),
+    ("lava_spurt", ["lava"], 0.18, 2.0, 1, 4, 2, 24, "sway", False),
+    ("vrock", ["basalt", "rock", "dust"], 0.40, 1.2, 2, 1, 3, 22, "static", False),
+    ("ore_deposit", ["basalt", "rock"], 0.18, 2.5, 1, 1, 3, 22, "static", False),
+    ("basalt_column", ["basalt", "cliff"], 0.10, 3.0, 1, 1, 2, 38, "static", False),
+    ("vboulder", ["rock", "cliff"], 0.10, 4.0, 1, 1, 2, 36, "static", False),
+    ("fumarole", ["basalt", "dust"], 0.14, 3.0, 1, 4, 2, 30, "sway", False),
+    ("mining_drill", ["basalt", "rock", "dust"], 0.06, 6.0, 1, 1, 2, 34, "static", False),
+    ("ash_scrub", ["dust"], 0.10, 1.5, 2, 4, 2, 22, "sway", False),
+    ("rock_dweller", ["basalt", "dust"], 0.03, 6.0, 1, 5, 2, 22, "peek", True),
+    ("salamander", ["lava", "basalt"], 0.02, 8.0, 1, 5, 2, 22, "peek", True),
+]
+
+ROSTERS = {"garden": GARDEN_BAKE, "rocky": ROCKY_BAKE}
+
 
 def setup_cam(elev, azim, ortho, target_z):
     B.setup_scene(ortho, RES, freestyle_thick=1.1)
@@ -330,7 +456,9 @@ import numpy as np  # noqa: E402
 from PIL import ImageDraw, ImageFilter  # noqa: E402
 
 ORTHO_B = 4.2
-PX_PER_UNIT = 12.0          # final sprite scale (a 2.4u tree → ~29 px tall)
+# final sprite scale per biome (px per world-unit). Rocky props are short, so
+# they need a larger scale to read as objects rather than speckle.
+PX_PER_UNIT = {"garden": 12.0, "rocky": 17.0}
 TMP = os.path.join(OUT, "_obj_bake_tmp.png")
 
 
@@ -364,11 +492,11 @@ def _jitter(img, var):
     return Image.fromarray(a.astype("uint8"))
 
 
-def bake():
+def bake(biome="garden"):
     out_dir = os.path.abspath(os.path.join(OUT, "..", "..", "..", "assets", "sprites", "worlds"))
-    ce = math.cos(math.radians(50)); ppt = RES / ORTHO_B; D = PX_PER_UNIT / ppt
+    ce = math.cos(math.radians(50)); ppt = RES / ORTHO_B; D = PX_PER_UNIT.get(biome, 12.0) / ppt
     cells = []   # per object: dict(name, frames[var][frame]=PIL, tw, th, y_off, params)
-    for (name, terrains, dens, mind, mx, nf, nv, _tile, anim, shy) in GARDEN_BAKE:
+    for (name, terrains, dens, mind, mx, nf, nv, _tile, anim, shy) in ROSTERS[biome]:
         frames = _render_frames(name, anim, nf)
         # union bbox across frames so the animation is aligned
         x0 = y0 = 10**9; x1 = y1 = 0
@@ -408,16 +536,16 @@ def bake():
         meta.append((c["name"], ypx, c["nf"], c["nv"], c["tw"], c["th"], c["terrains"],
                      c["dens"], c["mind"], c["mx"], c["y_off"], c["shy"]))
         ypx += c["nf"] * c["th"]
-    atlas.save(os.path.join(out_dir, "garden_objects.png"))
-    _merge_manifest(out_dir, meta)
-    print(f"baked garden: {len(meta)} objects → garden_objects.png ({atlas_w}×{atlas_h})")
+    atlas.save(os.path.join(out_dir, f"{biome}_objects.png"))
+    _merge_manifest(out_dir, meta, biome)
+    print(f"baked {biome}: {len(meta)} objects → {biome}_objects.png ({atlas_w}×{atlas_h})")
 
 
-def _merge_manifest(out_dir, meta):
+def _merge_manifest(out_dir, meta, biome):
     import re
     path = os.path.join(out_dir, "objects_manifest.ron")
     txt = open(path).read()
-    lines = ['        "garden": (', '            atlas: "garden_objects.png",', "            objects: ["]
+    lines = [f'        "{biome}": (', f'            atlas: "{biome}_objects.png",', "            objects: ["]
     for (nm, ypx, nf, nv, tw, th, terr, dens, mind, mx, yo, shy) in meta:
         tr = "[" + ", ".join(f'"{t}"' for t in terr) + "]"
         lines += ["                (",
@@ -430,15 +558,14 @@ def _merge_manifest(out_dir, meta):
                   "                ),"]
     lines += ["            ],", "        ),"]
     block = "\n".join(lines)
-    # replace the existing "garden": ( ... ), block
-    new = re.sub(r'        "garden": \(.*?\n        \),', block, txt, count=1, flags=re.S)
+    new = re.sub(rf'        "{biome}": \(.*?\n        \),', block, txt, count=1, flags=re.S)
     open(path, "w").write(new)
 
 
 if __name__ == "__main__":
     import sys
     if "bake" in sys.argv:
-        bake()
+        bake(sys.argv[2] if len(sys.argv) > 2 else "garden")
     else:
         for fn in BUILDERS:
             render(fn, 50, 0, suffix="_34")
