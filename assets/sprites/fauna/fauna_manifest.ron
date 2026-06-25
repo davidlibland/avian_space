@@ -1,0 +1,27 @@
+// fauna_manifest.ron — roaming animals (surface_fauna).
+// Sheet layout: 3 cols (still, w1, w2) x 4 rows (down, left, right, up).
+(
+    species: [
+        (
+            name: "deer", sheet: "sprites/fauna/deer.png",
+            biome: "garden", terrains: ["grass", "forest"],
+            tile_w: 34, tile_h: 34,
+            speed: 34.0, flee_speed: 78.0,
+            group: 3, flier: false,
+        ),
+        (
+            name: "rabbit", sheet: "sprites/fauna/rabbit.png",
+            biome: "garden", terrains: ["grass"],
+            tile_w: 28, tile_h: 28,
+            speed: 46.0, flee_speed: 96.0,
+            group: 1, flier: false,
+        ),
+        (
+            name: "fox", sheet: "sprites/fauna/fox.png",
+            biome: "garden", terrains: ["grass", "forest"],
+            tile_w: 30, tile_h: 30,
+            speed: 42.0, flee_speed: 84.0,
+            group: 1, flier: false,
+        ),
+    ],
+)
