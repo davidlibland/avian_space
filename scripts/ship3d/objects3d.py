@@ -201,10 +201,12 @@ def build_wildflower(m):
 
 
 # ── mountain ──
-def build_boulder(m):
-    B.add_box("bld1", (0, 0, 0.42), (1.12, 0.86, 0.82), m["stone"], bevel=0.14)
-    B.add_box("bld2", (0.42, 0.2, 0.2), (0.5, 0.46, 0.42), m["stone_d"], bevel=0.1)
-    B.add_box("bld3", (-0.4, -0.18, 0.26), (0.4, 0.38, 0.5), m["stone"], bevel=0.1)
+def build_boulder(m):                                                    # rounded, soft, irregular
+    for i, (x, y, z, rx, ry, rz, k) in enumerate(
+        [(0, 0, 0.42, 0.62, 0.52, 0.48, "stone"), (0.32, 0.14, 0.3, 0.42, 0.38, 0.4, "stone_d"),
+         (-0.3, -0.12, 0.28, 0.4, 0.36, 0.4, "stone"), (0.06, -0.24, 0.22, 0.32, 0.28, 0.3, "stone_d")]):
+        B.add_sphere(f"bld{i}", (x, y, z), (rx, ry, rz), m[k])
+    B.add_sphere("bmoss", (-0.08, 0.12, 0.6), (0.32, 0.26, 0.12), m["moss"])     # moss cap
 
 
 def build_alpine_scrub(m):
@@ -276,25 +278,33 @@ def build_hole_creature(m, peek=1.0):
             B.add_sphere(f"creye{sx}", (sx * 0.06, -0.13, z + 0.04), (0.03, 0.03, 0.03), m["dark"])
 
 
-def build_giant_oak(m):                                                  # emergent canopy giant
-    B.add_cylinder("gtrunk", (0, 0, 0.85), 0.22, 1.7, m["bark"], axis="z", r2=0.16)
+def build_giant_oak(m):                                                  # huge spreading emergent
+    B.add_cylinder("gtrunk", (0, 0, 1.05), 0.3, 2.1, m["bark"], axis="z", r2=0.22)
     for i, (x, y, z, r, k) in enumerate(
-        [(0, 0, 2.3, 1.15, "leaf_d"), (-0.7, 0.2, 2.1, 0.7, "leaf_d"), (0.7, -0.15, 2.1, 0.7, "leaf"),
-         (0.15, 0.45, 2.85, 0.6, "leaf"), (-0.2, -0.45, 2.45, 0.65, "leaf_d"), (0.45, 0.3, 2.6, 0.55, "leaf")]):
+        [(0, 0, 2.8, 1.55, "leaf_d"), (-1.05, 0.25, 2.45, 0.95, "leaf_d"), (1.05, -0.2, 2.45, 0.95, "leaf"),
+         (0.2, 0.6, 3.45, 0.85, "leaf"), (-0.3, -0.6, 2.9, 0.9, "leaf_d"), (0.65, 0.45, 3.1, 0.75, "leaf"),
+         (-0.7, 0.35, 3.0, 0.75, "leaf")]):
         B.add_sphere(f"goak{i}", (x, y, z), (r, r * 0.9, r), m[k])
 
 
-def build_tall_pine(m):                                                  # tall emergent conifer
-    B.add_cylinder("tptrunk", (0, 0, 0.5), 0.15, 1.0, m["bark"], axis="z")
-    for i, (z, r, k) in enumerate([(1.0, 1.0, "pine"), (1.6, 0.78, "pine_l"), (2.2, 0.56, "pine"),
-                                   (2.7, 0.36, "pine_l"), (3.1, 0.18, "pine")]):
-        B.add_cylinder(f"tpc{i}", (0, 0, z), r, 0.7, m[k], axis="z", r2=0.02, seg=18)
+def build_tall_pine(m):                                                  # very tall emergent conifer
+    B.add_cylinder("tptrunk", (0, 0, 0.6), 0.18, 1.2, m["bark"], axis="z")
+    for i, (z, r, k) in enumerate([(1.15, 1.2, "pine"), (1.85, 0.94, "pine_l"), (2.55, 0.68, "pine"),
+                                   (3.2, 0.46, "pine_l"), (3.7, 0.26, "pine"), (4.05, 0.1, "pine_l")]):
+        B.add_cylinder(f"tpc{i}", (0, 0, z), r, 0.85, m[k], axis="z", r2=0.02, seg=18)
 
 
 def build_undergrowth(m):                                                # low leafy forest-floor spread
     for i, (x, y, r) in enumerate([(0, 0, 0.22), (-0.2, 0.12, 0.16), (0.22, -0.05, 0.18),
                                    (0.08, 0.2, 0.14), (-0.15, -0.15, 0.15)]):
         B.add_sphere(f"ug{i}", (x, y, 0.12), (r, r * 0.85, r * 0.55), m[["leaf_d", "leaf", "leaf_d"][i % 3]])
+
+
+def build_clover(m):                                                      # low grassland ground cover
+    for i, (x, y) in enumerate([(0, 0), (-0.18, 0.1), (0.18, 0.08), (0.05, -0.15), (-0.1, -0.12)]):
+        B.add_sphere(f"cl{i}", (x, y, 0.06), (0.1, 0.1, 0.05), m["leaf"])
+    for i, (x, y, k) in enumerate([(0.1, 0.15, "fl_y"), (-0.12, -0.05, "fl_r")]):
+        B.add_sphere(f"clf{i}", (x, y, 0.12), (0.04, 0.04, 0.04), m[k])
 
 
 # ── rocky / volcanic biome ──
@@ -341,10 +351,18 @@ def build_ore_deposit(m):
         B.add_cylinder(f"crys{a}", (x, y, z), 0.06, 0.24, m["ore"], axis="z", r2=0.0, seg=6)
 
 
-def build_vboulder(m):
-    B.add_box("vb1", (0, 0, 0.42), (1.12, 0.86, 0.82), m["vrock"], bevel=0.12)
-    B.add_box("vb2", (0.42, 0.2, 0.22), (0.5, 0.46, 0.44), m["vrock_d"], bevel=0.1)
-    B.add_box("vb3", (-0.4, -0.16, 0.26), (0.4, 0.38, 0.5), m["vrock_l"], bevel=0.1)
+def build_vboulder(m):                                                   # rounded, soft, irregular
+    for i, (x, y, z, rx, ry, rz, k) in enumerate(
+        [(0, 0, 0.44, 0.64, 0.54, 0.5, "vrock"), (0.34, 0.16, 0.3, 0.44, 0.4, 0.42, "vrock_d"),
+         (-0.32, -0.12, 0.3, 0.42, 0.38, 0.42, "vrock_l"), (0.06, -0.24, 0.22, 0.34, 0.3, 0.32, "vrock")]):
+        B.add_sphere(f"vbld{i}", (x, y, z), (rx, ry, rz), m[k])
+
+
+def build_vrock_round(m):                                                # small rounded irregular rock
+    for i, (x, y, z, rx, ry, rz, k) in enumerate(
+        [(0, 0, 0.18, 0.36, 0.3, 0.28, "vrock"), (0.17, 0.08, 0.13, 0.21, 0.19, 0.2, "vrock_l"),
+         (-0.15, -0.06, 0.11, 0.19, 0.17, 0.18, "vrock_d")]):
+        B.add_sphere(f"vrr{i}", (x, y, z), (rx, ry, rz), m[k])
 
 
 def build_mining_drill(m):
@@ -401,9 +419,10 @@ BUILDERS = {
     "squirrel": build_squirrel, "bird_nest": build_bird_nest, "frog": build_frog,
     "alien_peek": build_alien_peek, "hole_creature": build_hole_creature,
     "giant_oak": build_giant_oak, "tall_pine": build_tall_pine, "undergrowth": build_undergrowth,
+    "clover": build_clover,
     # rocky
     "lava_bubble": build_lava_bubble, "lava_spurt": build_lava_spurt, "vrock": build_vrock,
-    "vrock_slab": build_vrock_slab, "vrock_shard": build_vrock_shard,
+    "vrock_slab": build_vrock_slab, "vrock_shard": build_vrock_shard, "vrock_round": build_vrock_round,
     "basalt_column": build_basalt_column, "ore_deposit": build_ore_deposit, "vboulder": build_vboulder,
     "mining_drill": build_mining_drill, "fumarole": build_fumarole, "ash_scrub": build_ash_scrub,
     "rock_dweller": build_rock_dweller, "salamander": build_salamander,
@@ -413,9 +432,9 @@ TOP = {"grass_tuft": 0.6, "oak": 2.4, "conifer": 2.4, "birch": 2.3, "willow": 2.
        "reed": 1.6, "lilypad": 0.4, "fish": 0.8, "seaweed": 1.0, "shell": 0.5, "driftwood": 0.5,
        "wildflower": 0.7, "squirrel": 0.7, "bird_nest": 0.5, "frog": 0.4, "alien_peek": 0.6,
        "hole_creature": 0.4,
-       "giant_oak": 3.5, "tall_pine": 3.3, "undergrowth": 0.5,
+       "giant_oak": 3.9, "tall_pine": 4.2, "undergrowth": 0.5, "clover": 0.3,
        "lava_bubble": 0.4, "lava_spurt": 0.9, "vrock": 0.7, "vrock_slab": 0.7, "vrock_shard": 1.0,
-       "basalt_column": 1.4, "ore_deposit": 0.7,
+       "vrock_round": 0.5, "basalt_column": 1.4, "ore_deposit": 0.7,
        "vboulder": 1.0, "mining_drill": 1.3, "fumarole": 1.1, "ash_scrub": 0.7, "rock_dweller": 0.6,
        "salamander": 0.5}
 
@@ -423,28 +442,29 @@ TOP = {"grass_tuft": 0.6, "oak": 2.4, "conifer": 2.4, "birch": 2.3, "willow": 2.
 # (name, terrains, density, min_distance, max_per_tile, n_frames, n_variants, tile, anim, shy)
 #   anim: "sway" (rotate), "static", "peek" (emerge, shy)
 GARDEN_BAKE = [
-    ("grass_tuft", ["sand", "grass", "forest"], 0.95, 0.8, 5, 4, 3, 22, "sway", False),
-    ("wildflower", ["grass"], 0.50, 0.8, 2, 4, 3, 22, "sway", False),
+    ("grass_tuft", ["sand", "grass", "forest"], 1.00, 0.8, 6, 4, 3, 22, "sway", False),
+    ("clover", ["grass", "forest"], 0.60, 0.8, 4, 4, 3, 18, "sway", False),
+    ("wildflower", ["grass"], 0.60, 0.8, 3, 4, 3, 22, "sway", False),
     ("fern", ["forest"], 0.80, 0.8, 3, 4, 3, 22, "sway", False),
-    ("undergrowth", ["forest"], 0.55, 0.8, 2, 4, 3, 22, "sway", False),
+    ("undergrowth", ["forest", "grass"], 0.55, 0.8, 2, 4, 3, 22, "sway", False),
     ("bush", ["grass", "forest"], 0.50, 1.5, 2, 4, 3, 26, "sway", False),
-    ("mushroom", ["forest"], 0.35, 1.0, 2, 1, 3, 20, "static", False),
+    ("mushroom", ["forest"], 0.35, 1.0, 2, 4, 3, 20, "sway", False),
     ("seaweed", ["water"], 0.18, 1.5, 2, 4, 3, 22, "sway", False),
     ("reed", ["water"], 0.14, 2.0, 1, 4, 3, 30, "sway", False),
-    ("lilypad", ["water"], 0.12, 2.0, 1, 1, 3, 26, "static", False),
+    ("lilypad", ["water"], 0.12, 2.0, 1, 4, 3, 26, "sway", False),
     ("fish", ["water"], 0.05, 4.0, 1, 4, 2, 24, "sway", False),
     ("shell", ["sand"], 0.10, 1.5, 1, 1, 3, 18, "static", False),
     ("driftwood", ["sand"], 0.06, 3.0, 1, 1, 2, 26, "static", False),
-    ("rock", ["sand", "grass", "mountain"], 0.10, 2.5, 2, 1, 3, 22, "static", False),
+    ("rock", ["sand", "grass", "forest", "mountain"], 0.15, 2.5, 2, 1, 3, 22, "static", False),
     ("alpine_scrub", ["mountain"], 0.15, 1.5, 2, 4, 3, 22, "sway", False),
     ("oak", ["grass", "forest"], 0.40, 2.5, 1, 4, 3, 40, "sway", False),
     ("birch", ["forest"], 0.50, 1.8, 1, 4, 3, 40, "sway", False),
     ("conifer", ["forest", "mountain"], 0.50, 2.0, 1, 4, 3, 40, "sway", False),
     ("willow", ["forest"], 0.20, 2.5, 1, 4, 3, 40, "sway", False),
     ("dead_tree", ["forest"], 0.12, 3.0, 1, 4, 3, 40, "sway", False),
-    ("giant_oak", ["forest"], 0.14, 4.0, 1, 4, 3, 56, "sway", False),
-    ("tall_pine", ["forest", "mountain"], 0.14, 4.0, 1, 4, 3, 56, "sway", False),
-    ("boulder", ["mountain"], 0.06, 5.0, 1, 1, 2, 36, "static", False),
+    ("giant_oak", ["forest"], 0.15, 4.0, 1, 4, 3, 72, "sway", False),
+    ("tall_pine", ["forest", "mountain"], 0.15, 4.0, 1, 4, 3, 76, "sway", False),
+    ("boulder", ["grass", "mountain"], 0.05, 5.0, 1, 1, 2, 36, "static", False),
     ("frog", ["water", "grass"], 0.04, 4.0, 1, 4, 2, 18, "peek", True),
     ("squirrel", ["forest"], 0.03, 6.0, 1, 5, 2, 24, "peek", True),
     ("bird_nest", ["forest", "grass"], 0.03, 6.0, 1, 5, 2, 24, "peek", True),
@@ -457,14 +477,15 @@ GARDEN_BAKE = [
 ROCKY_BAKE = [
     ("lava_bubble", ["lava"], 0.55, 0.8, 2, 4, 3, 18, "sway", False),
     ("lava_spurt", ["lava"], 0.18, 2.0, 1, 4, 2, 24, "sway", False),
-    ("vrock", ["basalt", "rock", "dust"], 0.24, 1.2, 2, 1, 3, 22, "static", False),
-    ("vrock_slab", ["basalt", "rock"], 0.16, 1.5, 1, 1, 3, 24, "static", False),
-    ("vrock_shard", ["basalt", "rock", "dust"], 0.14, 2.0, 1, 1, 3, 26, "static", False),
-    ("ore_deposit", ["basalt", "rock"], 0.18, 2.5, 1, 1, 3, 22, "static", False),
+    ("vrock", ["basalt", "rock", "dust"], 0.20, 1.2, 2, 1, 3, 22, "static", False),
+    ("vrock_round", ["basalt", "rock", "dust"], 0.18, 1.2, 2, 1, 3, 22, "static", False),
+    ("vrock_slab", ["basalt", "rock"], 0.14, 1.5, 1, 1, 3, 24, "static", False),
+    ("vrock_shard", ["basalt", "rock", "dust"], 0.12, 2.0, 1, 1, 3, 26, "static", False),
+    ("ore_deposit", ["basalt", "rock"], 0.18, 2.5, 1, 4, 3, 22, "sway", False),
     ("basalt_column", ["basalt", "cliff"], 0.10, 3.0, 1, 1, 2, 38, "static", False),
     ("vboulder", ["rock", "cliff"], 0.10, 4.0, 1, 1, 2, 36, "static", False),
     ("fumarole", ["basalt", "dust"], 0.14, 3.0, 1, 4, 2, 30, "sway", False),
-    ("mining_drill", ["basalt", "rock", "dust"], 0.06, 6.0, 1, 1, 2, 34, "static", False),
+    ("mining_drill", ["basalt", "rock", "dust"], 0.06, 6.0, 1, 4, 2, 34, "sway", False),
     ("ash_scrub", ["dust"], 0.10, 1.5, 2, 4, 2, 22, "sway", False),
     ("rock_dweller", ["basalt", "dust"], 0.03, 6.0, 1, 5, 2, 22, "peek", True),
     ("salamander", ["lava", "basalt"], 0.02, 8.0, 1, 5, 2, 22, "peek", True),
