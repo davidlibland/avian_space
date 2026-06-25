@@ -40,6 +40,7 @@ def mats():
         ember=B.glow_material("fember", (1.0, 0.5, 0.2), strength=2.0),
         liz=C(150, 140, 90), liz_d=C(108, 96, 62), liz_l=C(190, 178, 120),
         ratf=C(120, 110, 104), ratf_d=C(84, 76, 72), ratbel=C(176, 166, 158),
+        scar=C(58, 70, 56, spec=0.5, spec_sharp=0.7), scar_l=C(110, 128, 100),
         dmetal=C(150, 156, 166, spec=0.8, spec_sharp=0.85), dmetal_d=C(96, 100, 112),
         dmetal_l=C(196, 200, 208), dlens=B.glow_material("fdlens", (0.4, 0.85, 0.95), strength=2.2),
         # fliers
@@ -175,6 +176,93 @@ def build_drone(m, frame):
                   (0.14, 0.02, 0.01), m["dmetal_l"])
 
 
+# ── ice / rocky / desert / station roamers ────────────────────────────────
+def build_ice_monster(m, frame):                 # slow lumbering beast (fierce but harmless)
+    b = _bob(frame)
+    B.add_sphere("body", (0, 0.1, 0.6 + b), (0.34, 0.42, 0.34), m["icem"])
+    B.add_sphere("belly", (0, 0.0, 0.46 + b), (0.28, 0.34, 0.18), m["snowf"])
+    B.add_sphere("head", (0, -0.36, 0.72 + b), (0.26, 0.24, 0.22), m["icem"])
+    B.add_sphere("snout", (0, -0.56, 0.64 + b), (0.15, 0.15, 0.11), m["snowf"])
+    for sx in (-1, 1):
+        B.add_cylinder(f"horn{sx}", (sx * 0.17, -0.42, 0.96 + b), 0.05, 0.24, m["cream"], axis="z", r2=0.0)
+        B.add_box(f"tusk{sx}", (sx * 0.1, -0.6, 0.56 + b), (0.03, 0.04, 0.13), m["cream"])
+        B.add_sphere(f"eye{sx}", (sx * 0.1, -0.52, 0.76 + b), (0.04, 0.04, 0.04), m["eye"])
+    _legs(m, "icem_d", 0.22, 0.26, 0.22, 0.42, 0.1, frame)
+
+
+def build_snow_hare(m, frame):                   # fast skittish — bolts
+    b = _bob(frame)
+    B.add_sphere("body", (0, 0.06, 0.3 + b), (0.18, 0.26, 0.18), m["snowf"])
+    B.add_sphere("head", (0, -0.2, 0.36 + b), (0.13, 0.13, 0.13), m["snowf"])
+    B.add_sphere("snout", (0, -0.32, 0.32 + b), (0.07, 0.07, 0.06), m["snowf_d"])
+    for sx in (-1, 1):
+        B.add_box(f"ear{sx}", (sx * 0.06, -0.12, 0.6 + b), (0.05, 0.04, 0.22), m["snowf_d"])
+        B.add_sphere(f"eye{sx}", (sx * 0.07, -0.28, 0.38 + b), (0.022, 0.022, 0.022), m["eye"])
+    B.add_sphere("tail", (0, 0.28, 0.32 + b), (0.08, 0.08, 0.08), m["snowf"])
+    _legs(m, "snowf_d", 0.11, 0.16, 0.12, 0.22, 0.05, frame)
+
+
+def build_rock_monster(m, frame):                # slow rocky golem (fierce but harmless)
+    b = _bob(frame)
+    B.add_box("body", (0, 0.08, 0.56 + b), (0.34, 0.4, 0.34), m["rockm"], bevel=0.08)
+    B.add_box("head", (0, -0.34, 0.64 + b), (0.26, 0.24, 0.24), m["rockm_d"], bevel=0.06)
+    B.add_box("brow", (0, -0.48, 0.72 + b), (0.24, 0.08, 0.06), m["rockm_l"])
+    for sx in (-1, 1):
+        B.add_sphere(f"eye{sx}", (sx * 0.1, -0.5, 0.64 + b), (0.04, 0.04, 0.04), m["ember"])
+        B.add_box(f"spike{sx}", (sx * 0.2, 0.22, 0.78 + b), (0.08, 0.1, 0.18), m["rockm_l"])
+    _legs(m, "rockm_d", 0.2, 0.24, 0.2, 0.4, 0.1, frame)
+
+
+def build_lava_salamander(m, frame):             # roams lava edges, glowing back
+    b = _bob(frame)
+    B.add_sphere("body", (0, 0.05, 0.26 + b), (0.16, 0.4, 0.12), m["liz"])
+    B.add_sphere("head", (0, -0.34, 0.28 + b), (0.13, 0.14, 0.1), m["liz"])
+    B.add_cylinder("tail", (0, 0.5, 0.24 + b), 0.08, 0.42, m["liz_d"], axis="y", r2=0.02)
+    for sx in (-1, 1):
+        B.add_sphere(f"eye{sx}", (sx * 0.07, -0.42, 0.32 + b), (0.025, 0.025, 0.025), m["eye"])
+    for i in range(3):
+        B.add_sphere(f"glow{i}", (0, -0.1 + i * 0.18, 0.34 + b), (0.05, 0.05, 0.03), m["ember"])
+    _legs(m, "liz_d", 0.18, 0.22, 0.08, 0.16, 0.035, frame)
+
+
+def build_sand_lizard(m, frame):                 # freeze-then-dart
+    b = _bob(frame)
+    B.add_sphere("body", (0, 0.05, 0.24 + b), (0.15, 0.36, 0.11), m["liz"])
+    B.add_sphere("head", (0, -0.3, 0.26 + b), (0.12, 0.13, 0.1), m["liz"])
+    B.add_cylinder("tail", (0, 0.46, 0.22 + b), 0.07, 0.42, m["liz_l"], axis="y", r2=0.015)
+    for sx in (-1, 1):
+        B.add_sphere(f"eye{sx}", (sx * 0.07, -0.38, 0.3 + b), (0.025, 0.025, 0.025), m["eye"])
+    for i in range(4):
+        B.add_sphere(f"spot{i}", (-0.06 + (i % 2) * 0.12, -0.05 + (i // 2) * 0.2, 0.32 + b),
+                     (0.03, 0.03, 0.02), m["liz_d"])
+    _legs(m, "liz_d", 0.17, 0.2, 0.08, 0.15, 0.032, frame)
+
+
+def build_scarab(m, frame):                      # small skittering beetle
+    b = _bob(frame)
+    B.add_sphere("body", (0, 0.04, 0.16 + b), (0.16, 0.2, 0.12), m["scar"])
+    B.add_sphere("shine", (0, 0.0, 0.24 + b), (0.1, 0.13, 0.06), m["scar_l"])
+    B.add_sphere("head", (0, -0.18, 0.13 + b), (0.08, 0.07, 0.06), m["scar"])
+    stride = {0: 0.0, 1: 0.06, 2: -0.06}[frame]
+    for sx in (-1, 1):
+        B.add_cylinder(f"ant{sx}", (sx * 0.04, -0.24, 0.18 + b), 0.01, 0.09, m["scar_l"], axis="z", r2=0.0)
+        for row, sy in enumerate((-0.06, 0.04, 0.14)):
+            ph = stride if (sx > 0) ^ (row % 2 == 0) else -stride
+            B.add_cylinder(f"lg{sx}{row}", (sx * 0.15, sy + ph, 0.06 + b), 0.012, 0.12, m["scar"], axis="z", r2=0.0)
+
+
+def build_rat(m, frame):                         # station vermin — scurries
+    b = _bob(frame)
+    B.add_sphere("body", (0, 0.06, 0.2 + b), (0.13, 0.23, 0.12), m["ratf"])
+    B.add_sphere("head", (0, -0.2, 0.22 + b), (0.1, 0.1, 0.09), m["ratf"])
+    B.add_box("snout", (0, -0.32, 0.2 + b), (0.05, 0.07, 0.05), m["ratbel"])
+    for sx in (-1, 1):
+        B.add_sphere(f"ear{sx}", (sx * 0.07, -0.16, 0.32 + b), (0.05, 0.02, 0.05), m["ratf_d"])
+        B.add_sphere(f"eye{sx}", (sx * 0.05, -0.27, 0.24 + b), (0.02, 0.02, 0.02), m["eye"])
+    B.add_cylinder("tail", (0, 0.42, 0.16 + b), 0.025, 0.42, m["ratbel"], axis="y", r2=0.008)
+    _legs(m, "ratf_d", 0.1, 0.14, 0.08, 0.14, 0.03, frame)
+
+
 # Each species: builder, camera (ortho/target_z/elev), tile, manifest fields.
 # Fliers render more top-down (higher elev); the game sorts them above ground.
 SPECIES = [
@@ -184,6 +272,24 @@ SPECIES = [
          biome="garden", terrains=["grass"], speed=46.0, flee_speed=96.0, group=1, flier=False),
     dict(name="fox", builder=build_fox, ortho=1.8, target_z=0.4, tile=30, elev=50,
          biome="garden", terrains=["grass", "forest"], speed=42.0, flee_speed=84.0, group=1, flier=False),
+    # ice
+    dict(name="ice_monster", builder=build_ice_monster, ortho=2.5, target_z=0.55, tile=40, elev=50,
+         biome="ice", terrains=["snow", "ice_rock"], speed=22.0, flee_speed=40.0, group=1, flier=False),
+    dict(name="snow_hare", builder=build_snow_hare, ortho=1.5, target_z=0.3, tile=26, elev=50,
+         biome="ice", terrains=["snow"], speed=50.0, flee_speed=112.0, group=1, flier=False),
+    # rocky
+    dict(name="rock_monster", builder=build_rock_monster, ortho=2.5, target_z=0.5, tile=38, elev=50,
+         biome="rocky", terrains=["basalt", "rock"], speed=20.0, flee_speed=36.0, group=1, flier=False),
+    dict(name="lava_salamander", builder=build_lava_salamander, ortho=1.9, target_z=0.3, tile=30, elev=50,
+         biome="rocky", terrains=["lava", "basalt"], speed=30.0, flee_speed=66.0, group=1, flier=False),
+    # desert
+    dict(name="sand_lizard", builder=build_sand_lizard, ortho=1.9, target_z=0.3, tile=30, elev=50,
+         biome="desert", terrains=["dunes", "hard_sand"], speed=26.0, flee_speed=124.0, group=1, flier=False),
+    dict(name="scarab", builder=build_scarab, ortho=1.2, target_z=0.2, tile=22, elev=50,
+         biome="desert", terrains=["hard_sand", "dunes"], speed=34.0, flee_speed=72.0, group=2, flier=False),
+    # station
+    dict(name="rat", builder=build_rat, ortho=1.4, target_z=0.25, tile=24, elev=50,
+         biome="interior", terrains=["floor", "plating", "grate"], speed=44.0, flee_speed=122.0, group=1, flier=False),
     # fliers (flier=True): drift/circle above ground, sort over the player, no flee
     dict(name="butterfly", builder=build_butterfly, ortho=1.2, target_z=0.3, tile=22, elev=72,
          biome="garden", terrains=["grass"], speed=28.0, flee_speed=28.0, group=2, flier=True),

@@ -44,6 +44,9 @@ const FLY_Z: f32 = 8.0;
 /// Flier drift hop length (px).
 const FLY_DRIFT_MIN: f32 = 70.0;
 const FLY_DRIFT_MAX: f32 = 220.0;
+/// Herd species bias their wander search this fraction of the way toward the
+/// flock centroid, so they regroup and drift together (0 = none, 1 = at centroid).
+const HERD_BIAS: f32 = 0.5;
 
 // ── RON manifest ─────────────────────────────────────────────────────────
 
@@ -319,6 +322,18 @@ pub fn run_fauna(
     let world = &mut *world; // reborrow for disjoint field access (rng vs grid)
     let ppos = walker.single().ok().map(|t| t.translation.truncate());
 
+    // Per-species herd centroid (read-only pass) so group roamers drift together.
+    let mut sums: std::collections::HashMap<usize, (Vec2, f32)> = std::collections::HashMap::new();
+    for (_, fauna, tf, _) in q.iter() {
+        if !fauna.flier {
+            let e = sums.entry(fauna.species).or_insert((Vec2::ZERO, 0.0));
+            e.0 += tf.translation.truncate();
+            e.1 += 1.0;
+        }
+    }
+    let centroids: std::collections::HashMap<usize, Vec2> =
+        sums.iter().map(|(k, (s, n))| (*k, *s / *n)).collect();
+
     for (entity, mut fauna, tf, mut vel) in &mut q {
         let pos = tf.translation.truncate();
 
@@ -377,8 +392,21 @@ pub fn run_fauna(
                 if fauna.timer.just_finished() {
                     // Pick a nearby valid home tile to wander to.
                     let (map_w, map_h) = (world.map_w, world.map_h);
-                    let idxs = &world.species[fauna.species].terrain_idxs;
+                    let sp_ref = &world.species[fauna.species];
+                    let idxs = &sp_ref.terrain_idxs;
+                    let group = sp_ref.group;
+                    // Herd species bias the search toward the flock centroid.
                     let (cx, cy) = tile_of(pos);
+                    let (cx, cy) = match centroids.get(&fauna.species) {
+                        Some(cen) if group > 1 => {
+                            let (ctx, cty) = tile_of(*cen);
+                            (
+                                cx + ((ctx - cx) as f32 * HERD_BIAS).round() as i32,
+                                cy + ((cty - cy) as f32 * HERD_BIAS).round() as i32,
+                            )
+                        }
+                        _ => (cx, cy),
+                    };
                     let mut picked = None;
                     for _ in 0..16 {
                         let nx = cx + world.rng.r#gen_range(-WANDER_TILES..=WANDER_TILES);
