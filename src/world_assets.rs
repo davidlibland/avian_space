@@ -135,6 +135,26 @@ pub struct BuildingsManifest {
     pub styles: HashMap<String, BuildingStyleMeta>,
 }
 
+/// One baked 3/4 building sprite + its placement metadata.
+#[derive(Deserialize, Debug)]
+pub struct Building3dSprite {
+    pub style: String,
+    pub func: String,
+    pub w: u32,
+    #[allow(dead_code)]
+    pub d: u32,
+    /// Footprint front-centre on the ground, as a Bevy `Anchor::Custom` fraction.
+    pub anchor: (f32, f32),
+}
+
+/// `buildings3d_manifest.ron` — baked 3/4 building sprites (scripts/ship3d/buildings3d.py bake).
+#[derive(Deserialize, Debug)]
+pub struct Buildings3dManifest {
+    /// Pixels per tile in the baked sprite (engine scale = TILE_PX / this).
+    pub px_per_tile: f32,
+    pub sprites: Vec<Building3dSprite>,
+}
+
 /// Map a biome name to the building style used on that biome's planets.
 pub fn biome_to_building_style(biome: &str) -> &'static str {
     match biome {

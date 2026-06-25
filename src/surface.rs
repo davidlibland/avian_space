@@ -568,6 +568,71 @@ fn building_kinds_for_planet(
     kinds
 }
 
+/// Template (footprint + door) used to place each building kind. Chosen so the
+/// baked 3/4 sprite — which assumes this footprint — fits. Every style provides
+/// these three (cryo/station were given the missing two).
+fn kind_template(kind: BuildingKind) -> &'static str {
+    match kind {
+        BuildingKind::Outfitter => "small_house",   // 4×4
+        BuildingKind::Shipyard => "large_building",  // 8×6
+        _ => "medium_house",                         // 6×5 — Market, Bar (+ fallback)
+    }
+}
+
+/// Baked 3/4 sprite name (assets/sprites/worlds/buildings3d/<style>_<func>.png).
+fn kind_func(kind: BuildingKind) -> &'static str {
+    match kind {
+        BuildingKind::Market => "market",
+        BuildingKind::Outfitter => "outfitter",
+        BuildingKind::Shipyard => "shipyard",
+        BuildingKind::Bar => "bar",
+        BuildingKind::MechanicShop => "mechanic",
+        BuildingKind::ShipPad => "pad",
+    }
+}
+
+/// World position of a footprint's front-centre on the ground (south edge of the
+/// door row), where the 3/4 sprite's anchor is pinned.
+fn footprint_front_center(tx: u32, ty: u32, w: u32, map_w: u32, map_h: u32, tile_px: f32) -> Vec2 {
+    let base = tile_to_world(tx, ty, map_w, map_h, tile_px);
+    Vec2::new(base.x + (w as f32 - 1.0) * 0.5 * tile_px, base.y - tile_px * 0.5)
+}
+
+/// Spawn a 3/4 building as two depth-split layers so a player stands framed in
+/// its doorway: `_back` (surfaces farther than the door plane) draws behind the
+/// player; `_front` (surfaces nearer, with the doorway cut open) draws over the
+/// player so they show through the opening, framed by the jambs.
+#[allow(clippy::too_many_arguments)]
+fn spawn_building_3d(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    style: &str,
+    func: &str,
+    anchor: (f32, f32),
+    fc: Vec2,
+    scale: f32,
+    tile_px: f32,
+) {
+    commands.spawn((
+        DespawnOnExit(PlayState::Exploring),
+        Sprite::from_image(
+            asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_back.png")),
+        ),
+        bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
+        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y + tile_px))
+            .with_scale(Vec3::splat(scale)),
+    ));
+    commands.spawn((
+        DespawnOnExit(PlayState::Exploring),
+        Sprite::from_image(
+            asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_front.png")),
+        ),
+        bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
+        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y))
+            .with_scale(Vec3::splat(scale)),
+    ));
+}
+
 /// Landing pad: all 9 tiles of the 3×3 atlas.
 /// (dx, dy, atlas_index). Atlas is row-major top-down in the PNG,
 /// but tile placement is bottom-up (dy=+1 = up on screen).
@@ -766,6 +831,9 @@ fn setup_surface(
                     .collect()
             })
             .unwrap_or_default();
+        // Baked 3/4 building sprites (replace the flat exterior tiles, visually).
+        let b3d = load_ron("buildings3d_manifest.ron")
+            .and_then(|t| ron::from_str::<crate::world_assets::Buildings3dManifest>(&t).ok());
         let ext_collision: Vec<u8> = bldg_manifest
             .as_ref()
             .map(|m| m.ext_collision.clone())
@@ -802,17 +870,15 @@ fn setup_surface(
         placed_buildings.push((pad_cx - 1, pad_cy - 1, 3, 3));
         // Reserve the mechanic area (4×3).
         placed_buildings.push((mech_x, mech_y, 4, 3));
-        let mut template_idx = 0;
         let mut building_assignments: Vec<(BuildingKind, u32, u32, usize)> = Vec::new(); // (kind, x, y, template_idx)
 
         for kind in &building_kinds {
-            let tmpl = if templates.is_empty() {
-                None
-            } else {
-                let t = &templates[template_idx % templates.len()];
-                template_idx += 1;
-                Some(t)
-            };
+            // Semantic: each kind gets the template its 3/4 sprite was built for.
+            let ti_opt = templates
+                .iter()
+                .position(|t| t.name == kind_template(*kind))
+                .or(if templates.is_empty() { None } else { Some(0) });
+            let tmpl = ti_opt.map(|i| &templates[i]);
             let (bw, bh) = tmpl.map(|t| (t.width, t.height)).unwrap_or((2, 2));
             let spacing = min_building_spacing.max(bw.max(bh) + 2);
 
@@ -841,13 +907,8 @@ fn setup_surface(
             });
 
             if let Some(&(tx, ty)) = pos {
-                let ti = if templates.is_empty() {
-                    0
-                } else {
-                    (template_idx - 1) % templates.len()
-                };
                 placed_buildings.push((tx, ty, bw, bh));
-                building_assignments.push((*kind, tx, ty, ti));
+                building_assignments.push((*kind, tx, ty, ti_opt.unwrap_or(0)));
             }
         }
 
@@ -1094,34 +1155,22 @@ fn setup_surface(
         // All tiles in the building share the same z based on the floor row.
         let mech_floor_world = tile_to_world(mech_x, mech_y, map_w, map_h, tile_px);
         let mech_z = crate::surface_objects::depth_z(mech_floor_world.y - tile_px * 0.5);
-        if let (Some(mech_img), Some(mech_lay)) = (mech_atlas_handle.as_ref(), mech_layout.as_ref())
+        let _ = (mech_atlas_handle.as_ref(), mech_layout.as_ref(), mech_z);
         {
-            // The mechanic atlas is 4×3, stored top-down in the PNG.
-            // Row 0 in the atlas = roof (top of building).
-            // We stamp bottom-up: atlas row 2 → lowest y, atlas row 0 → highest y.
+            // Collision footprint (4×3) + garage-door sensor stay on the grid; the
+            // flat mechanic tiles are replaced by the 3/4 sprite.
             for row in 0..3u32 {
                 for col in 0..4u32 {
-                    let atlas_row = 2 - row; // flip: bottom-up
-                    let atlas_idx = (atlas_row * 4 + col) as usize;
+                    let atlas_row = 2 - row; // bottom-up
                     let tx = mech_x + col;
                     let ty = mech_y + row;
                     let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
-
-                    // Garage door tiles (atlas row 2, cols 1-2) are sensors.
                     let is_garage = atlas_row == 2 && (col == 1 || col == 2);
 
                     let mut entity = commands.spawn((
                         DespawnOnExit(PlayState::Exploring),
-                        Sprite::from_atlas_image(
-                            mech_img.clone(),
-                            TextureAtlas {
-                                layout: mech_lay.clone(),
-                                index: atlas_idx,
-                            },
-                        ),
                         Transform::from_xyz(world_pos.x, world_pos.y, mech_z),
                     ));
-
                     if is_garage {
                         entity.insert((
                             Building {
@@ -1151,6 +1200,23 @@ fn setup_surface(
                     }
                 }
             }
+            // 3/4 mechanic sprite (6-wide; overhangs the 4×3 collision footprint).
+            if let Some(spr) = b3d.as_ref().and_then(|m| {
+                m.sprites.iter().find(|s| s.style == style_name && s.func == "mechanic")
+            }) {
+                let fc = footprint_front_center(mech_x, mech_y, 4, map_w, map_h, tile_px);
+                let scale = tile_px / b3d.as_ref().map(|m| m.px_per_tile).unwrap_or(tile_px);
+                spawn_building_3d(
+                    &mut commands,
+                    &asset_server,
+                    style_name,
+                    "mechanic",
+                    (spr.anchor.0, spr.anchor.1),
+                    fc,
+                    scale,
+                    tile_px,
+                );
+            }
             // Mechanic label above garage door.
             let label_world = tile_to_world(mech_x + 1, mech_y, map_w, map_h, tile_px);
             spawn_building_label(
@@ -1173,9 +1239,9 @@ fn setup_surface(
             let bldg_floor_world = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
             let bldg_z = crate::surface_objects::depth_z(bldg_floor_world.y - tile_px * 0.5);
 
-            if let (Some(tmpl), Some(ext_img), Some(ext_lay)) =
-                (tmpl, ext_atlas_handle.as_ref(), ext_layout.as_ref())
-            {
+            if let Some(tmpl) = tmpl {
+                // Footprint collision + the door sensor stay on the grid; the flat
+                // exterior tiles are no longer drawn (the 3/4 sprite replaces them).
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
                         let tile_idx = tmpl.tiles[row as usize][col as usize];
@@ -1192,13 +1258,6 @@ fn setup_surface(
 
                         let mut entity = commands.spawn((
                             DespawnOnExit(PlayState::Exploring),
-                            Sprite::from_atlas_image(
-                                ext_img.clone(),
-                                TextureAtlas {
-                                    layout: ext_lay.clone(),
-                                    index: tile_idx as usize,
-                                },
-                            ),
                             Transform::from_xyz(world_pos.x, world_pos.y, bldg_z),
                         ));
 
@@ -1228,6 +1287,27 @@ fn setup_surface(
                             ));
                         }
                     }
+                }
+
+                // The 3/4 building, as two depth layers (lower behind the player,
+                // _top over the player) so they read standing in the doorway.
+                if let Some(spr) = b3d.as_ref().and_then(|m| {
+                    let func = kind_func(kind);
+                    m.sprites.iter().find(|s| s.style == style_name && s.func == func)
+                }) {
+                    let func = kind_func(kind);
+                    let fc = footprint_front_center(anchor_tx, anchor_ty, spr.w, map_w, map_h, tile_px);
+                    let scale = tile_px / b3d.as_ref().map(|m| m.px_per_tile).unwrap_or(tile_px);
+                    spawn_building_3d(
+                        &mut commands,
+                        &asset_server,
+                        style_name,
+                        func,
+                        (spr.anchor.0, spr.anchor.1),
+                        fc,
+                        scale,
+                        tile_px,
+                    );
                 }
             } else {
                 let world_pos = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
