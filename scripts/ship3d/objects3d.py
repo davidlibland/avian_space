@@ -85,6 +85,46 @@ def mats():
         crfur=B.toon_material("crfur", C(70, 60, 58)),
         sal=B.toon_material("sal", C(220, 120, 60)),
         sal_l=B.toon_material("sal_l", C(255, 180, 90)),
+        # ── ice / frozen ──
+        ice=B.toon_material("ice", C(200, 224, 238)),
+        ice_d=B.toon_material("ice_d", C(146, 184, 210)),
+        ice_l=B.toon_material("ice_l", C(234, 246, 252)),
+        iceglow=B.glow_material("iceglow", C(130, 205, 240), strength=1.6),
+        snowm=B.toon_material("snowm", C(234, 240, 246)),
+        lichg=B.toon_material("lichg", C(140, 158, 120)),
+        licho=B.toon_material("licho", C(192, 150, 92)),
+        ffern=B.toon_material("ffern", C(168, 200, 190)),
+        deadw=B.toon_material("deadw", C(122, 110, 100)),
+        foxf=B.toon_material("foxf", C(240, 242, 246)),
+        foxf_d=B.toon_material("foxf_d", C(198, 206, 216)),
+        sealb=B.toon_material("sealb", C(110, 118, 132)),
+        # ── desert ──
+        cact=B.toon_material("cact", C(96, 142, 86)),
+        cact_d=B.toon_material("cact_d", C(64, 104, 66)),
+        cact_l=B.toon_material("cact_l", C(140, 178, 110)),
+        sscrub=B.toon_material("sscrub", C(132, 138, 84)),
+        drygr=B.toon_material("drygr", C(196, 170, 96)),
+        ssand=B.toon_material("ssand", C(206, 150, 96)),
+        ssand_d=B.toon_material("ssand_d", C(160, 108, 70)),
+        ssand_l=B.toon_material("ssand_l", C(230, 184, 132)),
+        sbone=B.toon_material("sbone", C(220, 210, 188)),
+        srust=B.toon_material("srust", C(150, 90, 60), spec=0.5),
+        lizard=B.toon_material("lizard", C(150, 140, 90)),
+        lizard_d=B.toon_material("lizard_d", C(108, 96, 62)),
+        snake=B.toon_material("snake", C(196, 160, 110)),
+        # ── station / interior ──
+        smetal=B.toon_material("smetal", C(150, 154, 162), spec=0.8, spec_sharp=0.8),
+        smetal_d=B.toon_material("smetal_d", C(96, 100, 110)),
+        smetal_l=B.toon_material("smetal_l", C(190, 194, 202)),
+        screen=B.glow_material("screen", C(110, 210, 230), strength=2.2),
+        screen2=B.glow_material("screen2", C(150, 230, 150), strength=2.0),
+        holo=B.glow_material("holo", C(220, 130, 240), strength=2.4),
+        crate_y=B.toon_material("crate_y", C(206, 158, 70)),
+        crate_b=B.toon_material("crate_b", C(80, 120, 168)),
+        coolant=B.glow_material("coolant", C(120, 230, 200), strength=1.8),
+        plant_g=B.toon_material("plant_g", C(96, 168, 92)),
+        ratf=B.toon_material("ratf", C(110, 100, 96)),
+        roachb=B.toon_material("roachb", C(70, 58, 50), spec=0.6),
     )
 
 
@@ -409,6 +449,257 @@ def build_salamander(m, peek=1.0):
             B.add_sphere(f"salsp{i}", (-0.06 + i * 0.08, -0.04, z + 0.2), (0.03, 0.03, 0.02), m["sal_l"])
 
 
+# ── ice / frozen biome ──
+def build_ice_floe(m):                                                   # flat drifting ice raft
+    B.add_cylinder("if1", (0, 0, 0.07), 0.5, 0.14, m["ice"], axis="z", seg=6, r2=0.44)
+    B.add_cylinder("if2", (0.12, 0.08, 0.18), 0.28, 0.1, m["ice_l"], axis="z", seg=5, r2=0.22)
+    B.add_cylinder("if3", (-0.16, -0.1, 0.14), 0.18, 0.08, m["ice_d"], axis="z", seg=6, r2=0.13)
+
+
+def build_ice_glint(m):                                                  # frozen bubble / under-ice glint
+    B.add_cylinder("ig0", (0, 0, 0.03), 0.3, 0.05, m["ice"], axis="z", seg=6, r2=0.26)
+    B.add_sphere("ig1", (0, 0, 0.07), (0.15, 0.15, 0.09), m["iceglow"])
+
+
+def build_ice_spire(m):                                                  # translucent crystal landmark
+    B.add_cylinder("isp1", (0, 0, 0.6), 0.18, 1.2, m["ice"], axis="z", seg=6, r2=0.03)
+    B.add_cylinder("isp2", (0.17, 0.06, 0.34), 0.1, 0.66, m["ice_l"], axis="z", seg=5, r2=0.02)
+    B.add_cylinder("isp3", (-0.14, -0.05, 0.28), 0.08, 0.52, m["ice_d"], axis="z", seg=6, r2=0.02)
+
+
+def build_frosted_rock(m):                                               # rimed rounded boulder
+    for i, (x, y, z, rx, ry, rz, k) in enumerate(
+        [(0, 0, 0.34, 0.52, 0.44, 0.4, "stone"), (0.27, 0.12, 0.24, 0.34, 0.3, 0.32, "stone_d"),
+         (-0.25, -0.1, 0.22, 0.32, 0.28, 0.3, "stone")]):
+        B.add_sphere(f"fr{i}", (x, y, z), (rx, ry, rz), m[k])
+    B.add_sphere("frcap", (-0.04, 0.1, 0.5), (0.36, 0.3, 0.12), m["snowm"])
+
+
+def build_lichen(m):                                                     # low clinging crust
+    for i, (x, y, k) in enumerate([(0, 0, "lichg"), (-0.16, 0.1, "licho"), (0.16, 0.08, "lichg"),
+                                   (0.05, -0.14, "licho"), (-0.1, -0.1, "lichg")]):
+        B.add_cylinder(f"lc{i}", (x, y, 0.025), 0.11, 0.04, m[k], axis="z", seg=6, r2=0.07)
+
+
+def build_frost_fern(m):                                                 # clinging frost-fern
+    B.add_sphere("ffb", (0, 0, 0.05), (0.1, 0.1, 0.05), m["ffern"])
+    for a in range(5):
+        th = a / 5 * 2 * math.pi
+        B.add_cylinder(f"ff{a}", (0.11 * math.cos(th), 0.11 * math.sin(th), 0.16), 0.02, 0.3, m["ffern"], axis="z", r2=0.0)
+
+
+def build_frozen_shrub(m):                                               # dead frozen shrub
+    B.add_cylinder("fs0", (0, 0, 0.18), 0.04, 0.36, m["deadw"], axis="z")
+    for a in range(5):
+        th = a / 5 * 2 * math.pi
+        B.add_cylinder(f"fsb{a}", (0.09 * math.cos(th), 0.09 * math.sin(th), 0.34), 0.02, 0.3, m["deadw"], axis="z", r2=0.0)
+    B.add_sphere("fscap", (0, 0, 0.5), (0.18, 0.16, 0.1), m["snowm"])
+
+
+def build_ice_geyser(m):                                                 # crevasse steam vent
+    B.add_cylinder("gv", (0, 0, 0.1), 0.26, 0.2, m["ice_d"], axis="z", seg=6, r2=0.14)
+    for i, (z, r) in enumerate([(0.4, 0.14), (0.66, 0.18), (0.92, 0.14)]):
+        B.add_sphere(f"gst{i}", (0.03 * i, 0, z), (r, r, r), m["steam"])
+
+
+def build_snow_fox(m, peek=1.0):                                         # shy white fox
+    B.add_sphere("sfsnow", (0, 0.12, 0.08), (0.34, 0.26, 0.13), m["snowm"])
+    if peek > 0.12:
+        z = -0.05 + peek * 0.2
+        B.add_sphere("sfbody", (0, -0.04, z + 0.12), (0.2, 0.15, 0.13), m["foxf"])
+        B.add_sphere("sfhead", (0, -0.2, z + 0.14), (0.12, 0.11, 0.11), m["foxf"])
+        for sx in (-1, 1):
+            B.add_box(f"sfear{sx}", (sx * 0.07, -0.22, z + 0.26), (0.06, 0.04, 0.09), m["foxf_d"])
+            B.add_sphere(f"sfeye{sx}", (sx * 0.05, -0.28, z + 0.16), (0.025, 0.028, 0.025), m["dark"])
+
+
+def build_seal(m, peek=1.0):                                             # shy seal by the water
+    B.add_cylinder("slice", (0, 0.14, 0.05), 0.34, 0.1, m["ice"], axis="z", seg=6, r2=0.28)
+    if peek > 0.12:
+        z = -0.05 + peek * 0.16
+        B.add_sphere("slbody", (0, -0.02, z + 0.12), (0.22, 0.16, 0.13), m["sealb"])
+        B.add_sphere("slhead", (0, -0.2, z + 0.16), (0.12, 0.12, 0.12), m["sealb"])
+        for sx in (-1, 1):
+            B.add_sphere(f"sleye{sx}", (sx * 0.05, -0.28, z + 0.18), (0.03, 0.03, 0.03), m["dark"])
+
+
+# ── desert / arid biome ──
+def build_saguaro(m):                                                    # tall branching cactus
+    B.add_cylinder("sg0", (0, 0, 0.75), 0.17, 1.5, m["cact"], axis="z", r2=0.15)
+    B.add_sphere("sgtop", (0, 0, 1.5), (0.17, 0.17, 0.17), m["cact"])
+    B.add_cylinder("sgalh", (-0.22, 0, 0.85), 0.08, 0.34, m["cact_d"], axis="x")
+    B.add_cylinder("sgalv", (-0.36, 0, 1.05), 0.08, 0.5, m["cact"], axis="z", r2=0.07)
+    B.add_sphere("sgalt", (-0.36, 0, 1.3), (0.08, 0.08, 0.08), m["cact"])
+    B.add_cylinder("sgarh", (0.2, 0, 1.05), 0.08, 0.3, m["cact_d"], axis="x")
+    B.add_cylinder("sgarv", (0.34, 0, 1.22), 0.08, 0.42, m["cact"], axis="z", r2=0.07)
+    B.add_sphere("sgart", (0.34, 0, 1.43), (0.08, 0.08, 0.08), m["cact"])
+    B.add_sphere("sgfl", (0.05, -0.1, 1.55), (0.07, 0.07, 0.05), m["fl_r"])
+
+
+def build_barrel_cactus(m):                                              # squat barrel cactus
+    B.add_cylinder("bc0", (0, 0, 0.22), 0.26, 0.44, m["cact"], axis="z", r2=0.22, seg=12)
+    B.add_sphere("bctop", (0, 0, 0.44), (0.24, 0.24, 0.1), m["cact_l"])
+    for a in range(3):
+        th = a / 3 * 2 * math.pi
+        B.add_sphere(f"bcfl{a}", (0.1 * math.cos(th), 0.1 * math.sin(th), 0.5), (0.05, 0.05, 0.04), m["fl_y"])
+
+
+def build_desert_scrub(m):                                               # sagebrush
+    B.add_cylinder("dsc0", (0, 0, 0.1), 0.04, 0.2, m["ssand_d"], axis="z")
+    for i, (x, y, r) in enumerate([(0, 0, 0.18), (-0.16, 0.1, 0.13), (0.16, 0.08, 0.14), (0.05, -0.14, 0.12)]):
+        B.add_sphere(f"dsc{i}", (x, y, 0.26), (r, r, r * 0.8), m["sscrub"])
+
+
+def build_dry_grass(m):                                                  # dry wind grass
+    for a in range(7):
+        th = a / 7 * 2 * math.pi; r = 0.05 + 0.03 * (a % 3)
+        B.add_cylinder(f"dg{a}", (r * math.cos(th), r * math.sin(th), 0.2), 0.012, 0.42, m["drygr"], axis="z", r2=0.0)
+
+
+def build_desert_rock(m):                                                # wind-worn smooth rock
+    for i, (x, y, z, rx, ry, rz, k) in enumerate(
+        [(0, 0, 0.26, 0.46, 0.4, 0.3, "ssand"), (0.22, 0.1, 0.18, 0.28, 0.26, 0.24, "ssand_d"),
+         (-0.2, -0.08, 0.16, 0.26, 0.24, 0.22, "ssand_l")]):
+        B.add_sphere(f"dsr{i}", (x, y, z), (rx, ry, rz), m[k])
+
+
+def build_sandstone_arch(m):                                             # hero arch landmark
+    for sx in (-1, 1):
+        B.add_cylinder(f"sapil{sx}", (sx * 0.4, 0, 0.55), 0.16, 1.1, m["ssand"], axis="z", r2=0.14)
+    B.add_box("satop", (0, 0, 1.2), (1.12, 0.3, 0.26), m["ssand_d"], bevel=0.08)
+    B.add_box("sacap", (0, 0, 1.32), (0.7, 0.26, 0.08), m["ssand_l"])
+
+
+def build_hoodoo(m):                                                     # mesa hoodoo
+    B.add_cylinder("hd0", (0, 0, 0.3), 0.24, 0.6, m["ssand_d"], axis="z", r2=0.18, seg=8)
+    B.add_cylinder("hd1", (0.03, 0, 0.75), 0.16, 0.4, m["ssand"], axis="z", r2=0.2, seg=8)
+    B.add_sphere("hd2", (0, 0, 1.0), (0.26, 0.24, 0.16), m["ssand_l"])
+
+
+def build_petrified_tree(m):                                             # bleached dead tree
+    B.add_cylinder("pt0", (0, 0, 0.5), 0.1, 1.0, m["sbone"], axis="z", r2=0.06)
+    B.add_cylinder("ptb0", (0.18, 0, 0.85), 0.05, 0.4, m["sbone"], axis="x")
+    B.add_cylinder("ptb1", (-0.16, 0.05, 0.95), 0.05, 0.36, m["sbone"], axis="x")
+
+
+def build_prospector_wreck(m):                                           # old drill / bones relic
+    B.add_box("pw0", (0, 0, 0.14), (0.5, 0.4, 0.28), m["srust"], bevel=0.04)
+    B.add_cylinder("pw1", (0.1, 0, 0.5), 0.06, 0.5, m["srust"], axis="z")
+    B.add_box("pw2", (-0.2, 0.1, 0.3), (0.18, 0.16, 0.3), m["smetal_d"], bevel=0.03)
+    B.add_sphere("pwbone", (-0.3, -0.16, 0.05), (0.1, 0.06, 0.05), m["sbone"])
+
+
+def build_sand_lizard(m, peek=1.0):                                      # shy lizard
+    B.add_cylinder("slz_s", (0, 0.1, 0.06), 0.3, 0.1, m["ssand_d"], axis="z", seg=6, r2=0.24)
+    if peek > 0.12:
+        z = -0.05 + peek * 0.12
+        B.add_sphere("slzb", (0, -0.04, z + 0.1), (0.2, 0.13, 0.09), m["lizard"])
+        B.add_sphere("slzh", (0, -0.2, z + 0.1), (0.1, 0.09, 0.08), m["lizard"])
+        for sx in (-1, 1):
+            B.add_sphere(f"slze{sx}", (sx * 0.05, -0.26, z + 0.14), (0.025, 0.025, 0.025), m["dark"])
+        for i in range(3):
+            B.add_sphere(f"slzsp{i}", (-0.06 + i * 0.07, -0.02, z + 0.16), (0.03, 0.03, 0.02), m["lizard_d"])
+
+
+def build_sand_snake(m, peek=1.0):                                       # shy burrowing snake
+    B.add_cylinder("sns_s", (0, 0.1, 0.05), 0.3, 0.08, m["ssand_d"], axis="z", seg=6, r2=0.24)
+    if peek > 0.12:
+        z = -0.05 + peek * 0.18
+        B.add_cylinder("snsb", (0, -0.08, z + 0.18), 0.07, 0.36, m["snake"], axis="z", r2=0.05)
+        B.add_sphere("snsh", (0, -0.12, z + 0.34), (0.09, 0.08, 0.07), m["snake"])
+        for sx in (-1, 1):
+            B.add_sphere(f"snse{sx}", (sx * 0.04, -0.16, z + 0.36), (0.02, 0.02, 0.02), m["dark"])
+
+
+# ── station / interior biome ──
+def build_kiosk(m):                                                      # terminal / vending machine
+    B.add_box("kbody", (0, 0, 0.4), (0.5, 0.36, 0.8), m["smetal"], bevel=0.04)
+    B.add_box("kscr", (0, -0.2, 0.55), (0.34, 0.04, 0.34), m["screen"])
+    B.add_box("kbase", (0, 0, 0.08), (0.54, 0.4, 0.16), m["smetal_d"], bevel=0.03)
+    B.add_box("ktop", (0, 0, 0.82), (0.46, 0.32, 0.06), m["smetal_l"])
+
+
+def build_machine(m):                                                    # maintenance machine / generator
+    B.add_box("mc0", (0, 0, 0.32), (0.6, 0.5, 0.64), m["smetal_d"], bevel=0.05)
+    B.add_cylinder("mc1", (0.18, 0, 0.78), 0.14, 0.3, m["smetal"], axis="z")
+    B.add_box("mc2", (-0.2, 0.1, 0.5), (0.18, 0.16, 0.4), m["smetal"], bevel=0.03)
+    B.add_box("mclt", (0, -0.26, 0.5), (0.1, 0.04, 0.1), m["screen2"])
+
+
+def build_floor_vent(m):                                                 # vent with steam
+    B.add_box("fv0", (0, 0, 0.05), (0.4, 0.4, 0.1), m["smetal_d"], bevel=0.02)
+    for gx in (-0.12, 0, 0.12):
+        B.add_box(f"fvg{gx}", (gx, 0, 0.1), (0.06, 0.34, 0.04), m["smetal"])
+    for i, (z, r) in enumerate([(0.35, 0.12), (0.6, 0.15), (0.85, 0.11)]):
+        B.add_sphere(f"fvs{i}", (0.02 * i, 0, z), (r, r, r), m["steam"])
+
+
+def build_holo_sign(m):                                                  # holographic ad
+    B.add_cylinder("hs0", (0, 0, 0.1), 0.08, 0.2, m["smetal_d"], axis="z")
+    B.add_box("hspole", (0, 0, 0.5), (0.05, 0.05, 0.8), m["smetal"])
+    B.add_box("hsad", (0, 0.06, 0.9), (0.4, 0.02, 0.34), m["holo"])
+
+
+def build_crate(m):                                                      # cargo crate
+    B.add_box("cr0", (0, 0, 0.24), (0.48, 0.44, 0.48), m["crate_y"], bevel=0.03)
+    B.add_box("crb1", (0, 0, 0.24), (0.5, 0.06, 0.5), m["smetal_d"])
+    B.add_box("crb2", (0, 0, 0.42), (0.5, 0.46, 0.06), m["smetal_d"])
+
+
+def build_canister(m):                                                   # barrel / canister
+    B.add_cylinder("cn0", (0, 0, 0.3), 0.18, 0.6, m["crate_b"], axis="z")
+    B.add_cylinder("cn1", (0, 0, 0.55), 0.19, 0.06, m["smetal"], axis="z")
+    B.add_cylinder("cn2", (0, 0, 0.16), 0.19, 0.06, m["smetal"], axis="z")
+
+
+def build_cabling(m):                                                    # junction box + cables
+    B.add_box("cbl0", (0, 0, 0.2), (0.28, 0.2, 0.4), m["smetal_d"], bevel=0.03)
+    B.add_box("cbllt", (0, -0.11, 0.3), (0.06, 0.04, 0.06), m["screen"])
+    for a in range(3):
+        th = a / 3 * 2 * math.pi
+        B.add_cylinder(f"cblc{a}", (0.12 * math.cos(th), 0.12 * math.sin(th), 0.08), 0.025, 0.16, m["smetal"], axis="z", r2=0.02)
+
+
+def build_coolant(m):                                                    # coolant / sewage flow
+    B.add_cylinder("co0", (0, 0, 0.03), 0.32, 0.06, m["smetal_d"], axis="z", r2=0.3)
+    B.add_cylinder("co1", (0, 0, 0.05), 0.26, 0.04, m["coolant"], axis="z", r2=0.26)
+    B.add_sphere("co2", (0.05, 0.05, 0.08), (0.08, 0.08, 0.04), m["coolant"])
+
+
+def build_planter(m):                                                    # hydroponic planter (only nature)
+    B.add_box("pl0", (0, 0, 0.14), (0.4, 0.3, 0.28), m["smetal_l"], bevel=0.03)
+    B.add_cylinder("plg", (0, 0, 0.32), 0.02, 0.2, m["plant_g"], axis="z")
+    for i, (x, y, r) in enumerate([(0, 0, 0.16), (-0.12, 0.05, 0.12), (0.12, 0.04, 0.13)]):
+        B.add_sphere(f"plf{i}", (x, y, 0.36), (r, r, r * 0.9), m["plant_g"])
+
+
+def build_wall_pipe(m):                                                  # mounted pipe / panel
+    B.add_box("wp0", (0, 0.1, 0.4), (0.4, 0.1, 0.7), m["smetal_d"], bevel=0.02)
+    B.add_cylinder("wp1", (0, -0.02, 0.4), 0.06, 0.7, m["smetal"], axis="z")
+    B.add_cylinder("wp2", (0, -0.02, 0.62), 0.07, 0.2, m["smetal_l"], axis="x")
+
+
+def build_rat(m, peek=1.0):                                              # shy vermin
+    B.add_box("rt_g", (0, 0.1, 0.06), (0.34, 0.26, 0.12), m["smetal_d"], bevel=0.03)
+    for gx in (-0.08, 0.04):
+        B.add_box(f"rtgl{gx}", (gx, 0.1, 0.12), (0.03, 0.22, 0.02), m["smetal"])
+    if peek > 0.12:
+        z = -0.05 + peek * 0.14
+        B.add_sphere("rtb", (0, -0.06, z + 0.1), (0.16, 0.12, 0.1), m["ratf"])
+        B.add_sphere("rth", (0, -0.2, z + 0.1), (0.09, 0.08, 0.08), m["ratf"])
+        for sx in (-1, 1):
+            B.add_sphere(f"rtear{sx}", (sx * 0.06, -0.2, z + 0.18), (0.04, 0.04, 0.02), m["ratf"])
+            B.add_sphere(f"rteye{sx}", (sx * 0.04, -0.26, z + 0.12), (0.022, 0.022, 0.022), m["dark"])
+
+
+def build_roach(m, peek=1.0):                                            # shy roach swarm
+    B.add_box("rc_g", (0, 0.1, 0.05), (0.32, 0.24, 0.1), m["smetal_d"], bevel=0.03)
+    if peek > 0.12:
+        z = -0.05 + peek * 0.08
+        for i, (x, y) in enumerate([(0, -0.08), (-0.12, -0.02), (0.12, -0.04), (-0.05, -0.16), (0.06, -0.14)]):
+            B.add_sphere(f"rc{i}", (x, y, z + 0.06), (0.06, 0.09, 0.04), m["roachb"])
+
+
 BUILDERS = {
     "grass_tuft": build_grass_tuft,
     "oak": build_oak, "conifer": build_conifer, "birch": build_birch, "willow": build_willow,
@@ -426,6 +717,21 @@ BUILDERS = {
     "basalt_column": build_basalt_column, "ore_deposit": build_ore_deposit, "vboulder": build_vboulder,
     "mining_drill": build_mining_drill, "fumarole": build_fumarole, "ash_scrub": build_ash_scrub,
     "rock_dweller": build_rock_dweller, "salamander": build_salamander,
+    # ice
+    "ice_floe": build_ice_floe, "ice_glint": build_ice_glint, "ice_spire": build_ice_spire,
+    "frosted_rock": build_frosted_rock, "lichen": build_lichen, "frost_fern": build_frost_fern,
+    "frozen_shrub": build_frozen_shrub, "ice_geyser": build_ice_geyser, "snow_fox": build_snow_fox,
+    "seal": build_seal,
+    # desert
+    "saguaro": build_saguaro, "barrel_cactus": build_barrel_cactus, "desert_scrub": build_desert_scrub,
+    "dry_grass": build_dry_grass, "desert_rock": build_desert_rock, "sandstone_arch": build_sandstone_arch,
+    "hoodoo": build_hoodoo, "petrified_tree": build_petrified_tree, "prospector_wreck": build_prospector_wreck,
+    "sand_lizard": build_sand_lizard, "sand_snake": build_sand_snake,
+    # station / interior
+    "kiosk": build_kiosk, "machine": build_machine, "floor_vent": build_floor_vent,
+    "holo_sign": build_holo_sign, "crate": build_crate, "canister": build_canister,
+    "cabling": build_cabling, "coolant": build_coolant, "planter": build_planter,
+    "wall_pipe": build_wall_pipe, "rat": build_rat, "roach": build_roach,
 }
 TOP = {"grass_tuft": 0.6, "oak": 2.4, "conifer": 2.4, "birch": 2.3, "willow": 2.0, "dead_tree": 2.2,
        "bush": 0.9, "fern": 1.0, "mushroom": 0.6, "rock": 0.7, "boulder": 1.0, "alpine_scrub": 0.6,
@@ -436,7 +742,14 @@ TOP = {"grass_tuft": 0.6, "oak": 2.4, "conifer": 2.4, "birch": 2.3, "willow": 2.
        "lava_bubble": 0.4, "lava_spurt": 0.9, "vrock": 0.7, "vrock_slab": 0.7, "vrock_shard": 1.0,
        "vrock_round": 0.5, "basalt_column": 1.4, "ore_deposit": 0.7,
        "vboulder": 1.0, "mining_drill": 1.3, "fumarole": 1.1, "ash_scrub": 0.7, "rock_dweller": 0.6,
-       "salamander": 0.5}
+       "salamander": 0.5,
+       "ice_floe": 0.3, "ice_glint": 0.3, "ice_spire": 1.3, "frosted_rock": 0.6, "lichen": 0.1,
+       "frost_fern": 0.5, "frozen_shrub": 0.6, "ice_geyser": 1.1, "snow_fox": 0.6, "seal": 0.6,
+       "saguaro": 1.7, "barrel_cactus": 0.55, "desert_scrub": 0.45, "dry_grass": 0.6, "desert_rock": 0.6,
+       "sandstone_arch": 1.5, "hoodoo": 1.2, "petrified_tree": 1.1, "prospector_wreck": 0.7,
+       "sand_lizard": 0.5, "sand_snake": 0.6,
+       "kiosk": 0.9, "machine": 1.0, "floor_vent": 1.0, "holo_sign": 1.3, "crate": 0.5, "canister": 0.6,
+       "cabling": 0.45, "coolant": 0.2, "planter": 0.5, "wall_pipe": 0.8, "rat": 0.5, "roach": 0.2}
 
 # Garden placement + animation roster for the bake.
 # (name, terrains, density, min_distance, max_per_tile, n_frames, n_variants, tile, anim, shy)
@@ -491,7 +804,58 @@ ROCKY_BAKE = [
     ("salamander", ["lava", "basalt"], 0.02, 8.0, 1, 5, 2, 22, "peek", True),
 ]
 
-ROSTERS = {"garden": GARDEN_BAKE, "rocky": ROCKY_BAKE}
+# Ice: mostly empty white; snow carries the little life; deep_ice has floes +
+# glints; ice_rock has spires + frosted boulders; crevasse = steam + rare seal.
+ICE_BAKE = [
+    ("ice_floe", ["deep_ice", "ice", "snow"], 0.18, 1.5, 1, 4, 3, 26, "sway", False),
+    ("ice_glint", ["deep_ice"], 0.10, 1.2, 2, 4, 2, 18, "sway", False),
+    ("ice_spire", ["ice", "ice_rock"], 0.12, 2.5, 1, 1, 3, 36, "static", False),
+    ("frosted_rock", ["ice_rock", "snow"], 0.12, 2.0, 1, 1, 3, 24, "static", False),
+    ("lichen", ["snow", "ice_rock"], 0.20, 0.8, 3, 1, 3, 16, "static", False),
+    ("frost_fern", ["snow", "ice_rock"], 0.12, 1.0, 2, 4, 3, 20, "sway", False),
+    ("frozen_shrub", ["snow"], 0.08, 2.0, 1, 4, 2, 24, "sway", False),
+    ("ice_geyser", ["crevasse"], 0.16, 2.5, 1, 4, 2, 28, "sway", False),
+    ("snow_fox", ["snow"], 0.03, 6.0, 1, 5, 2, 22, "peek", True),
+    ("seal", ["crevasse", "deep_ice"], 0.02, 7.0, 1, 5, 2, 24, "peek", True),
+    ("alien_peek", ["snow", "ice"], 0.015, 8.0, 1, 5, 1, 24, "peek", True),
+]
+
+# Desert: dunes = cacti + critters; hard_sand = scrub + tufts + rocks (busiest);
+# sandstone = arches + dead trees + relics; mesa = boulders; quicksand bare.
+DESERT_BAKE = [
+    ("dry_grass", ["hard_sand", "dunes"], 0.50, 0.8, 3, 4, 3, 22, "sway", False),
+    ("desert_scrub", ["hard_sand"], 0.28, 1.0, 2, 4, 3, 22, "sway", False),
+    ("barrel_cactus", ["dunes", "hard_sand"], 0.16, 1.5, 1, 1, 3, 22, "static", False),
+    ("saguaro", ["dunes", "hard_sand"], 0.14, 2.5, 1, 4, 3, 38, "sway", False),
+    ("desert_rock", ["hard_sand", "sandstone"], 0.18, 1.2, 2, 1, 3, 22, "static", False),
+    ("sandstone_arch", ["sandstone", "mesa"], 0.06, 4.0, 1, 1, 2, 40, "static", False),
+    ("hoodoo", ["mesa", "sandstone"], 0.10, 3.0, 1, 1, 3, 34, "static", False),
+    ("petrified_tree", ["sandstone"], 0.08, 3.0, 1, 4, 2, 30, "sway", False),
+    ("prospector_wreck", ["hard_sand", "sandstone"], 0.03, 6.0, 1, 1, 2, 26, "static", False),
+    ("sand_lizard", ["dunes", "hard_sand"], 0.03, 6.0, 1, 5, 2, 22, "peek", True),
+    ("sand_snake", ["dunes"], 0.02, 7.0, 1, 5, 2, 22, "peek", True),
+    ("alien_peek", ["hard_sand"], 0.015, 8.0, 1, 5, 1, 24, "peek", True),
+]
+
+# Station: floor/plating = kiosks, crates, ads, planter; grate = vents, coolant,
+# vermin; conduit = cabling + fluids; wall = mounted pipes.
+STATION_BAKE = [
+    ("crate", ["floor", "plating"], 0.10, 1.5, 1, 1, 3, 20, "static", False),
+    ("canister", ["floor", "plating"], 0.08, 1.5, 1, 1, 3, 22, "static", False),
+    ("kiosk", ["floor", "plating"], 0.07, 2.5, 1, 4, 3, 30, "sway", False),
+    ("machine", ["plating", "grate"], 0.06, 2.5, 1, 4, 2, 32, "sway", False),
+    ("floor_vent", ["floor", "plating", "grate"], 0.08, 2.0, 1, 4, 2, 28, "sway", False),
+    ("holo_sign", ["floor", "plating"], 0.04, 4.0, 1, 4, 2, 34, "sway", False),
+    ("cabling", ["conduit", "wall"], 0.18, 1.2, 1, 4, 2, 18, "sway", False),
+    ("wall_pipe", ["wall", "conduit"], 0.14, 1.5, 1, 1, 2, 26, "static", False),
+    ("coolant", ["grate", "conduit"], 0.12, 1.5, 1, 4, 2, 18, "sway", False),
+    ("planter", ["floor"], 0.05, 3.0, 1, 4, 2, 22, "sway", False),
+    ("rat", ["floor", "plating", "grate"], 0.03, 6.0, 1, 5, 2, 20, "peek", True),
+    ("roach", ["grate", "conduit"], 0.02, 6.0, 1, 5, 2, 16, "peek", True),
+]
+
+ROSTERS = {"garden": GARDEN_BAKE, "rocky": ROCKY_BAKE, "ice": ICE_BAKE,
+           "desert": DESERT_BAKE, "interior": STATION_BAKE}
 
 
 def setup_cam(elev, azim, ortho, target_z):
@@ -523,8 +887,9 @@ from PIL import ImageDraw, ImageFilter  # noqa: E402
 ORTHO_B = 4.2
 # final sprite scale per biome (px per world-unit). Rocky props are short, so
 # they need a larger scale to read as objects rather than speckle.
-PX_PER_UNIT = {"garden": 12.0, "rocky": 17.0}
-NO_SHADOW = {"lava_bubble", "lava_spurt", "fish", "seaweed"}   # sit in lava/water, not on ground
+PX_PER_UNIT = {"garden": 12.0, "rocky": 17.0, "ice": 20.0, "desert": 20.0, "interior": 36.0}
+# sit in lava/water/fluid, not on ground → skip the baked contact shadow
+NO_SHADOW = {"lava_bubble", "lava_spurt", "fish", "seaweed", "ice_floe", "ice_glint", "coolant"}
 TMP = os.path.join(OUT, "_obj_bake_tmp.png")
 
 
