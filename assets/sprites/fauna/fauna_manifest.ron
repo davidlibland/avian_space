@@ -1,5 +1,6 @@
 // fauna_manifest.ron — roaming animals (surface_fauna).
 // Sheet layout: 3 cols (still, w1, w2) x 4 rows (down, left, right, up).
+// flier=true: drifts/circles above ground, sorts over the player, no flee.
 (
     species: [
         (
@@ -22,6 +23,48 @@
             tile_w: 30, tile_h: 30,
             speed: 42.0, flee_speed: 84.0,
             group: 1, flier: false,
+        ),
+        (
+            name: "butterfly", sheet: "sprites/fauna/butterfly.png",
+            biome: "garden", terrains: ["grass"],
+            tile_w: 22, tile_h: 22,
+            speed: 28.0, flee_speed: 28.0,
+            group: 2, flier: true,
+        ),
+        (
+            name: "songbird", sheet: "sprites/fauna/songbird.png",
+            biome: "garden", terrains: ["grass", "forest"],
+            tile_w: 24, tile_h: 24,
+            speed: 58.0, flee_speed: 58.0,
+            group: 1, flier: true,
+        ),
+        (
+            name: "petrel", sheet: "sprites/fauna/petrel.png",
+            biome: "ice", terrains: ["snow", "ice"],
+            tile_w: 28, tile_h: 28,
+            speed: 52.0, flee_speed: 52.0,
+            group: 2, flier: true,
+        ),
+        (
+            name: "ember_moth", sheet: "sprites/fauna/ember_moth.png",
+            biome: "rocky", terrains: ["lava", "basalt"],
+            tile_w: 22, tile_h: 22,
+            speed: 32.0, flee_speed: 32.0,
+            group: 2, flier: true,
+        ),
+        (
+            name: "vulture", sheet: "sprites/fauna/vulture.png",
+            biome: "desert", terrains: ["mesa", "sandstone"],
+            tile_w: 32, tile_h: 32,
+            speed: 44.0, flee_speed: 44.0,
+            group: 1, flier: true,
+        ),
+        (
+            name: "drone", sheet: "sprites/fauna/drone.png",
+            biome: "interior", terrains: ["floor", "plating"],
+            tile_w: 26, tile_h: 26,
+            speed: 40.0, flee_speed: 40.0,
+            group: 1, flier: true,
         ),
     ],
 )

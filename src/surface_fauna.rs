@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 
-use crate::surface::Walker;
+use crate::surface::{TILE_PX, Walker};
 use crate::surface_character::CharacterAnim;
 use crate::surface_objects::depth_z;
 use crate::surface_pathfinding::SurfaceCostMap;
@@ -38,6 +38,12 @@ const SPAWN_MAX_DIST: f32 = 1250.0;
 const WANDER_TILES: i32 = 5;
 /// World distance (px) below which a roamer counts as "arrived" at its target.
 const ARRIVE_DIST: f32 = 5.0;
+/// Fliers float this many px above their ground track and sort over everything.
+const FLY_ALTITUDE: f32 = 64.0;
+const FLY_Z: f32 = 8.0;
+/// Flier drift hop length (px).
+const FLY_DRIFT_MIN: f32 = 70.0;
+const FLY_DRIFT_MAX: f32 = 220.0;
 
 // ── RON manifest ─────────────────────────────────────────────────────────
 
@@ -73,6 +79,7 @@ struct FaunaSpecies {
     flee_speed: f32,
     group: u32,
     foot_off: f32,
+    flier: bool,
 }
 
 /// Loaded fauna data + the live terrain grid, for the spawn/AI systems.
@@ -114,6 +121,7 @@ pub struct Fauna {
     state: FaunaState,
     timer: Timer,
     target: Vec2,
+    flier: bool,
 }
 
 // ── Setup / teardown (called from surface.rs) ───────────────────────────────
@@ -153,8 +161,8 @@ pub fn setup_fauna(
 
     let mut species = Vec::new();
     for def in &manifest.species {
-        if def.biome != biome_name || def.flier {
-            continue; // fliers handled separately (not yet); wrong-biome skipped
+        if def.biome != biome_name {
+            continue;
         }
         let terrain_idxs: Vec<u32> = def
             .terrains
@@ -179,6 +187,7 @@ pub fn setup_fauna(
             flee_speed: def.flee_speed,
             group: def.group.max(1),
             foot_off: def.tile_h as f32 * 0.35,
+            flier: def.flier,
         });
     }
 
@@ -257,33 +266,43 @@ pub fn spawn_fauna(
             }
             found
         };
-        let pos = SurfaceCostMap::tile_to_world(tx as u32, ty as u32);
+        let ground = SurfaceCostMap::tile_to_world(tx as u32, ty as u32);
         let sp = &world.species[sp_idx];
+        let flier = sp.flier;
         let graze = world.rng.r#gen_range(1.2..3.5);
-        commands.spawn((
+        // Fliers float above their ground track and sort over everything.
+        let pos = if flier { Vec2::new(ground.x, ground.y + FLY_ALTITUDE) } else { ground };
+        let z = if flier { FLY_Z } else { depth_z(pos.y - sp.foot_off) };
+        let mut ent = commands.spawn((
             DespawnOnExit(PlayState::Exploring),
             Fauna {
                 species: sp_idx,
                 speed: sp.speed,
                 flee_speed: sp.flee_speed,
                 foot_off: sp.foot_off,
-                state: FaunaState::Graze,
+                flier,
+                state: if flier { FaunaState::Wander } else { FaunaState::Graze },
                 timer: Timer::from_seconds(graze, TimerMode::Once),
                 target: pos,
             },
-            CharacterAnim::with_interval(0.16),
+            CharacterAnim::with_interval(if flier { 0.11 } else { 0.16 }),
             RigidBody::Dynamic,
             LockedAxes::ROTATION_LOCKED,
-            Collider::circle(4.0),
-            CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
-            LinearDamping(12.0),
+            LinearDamping(if flier { 4.0 } else { 12.0 }),
             LinearVelocity(Vec2::ZERO),
             Sprite::from_atlas_image(
                 sp.image.clone(),
                 TextureAtlas { layout: sp.layout.clone(), index: 0 },
             ),
-            Transform::from_xyz(pos.x, pos.y, depth_z(pos.y - sp.foot_off)),
+            Transform::from_xyz(pos.x, pos.y, z),
         ));
+        // Roamers collide with the terrain; fliers pass over everything.
+        if !flier {
+            ent.insert((
+                Collider::circle(4.0),
+                CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+            ));
+        }
     }
 }
 
@@ -303,13 +322,34 @@ pub fn run_fauna(
     for (entity, mut fauna, tf, mut vel) in &mut q {
         let pos = tf.translation.truncate();
 
-        // Recycle roamers that have drifted far off-screen.
+        // Recycle anything that has drifted far off-screen.
         if let Some(pp) = ppos {
             if pos.distance(pp) > DESPAWN_DIST {
                 commands.entity(entity).despawn();
                 continue;
             }
-            // Panic if the player is close.
+        }
+
+        // Fliers drift over the map ignoring terrain, never fleeing — so they
+        // stay above MOVE_THRESHOLD and keep flapping.
+        if fauna.flier {
+            if (fauna.target - pos).length() < ARRIVE_DIST {
+                let ang = world.rng.r#gen_range(0.0..std::f32::consts::TAU);
+                let r = world.rng.r#gen_range(FLY_DRIFT_MIN..FLY_DRIFT_MAX);
+                let hw = world.map_w as f32 * TILE_PX * 0.5 - TILE_PX;
+                let hh = world.map_h as f32 * TILE_PX * 0.5 - TILE_PX;
+                let t = pos + Vec2::from_angle(ang) * r;
+                fauna.target = Vec2::new(
+                    t.x.clamp(-hw, hw),
+                    t.y.clamp(-hh + FLY_ALTITUDE, hh + FLY_ALTITUDE),
+                );
+            }
+            vel.0 = (fauna.target - pos).normalize_or_zero() * fauna.speed;
+            continue;
+        }
+
+        // Roamers panic when the player is close.
+        if let Some(pp) = ppos {
             if pos.distance(pp) < FLEE_RADIUS && fauna.state != FaunaState::Flee {
                 fauna.state = FaunaState::Flee;
             }
@@ -373,10 +413,15 @@ pub fn run_fauna(
     }
 }
 
-/// Depth-sort roamers each frame (feet below sprite centre).
+/// Depth-sort fauna each frame: roamers y-sort with the ground (feet below
+/// sprite centre); fliers sort at a fixed high z, over ground and player.
 pub fn depth_sort_fauna(mut q: Query<(&mut Transform, &Fauna)>) {
     for (mut tf, fauna) in &mut q {
-        tf.translation.z = depth_z(tf.translation.y - fauna.foot_off);
+        tf.translation.z = if fauna.flier {
+            FLY_Z
+        } else {
+            depth_z(tf.translation.y - fauna.foot_off)
+        };
     }
 }
 
