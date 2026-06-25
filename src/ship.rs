@@ -143,6 +143,10 @@ pub fn ship_plugin(app: &mut App) {
             (apply_damage, sync_hostilites, score_hits, tick_distressed)
                 .run_if(in_state(PlayState::Flying)),
         )
+        .add_systems(
+            Update,
+            update_ship_sprite_frame.run_if(in_state(PlayState::Flying)),
+        )
         .add_systems(Update, save_combat_stats_periodic)
         .add_systems(Update, tick_player_death_timer)
         .add_systems(Update, handle_buy_ship);
@@ -217,6 +221,9 @@ pub struct ShipData {
     pub sprite_path: String,
     #[serde(skip)]
     pub sprite_handle: Handle<Image>,
+    /// Layout for the baked rotation/thrust sprite atlas (None = plain image).
+    #[serde(skip)]
+    pub atlas_layout: Option<Handle<TextureAtlasLayout>>,
     pub radius: f32,
     pub price: i128,
     pub personality: Personality,
@@ -241,6 +248,50 @@ pub struct ShipData {
     pub reverse_kp: Scalar,
     #[serde(default = "default_reverse_kd")]
     pub reverse_kd: Scalar,
+}
+
+/// Number of pre-baked heading frames per ship sprite atlas. MUST match
+/// `scripts/ship3d/bake_atlases.py` (frames 0..N idle, N..2N thrust, packed
+/// row-major in an 8×8 grid).
+pub const SHIP_HEADINGS: usize = 32;
+/// Atlas grid columns/rows (8×8 = 64 tiles = 2 × SHIP_HEADINGS).
+pub const SHIP_ATLAS_COLS: u32 = 8;
+pub const SHIP_ATLAS_ROWS: u32 = 8;
+/// Atlas tile size in pixels (must match the bake's TILE).
+pub const SHIP_ATLAS_TILE: u32 = 128;
+/// On-screen sprite size = radius × this. Bumped from the prior 2.2 so ships
+/// read more clearly (atlas tiles scale via custom_size — no re-bake needed).
+const SHIP_SPRITE_SCALE: f32 = 2.6;
+
+/// Full on-screen size of a ship sprite, derived from its collision radius.
+/// Use this (not the texture size) for scale animations: ship atlases are a
+/// fixed tile resolution decoupled from the displayed size.
+pub fn ship_display_size(radius: f32) -> Vec2 {
+    Vec2::splat(radius * SHIP_SPRITE_SCALE)
+}
+
+/// Drive-firing flag: set by `ship_movement` from the thrust command, read by
+/// `update_ship_sprite_frame` to select the exhaust-on atlas frames.
+#[derive(Component, Default)]
+pub struct DriveActive(pub bool);
+
+/// Build a ship's sprite. When a baked atlas layout is present, use an atlas
+/// sprite (per-heading + thrust frames); otherwise fall back to a plain image.
+/// Always sized to the ship's radius so tile resolution is independent of the
+/// on-screen size.
+pub fn ship_sprite(data: &ShipData) -> Sprite {
+    let mut sprite = match &data.atlas_layout {
+        Some(layout) => Sprite::from_atlas_image(
+            data.sprite_handle.clone(),
+            TextureAtlas {
+                layout: layout.clone(),
+                index: 0,
+            },
+        ),
+        None => Sprite::from_image(data.sprite_handle.clone()),
+    };
+    sprite.custom_size = Some(Vec2::splat(data.radius * SHIP_SPRITE_SCALE));
+    sprite
 }
 
 /// Hard cap on ship angular speed (rad/s). Above each ship's natural
@@ -593,6 +644,7 @@ pub struct ShipBundle {
     distressed: Distressed,
     tracer_slots: crate::weapons::TracerSlots,
     pub sprite: Sprite,
+    drive: DriveActive,
     transform: Transform,
     body: RigidBody,
     angular_damping: AngularDamping,
@@ -607,6 +659,11 @@ pub struct ShipBundle {
 impl ShipBundle {
     pub fn get_personality(&self) -> Personality {
         self.ship.data.personality.clone()
+    }
+
+    /// Collision radius of the bundled ship (for sizing scale animations).
+    pub fn radius(&self) -> f32 {
+        self.ship.data.radius
     }
 
     /// Replace the random starting cargo with a fixed commodity and quantity.
@@ -714,7 +771,8 @@ pub fn ship_bundle(
         ship,
         distressed: Distressed::default(),
         tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
-        sprite: Sprite::from_image(ship_data.sprite_handle.clone()),
+        sprite: ship_sprite(&ship_data),
+        drive: DriveActive::default(),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
         angular_damping: AngularDamping(ship_data.angular_drag), // equivalent to angular_drag = 3.0
@@ -756,7 +814,8 @@ pub fn ship_bundle_from_pilot(
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
         max_angular_speed: MaxAngularSpeed(MAX_ANG_SPEED),
-        sprite: Sprite::from_image(ship.data.sprite_handle.clone()),
+        sprite: ship_sprite(&ship.data),
+        drive: DriveActive::default(),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
         collider: Collider::circle(ship.data.radius),
@@ -781,15 +840,25 @@ fn ship_movement(
     mut reader: MessageReader<ShipCommand>,
     time: Res<Time>,
     mut query: Query<
-        (&mut LinearVelocity, &mut AngularVelocity, &Transform, &Ship),
+        (
+            &mut LinearVelocity,
+            &mut AngularVelocity,
+            &Transform,
+            &Ship,
+            &mut DriveActive,
+        ),
         (With<RigidBody>, Without<Sensor>),
     >,
 ) {
     for cmd in reader.read() {
-        let Ok((mut velocity, mut ang_vel, transform, ship)) = query.get_mut(cmd.entity) else {
+        let Ok((mut velocity, mut ang_vel, transform, ship, mut drive)) =
+            query.get_mut(cmd.entity)
+        else {
             continue;
         };
         let dt = time.delta_secs();
+        // Drive flame is shown whenever forward thrust is commanded.
+        drive.0 = cmd.thrust.abs() > f32::EPSILON;
 
         let forward = (transform.rotation * Vec3::Y).xy();
         let speed = velocity.length();
@@ -817,6 +886,24 @@ fn ship_movement(
                 .clamp(-ship.data.torque, ship.data.torque);
             (*ang_vel).0 += pd_torque * cmd.reverse * dt;
         }
+    }
+}
+
+/// Pick the atlas frame from each ship's heading and drive state.
+///
+/// Frames are pre-baked "nose-up, light rotated by -i·step" so that rotating
+/// the sprite by the physics heading lands the baked light world-fixed → the
+/// hull keeps rotating smoothly while highlights glide across it. Frames
+/// `0..N` are idle, `N..2N` add the drive flame.
+fn update_ship_sprite_frame(mut ships: Query<(&Transform, &DriveActive, &mut Sprite), With<Ship>>) {
+    let step = std::f32::consts::TAU / SHIP_HEADINGS as f32;
+    for (transform, drive, mut sprite) in &mut ships {
+        let Some(atlas) = sprite.texture_atlas.as_mut() else {
+            continue; // plain-image ship (no baked atlas)
+        };
+        let (heading, _, _) = transform.rotation.to_euler(bevy::math::EulerRot::ZYX);
+        let i = (heading / step).round().rem_euclid(SHIP_HEADINGS as f32) as usize;
+        atlas.index = i + if drive.0 { SHIP_HEADINGS } else { 0 };
     }
 }
 
@@ -995,7 +1082,7 @@ fn handle_buy_ship(
 
         // Replace physics/render components.
         commands.entity(entity).insert((
-            Sprite::from_image(new_data.sprite_handle.clone()),
+            ship_sprite(new_data),
             Collider::circle(new_data.radius),
             MaxLinearSpeed(new_data.max_speed),
             AngularDamping(new_data.angular_drag),

@@ -638,45 +638,67 @@ def render_sprite(planet: Planet, size: int = 256) -> Image.Image:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    root      = Path(__file__).resolve().parent.parent
-    yaml_path = root / "assets" / "star_systems.yaml"
-    out_dir   = root / "assets" / "sprites" / "planets"
+    import sys as _sys
+
+    # `--force` regenerates every planet; default only fills in missing sprites.
+    force = "--force" in _sys.argv
+
+    root    = Path(__file__).resolve().parent.parent
+    assets  = root / "assets"
+    out_dir = assets / "sprites" / "planets"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(yaml_path) as f:
-        systems = yaml.safe_load(f)
+    # Every system-definition file (star_systems + mining/escort/simulator/…),
+    # mirroring the game's parse_dir over assets/.
+    yaml_paths = sorted(assets.glob("*system*.yaml"))
 
     count = 0
-    for sys_name, sys_data in systems.items():
-        planets = sys_data.get("planets") or {}
-        for planet_name, pdata in planets.items():
-            ptype = pdata.get("planet_type", "rocky")
+    skipped = 0
+    for yaml_path in yaml_paths:
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f)
+        if not isinstance(data, dict):
+            continue  # e.g. starting_system.yaml is just a system name string
+        # Two shapes: star_systems.yaml is {system_name: {...}}; the per-system
+        # files (mining/escort/…) ARE a single system (top-level has `planets`).
+        if "planets" in data:
+            systems = [(yaml_path.stem, data)]
+        else:
+            systems = [(k, v) for k, v in data.items() if isinstance(v, dict)]
+        for sys_name, sys_data in systems:
+            planets = sys_data.get("planets") or {}
+            for planet_name, pdata in planets.items():
+                out = out_dir / f"{planet_name}.png"
+                if out.exists() and not force:
+                    skipped += 1
+                    continue
+                ptype = pdata.get("planet_type", "rocky")
 
-            game_radius = pdata.get("radius", 30.0)
-            planet = build_planet(planet_name, pdata)
+                game_radius = pdata.get("radius", 30.0)
+                planet = build_planet(planet_name, pdata)
 
-            # For ringed planets, scale the sprite to the ring outer extent
-            # so rings aren't clipped in-game.  The ratio ring_outer/body
-            # (both in mesh units where body=2.0) maps to the game-pixel
-            # scale factor.
-            if planet.rings is not None:
-                ring_extent = np.abs(planet.rings.bounds).max()
-                scale = ring_extent / planet.radius   # mesh-space ratio
-                effective_radius = game_radius * scale
-            else:
-                effective_radius = game_radius
-            sz = sprite_size(effective_radius)
+                # For ringed planets, scale the sprite to the ring outer extent
+                # so rings aren't clipped in-game.  The ratio ring_outer/body
+                # (both in mesh units where body=2.0) maps to the game-pixel
+                # scale factor.
+                if planet.rings is not None:
+                    ring_extent = np.abs(planet.rings.bounds).max()
+                    scale = ring_extent / planet.radius   # mesh-space ratio
+                    effective_radius = game_radius * scale
+                else:
+                    effective_radius = game_radius
+                sz = sprite_size(effective_radius)
 
-            print(f"  {sys_name}/{planet_name} ({ptype}, {sz}x{sz})...",
-                  end=" ", flush=True)
-            img    = render_sprite(planet, size=max(sz, 128)).resize(
-                (sz, sz), Image.LANCZOS)
-            out    = out_dir / f"{planet_name}.png"
-            img.save(out)
-            print(f"-> {out.relative_to(root)}")
-            count += 1
+                print(f"  {yaml_path.name}:{sys_name}/{planet_name} "
+                      f"({ptype}, {sz}x{sz})...", end=" ", flush=True)
+                img = render_sprite(planet, size=max(sz, 128)).resize(
+                    (sz, sz), Image.LANCZOS)
+                img.save(out)
+                print(f"-> {out.relative_to(root)}")
+                count += 1
 
-    print(f"\nDone — {count} planet sprites written to {out_dir.relative_to(root)}/")
+    print(f"\nDone — {count} generated, {skipped} skipped (existing) → "
+          f"{out_dir.relative_to(root)}/")
 
 
 if __name__ == "__main__":

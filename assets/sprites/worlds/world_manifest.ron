@@ -2,7 +2,7 @@
 // Deserialize into WorldManifest in Bevy
 (
     tile_size: 32,
-    atlas_cols: 48,
+    atlas_cols: 50,
     biomes: {
         "garden": (
             atlas: "garden_atlas.png",

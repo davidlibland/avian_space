@@ -215,6 +215,12 @@ pub fn compute_bitmask(
 
 // ── Tilemap builder ───────────────────────────────────────────────────────
 
+/// Atlas column of the fully-interior blob47 tile (mask 255).
+const INTERIOR_COL: u8 = 46;
+/// Interior variants baked per terrain (atlas cols 46..46+N-1). MUST match
+/// `N_VARIANTS` in scripts/ship3d/terrain_gen.py.
+const INTERIOR_VARIANTS: u32 = 4;
+
 /// Compute the `TileTextureIndex` for a given position.
 ///
 /// `texture_index = terrain_row * atlas_cols + blob47_lut[reduce_to_47(bitmask)]`
@@ -236,6 +242,17 @@ pub fn tile_texture_index(
         let cardinals_only = reduced & (T | R | B | L);
         let fallback = lut.lut[cardinals_only as usize];
         if fallback == 255 { 46 } else { fallback }
+    } else {
+        col
+    };
+    // Break the repeating grid on fully-interior tiles by picking a per-tile
+    // interior variant (atlas cols 46..46+N-1). Deterministic position hash so
+    // it's stable per planet and the seamless windowed-delta variants tile.
+    let col = if col == INTERIOR_COL {
+        let h = (x as u32)
+            .wrapping_mul(73856093)
+            .wrapping_add((y as u32).wrapping_mul(19349663));
+        INTERIOR_COL + (h % INTERIOR_VARIANTS) as u8
     } else {
         col
     };
@@ -360,7 +377,7 @@ mod tests {
         for &(mask, col) in &PICK_TILE {
             lut[mask as usize] = col;
         }
-        Blob47Lut { atlas_cols: 48, lut }
+        Blob47Lut { atlas_cols: 50, lut }
     }
 
     #[test]

@@ -11,11 +11,51 @@ use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 use rand::Rng;
 
 pub const PICKUP_RADIUS: f32 = 15.0;
+/// Tumble frames in the crystal atlas — MUST match scripts/ship3d/pickup_gen.py.
+const PICKUP_TUMBLE_FRAMES: usize = 16;
 
 #[derive(Component)]
 pub struct Pickup {
     pub commodity: String,
     pub quantity: u16,
+}
+
+/// Loaded crystal tumble atlas + its layout (headless-safe Option).
+#[derive(Resource, Default)]
+struct PickupAtlas {
+    image: Handle<Image>,
+    layout: Option<Handle<TextureAtlasLayout>>,
+}
+
+/// Per-pickup tumble clock (independent of the in-plane physics spin).
+#[derive(Component)]
+struct PickupTumble {
+    phase: f32,
+    speed: f32,
+}
+
+fn load_pickup_atlas(
+    asset_server: Res<AssetServer>,
+    layouts: Option<ResMut<Assets<TextureAtlasLayout>>>,
+    mut commands: Commands,
+) {
+    let layout = layouts.map(|mut l| {
+        l.add(TextureAtlasLayout::from_grid(UVec2::splat(64), 4, 4, None, None))
+    });
+    let image = asset_server.load("sprites/pickups/crystal.png");
+    commands.insert_resource(PickupAtlas { image, layout });
+}
+
+/// Advance each pickup's tumble frame over time (physics spins it in-plane).
+fn tumble_pickups(time: Res<Time>, mut q: Query<(&PickupTumble, &mut Sprite)>) {
+    let t = time.elapsed_secs();
+    for (tumble, mut sprite) in &mut q {
+        if let Some(atlas) = sprite.texture_atlas.as_mut() {
+            let frac = (t * tumble.speed + tumble.phase).rem_euclid(1.0);
+            atlas.index =
+                ((frac * PICKUP_TUMBLE_FRAMES as f32) as usize) % PICKUP_TUMBLE_FRAMES;
+        }
+    }
 }
 
 #[derive(Event, Message)]
@@ -26,16 +66,21 @@ pub struct PickupDrop {
 }
 
 pub fn pickup_plugin(app: &mut App) {
-    app.add_message::<PickupDrop>().add_systems(
-        Update,
-        (spawn_pickups, collect_pickups).run_if(in_state(PlayState::Flying)),
-    );
+    app.add_message::<PickupDrop>()
+        .init_resource::<PickupAtlas>()
+        .add_systems(Startup, load_pickup_atlas)
+        .add_systems(
+            Update,
+            (spawn_pickups, collect_pickups, tumble_pickups)
+                .run_if(in_state(PlayState::Flying)),
+        );
 }
 
 fn spawn_pickups(
     mut reader: MessageReader<PickupDrop>,
     mut commands: Commands,
     item_universe: Res<ItemUniverse>,
+    atlas: Res<PickupAtlas>,
 ) {
     let mut rng = rand::thread_rng();
     for drop in reader.read() {
@@ -44,11 +89,25 @@ fn spawn_pickups(
             .get(&drop.commodity)
             .map(|c| c.color)
             .unwrap_or([1.0, 0.85, 0.1]);
+        // White faceted "pure deposit" crystal tumble atlas, tinted per commodity.
+        let mut sprite = match &atlas.layout {
+            Some(l) => Sprite::from_atlas_image(
+                atlas.image.clone(),
+                TextureAtlas { layout: l.clone(), index: 0 },
+            ),
+            None => Sprite::from_image(atlas.image.clone()),
+        };
+        sprite.color = Color::srgb(r, g, b);
+        sprite.custom_size = Some(Vec2::splat(21.0)); // 50% bigger
         commands.spawn((
             DespawnOnExit(PlayState::Flying),
             Pickup {
                 commodity: drop.commodity.clone(),
                 quantity: drop.quantity,
+            },
+            PickupTumble {
+                phase: rng.gen_range(0.0..1.0),
+                speed: rng.gen_range(0.08..0.2),
             },
             Transform::from_translation(drop.location.extend(-0.5)),
             RigidBody::Dynamic,
@@ -59,11 +118,7 @@ fn spawn_pickups(
             Sensor,
             CollisionEventsEnabled,
             CollisionLayers::new(GameLayer::Pickup, [GameLayer::Ship]),
-            Sprite {
-                color: Color::srgb(r, g, b),
-                custom_size: Some(Vec2::splat(10.0)),
-                ..default()
-            },
+            sprite,
         ));
     }
 }

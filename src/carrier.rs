@@ -172,7 +172,7 @@ fn spawn_escort_ships(
         let personality = bundle.get_personality();
 
         // Determine the full sprite size, then shrink it for the launch animation.
-        let full_size = image_size(&bundle.sprite, &images);
+        let full_size = crate::ship::ship_display_size(bundle.radius());
         let start_size = full_size * ANIM_MIN_SCALE;
         bundle.sprite.custom_size = Some(start_size);
 
@@ -409,13 +409,12 @@ fn escort_act(
 fn begin_escort_dock(
     mut commands: Commands,
     escorts: Query<
-        (Entity, &CarrierEscort, &EscortMode, &Position, &Sprite),
+        (Entity, &CarrierEscort, &EscortMode, &Position, &Ship),
         (Without<ScalingUp>, Without<DockingEscort>),
     >,
     mother_ships: Query<(&Ship, &Position), Without<CarrierEscort>>,
-    images: Res<Assets<Image>>,
 ) {
-    for (entity, escort, mode, escort_pos, sprite) in &escorts {
+    for (entity, escort, mode, escort_pos, ship) in &escorts {
         if !matches!(mode, EscortMode::Dock) {
             continue;
         }
@@ -424,7 +423,7 @@ fn begin_escort_dock(
         };
         let dist = (escort_pos.0 - mother_pos.0).length();
         if dist < DOCK_START_RADIUS + mother.data.radius {
-            let full_size = image_size(sprite, &images);
+            let full_size = crate::ship::ship_display_size(ship.data.radius);
             commands.entity(entity).insert(DockingEscort {
                 start_distance: dist.max(1.0),
                 full_size,
@@ -437,11 +436,12 @@ fn begin_escort_dock(
 /// command), cancel the dock and let it act normally again.
 fn cancel_escort_dock(
     mut commands: Commands,
-    mut escorts: Query<(Entity, &EscortMode, &mut Sprite), With<DockingEscort>>,
+    mut escorts: Query<(Entity, &EscortMode, &DockingEscort, &mut Sprite)>,
 ) {
-    for (entity, mode, mut sprite) in &mut escorts {
+    for (entity, mode, dock, mut sprite) in &mut escorts {
         if !matches!(mode, EscortMode::Dock) {
-            sprite.custom_size = None;
+            // Restore the full display size (atlas tiles are decoupled from it).
+            sprite.custom_size = Some(dock.full_size);
             commands.entity(entity).remove::<DockingEscort>();
         }
     }

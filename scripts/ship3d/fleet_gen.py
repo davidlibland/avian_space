@@ -1,0 +1,807 @@
+"""
+fleet_gen.py — BESPOKE, purpose-built ship silhouettes for the whole fleet.
+
+Every ship is hand-shaped to the role in docs/ship_design_bible.md; no shared
+template.  A ship must be unmistakable in silhouette alone.
+
+Pipeline hooks (for the two requested features):
+  * EXHAUST LAYER  — all drive flames go into a separate "exhaust" collection so
+    each ship renders an idle frame (no flame) and a thrust frame (flame).  The
+    game composites the flame layer only while the drive is firing.
+  * YAW / ANGLES   — render_ship(yaw=θ) rotates the SHIP against a FIXED world
+    light, so baking a ring of headings gives subtly shifting highlights/shadows
+    (rotating a single sprite in-engine would not).
+
+Run:  scripts/.blender_venv/bin/python fleet_gen.py
+"""
+
+import math
+import os
+
+import bpy
+from PIL import Image, ImageDraw
+
+from blender_gen import (add_box, add_cylinder, add_sphere, elliptical_wing,
+                         glow_material, loft_hull, render_to, reset,
+                         setup_scene, toon_material, _obj_from_pydata)
+
+OUT = os.path.join(os.path.dirname(__file__), "out")
+EXHAUST = "exhaust"
+
+
+def C(*rgb):
+    return tuple(v / 255.0 for v in rgb)
+
+
+# ─────────────────────── exhaust layer + yaw pipeline ──────────────────────
+def _exhaust_coll():
+    if EXHAUST not in bpy.data.collections:
+        c = bpy.data.collections.new(EXHAUST)
+        bpy.context.scene.collection.children.link(c)
+    return bpy.data.collections[EXHAUST]
+
+
+def plume(name, x, y_nozzle, z, r, length, width, mat):
+    """Exhaust cone (wide ring at the nozzle, point aft) — registered in the
+    separate EXHAUST collection so it can be toggled for thrust."""
+    seg = 16
+    verts, faces = [], []
+    rr = r * width
+    y0 = y_nozzle - 0.02
+    for k in range(seg):
+        a = 2 * math.pi * k / seg
+        verts.append((x + rr * math.cos(a), y0, z + rr * math.sin(a)))
+    tip = len(verts); verts.append((x, y0 - length, z))
+    base = len(verts); verts.append((x, y0, z))
+    for j in range(seg):
+        jn = (j + 1) % seg
+        faces.append((j, jn, tip))
+        faces.append((base, jn, j))
+    ob = _obj_from_pydata(name, verts, faces, mat, smooth=True)
+    for c in list(ob.users_collection):
+        c.objects.unlink(ob)
+    _exhaust_coll().objects.link(ob)
+    return ob
+
+
+def _set_exhaust_visible(vis):
+    if EXHAUST in bpy.data.collections:
+        for ob in bpy.data.collections[EXHAUST].objects:
+            ob.hide_render = not vis
+
+
+def _rotate_ship(yaw):
+    """Parent every ship mesh to a root empty and spin it; camera+lights stay
+    fixed in world so the lighting on the hull changes with heading."""
+    if abs(yaw) < 1e-6:
+        return
+    root = bpy.data.objects.new("ship_root", None)
+    bpy.context.scene.collection.objects.link(root)
+    for o in [o for o in bpy.context.scene.objects if o.type == "MESH"]:
+        o.parent = root
+    root.rotation_euler = (0, 0, yaw)
+
+
+# ════════════════════ Independent / Merchant civilian ══════════════════════
+def build_shuttle():
+    hull = toon_material("sh", C(95, 150, 175), spec=0.8)
+    dark = toon_material("sh_d", C(60, 110, 135))
+    glass = toon_material("sh_g", C(150, 210, 235), spec=1.6, glass=True)
+    glow = glow_material("sh_e", C(255, 175, 90), 4)
+    loft_hull("sh_h", [
+        dict(y=0.72, w=0.09, h=0.11, cz=0.02),
+        dict(y=0.45, w=0.25, h=0.2, cz=0.03),
+        dict(y=0.08, w=0.3, h=0.22, cz=0.03),
+        dict(y=-0.28, w=0.25, h=0.19, cz=0.02),
+        dict(y=-0.56, w=0.15, h=0.13, cz=0.01),
+        dict(y=-0.7, w=0.11, h=0.11, cz=0),
+    ], hull, m=18, n=2.2, flatten=0.7, subsurf=2)
+    add_sphere("sh_can", (0, 0.34, 0.18), (0.13, 0.17, 0.13), glass, zclip=0.18)
+    elliptical_wing("sh_fin", dark, span=0.36, root_chord=0.26, tip_chord=0.07,
+                    root_y=-0.12, thick=0.04, cz=0.0, sweep=0.55, sections=5)
+    add_cylinder("sh_nz", (0, -0.72, 0.0), 0.09, 0.1, dark, r2=0.1)
+    plume("sh_pl", 0, -0.78, 0, 0.075, 0.28, 1.0, glow)
+
+
+def build_courier():
+    hull = toon_material("co", C(165, 150, 115), spec=0.9)
+    dark = toon_material("co_d", C(120, 108, 82))
+    glass = toon_material("co_g", C(150, 205, 230), spec=1.6, glass=True)
+    glow = glow_material("co_e", C(255, 175, 95), 4)
+    loft_hull("co_h", [
+        dict(y=1.05, w=0.015, h=0.02, cz=0),
+        dict(y=0.7, w=0.07, h=0.08, cz=0.01),
+        dict(y=0.2, w=0.1, h=0.11, cz=0.02),
+        dict(y=-0.3, w=0.09, h=0.1, cz=0.02),
+        dict(y=-0.8, w=0.07, h=0.08, cz=0.01),
+        dict(y=-1.02, w=0.05, h=0.06, cz=0),
+    ], hull, m=16, n=2.2, flatten=0.75, subsurf=2)
+    add_sphere("co_can", (0, 0.4, 0.1), (0.06, 0.16, 0.07), glass, zclip=0.1)
+    elliptical_wing("co_fin", dark, span=0.46, root_chord=0.5, tip_chord=0.03,
+                    root_y=-0.2, thick=0.035, cz=0.0, sweep=0.7, sections=6)
+    for sx in (-0.05, 0.05):
+        add_cylinder("co_nz", (sx, -1.02, 0.0), 0.04, 0.1, dark, r2=0.05)
+        plume("co_pl", sx, -1.08, 0, 0.032, 0.34, 1.1, glow)
+
+
+def build_prospector():
+    hull = toon_material("pr", C(150, 120, 80), spec=0.6)
+    dark = toon_material("pr_d", C(108, 86, 56))
+    drill = toon_material("pr_dr", C(220, 175, 80), spec=1.1)
+    glass = toon_material("pr_g", C(130, 180, 205), spec=1.4, glass=True)
+    glow = glow_material("pr_e", C(255, 170, 90), 4)
+    # compact arrowhead — nimbler than the heavy miner
+    loft_hull("pr_h", [
+        dict(y=0.7, w=0.05, h=0.06, cz=0.01),
+        dict(y=0.35, w=0.22, h=0.16, cz=0.03),
+        dict(y=0.0, w=0.24, h=0.17, cz=0.03),
+        dict(y=-0.35, w=0.2, h=0.14, cz=0.02),
+        dict(y=-0.62, w=0.13, h=0.11, cz=0.01),
+    ], hull, m=14, n=2.6, flatten=0.6, subsurf=2)
+    add_sphere("pr_can", (0, 0.28, 0.17), (0.1, 0.12, 0.09), glass, zclip=0.17)
+    # forward mining drill spike jutting from the nose
+    add_cylinder("pr_drl", (0, 0.95, 0.04), 0.07, 0.4, drill, r2=0.004)
+    add_cylinder("pr_col", (0, 0.72, 0.04), 0.09, 0.06, dark)
+    # swept agility fins
+    elliptical_wing("pr_fin", dark, span=0.42, root_chord=0.28, tip_chord=0.05,
+                    root_y=-0.18, thick=0.04, cz=0.0, sweep=0.55, sections=5)
+    for sx in (-0.13, 0.13):
+        add_cylinder("pr_nz", (sx, -0.62, 0.0), 0.07, 0.1, dark, r2=0.08)
+        plume("pr_pl", sx, -0.68, 0, 0.058, 0.24, 1.0, glow)
+
+
+def build_fighter():
+    hull = toon_material("fi", C(150, 170, 205), spec=1.0, spec_sharp=0.9)
+    dark = toon_material("fi_d", C(96, 116, 150))
+    accent = toon_material("fi_a", C(210, 70, 70))
+    glass = toon_material("fi_g", C(150, 215, 250), spec=1.6, glass=True)
+    glow = glow_material("fi_e", C(120, 190, 255), 6)
+    loft_hull("fi_h", [
+        dict(y=1.02, w=0.015, h=0.015, cz=0),
+        dict(y=0.6, w=0.15, h=0.16, cz=0.03),
+        dict(y=0.2, w=0.18, h=0.17, cz=0.03),
+        dict(y=-0.2, w=0.15, h=0.14, cz=0.02),
+        dict(y=-0.6, w=0.11, h=0.12, cz=0.01),
+        dict(y=-0.95, w=0.09, h=0.1, cz=0),
+    ], hull, m=14, n=2.4, flatten=0.7, subsurf=2)
+    add_sphere("fi_can", (0, 0.32, 0.16), (0.085, 0.2, 0.12), glass, zclip=0.16)
+    add_box("fi_str", (0, 0.5, 0.16), (0.2, 0.04, 0.05), accent, bevel=0.01)
+    # swept-back delta + forward canards (the approved "A" look)
+    elliptical_wing("fi_wing", hull, span=0.66, root_chord=0.6, tip_chord=0.06,
+                    root_y=-0.2, thick=0.055, cz=0.02, sweep=0.62, dihedral=0.04)
+    elliptical_wing("fi_can", dark, span=0.26, root_chord=0.16, tip_chord=0.03,
+                    root_y=0.42, thick=0.03, cz=0.02, sweep=0.18, sections=5)
+    for sx in (-0.06, 0.06):
+        add_cylinder("fi_nz", (sx, -0.96, 0.0), 0.06, 0.12, dark, r2=0.072)
+        plume("fi_pl", sx, -1.02, 0, 0.05, 0.32, 0.8, glow)
+
+
+def build_corvette():
+    hull = toon_material("cv", C(135, 158, 198), spec=1.0)
+    dark = toon_material("cv_d", C(90, 112, 152))
+    glass = toon_material("cv_g", C(150, 215, 250), spec=1.6, glass=True)
+    glow = glow_material("cv_e", C(120, 190, 255), 6)
+    # needle blade — narrow and tall, almost no wing
+    loft_hull("cv_h", [
+        dict(y=1.0, w=0.015, h=0.02, cz=0),
+        dict(y=0.6, w=0.06, h=0.07, cz=0.01),
+        dict(y=0.1, w=0.08, h=0.09, cz=0.02),
+        dict(y=-0.4, w=0.07, h=0.08, cz=0.01),
+        dict(y=-0.85, w=0.05, h=0.06, cz=0),
+    ], hull, m=14, n=2.3, flatten=0.7, subsurf=2)
+    add_sphere("cv_can", (0, 0.42, 0.09), (0.04, 0.13, 0.05), glass, zclip=0.09)
+    # small delta tail tabs low on the hull
+    elliptical_wing("cv_fin", dark, span=0.26, root_chord=0.22, tip_chord=0.03,
+                    root_y=-0.55, thick=0.03, cz=0.0, sweep=0.5, sections=5)
+    add_cylinder("cv_nz", (0, -0.85, 0.0), 0.055, 0.1, dark, r2=0.065)
+    plume("cv_pl", 0, -0.91, 0, 0.045, 0.3, 0.8, glow)
+
+
+def build_frigate():
+    hull = toon_material("fr", C(120, 135, 162), spec=0.7)
+    dark = toon_material("fr_d", C(80, 94, 118))
+    nac = toon_material("fr_n", C(95, 108, 132))
+    glass = toon_material("fr_g", C(140, 195, 225), spec=1.4, glass=True)
+    glow = glow_material("fr_e", C(120, 185, 255), 5)
+    # practical surplus warship — chunky wedge, greebly
+    loft_hull("fr_h", [
+        dict(y=0.95, w=0.08, h=0.1, cz=0.02),
+        dict(y=0.55, w=0.24, h=0.18, cz=0.03),
+        dict(y=0.05, w=0.26, h=0.19, cz=0.03),
+        dict(y=-0.45, w=0.22, h=0.16, cz=0.02),
+        dict(y=-0.8, w=0.16, h=0.13, cz=0.01),
+    ], hull, m=14, n=3.0, flatten=0.55, subsurf=2)
+    add_box("fr_can", (0, 0.45, 0.16), (0.12, 0.16, 0.07), glass, taper=0.7, bevel=0.02)
+    # side weapon nacelles with barrel stubs
+    for sx in (-1, 1):
+        add_box("fr_nac", (sx * 0.34, -0.05, 0.02), (0.13, 0.6, 0.18), nac,
+                taper=0.85, bevel=0.02)
+        add_cylinder("fr_brl", (sx * 0.34, 0.35, 0.05), 0.02, 0.24, dark)
+    # center spine detail + panel greebles
+    add_box("fr_spine", (0, -0.05, 0.2), (0.1, 0.7, 0.08), dark, bevel=0.01)
+    for yc in (0.1, -0.2):
+        add_box("fr_pan", (0, yc, 0.21), (0.4, 0.04, 0.03), dark)
+    for sx in (-0.16, 0.16):
+        add_cylinder("fr_nz", (sx, -0.82, 0.0), 0.07, 0.12, dark, r2=0.085)
+        plume("fr_pl", sx, -0.88, 0, 0.06, 0.3, 0.8, glow)
+
+
+def build_freighter():
+    hull = toon_material("ft", C(150, 142, 120), spec=0.5)
+    dark = toon_material("ft_d", C(105, 100, 84))
+    cargo = toon_material("ft_c", C(120, 128, 138))
+    glass = toon_material("ft_g", C(130, 180, 205), spec=1.3, glass=True)
+    glow = glow_material("ft_e", C(255, 170, 90), 4)
+    # boxy medium hauler with paired side cargo modules
+    loft_hull("ft_h", [
+        dict(y=0.9, w=0.08, h=0.1, cz=0.02),
+        dict(y=0.5, w=0.2, h=0.18, cz=0.03),
+        dict(y=0.0, w=0.22, h=0.2, cz=0.03),
+        dict(y=-0.5, w=0.2, h=0.18, cz=0.02),
+        dict(y=-0.85, w=0.15, h=0.14, cz=0.01),
+    ], hull, m=12, n=3.2, flatten=0.55, subsurf=2)
+    add_box("ft_cock", (0, 0.62, 0.12), (0.16, 0.2, 0.16), hull, taper=0.6)
+    add_sphere("ft_can", (0, 0.7, 0.2), (0.06, 0.07, 0.05), glass)
+    # paired side cargo modules
+    for sx in (-1, 1):
+        add_box("ft_cargo", (sx * 0.36, -0.05, 0.04), (0.18, 0.7, 0.3), cargo,
+                taper=0.92, bevel=0.015)
+        for yc in (0.15, -0.2):
+            add_box("ft_seam", (sx * 0.36, yc, 0.2), (0.18, 0.03, 0.03), dark)
+    for sx in (-0.18, 0.0, 0.18):
+        add_cylinder("ft_nz", (sx, -0.86, 0.0), 0.06, 0.1, dark, r2=0.075)
+        plume("ft_pl", sx, -0.92, 0, 0.05, 0.24, 1.0, glow)
+
+
+def build_hauler():
+    spine = toon_material("ha_s", C(140, 142, 150))
+    spine_d = toon_material("ha_sd", C(98, 100, 110))
+    crates = [toon_material("ha_c0", C(150, 132, 95)),
+              toon_material("ha_c1", C(108, 120, 132)),
+              toon_material("ha_c2", C(140, 110, 90))]
+    glass = toon_material("ha_g", C(130, 180, 205), spec=1.3, glass=True)
+    glow = glow_material("ha_e", C(255, 170, 90), 4)
+    add_box("ha_spine", (0, 0.0, 0.0), (0.2, 1.8, 0.26), spine, taper=0.88)
+    add_box("ha_cock", (0, 0.85, 0.08), (0.18, 0.24, 0.2), spine, taper=0.6)
+    add_sphere("ha_can", (0, 0.92, 0.18), (0.07, 0.08, 0.06), glass)
+    # three rows of paired detachable containers
+    for row, yc in enumerate((0.42, 0.0, -0.42)):
+        for sx in (-0.34, 0.34):
+            add_box("ha_crate", (sx, yc, 0.05), (0.32, 0.36, 0.34),
+                    crates[row], taper=0.96, bevel=0.012)
+            add_box("ha_latch", (sx, yc, 0.23), (0.28, 0.32, 0.04), spine_d, bevel=0.01)
+    add_box("ha_eng", (0, -0.94, 0.0), (0.46, 0.2, 0.26), spine_d)
+    for sx in (-0.16, 0.16):
+        add_cylinder("ha_nz", (sx, -1.06, 0.0), 0.075, 0.12, spine_d, r2=0.09)
+        plume("ha_pl", sx, -1.12, 0, 0.06, 0.22, 1.0, glow)
+
+
+def build_bulk_carrier():
+    spine = toon_material("bc_s", C(120, 118, 112))
+    spine_d = toon_material("bc_sd", C(85, 84, 80))
+    pods = [toon_material("bc_p0", C(150, 132, 95)),
+            toon_material("bc_p1", C(110, 120, 130)),
+            toon_material("bc_p2", C(140, 110, 90))]
+    glass = toon_material("bc_g", C(120, 170, 200), spec=1.3, glass=True)
+    glow = glow_material("bc_e", C(255, 170, 90), 4)
+    add_box("bc_spine", (0, -0.05, 0.0), (0.22, 1.9, 0.28), spine, taper=0.9)
+    add_box("bc_cock", (0, 0.92, 0.08), (0.2, 0.22, 0.2), spine, taper=0.6)
+    add_sphere("bc_can", (0, 0.98, 0.18), (0.07, 0.08, 0.06), glass)
+    for ci, cx in enumerate((-0.5, -0.28, 0.28, 0.5)):
+        for r, yc in enumerate((0.55, 0.22, -0.11, -0.44)):
+            add_box("bc_pod", (cx, yc, 0.04), (0.2, 0.3, 0.34),
+                    pods[(ci + r) % 3], taper=0.96, bevel=0.012)
+    for yc in (0.55, -0.44):
+        add_box("bc_bar", (0, yc, -0.06), (1.2, 0.08, 0.1), spine_d, bevel=0.01)
+    add_box("bc_eng", (0, -0.92, 0.0), (0.7, 0.2, 0.26), spine_d)
+    for sx in (-0.28, -0.1, 0.1, 0.28):
+        add_cylinder("bc_nz", (sx, -1.04, 0.0), 0.07, 0.12, spine_d, r2=0.085)
+        plume("bc_pl", sx, -1.1, 0, 0.055, 0.22, 1.0, glow)
+
+
+def build_asteroid_miner():
+    hull = toon_material("am", C(168, 120, 58), spec=0.5)
+    dark = toon_material("am_d", C(118, 84, 42))
+    steel = toon_material("am_s", C(120, 120, 128), spec=0.7)
+    drill = toon_material("am_dr", C(220, 170, 70), spec=1.1)
+    glass = toon_material("am_g", C(120, 170, 200), spec=1.4, glass=True)
+    glow = glow_material("am_e", C(255, 165, 80), 4)
+    loft_hull("am_h", [
+        dict(y=0.45, w=0.22, h=0.16, cz=0.03),
+        dict(y=0.15, w=0.4, h=0.24, cz=0.04),
+        dict(y=-0.15, w=0.42, h=0.25, cz=0.04),
+        dict(y=-0.5, w=0.34, h=0.2, cz=0.02),
+        dict(y=-0.72, w=0.24, h=0.16, cz=0.01),
+    ], hull, m=14, n=3.0, flatten=0.6, subsurf=2)
+    add_sphere("am_can", (0, 0.3, 0.2), (0.13, 0.15, 0.1), glass, zclip=0.2)
+    for sx in (-1, 1):
+        add_box("am_arm", (sx * 0.36, 0.45, 0.03), (0.13, 0.6, 0.18), steel,
+                taper=0.8, bevel=0.02)
+        add_cylinder("am_col", (sx * 0.36, 0.68, 0.03), 0.12, 0.06, dark)
+        add_cylinder("am_drl", (sx * 0.36, 0.84, 0.03), 0.1, 0.3, drill, r2=0.004)
+        add_box("am_pod", (sx * 0.46, -0.25, 0.0), (0.12, 0.4, 0.2), dark, taper=0.85)
+    for sx in (-0.16, 0.16):
+        add_cylinder("am_nz", (sx, -0.72, 0.0), 0.1, 0.14, steel, r2=0.12)
+        plume("am_pl", sx, -0.8, 0, 0.08, 0.26, 1.1, glow)
+
+
+# ════════════════════════════ Federation ═══════════════════════════════════
+def build_fed_patrol():
+    hull = toon_material("fp", C(92, 94, 102), spec=0.7)   # visible charcoal
+    dark = toon_material("fp_d", C(58, 60, 68))
+    red = glow_material("fp_r", C(228, 40, 34), 1.12)       # vivid emissive red
+    glass = toon_material("fp_g", C(140, 160, 185), spec=1.4, glass=True)
+    glow = glow_material("fp_e", C(110, 175, 255), 6)
+    # angular armored dart
+    loft_hull("fp_h", [
+        dict(y=1.0, w=0.02, h=0.03, cz=0),
+        dict(y=0.62, w=0.14, h=0.13, cz=0.03),
+        dict(y=0.2, w=0.17, h=0.16, cz=0.03),
+        dict(y=-0.25, w=0.14, h=0.13, cz=0.02),
+        dict(y=-0.7, w=0.1, h=0.11, cz=0.01),
+        dict(y=-0.9, w=0.08, h=0.1, cz=0),
+    ], hull, m=12, n=3.4, flatten=0.55, subsurf=2)
+    add_box("fp_can", (0, 0.4, 0.14), (0.09, 0.16, 0.06), glass, taper=0.7)
+    add_box("fp_str", (0, 0.5, 0.15), (0.24, 0.1, 0.05), red)
+    # bold red swept wings against the charcoal body — unmistakable
+    elliptical_wing("fp_wing", red, span=0.5, root_chord=0.5, tip_chord=0.05,
+                    root_y=-0.18, thick=0.05, cz=0.02, sweep=0.6, dihedral=0.03)
+    for sx in (-0.07, 0.07):
+        add_cylinder("fp_nz", (sx, -0.9, 0.0), 0.06, 0.12, dark, r2=0.072)
+        plume("fp_pl", sx, -0.96, 0, 0.05, 0.34, 0.8, glow)
+
+
+def build_fed_destroyer():
+    hull = toon_material("fd", C(92, 94, 102), spec=0.6)   # visible charcoal
+    dark = toon_material("fd_d", C(58, 60, 68))
+    plate = toon_material("fd_p", C(76, 78, 86))
+    red = glow_material("fd_r", C(228, 40, 34), 1.12)       # vivid emissive red
+    glass = toon_material("fd_g", C(140, 160, 185), spec=1.3, glass=True)
+    glow = glow_material("fd_e", C(110, 175, 255), 5)
+    loft_hull("fd_h", [
+        dict(y=1.0, w=0.06, h=0.1, cz=0.02),
+        dict(y=0.62, w=0.34, h=0.2, cz=0.04),
+        dict(y=0.1, w=0.42, h=0.22, cz=0.05),
+        dict(y=-0.45, w=0.4, h=0.21, cz=0.04),
+        dict(y=-0.82, w=0.32, h=0.18, cz=0.03),
+        dict(y=-0.95, w=0.3, h=0.17, cz=0.03),
+    ], hull, m=12, n=3.8, flatten=0.5, subsurf=2)
+    for sx in (-1, 1):
+        # big red side armour belts — the dominant red mass
+        add_box("fd_flank", (sx * 0.44, -0.15, 0.03), (0.12, 0.95, 0.22), red,
+                taper=0.75, bevel=0.02)
+    add_box("fd_can", (0, 0.5, 0.16), (0.12, 0.18, 0.07), glass, taper=0.7, bevel=0.02)
+    add_box("fd_brow", (0, 0.62, 0.17), (0.28, 0.05, 0.05), red, bevel=0.01)
+    for yc in (0.2, -0.1, -0.4):
+        add_box("fd_seam", (0, yc, 0.24), (0.7, 0.035, 0.04), red, bevel=0)
+    for (tx, ty) in ((0, 0.0), (-0.2, -0.55), (0.2, -0.55)):
+        add_cylinder("fd_tr", (tx, ty, 0.26), 0.08, 0.05, plate)
+        add_sphere("fd_td", (tx, ty, 0.3), (0.07, 0.07, 0.055), dark)
+        for dx in (-0.025, 0.025):
+            add_cylinder("fd_brl", (tx + dx, ty + 0.12, 0.3), 0.012, 0.18, dark)
+    for sx in (-0.27, -0.09, 0.09, 0.27):
+        add_cylinder("fd_nz", (sx, -0.98, 0.0), 0.07, 0.12, dark, r2=0.085)
+        plume("fd_pl", sx, -1.04, 0, 0.06, 0.4, 0.8, glow)
+
+
+def build_fed_missile_cruiser():
+    hull = toon_material("mc", C(90, 92, 100))             # visible charcoal
+    dark = toon_material("mc_d", C(56, 58, 66))
+    pod = toon_material("mc_p", C(76, 78, 86))
+    red = glow_material("mc_r", C(228, 40, 34), 1.12)       # vivid emissive red
+    tube = toon_material("mc_t", C(28, 29, 35))
+    glass = toon_material("mc_g", C(140, 160, 185), spec=1.3, glass=True)
+    glow = glow_material("mc_e", C(110, 175, 255), 5)
+    loft_hull("mc_h", [
+        dict(y=1.0, w=0.05, h=0.08, cz=0.02),
+        dict(y=0.6, w=0.14, h=0.15, cz=0.03),
+        dict(y=0.0, w=0.15, h=0.16, cz=0.03),
+        dict(y=-0.6, w=0.13, h=0.14, cz=0.02),
+        dict(y=-0.95, w=0.1, h=0.11, cz=0.01),
+    ], hull, m=14, n=3.0, flatten=0.6, subsurf=2)
+    add_box("mc_can", (0, 0.45, 0.14), (0.1, 0.16, 0.06), glass, taper=0.7)
+    add_box("mc_brow", (0, 0.56, 0.15), (0.18, 0.04, 0.04), red)
+    for sx in (-1, 1):
+        add_box("mc_pod", (sx * 0.4, -0.05, 0.04), (0.34, 0.95, 0.26), pod,
+                taper=0.92, bevel=0.02)
+        for yc in (0.25, 0.0, -0.25):
+            for tx in (-0.09, 0.0, 0.09):
+                add_box("mc_tube", (sx * 0.4 + tx, yc, 0.2),
+                        (0.05, 0.05, 0.1), tube, bevel=0)
+        add_box("mc_trim", (sx * 0.24, -0.05, 0.18), (0.06, 0.92, 0.05), red)
+        # red caps across the front + outer edge of each missile pod
+        add_box("mc_cap", (sx * 0.4, 0.42, 0.19), (0.34, 0.06, 0.06), red)
+        add_box("mc_edge", (sx * 0.565, -0.05, 0.18), (0.04, 0.92, 0.05), red)
+    for sx in (-0.1, 0.0, 0.1):
+        add_cylinder("mc_nz", (sx, -0.96, 0.0), 0.06, 0.1, dark, r2=0.07)
+        plume("mc_pl", sx, -1.02, 0, 0.05, 0.36, 0.8, glow)
+
+
+def build_fed_carrier():
+    hull = toon_material("fc", C(90, 92, 100))             # visible charcoal
+    dark = toon_material("fc_d", C(56, 58, 66))
+    deck = toon_material("fc_dk", C(38, 40, 46))
+    plate = toon_material("fc_p", C(76, 78, 86))
+    red = glow_material("fc_r", C(228, 40, 34), 1.12)       # vivid emissive red
+    amber = glow_material("fc_l", C(255, 180, 70), 3)
+    glow = glow_material("fc_e", C(110, 175, 255), 5)
+    loft_hull("fc_h", [
+        dict(y=1.0, w=0.18, h=0.1, cz=0.0),
+        dict(y=0.6, w=0.55, h=0.14, cz=0.0),
+        dict(y=0.1, w=0.66, h=0.15, cz=0.0),
+        dict(y=-0.5, w=0.62, h=0.14, cz=0.0),
+        dict(y=-0.9, w=0.48, h=0.12, cz=0.0),
+        dict(y=-1.0, w=0.42, h=0.11, cz=0.0),
+    ], hull, m=12, n=3.4, flatten=0.5, subsurf=2)
+    add_box("fc_ram", (0, 0.95, 0.02), (0.18, 0.2, 0.12), red, taper=0.4, bevel=0.02)
+    add_box("fc_deck", (-0.04, -0.1, 0.13), (0.7, 1.3, 0.04), deck, bevel=0)
+    # bold red stripes along the flight-deck edges (very visible top-down)
+    for sx in (-0.4, 0.32):
+        add_box("fc_dredge", (sx, -0.1, 0.15), (0.04, 1.3, 0.035), red)
+    for y in (0.4, 0.1, -0.2, -0.5):
+        add_box("fc_line", (-0.04, y, 0.16), (0.02, 0.18, 0.02), amber)
+    add_box("fc_isl", (0.46, 0.3, 0.18), (0.14, 0.34, 0.18), plate, taper=0.8, bevel=0.02)
+    add_cylinder("fc_mast", (0.46, 0.4, 0.32), 0.012, 0.22, dark, axis="z")
+    add_box("fc_isl_r", (0.46, 0.44, 0.2), (0.12, 0.04, 0.05), red)
+    for sx in (-1, 1):
+        add_box("fc_spon", (sx * 0.66, -0.3, 0.04), (0.08, 0.4, 0.14), red, taper=0.8)
+    for sx in (-0.34, -0.2, -0.07, 0.07, 0.2, 0.34):
+        add_cylinder("fc_nz", (sx, -1.02, 0.0), 0.055, 0.1, dark, r2=0.07)
+        plume("fc_pl", sx, -1.08, 0, 0.045, 0.34, 0.8, glow)
+
+
+# ══════════════════════════════ Rebels ═════════════════════════════════════
+def build_rebel_fighter():
+    hull = toon_material("rf", C(48, 145, 230), spec=0.9)   # vivid Rebel blue
+    dark = toon_material("rf_d", C(32, 105, 185))
+    green = toon_material("rf_gr", C(70, 235, 130))          # bright green
+    glass = toon_material("rf_g", C(140, 230, 205), spec=1.6, glass=True)
+    glow = glow_material("rf_e", C(110, 245, 150), 6)
+    loft_hull("rf_h", [
+        dict(y=1.05, w=0.02, h=0.02, cz=0),
+        dict(y=0.75, w=0.08, h=0.09, cz=0.02),
+        dict(y=0.35, w=0.13, h=0.14, cz=0.03),
+        dict(y=-0.05, w=0.12, h=0.13, cz=0.02),
+        dict(y=-0.5, w=0.1, h=0.11, cz=0.01),
+        dict(y=-0.95, w=0.08, h=0.09, cz=0),
+    ], hull, m=16, n=2.1, flatten=0.7, subsurf=2)
+    add_sphere("rf_can", (0, 0.38, 0.14), (0.08, 0.2, 0.11), glass, zclip=0.14)
+    add_sphere("rf_nose", (0, 0.66, 0.03), (0.05, 0.13, 0.05), green)
+    elliptical_wing("rf_wing", hull, span=0.66, root_chord=0.55, tip_chord=0.04,
+                    root_y=-0.05, thick=0.05, cz=0.02, sweep=0.34, dihedral=0.07)
+    elliptical_wing("rf_tip", green, span=0.66, root_chord=0.12, tip_chord=0.03,
+                    root_y=-0.42, thick=0.045, cz=0.02, sweep=0.34, sections=5)
+    elliptical_wing("rf_can", dark, span=0.28, root_chord=0.15, tip_chord=0.03,
+                    root_y=0.46, thick=0.03, cz=0.02, sweep=0.16, sections=5)
+    add_cylinder("rf_nz", (0, -0.95, 0.0), 0.08, 0.12, dark, r2=0.09)
+    plume("rf_pl", 0, -1.01, 0, 0.07, 0.36, 0.8, glow)
+
+
+def build_rebel_gunboat():
+    hull = toon_material("rg", C(46, 140, 225), spec=0.8)   # vivid Rebel blue
+    dark = toon_material("rg_d", C(30, 100, 178))
+    green = toon_material("rg_gr", C(70, 235, 130))          # bright green
+    glass = toon_material("rg_g", C(130, 225, 200), spec=1.5, glass=True)
+    glow = glow_material("rg_e", C(110, 245, 150), 5)
+    # stockier hull, weapon-forward
+    loft_hull("rg_h", [
+        dict(y=0.7, w=0.1, h=0.12, cz=0.02),
+        dict(y=0.35, w=0.2, h=0.18, cz=0.03),
+        dict(y=-0.05, w=0.22, h=0.19, cz=0.03),
+        dict(y=-0.45, w=0.18, h=0.15, cz=0.02),
+        dict(y=-0.8, w=0.13, h=0.12, cz=0.01),
+    ], hull, m=16, n=2.4, flatten=0.6, subsurf=2)
+    add_sphere("rg_can", (0, 0.28, 0.17), (0.11, 0.13, 0.1), glass, zclip=0.17)
+    add_box("rg_str", (0, 0.42, 0.16), (0.32, 0.04, 0.05), green, bevel=0.01)
+    # twin forward gun booms projecting ahead of the hull
+    for sx in (-0.16, 0.16):
+        add_cylinder("rg_boom", (sx, 0.55, 0.04), 0.045, 0.6, dark, r2=0.05)
+        add_cylinder("rg_muz", (sx, 0.86, 0.04), 0.03, 0.1, green, r2=0.02)
+    # wing plates
+    elliptical_wing("rg_wing", hull, span=0.5, root_chord=0.42, tip_chord=0.06,
+                    root_y=-0.2, thick=0.05, cz=0.02, sweep=0.4, sections=6)
+    for sx in (-0.12, 0.0, 0.12):
+        add_cylinder("rg_nz", (sx, -0.82, 0.0), 0.06, 0.1, dark, r2=0.072)
+        plume("rg_pl", sx, -0.88, 0, 0.05, 0.3, 0.8, glow)
+
+
+def build_rebel_frigate():
+    hull = toon_material("rfr", C(44, 135, 218), spec=0.7)  # vivid Rebel blue
+    dark = toon_material("rfr_d", C(28, 95, 170))
+    green = toon_material("rfr_gr", C(70, 235, 130))         # bright green
+    bay = toon_material("rfr_b", C(20, 40, 60))
+    glass = toon_material("rfr_g", C(130, 220, 198), spec=1.4, glass=True)
+    glow = glow_material("rfr_e", C(110, 245, 150), 5)
+    # angular wedge with forward-swept nacelles
+    loft_hull("rfr_h", [
+        dict(y=0.95, w=0.06, h=0.1, cz=0.02),
+        dict(y=0.55, w=0.2, h=0.17, cz=0.03),
+        dict(y=0.05, w=0.22, h=0.18, cz=0.03),
+        dict(y=-0.45, w=0.18, h=0.15, cz=0.02),
+        dict(y=-0.82, w=0.13, h=0.12, cz=0.01),
+    ], hull, m=14, n=2.7, flatten=0.55, subsurf=2)
+    add_box("rfr_can", (0, 0.45, 0.16), (0.1, 0.16, 0.07), glass, taper=0.7, bevel=0.02)
+    add_box("rfr_str", (0, 0.58, 0.16), (0.22, 0.04, 0.05), green)
+    # forward-swept nacelles (negative sweep)
+    elliptical_wing("rfr_nac", hull, span=0.46, root_chord=0.42, tip_chord=0.08,
+                    root_y=0.1, thick=0.06, cz=0.02, sweep=-0.4, sections=6)
+    for sx in (-1, 1):
+        add_cylinder("rfr_brl", (sx * 0.42, 0.42, 0.04), 0.022, 0.22, dark)
+    # rear fighter bay (open dark recess)
+    add_box("rfr_bay", (0, -0.55, 0.16), (0.18, 0.3, 0.06), bay, bevel=0)
+    for sx in (-0.13, 0.13):
+        add_cylinder("rfr_nz", (sx, -0.84, 0.0), 0.065, 0.1, dark, r2=0.078)
+        plume("rfr_pl", sx, -0.9, 0, 0.055, 0.32, 0.8, glow)
+
+
+def build_rebel_carrier():
+    hull = toon_material("rc", C(46, 138, 220), spec=0.6)   # vivid Rebel blue
+    dark = toon_material("rc_d", C(30, 98, 172))
+    green = toon_material("rc_gr", C(70, 235, 130))          # bright green
+    frame = toon_material("rc_f", C(60, 155, 235))
+    glass = toon_material("rc_g", C(130, 220, 198), spec=1.4, glass=True)
+    glow = glow_material("rc_e", C(110, 245, 150), 5)
+    # long narrow hull
+    loft_hull("rc_h", [
+        dict(y=1.0, w=0.1, h=0.12, cz=0.0),
+        dict(y=0.6, w=0.22, h=0.17, cz=0.0),
+        dict(y=0.0, w=0.24, h=0.18, cz=0.0),
+        dict(y=-0.6, w=0.22, h=0.16, cz=0.0),
+        dict(y=-1.0, w=0.16, h=0.13, cz=0.0),
+    ], hull, m=14, n=2.6, flatten=0.5, subsurf=2)
+    add_sphere("rc_nose", (0, 0.9, 0.05), (0.07, 0.12, 0.06), green)
+    # open lattice flight deck: two side rails + cross spars, gaps between
+    for sx in (-0.26, 0.26):
+        add_box("rc_rail", (sx, 0.0, 0.18), (0.05, 1.5, 0.06), frame, bevel=0.01)
+    for yc in (0.55, 0.28, 0.0, -0.28, -0.55):
+        add_box("rc_spar", (0, yc, 0.18), (0.5, 0.05, 0.05), frame, bevel=0.01)
+    # bridge fin offset
+    add_box("rc_brg", (0.2, 0.45, 0.2), (0.1, 0.24, 0.16), dark, taper=0.8, bevel=0.02)
+    add_box("rc_brg_g", (0.2, 0.5, 0.24), (0.06, 0.04, 0.05), glass)
+    for sx in (-0.16, 0.0, 0.16):
+        add_cylinder("rc_nz", (sx, -1.02, 0.0), 0.07, 0.12, dark, r2=0.085)
+        plume("rc_pl", sx, -1.08, 0, 0.06, 0.3, 0.8, glow)
+
+
+# ══════════════════════════════ Pirates ════════════════════════════════════
+def build_pirate_corvette():
+    hull = toon_material("pc", C(150, 112, 64), spec=0.5)
+    dark = toon_material("pc_d", C(95, 70, 40))
+    rust = toon_material("pc_ru", C(120, 70, 40))
+    glass = toon_material("pc_g", C(120, 150, 110), spec=1.3, glass=True)
+    glow = glow_material("pc_e", C(255, 140, 50), 5)
+    # asymmetric scrap blade
+    loft_hull("pc_h", [
+        dict(y=0.95, w=0.03, h=0.04, cz=0),
+        dict(y=0.55, w=0.1, h=0.1, cz=0.02),
+        dict(y=0.1, w=0.12, h=0.12, cz=0.02),
+        dict(y=-0.4, w=0.1, h=0.1, cz=0.01),
+        dict(y=-0.82, w=0.07, h=0.08, cz=0),
+    ], hull, m=12, n=2.6, flatten=0.6, subsurf=2)
+    add_sphere("pc_can", (0.02, 0.35, 0.13), (0.07, 0.11, 0.08), glass, zclip=0.13)
+    # mismatched wings (left bigger, forward; right small)
+    elliptical_wing("pc_wR", hull, span=0.34, root_chord=0.3, tip_chord=0.05,
+                    root_y=-0.15, thick=0.05, cz=0.0, sweep=0.45, sections=5,
+                    side=1, mirror=False)
+    elliptical_wing("pc_wL", dark, span=0.46, root_chord=0.34, tip_chord=0.05,
+                    root_y=-0.05, thick=0.05, cz=0.0, sweep=0.3, sections=5,
+                    side=-1, mirror=False)
+    add_box("pc_rust", (-0.12, 0.1, 0.13), (0.08, 0.14, 0.02), rust, bevel=0)
+    add_cylinder("pc_ant", (0.08, 0.2, 0.2), 0.008, 0.2, dark, axis="z")
+    add_cylinder("pc_nz", (0.02, -0.82, 0.0), 0.06, 0.1, dark, r2=0.07)
+    plume("pc_pl", 0.02, -0.88, 0, 0.05, 0.28, 1.2, glow)
+    plume("pc_plh", 0.02, -0.88, 0, 0.03, 0.16, 1.1, glow_material("pc_ph", C(255, 210, 120), 7))
+
+
+def build_pirate_missile_boat():
+    hull = toon_material("pm", C(150, 112, 64), spec=0.5)
+    dark = toon_material("pm_d", C(95, 70, 40))
+    rack = toon_material("pm_r", C(110, 95, 78))
+    tube = toon_material("pm_t", C(45, 35, 22))
+    rust = toon_material("pm_ru", C(120, 70, 40))
+    glass = toon_material("pm_g", C(120, 150, 110), spec=1.3, glass=True)
+    glow = glow_material("pm_e", C(255, 140, 50), 5)
+    loft_hull("pm_h", [
+        dict(y=0.85, w=0.08, h=0.1, cz=0.01),
+        dict(y=0.45, w=0.2, h=0.18, cz=0.03),
+        dict(y=0.0, w=0.22, h=0.19, cz=0.03),
+        dict(y=-0.45, w=0.2, h=0.17, cz=0.02),
+        dict(y=-0.8, w=0.15, h=0.13, cz=0.01),
+    ], hull, m=12, n=3.0, flatten=0.55, subsurf=2)
+    add_sphere("pm_can", (0.03, 0.4, 0.17), (0.1, 0.13, 0.1), glass, zclip=0.17)
+    racks = [(-0.34, 0.0, 0.5, 0.34), (0.34, -0.08, 0.42, 0.3)]
+    for ri, (rx, ry, rl, rw_) in enumerate(racks):
+        add_box("pm_rack", (rx, ry, 0.06), (rw_, rl, 0.2), rack, bevel=0.01, taper=0.9)
+        rows = 3 if ri == 0 else 2
+        for k in range(rows):
+            yy = ry + rl * 0.5 - 0.08 - k * 0.14
+            add_box("pm_tube", (rx, yy, 0.17), (rw_ * 0.7, 0.05, 0.1), tube)
+    for (rx, ry) in ((-0.1, 0.2), (0.12, -0.3), (-0.05, -0.1)):
+        add_box("pm_rust", (rx, ry, 0.2), (0.08, 0.1, 0.02), rust, bevel=0)
+    add_cylinder("pm_ant", (0.12, 0.25, 0.28), 0.01, 0.26, dark, axis="z")
+    for i, (sx, er) in enumerate(((-0.11, 0.09), (0.13, 0.11))):
+        add_cylinder("pm_nz", (sx, -0.82, 0.0), er, 0.14, dark, r2=er * 1.2)
+        plume("pm_pl", sx, -0.9, 0, er * 0.9, 0.26, 1.25, glow)
+        plume("pm_plh", sx, -0.9, 0, er * 0.5, 0.15, 1.1,
+              glow_material(f"pm_ph{i}", C(255, 210, 120), 7))
+
+
+def build_pirate_carrier():
+    hull = toon_material("prc", C(145, 110, 64), spec=0.4)
+    dark = toon_material("prc_d", C(92, 68, 40))
+    deck = toon_material("prc_dk", C(70, 56, 38))
+    plate_a = toon_material("prc_pa", C(120, 122, 126))  # scavenged fed plate
+    plate_b = toon_material("prc_pb", C(60, 110, 120))   # scavenged rebel plate
+    rust = toon_material("prc_ru", C(120, 70, 40))
+    glow = glow_material("prc_e", C(255, 140, 50), 5)
+    # big chunky asymmetric hulk
+    loft_hull("prc_h", [
+        dict(y=1.0, w=0.14, h=0.13, cz=0.0),
+        dict(y=0.55, w=0.34, h=0.2, cz=0.0),
+        dict(y=0.0, w=0.4, h=0.22, cz=0.0),
+        dict(y=-0.55, w=0.36, h=0.2, cz=0.0),
+        dict(y=-0.95, w=0.26, h=0.16, cz=0.0),
+    ], hull, m=12, n=3.0, flatten=0.5, subsurf=2)
+    # mismatched welded deck plates — raised ABOVE the bulbous hull crest
+    # (~0.22) so they're not occluded from top-down.
+    add_box("prc_deck", (-0.03, -0.05, 0.25), (0.5, 1.2, 0.04), deck, bevel=0)
+    add_box("prc_plA", (-0.18, 0.35, 0.29), (0.22, 0.34, 0.05), plate_a, bevel=0.01)
+    add_box("prc_plB", (0.16, -0.1, 0.29), (0.26, 0.5, 0.05), plate_b, bevel=0.01)
+    add_box("prc_plC", (-0.1, -0.5, 0.29), (0.3, 0.26, 0.05), dark, bevel=0.01)
+    # trophy spikes + antennae + rust
+    for (sx, sy) in ((-0.42, 0.3), (0.44, -0.2)):
+        add_cylinder("prc_spike", (sx, sy, 0.1), 0.04, 0.4, dark, r2=0.005)
+    add_cylinder("prc_ant", (0.3, 0.5, 0.34), 0.012, 0.3, dark, axis="z")
+    for (rx, ry) in ((0.0, 0.5), (-0.3, -0.3)):
+        add_box("prc_rust", (rx, ry, 0.32), (0.12, 0.14, 0.02), rust, bevel=0)
+    # mismatched engine bank, orange fire
+    for i, (sx, er) in enumerate(((-0.22, 0.085), (-0.02, 0.1), (0.2, 0.075))):
+        add_cylinder("prc_nz", (sx, -0.96, 0.0), er, 0.12, dark, r2=er * 1.2)
+        plume("prc_pl", sx, -1.02, 0, er * 0.9, 0.26, 1.25, glow)
+
+
+# ════════════════════════ Cross-faction carrier ════════════════════════════
+def build_surplus_carrier():
+    hull = toon_material("sc", C(95, 105, 95), spec=0.5)   # neutral olive
+    dark = toon_material("sc_d", C(62, 70, 64))
+    deck = toon_material("sc_dk", C(40, 44, 40))
+    olive = toon_material("sc_o", C(120, 125, 90))
+    glass = toon_material("sc_g", C(130, 190, 175), spec=1.4, glass=True)
+    glow = glow_material("sc_e", C(110, 175, 255), 5)
+    # streamlined long wedge
+    loft_hull("sc_h", [
+        dict(y=1.0, w=0.06, h=0.1, cz=0.02),
+        dict(y=0.55, w=0.26, h=0.18, cz=0.02),
+        dict(y=0.0, w=0.3, h=0.19, cz=0.02),
+        dict(y=-0.55, w=0.26, h=0.17, cz=0.02),
+        dict(y=-0.95, w=0.18, h=0.13, cz=0.01),
+    ], hull, m=14, n=2.8, flatten=0.55, subsurf=2)
+    add_box("sc_nose", (0, 0.78, 0.18), (0.12, 0.2, 0.08), hull, taper=0.5)
+    add_box("sc_str", (0, 0.5, 0.22), (0.34, 0.04, 0.04), olive)
+    # swept-back fins (fast carrier feel)
+    elliptical_wing("sc_fin", dark, span=0.42, root_chord=0.3, tip_chord=0.05,
+                    root_y=0.2, thick=0.04, cz=0.02, sweep=0.5, sections=5)
+    # compact rear flight deck — raised above the hull crest (~0.21) so it shows
+    add_box("sc_deck", (0, -0.5, 0.24), (0.34, 0.5, 0.04), deck, bevel=0)
+    for y in (-0.35, -0.5, -0.65):
+        add_box("sc_line", (0, y, 0.27), (0.02, 0.1, 0.02),
+                glow_material("sc_l", C(255, 180, 70), 3))
+    # single offset bridge fin
+    add_box("sc_brg", (0.2, 0.15, 0.27), (0.1, 0.22, 0.16), dark, taper=0.8, bevel=0.02)
+    add_box("sc_brg_g", (0.2, 0.2, 0.32), (0.06, 0.04, 0.05), glass)
+    for sx in (-0.14, 0.14):
+        add_cylinder("sc_nz", (sx, -0.96, 0.0), 0.07, 0.12, dark, r2=0.085)
+        plume("sc_pl", sx, -1.02, 0, 0.06, 0.32, 0.8, glow)
+
+
+# ════════════════════════════════ registry ═════════════════════════════════
+REGISTRY = {
+    # name: (builder, ortho, group, label)
+    "shuttle": (build_shuttle, 1.9, "merchant", "r10 · starter pod"),
+    "courier": (build_courier, 2.5, "merchant", "r12 · parcel needle"),
+    "prospector": (build_prospector, 2.2, "merchant", "r14 · drill-spike dart"),
+    "asteroid_miner": (build_asteroid_miner, 2.4, "merchant", "r20 · drill-arm crab"),
+    "freighter": (build_freighter, 2.5, "merchant", "r32 · side-module hauler"),
+    "hauler": (build_hauler, 2.6, "merchant", "r40 · container spine"),
+    "bulk_carrier": (build_bulk_carrier, 2.7, "merchant", "r55 · cargo-pod brick"),
+    "fighter": (build_fighter, 2.5, "independent", "r12 · delta + canards"),
+    "corvette": (build_corvette, 2.2, "independent", "r9 · needle blade"),
+    "frigate": (build_frigate, 2.6, "independent", "r32 · surplus warship"),
+    "surplus_carrier": (build_surplus_carrier, 2.7, "independent", "r45 · neutral wedge"),
+    "fed_patrol": (build_fed_patrol, 2.3, "federation", "r15 · armored dart"),
+    "fed_destroyer": (build_fed_destroyer, 2.6, "federation", "r42 · slab battlewagon"),
+    "fed_missile_cruiser": (build_fed_missile_cruiser, 2.6, "federation", "r35 · all-tubes cruiser"),
+    "fed_carrier": (build_fed_carrier, 2.7, "federation", "r60 · flat-top flagship"),
+    "rebel_fighter": (build_rebel_fighter, 2.6, "rebels", "r12 · winged dart"),
+    "rebel_gunboat": (build_rebel_gunboat, 2.5, "rebels", "r22 · twin gun booms"),
+    "rebel_frigate": (build_rebel_frigate, 2.6, "rebels", "r28 · fwd-swept nacelles"),
+    "rebel_carrier": (build_rebel_carrier, 2.8, "rebels", "r55 · lattice deck"),
+    "pirate_corvette": (build_pirate_corvette, 2.1, "pirates", "r11 · scrap blade"),
+    "pirate_missile_boat": (build_pirate_missile_boat, 2.4, "pirates", "r18 · bolt-on racks"),
+    "pirate_carrier": (build_pirate_carrier, 2.8, "pirates", "r50 · welded hulk"),
+}
+
+
+def render_ship(name, yaw=0.0, thrust=True, suffix=""):
+    builder, ortho, _, _ = REGISTRY[name]
+    reset()
+    builder()
+    _rotate_ship(yaw)
+    setup_scene(ortho, 256)
+    _set_exhaust_visible(thrust)
+    render_to(os.path.join(OUT, f"fleet_{name}{suffix}.png"))
+
+
+def _cell(path, cell):
+    im = Image.open(path).convert("RGBA")
+    im.thumbnail((cell, cell), Image.LANCZOS)
+    c = Image.new("RGBA", (cell, cell), (0, 0, 0, 0))
+    c.paste(im, ((cell - im.width) // 2, (cell - im.height) // 2), im)
+    return c
+
+
+def montage(group, names, cols=4):
+    cell = 210; pad = 12; lblh = 20
+    rows = (len(names) + cols - 1) // cols
+    W = cell * cols + pad * (cols + 1)
+    H = (cell + lblh) * rows + pad * (rows + 1) + 24
+    cv = Image.new("RGBA", (W, H), (34, 36, 44, 255))
+    d = ImageDraw.Draw(cv)
+    d.text((pad, 6), group.upper(), fill=(240, 240, 250, 255))
+    for i, name in enumerate(names):
+        r, c = divmod(i, cols)
+        x = pad + c * (cell + pad)
+        y = 24 + pad + r * (cell + lblh + pad)
+        d.text((x + 4, y), name, fill=(235, 235, 245, 255))
+        d.text((x + 4, y + 10), REGISTRY[name][3], fill=(165, 170, 185, 255))
+        cv.paste(_cell(os.path.join(OUT, f"fleet_{name}.png"), cell), (x, y + lblh),
+                 _cell(os.path.join(OUT, f"fleet_{name}.png"), cell))
+    cv.save(os.path.join(OUT, f"_fleet_{group}.png"))
+    print("saved", f"_fleet_{group}.png")
+
+
+def feature_demos():
+    """Prove the two pipeline features on one ship."""
+    # idle vs thrust (exhaust layer toggle)
+    render_ship("rebel_fighter", thrust=False, suffix="_idle")
+    render_ship("rebel_fighter", thrust=True, suffix="_thrust")
+    # ring of headings (dynamic light) — note exhaust off so we read the hull
+    angles = [0, 30, 60, 90]
+    for a in angles:
+        render_ship("fed_destroyer", yaw=math.radians(a), thrust=False,
+                    suffix=f"_yaw{a}")
+    # compose demo strips
+    cell = 210; pad = 12
+    pair = Image.new("RGBA", (cell * 2 + pad * 3, cell + pad * 2 + 20), (34, 36, 44, 255))
+    dd = ImageDraw.Draw(pair)
+    for j, (sfx, lbl) in enumerate(((("_idle"), "drive OFF"), (("_thrust"), "drive ON"))):
+        dd.text((pad + j * (cell + pad), 4), lbl, fill=(235, 235, 245, 255))
+        pair.paste(_cell(os.path.join(OUT, f"fleet_rebel_fighter{sfx}.png"), cell),
+                   (pad + j * (cell + pad), 20),
+                   _cell(os.path.join(OUT, f"fleet_rebel_fighter{sfx}.png"), cell))
+    pair.save(os.path.join(OUT, "_demo_exhaust.png"))
+    strip = Image.new("RGBA", (cell * 4 + pad * 5, cell + pad * 2 + 20), (34, 36, 44, 255))
+    ds = ImageDraw.Draw(strip)
+    for j, a in enumerate(angles):
+        ds.text((pad + j * (cell + pad), 4), f"heading {a}°", fill=(235, 235, 245, 255))
+        strip.paste(_cell(os.path.join(OUT, f"fleet_fed_destroyer_yaw{a}.png"), cell),
+                    (pad + j * (cell + pad), 20),
+                    _cell(os.path.join(OUT, f"fleet_fed_destroyer_yaw{a}.png"), cell))
+    strip.save(os.path.join(OUT, "_demo_angles.png"))
+    print("saved _demo_exhaust.png _demo_angles.png")
+
+
+def main():
+    for name in REGISTRY:
+        render_ship(name)
+        print("rendered", name)
+    groups = {}
+    for name, (_, _, g, _) in REGISTRY.items():
+        groups.setdefault(g, []).append(name)
+    for g, names in groups.items():
+        montage(g, names)
+    feature_demos()
+
+
+if __name__ == "__main__":
+    main()

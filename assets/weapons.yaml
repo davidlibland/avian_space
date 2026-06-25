@@ -16,7 +16,7 @@ goose:
     damage: 20
     guided: true
     turn_rate: 2.0
-    sprite_path: sprites/ships/goose.png
+    sprite_path: sprites/weapons/goose.png
     sound_path: sounds/weapons/ir_missile.ogg
     display_name: "Goose Missile"
     ammo:
@@ -71,7 +71,7 @@ ir_missile:
     damage: 40
     guided: true
     turn_rate: 2.5
-    sprite_path: sprites/ships/ir_missile.png
+    sprite_path: sprites/weapons/ir_missile.png
     sound_path: sounds/weapons/ir_missile.ogg
     ammo:
         !Ammo:
@@ -85,7 +85,7 @@ javelin:
     damage: 20
     guided: true
     turn_rate: 1.25
-    sprite_path: sprites/ships/javelin.png
+    sprite_path: sprites/weapons/javelin.png
     sound_path: sounds/weapons/javelin.ogg
     ammo:
         !Ammo:
@@ -100,7 +100,7 @@ space_mine:
     guided: true
     turn_rate: 1.0
     aimable_arc: 180
-    sprite_path: sprites/ships/space_mine.png
+    sprite_path: sprites/weapons/space_mine.png
     sound_path: sounds/weapons/space_mine.ogg
     ammo:
         !Ammo:

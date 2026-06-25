@@ -46,7 +46,7 @@ sol:
         chemicals: 35
         gold: 100
       outfitter: [laser, proton_beam, ir_missile, space_mine, javelin]
-      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
+      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, prospector, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
     moon:
       planet_type: rocky
       faction: Federation
@@ -59,7 +59,7 @@ sol:
         iron: 20
         food: 40
       outfitter: []
-      shipyard: [shuttle, courier]
+      shipyard: [shuttle, courier, prospector]
     mars:
       planet_type: desert
       faction: Federation
@@ -226,8 +226,8 @@ sol:
       number: 40
       radius: 1500.
   ships:
-    min: 15
-    max: 20
+    min: 30
+    max: 40
     types:
       fed_patrol: 2.0
       fed_destroyer: 0.25
@@ -236,7 +236,8 @@ sol:
       hauler: 2.0
       freighter: 1.0
       courier: 0.5
-      asteroid_miner: 3.0
+      asteroid_miner: 1.5
+      prospector: 1.5
       rebel_fighter: 1.5        # occasional Rebel scout near the border
       rebel_gunboat: 0.25
       rebel_frigate: 0.25
@@ -286,7 +287,8 @@ kepler_22:
       fed_destroyer: 1.0
       hauler: 2.0
       courier: 1.0
-      asteroid_miner: 2.0
+      asteroid_miner: 1.0
+      prospector: 1.0
 
 tau_ceti:
   map_position: [-280.0, 60.0]
@@ -330,7 +332,8 @@ tau_ceti:
       hauler: 2.0
       freighter: 1.0
       courier: 1.0
-      asteroid_miner: 3.0
+      asteroid_miner: 1.5
+      prospector: 1.5
 
 epsilon_eridani:
   map_position: [-350.0, -100.0]
@@ -374,7 +377,8 @@ epsilon_eridani:
       hauler: 2.0
       freighter: 2.0
       bulk_carrier: 1.0
-      asteroid_miner: 4.0
+      asteroid_miner: 2.0
+      prospector: 2.0
 
 vega:
   map_position: [-160.0, -220.0]
@@ -396,7 +400,7 @@ vega:
         titanium: 180
         iron: 5
       outfitter: [laser, ir_missile, space_mine]
-      shipyard: [corvette, courier, hauler, asteroid_miner, freighter]
+      shipyard: [corvette, courier, hauler, asteroid_miner, prospector, freighter]
     vega_2:
       planet_type: rocky
       faction: Federation
@@ -423,7 +427,8 @@ vega:
       fed_patrol: 1.0
       hauler: 2.0
       freighter: 1.0
-      asteroid_miner: 4.0
+      asteroid_miner: 2.0
+      prospector: 2.0
 
 barnard:
   map_position: [-130.0, 180.0]
@@ -441,7 +446,7 @@ barnard:
         water: 40
         iron: 8
       outfitter: [space_mine]
-      shipyard: [shuttle, courier, asteroid_miner]
+      shipyard: [shuttle, courier, asteroid_miner, prospector]
     barnard_station:
       planet_type: rocky
       faction: Federation
@@ -454,7 +459,7 @@ barnard:
         water: 12
         iron: 20
       outfitter: [ir_missile, space_mine]
-      shipyard: [courier, freighter, bulk_carrier]
+      shipyard: [courier, freighter, bulk_carrier, prospector]
   astroid_fields:
     -
       location: [0., 0.]
@@ -468,7 +473,8 @@ barnard:
       fed_destroyer: 1.0
       hauler: 2.0
       freighter: 1.0
-      asteroid_miner: 4.0
+      asteroid_miner: 2.0
+      prospector: 2.0
       rebel_fighter: 1.0        # occasional Rebel border probe
 
 # ── Uninhabited border systems ──────────────────────────────────────────────────
@@ -494,7 +500,8 @@ alpha_centauri:
     types:
       pirate_corvette: 3.0
       pirate_missile_boat: 2.0
-      asteroid_miner: 3.0
+      asteroid_miner: 1.5
+      prospector: 1.5
       fed_patrol: 1.0           # Federation border sweep
       rebel_fighter: 1.0        # Rebel forward scout
 
@@ -515,7 +522,8 @@ drift:
     types:
       pirate_corvette: 2.0
       pirate_missile_boat: 2.0
-      asteroid_miner: 4.0
+      asteroid_miner: 2.0
+      prospector: 2.0
       fed_patrol: 1.0           # Federation sweep from barnard
       rebel_gunboat: 1.0        # Rebel probe from procyon
 
@@ -545,7 +553,7 @@ procyon:
         water: 10
         gold: 80
       outfitter: [laser, ir_missile, javelin, space_mine]
-      shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, freighter, bulk_carrier, asteroid_miner]
+      shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, freighter, bulk_carrier, asteroid_miner, prospector]
     procyon_ii:
       planet_type: rocky
       faction: Rebel
@@ -622,7 +630,8 @@ sirius:
       rebel_frigate: 1.0
       hauler: 2.0
       freighter: 2.0
-      asteroid_miner: 3.0
+      asteroid_miner: 1.5
+      prospector: 1.5
       fed_patrol: 1.0           # Federation border probe from alpha_centauri
 
 rigel:
@@ -667,7 +676,8 @@ rigel:
       rebel_frigate: 2.0
       rebel_fighter: 2.0
       hauler: 1.0
-      asteroid_miner: 2.0
+      asteroid_miner: 1.0
+      prospector: 1.0
 
 altair:
   map_position: [500.0, 220.0]
@@ -686,7 +696,7 @@ altair:
         food: 35
         water: 30
       outfitter: [laser, javelin, space_mine]
-      shipyard: [rebel_fighter, rebel_gunboat, courier, asteroid_miner]
+      shipyard: [rebel_fighter, rebel_gunboat, courier, asteroid_miner, prospector]
     altair_rock:
       planet_type: rocky
       faction: Rebel
@@ -712,7 +722,8 @@ altair:
       rebel_gunboat: 1.0
       hauler: 2.0
       courier: 2.0
-      asteroid_miner: 2.0
+      asteroid_miner: 1.0
+      prospector: 1.0
 
 deneb:
   map_position: [680.0, 80.0]

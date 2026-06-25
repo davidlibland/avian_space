@@ -1,6 +1,8 @@
+use avian2d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use rand::Rng;
 
+use crate::ship::Ship;
 use crate::PlayState;
 
 pub fn explosions_plugin(app: &mut App) {
@@ -125,6 +127,127 @@ fn trigger_jump_flashes(
                 Transform::from_xyz(pos.x, pos.y, 1.0),
             ));
         }
+    }
+}
+
+// ── Damage smoke ────────────────────────────────────────────────────────────
+// Ships emit translucent smoke once damaged past 50%, with the emission rate
+// (and density/darkness) scaling with how badly they're hurt. Registered only
+// in non-headless mode so it adds no cost to headless RL training.
+
+/// Below this health fraction a ship starts smoking.
+const SMOKE_THRESHOLD: f32 = 0.5;
+/// Smoke puffs per second at maximum damage (health ≈ 0).
+const SMOKE_MAX_RATE: f32 = 22.0;
+
+#[derive(Component)]
+struct Smoke {
+    lifetime: f32,
+    max_lifetime: f32,
+    velocity: Vec2,
+    max_alpha: f32,
+    growth: f32,
+    base_size: f32,
+}
+
+pub fn ship_smoke_plugin(app: &mut App) {
+    app.add_systems(
+        Update,
+        (emit_ship_smoke, tick_smoke).run_if(in_state(PlayState::Flying)),
+    );
+}
+
+fn emit_ship_smoke(
+    mut commands: Commands,
+    time: Res<Time>,
+    asset_server: Res<AssetServer>,
+    ships: Query<(&Ship, &Transform, Option<&LinearVelocity>)>,
+) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+    let tex = asset_server.load("sprites/effects/smoke.png");
+    let mut rng = rand::thread_rng();
+    for (ship, transform, vel) in &ships {
+        if ship.health <= 0 {
+            continue;
+        }
+        let frac = ship.health as f32 / ship.data.max_health.max(1) as f32;
+        if frac >= SMOKE_THRESHOLD {
+            continue;
+        }
+        // 0 at the 50% threshold → 1 near death; drives rate, density, darkness.
+        let damage = ((SMOKE_THRESHOLD - frac) / SMOKE_THRESHOLD).clamp(0.0, 1.0);
+
+        // Emit at a rate proportional to the damage (fractional counts via a
+        // Bernoulli remainder so low rates still emit smoothly).
+        let expected = damage * SMOKE_MAX_RATE * dt;
+        let mut count = expected.floor() as u32;
+        if rng.gen_range(0.0..1.0) < expected.fract() {
+            count += 1;
+        }
+        if count == 0 {
+            continue;
+        }
+        let radius = ship.data.radius.max(4.0);
+        let ship_vel = vel.map(|v| v.0).unwrap_or(Vec2::ZERO);
+        let pos = transform.translation.truncate();
+        for _ in 0..count {
+            let off = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0))
+                * radius
+                * 0.5;
+            let gray = 0.52 - 0.30 * damage; // darker, sootier with more damage
+            let max_alpha = 0.16 + 0.24 * damage; // translucent; denser with damage
+            let base_size = radius * rng.gen_range(0.5..0.9);
+            let a: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+            // drift outward a little, trailing slightly behind the ship's motion
+            let velocity = Vec2::new(a.cos(), a.sin()) * rng.gen_range(6.0..18.0)
+                - ship_vel * 0.12;
+            let lifetime = rng.gen_range(0.8..1.6);
+            commands.spawn((
+                DespawnOnExit(PlayState::Flying),
+                Smoke {
+                    lifetime,
+                    max_lifetime: lifetime,
+                    velocity,
+                    max_alpha,
+                    growth: rng.gen_range(0.8..1.6),
+                    base_size,
+                },
+                Sprite {
+                    image: tex.clone(),
+                    color: Color::srgba(gray, gray, gray * 1.03, max_alpha),
+                    custom_size: Some(Vec2::splat(base_size)),
+                    ..default()
+                },
+                Transform::from_xyz(pos.x + off.x, pos.y + off.y, 0.7),
+            ));
+        }
+    }
+}
+
+/// Drift, expand and fade the smoke puffs, despawning when spent.
+fn tick_smoke(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut smoke: Query<(Entity, &mut Smoke, &mut Transform, &mut Sprite)>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut s, mut transform, mut sprite) in &mut smoke {
+        s.lifetime -= dt;
+        if s.lifetime <= 0.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+        let t = s.lifetime / s.max_lifetime; // 1 → 0
+        let age = 1.0 - t;
+        transform.translation.x += s.velocity.x * t * dt;
+        transform.translation.y += s.velocity.y * t * dt;
+        sprite.custom_size = Some(Vec2::splat(s.base_size * (1.0 + s.growth * age)));
+        // fade in briefly, then fade out
+        let fade = if age < 0.15 { age / 0.15 } else { t };
+        sprite.color = sprite.color.with_alpha(s.max_alpha * fade);
     }
 }
 

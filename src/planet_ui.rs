@@ -94,7 +94,14 @@ fn place_player_at_launch_site(
     mut commands: Commands,
     mut landed: ResMut<LandedContext>,
     mut player_query: Query<
-        (Entity, &mut Transform, &mut Position, &mut LinearVelocity, &mut Sprite),
+        (
+            Entity,
+            &mut Transform,
+            &mut Position,
+            &mut LinearVelocity,
+            &mut Sprite,
+            &Ship,
+        ),
         With<Player>,
     >,
     mut camera_query: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,
@@ -112,7 +119,7 @@ fn place_player_at_launch_site(
         return;
     };
     let pos = planet_data.location;
-    if let Ok((entity, mut tf, mut physics_pos, mut vel, mut sprite)) =
+    if let Ok((entity, mut tf, mut physics_pos, mut vel, mut sprite, ship)) =
         player_query.single_mut()
     {
         tf.translation = pos.extend(tf.translation.z);
@@ -123,7 +130,7 @@ fn place_player_at_launch_site(
         }
 
         // Start take-off scale-up animation.
-        let full_size = image_size(&sprite, &images);
+        let full_size = crate::ship::ship_display_size(ship.data.radius);
         sprite.custom_size = Some(full_size * ANIM_MIN_SCALE);
         commands.entity(entity).insert(ScalingUp {
             timer: Timer::from_seconds(PLANET_ANIM_DURATION, TimerMode::Once),

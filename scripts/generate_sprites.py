@@ -196,6 +196,59 @@ def draw_asteroid_miner():
     img.save(os.path.join(OUT, "asteroid_miner.png"))
 
 
+# ─── PROSPECTOR (30×30) – small, nimble entry-level mining ship ───────────────
+# Design note: the prospector is the cheap, agile counterpart to the bulky
+# asteroid_miner.  It has a small hold (so it must ferry ore back to a planet to
+# sell), turns quickly to aim and thread dense asteroid fields, and is fairly
+# durable to survive knocks.  Same earthy-brown mining palette; a forward mining
+# laser/drill spike marks the role, but the silhouette is compact and swept so
+# it reads as faster and more manoeuvrable than the heavy miner.
+def draw_prospector():
+    S = 30
+    img = make_img(S)
+    d = ImageDraw.Draw(img)
+    cx = S / 2
+
+    # Compact arrowhead hull — narrower and shorter than the asteroid_miner so
+    # it reads as a nimble prospecting craft.
+    hull = [
+        (cx, 2),         # nose
+        (cx + 7, 11),    # right shoulder
+        (cx + 6, 22),    # right flank
+        (cx + 3, 27),    # right tail
+        (cx - 3, 27),    # left tail
+        (cx - 6, 22),    # left flank
+        (cx - 7, 11),    # left shoulder
+    ]
+    d.polygon(hull, fill=(150, 120, 80, 255))
+
+    # Armour plating seams — durability cue
+    d.line([(cx - 6, 13), (cx + 6, 13)], fill=(95, 74, 46, 255), width=1)
+    d.line([(cx - 6, 20), (cx + 6, 20)], fill=(95, 74, 46, 255), width=1)
+
+    # Forward mining laser / drill spike — golden, juts from the nose to mark
+    # the mining role (echoes the asteroid_miner's drill bits).
+    d.polygon([(cx - 2, 6), (cx + 2, 6), (cx, 0)], fill=(200, 160, 80, 255))
+    d.line([(int(cx), 6), (int(cx), 1)], fill=(235, 200, 110, 255), width=1)
+
+    # Swept agility fins — angled back, slimmer than the miner's drill arms
+    d.polygon([(cx - 7, 11), (cx - 11, 20), (cx - 6, 19)], fill=(120, 96, 62, 255))
+    d.polygon([(cx + 7, 11), (cx + 11, 20), (cx + 6, 19)], fill=(120, 96, 62, 255))
+
+    # Cockpit blister near the nose
+    d.ellipse([int(cx) - 3, 7, int(cx) + 3, 13], fill=(80, 155, 200, 200))
+
+    # Twin engine pods at the tail
+    d.rectangle([int(cx) - 5, 23, int(cx) - 1, 28], fill=(78, 74, 70, 255))
+    d.rectangle([int(cx) + 1, 23, int(cx) + 5, 28], fill=(78, 74, 70, 255))
+
+    # Engine glow — warm orange (civilian / worker convention)
+    d.ellipse([int(cx) - 5, 26, int(cx) - 1, 30], fill=(255, 170, 90, 195))
+    d.ellipse([int(cx) + 1, 26, int(cx) + 5, 30], fill=(255, 170, 90, 195))
+
+    img.save(os.path.join(OUT, "prospector.png"))
+
+
 # ─── HAULER (88×88) – heavy cargo transport ───────────────────────────────────
 # Design note: the hauler is defined by its cargo containers rather than by
 # any aerodynamic shape.  Three rows of paired containers flank a central
@@ -1249,6 +1302,7 @@ if __name__ == "__main__":
     draw_shuttle()
     draw_fighter()
     draw_asteroid_miner()
+    draw_prospector()
     draw_hauler()
     draw_corvette()
     draw_frigate()

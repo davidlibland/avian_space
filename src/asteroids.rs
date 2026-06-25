@@ -10,8 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::PI;
 
-/// Max units dropped per unit of asteroid size when shattered.
-const ASTEROID_DROP_SCALE: f32 = 0.2;
 const ASTEROID_VELOCITY: f32 = 50.0;
 const ASTEROID_MAX_VELOCITY: f32 = ASTEROID_VELOCITY * 10.;
 /// How long (seconds) it takes a respawned asteroid to grow to full size.
@@ -25,12 +23,127 @@ const ASTEROID_FADE_INNER_FRAC: f32 = 0.15;
 /// Fade if distance-from-field-center > this fraction of field radius.
 const ASTEROID_FADE_OUTER_FRAC: f32 = 3.0;
 
+/// Number of baked asteroid shapes (rock_<i>.png / dep_<i>.png) and tumble
+/// frames per shape — MUST match scripts/ship3d/asteroid_gen.py.
+const ASTEROID_SHAPES: usize = 12;
+const ASTEROID_TUMBLE_FRAMES: usize = 64;
+/// On-screen sprite size = radius × this. The baked rock fills ~0.9 of the
+/// frame's half-extent (ortho 2.2), so this maps the tile to ~2·radius.
+const ASTEROID_SPRITE_SCALE: f32 = 2.44;
+
+/// Loaded rock + deposit tumble atlases and their shared layout.
+#[derive(Resource, Default)]
+pub struct AsteroidAtlases {
+    rocks: Vec<Handle<Image>>,
+    deps: Vec<Handle<Image>>,
+    layout: Option<Handle<TextureAtlasLayout>>,
+}
+
+/// Time-based tumble clock; the same phase/speed on the rock and its deposit
+/// child keeps them frame-synced.
+#[derive(Component, Clone)]
+pub struct AsteroidTumble {
+    phase: f32,
+    speed: f32,
+}
+
+fn load_asteroid_atlases(
+    asset_server: Res<AssetServer>,
+    layouts: Option<ResMut<Assets<TextureAtlasLayout>>>,
+    mut commands: Commands,
+) {
+    // 8×8 grid of 128px tiles (64 tumble frames). Optional layout = headless-safe.
+    let layout = layouts.map(|mut l| {
+        l.add(TextureAtlasLayout::from_grid(UVec2::splat(128), 8, 8, None, None))
+    });
+    let mut rocks = Vec::new();
+    let mut deps = Vec::new();
+    for i in 0..ASTEROID_SHAPES {
+        rocks.push(asset_server.load(format!("sprites/asteroids/rock_{i}.png")));
+        deps.push(asset_server.load(format!("sprites/asteroids/dep_{i}.png")));
+    }
+    commands.insert_resource(AsteroidAtlases { rocks, deps, layout });
+}
+
+/// Build an atlas sprite (or plain image fallback when headless / no layout).
+fn atlas_sprite(handle: &Handle<Image>, layout: &Option<Handle<TextureAtlasLayout>>,
+                px: f32, tint: Color) -> Sprite {
+    let mut s = match layout {
+        Some(l) => Sprite::from_atlas_image(
+            handle.clone(),
+            TextureAtlas { layout: l.clone(), index: 0 },
+        ),
+        None => Sprite::from_image(handle.clone()),
+    };
+    s.color = tint;
+    s.custom_size = Some(Vec2::splat(px));
+    s
+}
+
+/// Weighted-random pick of one commodity colour for an asteroid's deposits, so
+/// a mixed field shows a mix of single-ore asteroids the player can pick from.
+fn pick_tint(colors: &[([f32; 3], f32)], rng: &mut impl Rng) -> Color {
+    if colors.is_empty() {
+        return Color::srgb(0.7, 0.6, 0.45);
+    }
+    let total: f32 = colors.iter().map(|(_, w)| w).sum();
+    let chosen = if total <= 0.0 {
+        colors[0].0
+    } else {
+        let mut roll = rng.gen_range(0.0..total);
+        let mut pick = colors[0].0;
+        for (c, w) in colors {
+            roll -= w;
+            if roll <= 0.0 {
+                pick = *c;
+                break;
+            }
+        }
+        pick
+    };
+    Color::srgb(chosen[0], chosen[1], chosen[2])
+}
+
+/// Spawn the rock + tinted deposit-child sprites with a synced tumble clock.
+/// Shared by `spawn_asteroid` and `spawn_growing_asteroid`.
+fn asteroid_visual_bundle(
+    atlases: &AsteroidAtlases,
+    size: f32,
+    colors: &[([f32; 3], f32)],
+    rng: &mut impl Rng,
+) -> (Sprite, AsteroidTumble, usize, Color) {
+    let shape = rng.gen_range(0..atlases.rocks.len());
+    let tumble = AsteroidTumble {
+        phase: rng.gen_range(0.0..1.0),
+        speed: rng.gen_range(0.04..0.12),
+    };
+    let px = size * ASTEROID_SPRITE_SCALE;
+    let rock = atlas_sprite(&atlases.rocks[shape], &atlases.layout, px, Color::WHITE);
+    let tint = pick_tint(colors, rng);
+    (rock, tumble, shape, tint)
+}
+
+/// Advance every asteroid's (and deposit child's) tumble frame over time. The
+/// physics `AngularVelocity` separately spins it in-plane.
+fn tumble_asteroids(time: Res<Time>, mut q: Query<(&AsteroidTumble, &mut Sprite)>) {
+    let t = time.elapsed_secs();
+    for (tumble, mut sprite) in &mut q {
+        if let Some(atlas) = sprite.texture_atlas.as_mut() {
+            let frac = (t * tumble.speed + tumble.phase).rem_euclid(1.0);
+            atlas.index = ((frac * ASTEROID_TUMBLE_FRAMES as f32) as usize)
+                % ASTEROID_TUMBLE_FRAMES;
+        }
+    }
+}
+
 pub fn asteroid_plugin(app: &mut App) {
     app.add_message::<ShatterAsteroid>()
         .insert_resource(AsteroidRespawnTimer(Timer::from_seconds(
             ASTEROID_RESPAWN_INTERVAL,
             TimerMode::Repeating,
         )))
+        .init_resource::<AsteroidAtlases>()
+        .add_systems(Startup, load_asteroid_atlases)
         .add_systems(Update, asteroid_field_gravity)
         .add_systems(Update, handle_shatter.run_if(in_state(PlayState::Flying)))
         .add_systems(
@@ -39,6 +152,7 @@ pub fn asteroid_plugin(app: &mut App) {
                 grow_asteroids,
                 respawn_asteroids,
                 fade_asteroids,
+                tumble_asteroids,
                 check_asteroid_bounds,
                 asteroid_planet_collisions,
             )
@@ -67,7 +181,13 @@ pub struct GrowingAsteroid {
 pub struct AsteroidRespawnTimer(pub Timer);
 
 #[derive(Event, Message)]
-pub struct ShatterAsteroid(pub Entity);
+pub struct ShatterAsteroid {
+    pub entity: Entity,
+    /// Whether the shatter drops commodity pickups. `true` for weapon hits
+    /// (the intended way to mine); `false` for ship-ramming, so a miner must
+    /// actually shoot an asteroid to get any reward from it.
+    pub drop_pickups: bool,
+}
 
 #[derive(Component)]
 pub struct Asteroid {
@@ -177,8 +297,7 @@ fn spawn_ore_crystals(
 
 pub fn spawn_asteroid(
     commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
+    atlases: &AsteroidAtlases,
     field: Entity,
     size: f32,
     pos: Vec2,
@@ -186,56 +305,50 @@ pub fn spawn_asteroid(
     colors: &[([f32; 3], f32)],
 ) -> Entity {
     let mut rng = rand::thread_rng();
-    let segments = rng.gen_range(5..10);
+    let rot = rng.gen_range(-(0.1 * PI)..(0.1 * PI));
+    let px = size * ASTEROID_SPRITE_SCALE;
+    let (rock, tumble, shape, tint) = asteroid_visual_bundle(atlases, size, colors, &mut rng);
 
-    // Build jagged polygon
-    let mut verts: Vec<Vec2> = Vec::new();
-    for i in 0..segments {
-        let angle = (i as f32 / segments as f32) * std::f32::consts::TAU;
-        let r = size * rng.gen_range(0.75..1.25);
-        verts.push(Vec2::new(angle.cos() * r, angle.sin() * r));
-    }
-    let rot = rng.gen_range(-(0.1 * std::f32::consts::PI)..(0.1 * std::f32::consts::PI));
-
-    let mesh = polygon_mesh(&verts);
-    // Asteroids
-    let mut entity_cmd = commands
-        .spawn((
-            DespawnOnExit(PlayState::Flying),
-            Asteroid { size, field },
-            Mesh2d(meshes.add(mesh)),
-            MeshMaterial2d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
-            Transform::from_xyz(pos.x, pos.y, 0.0),
-            Collider::circle(size),
-            CollisionLayers::new(
+    let mut entity_cmd = commands.spawn((
+        DespawnOnExit(PlayState::Flying),
+        Asteroid { size, field },
+        rock,
+        tumble.clone(),
+        Transform::from_xyz(pos.x, pos.y, 0.0),
+        Collider::circle(size),
+        CollisionLayers::new(
+            GameLayer::Asteroid,
+            [
+                GameLayer::Ship,
+                GameLayer::Weapon,
                 GameLayer::Asteroid,
-                [
-                    GameLayer::Ship,
-                    GameLayer::Weapon,
-                    GameLayer::Asteroid,
-                    GameLayer::Planet,
-                    GameLayer::Radar,
-                ],
-            ),
-            LinearVelocity(vel),
-            AngularVelocity(rot),
-            RigidBody::Dynamic,
-            ColliderDensity(0.5),
-            CollisionEventsEnabled,
-            Restitution::new(1.0),
-            MaxLinearSpeed(ASTEROID_MAX_VELOCITY),
-            MaxAngularSpeed(3.0 * PI),
-        ));
+                GameLayer::Planet,
+                GameLayer::Radar,
+            ],
+        ),
+        LinearVelocity(vel),
+        AngularVelocity(rot),
+        RigidBody::Dynamic,
+        ColliderDensity(0.5),
+        CollisionEventsEnabled,
+        Restitution::new(1.0),
+        MaxLinearSpeed(ASTEROID_MAX_VELOCITY),
+        MaxAngularSpeed(3.0 * PI),
+    ));
     entity_cmd.with_children(|parent| {
-        spawn_ore_crystals(parent, meshes, materials, size, colors);
+        // tinted deposit overlay, frame-synced via the same tumble clock
+        parent.spawn((
+            atlas_sprite(&atlases.deps[shape], &atlases.layout, px, tint),
+            tumble.clone(),
+            Transform::from_xyz(0.0, 0.0, 0.01),
+        ));
     });
     entity_cmd.id()
 }
 
 pub fn build_asteroid_field(
-    mut commands: &mut Commands,
-    mut meshes: &mut ResMut<Assets<Mesh>>,
-    mut materials: &mut ResMut<Assets<ColorMaterial>>,
+    commands: &mut Commands,
+    atlases: &AsteroidAtlases,
     field_data: &AsteroidFieldData,
     item_universe: &ItemUniverse,
 ) {
@@ -268,9 +381,8 @@ pub fn build_asteroid_field(
         // Possibly orbit in other direction.
         let vel = if rng.gen_bool(0.5) { vel } else { -vel };
         spawn_asteroid(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
+            commands,
+            atlases,
             field,
             size,
             Vec2 { x, y } + field_data.location,
@@ -282,8 +394,7 @@ pub fn build_asteroid_field(
 
 pub fn shatter_asteroid(
     mut commands: &mut Commands,
-    mut meshes: &mut ResMut<Assets<Mesh>>,
-    mut materials: &mut ResMut<Assets<ColorMaterial>>,
+    atlases: &AsteroidAtlases,
     asteroid_entity: &Entity,
     asteroids: &Query<(&Asteroid, &Transform, &LinearVelocity)>,
     colors: &[([f32; 3], f32)],
@@ -302,8 +413,7 @@ pub fn shatter_asteroid(
                 let offset = new_size * new_vel / new_vel.length();
                 spawn_asteroid(
                     &mut commands,
-                    &mut meshes,
-                    &mut materials,
+                    atlases,
                     field,
                     new_size,
                     pos + offset,
@@ -317,19 +427,19 @@ pub fn shatter_asteroid(
 
 fn handle_shatter(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    atlases: Res<AsteroidAtlases>,
     mut reader: MessageReader<ShatterAsteroid>,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
     mut pickup_writer: MessageWriter<PickupDrop>,
     item_universe: Res<ItemUniverse>,
+    reward_cfg: Res<crate::config::RewardConfig>,
     asteroids: Query<(&Asteroid, &Transform, &LinearVelocity)>,
     fields: Query<&AsteroidField>,
 ) {
     use std::collections::HashSet;
     let mut rng = rand::thread_rng();
     let mut shattered: HashSet<Entity> = HashSet::new();
-    for ShatterAsteroid(entity) in reader.read() {
+    for ShatterAsteroid { entity, drop_pickups } in reader.read() {
         if !shattered.insert(*entity) {
             continue;
         }
@@ -338,31 +448,36 @@ fn handle_shatter(
                 location: transform.translation.xy(),
                 size: asteroid.size,
             });
-            let commodity = fields
-                .get(asteroid.field)
-                .ok()
-                .and_then(|f| {
-                    let total: f32 = f.commodities.values().sum();
-                    if total <= 0.0 {
-                        return None;
-                    }
-                    let mut roll = rng.gen_range(0.0..total);
-                    for (c, &w) in &f.commodities {
-                        roll -= w;
-                        if roll <= 0.0 {
-                            return Some(c.clone());
+            // Pickups only drop when an asteroid is shot (weapon hit). Ramming
+            // shatters the rock but yields nothing, so miners must actually
+            // shoot to mine (and thereby earn the asteroid_hit reward).
+            if *drop_pickups {
+                let commodity = fields
+                    .get(asteroid.field)
+                    .ok()
+                    .and_then(|f| {
+                        let total: f32 = f.commodities.values().sum();
+                        if total <= 0.0 {
+                            return None;
                         }
-                    }
-                    f.commodities.keys().next().cloned()
-                })
-                .unwrap_or_else(|| "iron".to_string());
-            let max_qty = ((asteroid.size * ASTEROID_DROP_SCALE) as u16).max(1);
-            let qty = rng.gen_range(1..=max_qty);
-            pickup_writer.write(PickupDrop {
-                location: transform.translation.xy(),
-                commodity,
-                quantity: qty,
-            });
+                        let mut roll = rng.gen_range(0.0..total);
+                        for (c, &w) in &f.commodities {
+                            roll -= w;
+                            if roll <= 0.0 {
+                                return Some(c.clone());
+                            }
+                        }
+                        f.commodities.keys().next().cloned()
+                    })
+                    .unwrap_or_else(|| "iron".to_string());
+                let max_qty = ((asteroid.size * reward_cfg.asteroid_drop_scale) as u16).max(1);
+                let qty = rng.gen_range(1..=max_qty);
+                pickup_writer.write(PickupDrop {
+                    location: transform.translation.xy(),
+                    commodity,
+                    quantity: qty,
+                });
+            }
         }
         let colors = asteroids
             .get(*entity)
@@ -370,14 +485,7 @@ fn handle_shatter(
             .and_then(|(a, _, _)| fields.get(a.field).ok())
             .map(|f| commodity_colors(&f.commodities, &item_universe))
             .unwrap_or_default();
-        shatter_asteroid(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            entity,
-            &asteroids,
-            &colors,
-        );
+        shatter_asteroid(&mut commands, &atlases, entity, &asteroids, &colors);
     }
 }
 
@@ -385,8 +493,7 @@ fn handle_shatter(
 /// It starts as a `Sensor` (no physics collisions) and becomes solid when fully grown.
 pub fn spawn_growing_asteroid(
     commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<ColorMaterial>>,
+    atlases: &AsteroidAtlases,
     field: Entity,
     size: f32,
     pos: Vec2,
@@ -394,15 +501,9 @@ pub fn spawn_growing_asteroid(
     colors: &[([f32; 3], f32)],
 ) {
     let mut rng = rand::thread_rng();
-    let segments = rng.gen_range(5..10);
-    let mut verts: Vec<Vec2> = Vec::new();
-    for i in 0..segments {
-        let angle = (i as f32 / segments as f32) * std::f32::consts::TAU;
-        let r = size * rng.gen_range(0.75..1.25);
-        verts.push(Vec2::new(angle.cos() * r, angle.sin() * r));
-    }
-    let rot = rng.gen_range(-(0.1 * std::f32::consts::PI)..(0.1 * std::f32::consts::PI));
-    let mesh = polygon_mesh(&verts);
+    let rot = rng.gen_range(-(0.1 * PI)..(0.1 * PI));
+    let px = size * ASTEROID_SPRITE_SCALE;
+    let (rock, tumble, shape, tint) = asteroid_visual_bundle(atlases, size, colors, &mut rng);
 
     // Sensor colliders don't contribute to mass, so we provide it explicitly.
     // Values match what Avian2D would compute from ColliderDensity(0.5) + Collider::circle(size):
@@ -417,8 +518,8 @@ pub fn spawn_growing_asteroid(
             DespawnOnExit(PlayState::Flying),
             Asteroid { size, field },
             GrowingAsteroid { progress: 0.0 },
-            Mesh2d(meshes.add(mesh)),
-            MeshMaterial2d(materials.add(Color::srgb(0.5, 0.5, 0.5))),
+            rock,
+            tumble.clone(),
             // Start invisible-small; grow_asteroids will lerp scale toward 1.
             Transform::from_xyz(pos.x, pos.y, 0.0).with_scale(Vec3::splat(0.01)),
             Collider::circle(size),
@@ -449,7 +550,11 @@ pub fn spawn_growing_asteroid(
             MaxAngularSpeed(3.0 * PI),
         ))
         .with_children(|parent| {
-            spawn_ore_crystals(parent, meshes, materials, size, colors);
+            parent.spawn((
+                atlas_sprite(&atlases.deps[shape], &atlases.layout, px, tint),
+                tumble.clone(),
+                Transform::from_xyz(0.0, 0.0, 0.01),
+            ));
         });
 }
 
@@ -480,8 +585,7 @@ fn grow_asteroids(
 /// if the live count falls below the field's target number.
 fn respawn_asteroids(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    atlases: Res<AsteroidAtlases>,
     mut timer: ResMut<AsteroidRespawnTimer>,
     time: Res<Time>,
     item_universe: Res<ItemUniverse>,
@@ -513,8 +617,7 @@ fn respawn_asteroids(
             let vel = if rng.gen_bool(0.5) { vel } else { -vel };
             spawn_growing_asteroid(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
+                &atlases,
                 field_entity,
                 size,
                 pos,
@@ -590,8 +693,7 @@ fn check_asteroid_bounds(
 /// shatter but emits no pickups or explosion.
 fn asteroid_planet_collisions(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    atlases: Res<AsteroidAtlases>,
     mut collision_starts: MessageReader<CollisionStart>,
     mut explosion_writer: MessageWriter<crate::explosions::TriggerExplosion>,
     asteroid_marker: Query<(), (With<Asteroid>, Without<FadingAsteroid>)>,
@@ -622,14 +724,7 @@ fn asteroid_planet_collisions(
                     size: asteroid.size,
                 });
             }
-            shatter_asteroid(
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                &entity,
-                &asteroid_data,
-                &colors,
-            );
+            shatter_asteroid(&mut commands, &atlases, &entity, &asteroid_data, &colors);
         }
     }
 }

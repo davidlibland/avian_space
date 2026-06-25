@@ -9,7 +9,7 @@ shuttle:
     "laser": [1, null]
   radius: 10.0
   price: 5000
-  sprite_path: sprites/ships/shuttle.png
+  sprite_path: sprites/ships/atlas/shuttle.png
   personality: Trader
   faction: Merchant
 
@@ -24,7 +24,7 @@ fighter:
     laser: [2, null]
   radius: 12.0
   price: 25000
-  sprite_path: sprites/ships/fighter.png
+  sprite_path: sprites/ships/atlas/fighter.png
   personality: Fighter
   required_unlocks: [fighter_license]
 
@@ -39,8 +39,29 @@ asteroid_miner:
     laser: [1, null]
   radius: 20.0
   price: 35000
-  sprite_path: sprites/ships/asteroid_miner.png
+  sprite_path: sprites/ships/atlas/asteroid_miner.png
   personality: Miner
+  faction: Merchant
+  required_unlocks: [mining_license]
+
+# Small, nimble, affordable mining ship. Faster and far more agile than the
+# asteroid_miner (turns quickly to aim and thread dense fields), fairly durable
+# to survive knocks, but with a deliberately tiny hold so it must ferry ore back
+# to a planet to sell — i.e. it has to learn the land-and-sell loop.
+prospector:
+  thrust: 80.0
+  max_speed: 90.0
+  torque: 30.0
+  max_health: 90
+  cargo_space: 6
+  item_space: 8
+  base_weapons:
+    laser: [1, null]
+  radius: 14.0
+  price: 9000
+  sprite_path: sprites/ships/atlas/prospector.png
+  personality: Miner
+  faction: Merchant
   required_unlocks: [mining_license]
 
 hauler:
@@ -54,7 +75,7 @@ hauler:
     "space_mine": [1, 12]
   radius: 40.0
   price: 50000
-  sprite_path: sprites/ships/hauler.png
+  sprite_path: sprites/ships/atlas/hauler.png
   personality: Trader
   faction: Merchant
   required_unlocks: [merchant_hauler_license]
@@ -74,7 +95,7 @@ corvette:
     proton_beam: [1, null]
   radius: 9.0
   price: 18000
-  sprite_path: sprites/ships/corvette.png
+  sprite_path: sprites/ships/atlas/corvette.png
   personality: Fighter
 
 frigate:
@@ -89,7 +110,7 @@ frigate:
     ir_missile: [1, 4]
   radius: 32.0
   price: 120000
-  sprite_path: sprites/ships/frigate.png
+  sprite_path: sprites/ships/atlas/frigate.png
   personality: Fighter
   required_unlocks: [frigate_license]
 
@@ -106,7 +127,7 @@ courier:
     laser: [1, null]
   radius: 12.0
   price: 15000
-  sprite_path: sprites/ships/courier.png
+  sprite_path: sprites/ships/atlas/courier.png
   personality: Trader
   faction: Merchant
 
@@ -121,7 +142,7 @@ freighter:
     space_mine: [1, 8]
   radius: 32.0
   price: 45000
-  sprite_path: sprites/ships/freighter.png
+  sprite_path: sprites/ships/atlas/freighter.png
   personality: Trader
   faction: Merchant
   required_unlocks: [merchant_freighter_license]
@@ -137,7 +158,7 @@ bulk_carrier:
     space_mine: [1, 20]
   radius: 55.0
   price: 85000
-  sprite_path: sprites/ships/bulk_carrier.png
+  sprite_path: sprites/ships/atlas/bulk_carrier.png
   personality: Trader
   faction: Merchant
   required_unlocks: [merchant_bulk_license]
@@ -156,7 +177,7 @@ fed_patrol:
     proton_beam: [2, null]
   radius: 15.0
   price: 30000
-  sprite_path: sprites/ships/fed_patrol.png
+  sprite_path: sprites/ships/atlas/fed_patrol.png
   personality: Fighter
   faction: Federation
   required_unlocks: [federation_ship_license]
@@ -173,7 +194,7 @@ fed_destroyer:
     ir_missile: [2, 8]
   radius: 42.0
   price: 180000
-  sprite_path: sprites/ships/fed_destroyer.png
+  sprite_path: sprites/ships/atlas/fed_destroyer.png
   personality: Fighter
   faction: Federation
   required_unlocks: [federation_ship_license, federation_capital_license]
@@ -191,7 +212,7 @@ fed_missile_cruiser:
     fighter_bay: [1, 3]
   radius: 35.0
   price: 150000
-  sprite_path: sprites/ships/fed_missile_cruiser.png
+  sprite_path: sprites/ships/atlas/fed_missile_cruiser.png
   personality: Fighter
   faction: Federation
   required_unlocks: [federation_ship_license]
@@ -210,7 +231,7 @@ rebel_fighter:
     laser: [2, null]
   radius: 12.0
   price: 22000
-  sprite_path: sprites/ships/rebel_fighter.png
+  sprite_path: sprites/ships/atlas/rebel_fighter.png
   personality: Fighter
   faction: Rebel
   required_unlocks: [rebel_ship_license]
@@ -226,7 +247,7 @@ rebel_gunboat:
     laser: [3, null]
   radius: 22.0
   price: 55000
-  sprite_path: sprites/ships/rebel_gunboat.png
+  sprite_path: sprites/ships/atlas/rebel_gunboat.png
   personality: Fighter
   faction: Rebel
   required_unlocks: [rebel_ship_license]
@@ -244,7 +265,7 @@ rebel_frigate:
     rebel_fighter_bay: [1, 3]
   radius: 28.0
   price: 100000
-  sprite_path: sprites/ships/rebel_frigate.png
+  sprite_path: sprites/ships/atlas/rebel_frigate.png
   personality: Fighter
   faction: Rebel
   required_unlocks: [rebel_ship_license, rebel_capital_license]
@@ -263,7 +284,7 @@ pirate_corvette:
     pirate_laser: [2, null]
   radius: 11.0
   price: 16000
-  sprite_path: sprites/ships/pirate_corvette.png
+  sprite_path: sprites/ships/atlas/pirate_corvette.png
   personality: Fighter
   faction: Pirate
 
@@ -279,7 +300,7 @@ pirate_missile_boat:
     goose: [2, 8]
   radius: 18.0
   price: 40000
-  sprite_path: sprites/ships/pirate_missile_boat.png
+  sprite_path: sprites/ships/atlas/pirate_missile_boat.png
   personality: Fighter
   faction: Pirate
 
@@ -297,7 +318,7 @@ surplus_carrier:
     fighter_bay: [1, 3]
   radius: 45.0
   price: 200000
-  sprite_path: sprites/ships/surplus_carrier.png
+  sprite_path: sprites/ships/atlas/surplus_carrier.png
   personality: Fighter
   required_unlocks: [carrier_license]
 
@@ -314,7 +335,7 @@ fed_carrier:
     fed_fighter_bay: [1, 4]
   radius: 60.0
   price: 300000
-  sprite_path: sprites/ships/fed_carrier.png
+  sprite_path: sprites/ships/atlas/fed_carrier.png
   personality: Fighter
   faction: Federation
   required_unlocks: [fed_carrier_license]
@@ -332,7 +353,7 @@ rebel_carrier:
     rebel_fighter_bay: [1, 4]
   radius: 55.0
   price: 250000
-  sprite_path: sprites/ships/rebel_carrier.png
+  sprite_path: sprites/ships/atlas/rebel_carrier.png
   personality: Fighter
   faction: Rebel
   required_unlocks: [rebel_carrier_license]
@@ -351,6 +372,6 @@ pirate_carrier:
     pirate_corvette_bay: [1, 3]
   radius: 50.0
   price: 180000
-  sprite_path: sprites/ships/pirate_carrier.png
+  sprite_path: sprites/ships/atlas/pirate_carrier.png
   personality: Fighter
   faction: Pirate
