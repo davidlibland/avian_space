@@ -142,12 +142,14 @@ pub fn spawn_ppo_training_thread(
 
             // ── Rollout metrics: per personality × reward_type ────────────
             let mut rew_total = [[0.0_f32; N_REWARD_TYPES]; N_PERSONALITIES];
+            let mut shared_total = [[0.0_f32; N_REWARD_TYPES]; N_PERSONALITIES];
             let mut rew_steps = [0_usize; N_PERSONALITIES];
             for seg in &segments {
                 let pi = personality_index(&seg.personality);
                 for t in &seg.transitions {
                     for h in 0..N_REWARD_TYPES {
                         rew_total[pi][h] += t.rewards[h];
+                        shared_total[pi][h] += t.shared_rewards[h];
                     }
                     rew_steps[pi] += 1;
                 }
@@ -158,9 +160,14 @@ pub fn spawn_ppo_training_thread(
                 );
             }
             let total_traj_steps: usize = rew_steps.iter().sum();
+            // Effective (weighted) totals for computing the shared fraction.
+            let mut all_tot_eff = 0.0_f32;
+            let mut all_shared_eff = 0.0_f32;
             for pi in 0..N_PERSONALITIES {
                 let pn = PERSONALITY_NAMES[pi];
                 let ns = rew_steps[pi].max(1) as f32;
+                let mut tot_eff = 0.0_f32;
+                let mut shared_eff = 0.0_f32;
                 for h in 0..N_REWARD_TYPES {
                     let rn = REWARD_TYPE_NAMES[h];
                     writer.add_scalar(
@@ -173,8 +180,39 @@ pub fn spawn_ppo_training_thread(
                         rew_total[pi][h] / ns,
                         update_cycle,
                     );
+                    // Ally-sourced (shared) portion of the reward.
+                    writer.add_scalar(
+                        &format!("reward_shared/{pn}/{rn}"),
+                        shared_total[pi][h],
+                        update_cycle,
+                    );
+                    writer.add_scalar(
+                        &format!("reward_shared_per_step/{pn}/{rn}"),
+                        shared_total[pi][h] / ns,
+                        update_cycle,
+                    );
+                    let w = reward_type_weights[h];
+                    tot_eff += rew_total[pi][h] * w;
+                    shared_eff += shared_total[pi][h] * w;
                 }
+                // Fraction of this personality's effective (policy-driving) reward
+                // that came from ally sharing rather than its own actions.
+                let frac = if tot_eff.abs() > 1e-8 {
+                    shared_eff / tot_eff
+                } else {
+                    0.0
+                };
+                writer.add_scalar(&format!("reward_shared_fraction/{pn}"), frac, update_cycle);
+                all_tot_eff += tot_eff;
+                all_shared_eff += shared_eff;
             }
+            // Aggregate shared fraction across all personalities.
+            let all_frac = if all_tot_eff.abs() > 1e-8 {
+                all_shared_eff / all_tot_eff
+            } else {
+                0.0
+            };
+            writer.add_scalar("reward_shared_fraction/all", all_frac, update_cycle);
             let total_reward: f32 = rew_total.iter().flat_map(|r| r.iter()).sum();
             let mean_reward_per_step = if total_traj_steps > 0 {
                 total_reward / total_traj_steps as f32

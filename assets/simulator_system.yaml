@@ -230,21 +230,27 @@ astroid_fields:
     number: 40
     radius: 1500.
 ships:
-  # Sol uses min: 15, max: 20.  Inflated ~50% to push the agent through
-  # busier engagements during training.
-  min: 23
-  max: 30
+  # Dedicated combat arena for RL training: one rollout world is pinned here
+  # (never swaps out) so Fighters always have enemies. Three mutually-hostile
+  # factions — Federation vs Rebel, Pirate hostile to both — make it a sustained
+  # 3-way brawl. Denser and more warship-heavy than sol; a few traders/miners
+  # remain for context and so those personalities still get some data here.
+  min: 30
+  max: 44
   types:
-    fed_patrol: 2.0
-    fed_destroyer: 0.25
-    fed_missile_cruiser: 0.125
-    shuttle: 1.5
-    hauler: 2.0
-    freighter: 1.0
-    courier: 0.5
-    asteroid_miner: 3.0
-    rebel_fighter: 1.5
-    rebel_gunboat: 0.25
+    # Federation warships (Fighter personality)
+    fed_patrol: 2.5
+    fed_destroyer: 0.5
+    fed_missile_cruiser: 0.25
+    # Rebel warships (Fighter personality)
+    rebel_fighter: 2.5
+    rebel_gunboat: 0.5
     rebel_frigate: 0.25
-    pirate_corvette: 3.25
-    pirate_missile_boat: 0.125
+    # Pirates — hostile to both Federation and Rebel
+    pirate_corvette: 3.0
+    pirate_missile_boat: 0.25
+    # Non-combatants: targets/context + a little miner/trader signal
+    asteroid_miner: 1.5
+    hauler: 1.0
+    freighter: 0.5
+    shuttle: 0.5

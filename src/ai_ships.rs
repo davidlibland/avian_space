@@ -79,6 +79,142 @@ pub fn ai_ship_bundle(app: &mut App) {
                 .chain()
                 .run_if(in_state(PlayState::Flying)),
         );
+    // Cooperation-behavior sampler — only registered when DIAG_COOP is set, so
+    // it costs nothing in normal runs. Emits aggregate [COOP] lines.
+    if std::env::var("DIAG_COOP").is_ok() {
+        app.insert_resource(CoopSampleTimer(Timer::from_seconds(5.0, TimerMode::Repeating)))
+            .add_systems(Update, coop_sampler.run_if(in_state(PlayState::Flying)));
+    }
+}
+
+/// Timer gating how often [`coop_sampler`] emits a sample.
+#[derive(Resource)]
+pub struct CoopSampleTimer(pub Timer);
+
+/// Gated (DIAG_COOP env) cooperation-behavior sampler. Periodically prints
+/// aggregate `[COOP]` metrics so we can measure *actual* cooperation — not just
+/// the reward-share proxy:
+///   - focus_fire: fraction of engaging fighters whose target an ally also
+///     attacks (coordinated engagement / focus fire).
+///   - allies_near / enemies_near: avg allies vs enemies within GROUP_RADIUS of
+///     an engaging fighter (local numerical superiority = grouped attacks).
+///   - escort_cov / mean_def_dist: fraction of merchants (traders/miners) with
+///     an allied fighter within ESCORT_RADIUS, and the mean nearest-defender
+///     distance (are merchants being escorted?).
+///   - threatened / threat_resp: merchants with a hostile attacker nearby, and
+///     the fraction of those that have a defender within ESCORT_RADIUS.
+/// Lines are tagged with the system so they can be filtered per-scenario.
+fn coop_sampler(
+    time: Res<Time>,
+    mut timer: ResMut<CoopSampleTimer>,
+    system: Res<CurrentStarSystem>,
+    ships: Query<(Entity, &Ship, &Position, &AIShip, &ShipHostility)>,
+) {
+    if !timer.0.tick(time.delta()).just_finished() {
+        return;
+    }
+    const GROUP_RADIUS: f32 = 600.0;
+    const ESCORT_RADIUS: f32 = 700.0;
+    const THREAT_RADIUS: f32 = 700.0;
+
+    let infos: Vec<(Entity, &Ship, &Position, &AIShip, &ShipHostility)> = ships.iter().collect();
+    let n = infos.len();
+    if n == 0 {
+        return;
+    }
+    let pos = |i: usize| infos[i].2.0;
+    let ally = |i: usize, j: usize| match infos[j].1.data.faction.as_deref() {
+        Some(f) => infos[i].1.allies.iter().any(|a| a.as_str() == f),
+        None => false,
+    };
+    let wtgt = |i: usize| match infos[i].1.weapons_target {
+        Some(Target::Ship(e)) => Some(e),
+        _ => None,
+    };
+    let is_fighter = |i: usize| matches!(infos[i].3.personality, Personality::Fighter);
+    let is_merchant =
+        |i: usize| matches!(infos[i].3.personality, Personality::Trader | Personality::Miner);
+
+    // Focus-fire + local outnumbering among engaging fighters.
+    let (mut eng, mut shared, mut allies_near_sum, mut enemies_near_sum) = (0u32, 0u32, 0.0f32, 0.0f32);
+    for i in 0..n {
+        if !is_fighter(i) {
+            continue;
+        }
+        let Some(tgt) = wtgt(i) else { continue };
+        eng += 1;
+        let (mut has_shared, mut anear, mut enear) = (false, 0u32, 0u32);
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            let d = (pos(j) - pos(i)).length();
+            if ally(i, j) {
+                if d <= GROUP_RADIUS {
+                    anear += 1;
+                }
+                if wtgt(j) == Some(tgt) {
+                    has_shared = true;
+                }
+            } else if d <= GROUP_RADIUS && infos[i].1.should_engage(infos[j].4) {
+                enear += 1;
+            }
+        }
+        if has_shared {
+            shared += 1;
+        }
+        allies_near_sum += anear as f32;
+        enemies_near_sum += enear as f32;
+    }
+
+    // Escort coverage + threat response for merchants.
+    let (mut merch, mut covered, mut dist_sum, mut dist_n) = (0u32, 0u32, 0.0f32, 0u32);
+    let (mut threatened, mut threat_defended) = (0u32, 0u32);
+    for m in 0..n {
+        if !is_merchant(m) {
+            continue;
+        }
+        merch += 1;
+        let mut nearest = f32::INFINITY;
+        for d in 0..n {
+            if d != m && is_fighter(d) && ally(d, m) {
+                let dd = (pos(d) - pos(m)).length();
+                if dd < nearest {
+                    nearest = dd;
+                }
+            }
+        }
+        if nearest.is_finite() {
+            dist_sum += nearest;
+            dist_n += 1;
+            if nearest <= ESCORT_RADIUS {
+                covered += 1;
+            }
+        }
+        let under_threat = (0..n).any(|e| {
+            e != m
+                && infos[e].1.should_engage(infos[m].4)
+                && (pos(e) - pos(m)).length() <= THREAT_RADIUS
+        });
+        if under_threat {
+            threatened += 1;
+            if nearest <= ESCORT_RADIUS {
+                threat_defended += 1;
+            }
+        }
+    }
+
+    let f = |num: u32, den: u32| if den > 0 { num as f32 / den as f32 } else { f32::NAN };
+    println!(
+        "[COOP] sys={} ships={} | focus_fire={:.3} eng={} allies_near={:.2} enemies_near={:.2} | escort_cov={:.3} merch={} mean_def_dist={:.0} | threatened={} threat_resp={:.3}",
+        system.0, n,
+        f(shared, eng), eng,
+        if eng > 0 { allies_near_sum / eng as f32 } else { f32::NAN },
+        if eng > 0 { enemies_near_sum / eng as f32 } else { f32::NAN },
+        f(covered, merch), merch,
+        if dist_n > 0 { dist_sum / dist_n as f32 } else { f32::NAN },
+        threatened, f(threat_defended, threatened),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -612,7 +748,7 @@ fn land_ship(
         if (planet_pos.0 - ship_pos.0).length() > LANDING_RADIUS {
             continue;
         }
-        let full_size = image_size(sprite, &images);
+        let full_size = crate::ship::ship_display_size(ship.data.radius);
         let (mass, inertia) = sensor_mass_for_ship(ship.data.radius);
         let Ok(mut ec) = commands.get_entity(entity) else {
             continue;
@@ -663,6 +799,19 @@ fn finish_ai_landing(
             .star_systems
             .get(&system_name)
             .and_then(|s| s.planets.get(&planet_name));
+
+        // Pre-sale hold fullness — used both for the superlinear cargo_sold
+        // shaping below and for the gated diagnostic. (Cargo isn't mutated
+        // between here and the sell block.)
+        let cargo_frac_pre_sale = {
+            let held: u16 = ship.cargo.values().sum();
+            held as f32 / ship.data.cargo_space.max(1) as f32
+        };
+        // Diagnostic (gated on DIAG_LANDINGS env): tells "lands full & sells"
+        // apart from "lands empty / for other reasons".
+        let diag = std::env::var("DIAG_LANDINGS").is_ok();
+        let diag_on_route =
+            matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity);
 
         // ── Landing reward for RLAgent ships ──────────────────
         if rl_agent.is_some() {
@@ -756,6 +905,17 @@ fn finish_ai_landing(
                 }
             }
             let credits_earned = (ship.credits - credits_before).max(0) as f32;
+            if diag {
+                let pers = match ai_ship.personality {
+                    Personality::Fighter => "fighter",
+                    Personality::Miner => "miner",
+                    Personality::Trader => "trader",
+                };
+                println!(
+                    "[DIAG] land pers={} ship={} cargo_frac={:.3} credits_earned={:.0} sell_route={}",
+                    pers, ship.ship_type, cargo_frac_pre_sale, credits_earned, diag_on_route
+                );
+            }
             if rl_agent.is_some() && credits_earned > 0.0 {
                 let credit_scale = item_universe
                     .ship_credit_scale
@@ -768,9 +928,18 @@ fn finish_ai_landing(
                     Personality::Miner => reward_cfg.cargo_sold_miner,
                     Personality::Trader => reward_cfg.cargo_sold_trader,
                 };
+                // Superlinear fill shaping: scale the sale reward by
+                // cargo_frac^(exponent-1) so a full hold pays disproportionately
+                // more than two half-loads. exponent=1 -> current linear payout;
+                // higher -> punishes premature half-loaded sell trips (teaches
+                // "fill before selling"). Full sellers (traders) are ~unaffected
+                // since cargo_frac≈1 -> multiplier≈1.
+                let fill_mult = cargo_frac_pre_sale
+                    .clamp(0.0, 1.0)
+                    .powf((reward_cfg.cargo_sold_fill_exponent - 1.0).max(0.0));
                 rl_reward_writer.write(RLReward {
                     entity: ship_entity,
-                    reward: credit_frac * personality_weight,
+                    reward: credit_frac * personality_weight * fill_mult,
                     reward_type: crate::consts::REWARD_CARGO_SOLD,
                 });
                 rl_reward_writer.write(RLReward {
@@ -811,14 +980,13 @@ fn finish_ai_landing(
 /// Tick the on-planet wait timer and start the take-off animation when done.
 fn tick_ai_landed(
     time: Res<Time>,
-    mut ships: Query<(Entity, &mut AILanded, &Sprite)>,
+    mut ships: Query<(Entity, &mut AILanded, &Ship)>,
     mut commands: Commands,
-    images: Res<Assets<Image>>,
 ) {
-    for (entity, mut landed, sprite) in &mut ships {
+    for (entity, mut landed, ship) in &mut ships {
         landed.timer.tick(time.delta());
         if landed.timer.just_finished() {
-            let full_size = image_size(sprite, &images);
+            let full_size = crate::ship::ship_display_size(ship.data.radius);
             commands
                 .entity(entity)
                 .remove::<(AILanded, Sensor, Mass, AngularInertia)>()

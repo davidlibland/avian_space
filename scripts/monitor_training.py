@@ -163,6 +163,45 @@ def main():
         if mild:
             print(f"  {pers:>10}  noise:       {', '.join(mild)}")
 
+    # ── Shared (ally-sourced) reward ──────────────────────────────────────
+    # Fraction of each personality's *effective* (weighted) reward that came
+    # from ally reward-sharing rather than its own actions, plus whether that
+    # fraction is rising/shrinking, and a per-reward-type breakdown.
+    print_section("SHARED REWARD (fraction of effective reward sourced from allies)")
+    all_frac = get(df, "reward_shared_fraction/all")
+    if len(all_frac) == 0:
+        print("  (no reward_shared_* scalars yet — needs a build with shared-reward")
+        print("   logging, and a few cycles to accumulate)")
+    else:
+
+        def _trend(vals):
+            r = windowed_z(vals)
+            if r is None:
+                return ""
+            d, _se, z, _n = r
+            tag = "↑ rising" if z > 2 else "↓ shrinking" if z < -2 else "~ flat"
+            return f"  {tag} (Δ={d:+.1%}, z={z:+.1f})"
+
+        m, sd, _se, _n = mean_sd_se(all_frac, 10)
+        print(f"  {'ALL':>8}: {m:7.1%} ± {sd:.1%}{_trend(all_frac)}")
+        for pers in PERSONALITIES:
+            vals = get(df, f"reward_shared_fraction/{pers}")
+            if len(vals) == 0:
+                continue
+            m, sd, _se, _n = mean_sd_se(vals, 10)
+            print(f"  {pers:>8}: {m:7.1%} ± {sd:.1%}{_trend(vals)}")
+
+        print("\n  Shared reward/step by type (mean last 10 cycles):")
+        header = f"{'':>10}" + "".join(f"{r:>12}" for r in REWARD_TYPES)
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+        for pers in PERSONALITIES:
+            cells = []
+            for rtype in REWARD_TYPES:
+                vals = get(df, f"reward_shared_per_step/{pers}/{rtype}")
+                cells.append(float(np.mean(vals[-10:])) if len(vals) else 0.0)
+            print(f"  {pers:>8}" + "".join(f"{v:12.6f}" for v in cells))
+
     # ── Training health (mean ± sd over last 10 cycles) ───────────────────
     print_section("TRAINING HEALTH (mean ± sd over last 10 cycles)")
     for tag, label in [

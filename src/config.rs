@@ -92,6 +92,10 @@ pub struct RewardConfig {
     // Asteroid-hit rewards.
     pub asteroid_hit_miner: f32,
     pub asteroid_hit_other: f32,
+    /// Ore-per-asteroid drop multiplier: a shattered asteroid drops
+    /// `1..=(size * asteroid_drop_scale)` units of ore. Higher = holds fill
+    /// faster, so ships break off to land & sell sooner.
+    pub asteroid_drop_scale: f32,
 
     // Landing rewards.
     pub landing_trader_can_sell: f32,
@@ -108,6 +112,11 @@ pub struct RewardConfig {
     pub cargo_sold_fighter: f32,
     pub cargo_sold_miner: f32,
     pub cargo_sold_trader: f32,
+    /// Superlinear fill shaping for the cargo-sold reward: the payout is scaled
+    /// by `cargo_frac^(exponent-1)`, so a full hold pays disproportionately more
+    /// than partial loads. 1.0 = linear (no shaping); >1 teaches ships to fill
+    /// before selling (targets miners; full-selling traders are ~unaffected).
+    pub cargo_sold_fill_exponent: f32,
 
     // Pickup rewards.
     pub pickup_reward_fighter: f32,
@@ -140,6 +149,7 @@ impl Default for RewardConfig {
             combat_personality_other: COMBAT_PERSONALITY_OTHER,
             asteroid_hit_miner: ASTEROID_HIT_MINER,
             asteroid_hit_other: ASTEROID_HIT_OTHER,
+            asteroid_drop_scale: 0.5,
             landing_trader_can_sell: LANDING_TRADER_CAN_SELL,
             landing_trader_can_buy: LANDING_TRADER_CAN_BUY,
             landing_fighter_can_rearm: LANDING_FIGHTER_CAN_REARM,
@@ -152,6 +162,7 @@ impl Default for RewardConfig {
             cargo_sold_fighter: CARGO_SOLD_FIGHTER,
             cargo_sold_miner: CARGO_SOLD_MINER,
             cargo_sold_trader: CARGO_SOLD_TRADER,
+            cargo_sold_fill_exponent: 1.0,
             pickup_reward_fighter: PICKUP_REWARD_FIGHTER,
             pickup_reward_miner: PICKUP_REWARD_MINER,
             pickup_reward_trader: PICKUP_REWARD_TRADER,

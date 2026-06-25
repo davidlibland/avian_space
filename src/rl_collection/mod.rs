@@ -78,6 +78,11 @@ pub struct Transition {
     pub rule_based_action: DiscreteAction,
     /// Per-reward-type rewards, indexed by `consts::REWARD_*`.
     pub rewards: [f32; crate::consts::N_REWARD_TYPES],
+    /// Portion of `rewards` contributed by ally reward-sharing (the delta added
+    /// by [`mix_ally_rewards`]). Diagnostic only: not used in training and not
+    /// persisted to the rl buffer (loads back as zeros) — the trainer
+    /// aggregates it per personality for TensorBoard.
+    pub shared_rewards: [f32; crate::consts::N_REWARD_TYPES],
     /// True when the ship died at this step (terminal state).
     pub done: bool,
     /// Sum of per-head log π(a|s) at the time the action was sampled.
@@ -255,10 +260,28 @@ struct PendingPolicyHandle(Handle<PolicyAsset>);
 // Plugin
 // ---------------------------------------------------------------------------
 
+/// Wiring injected to make this app one of several rollout worlds that share a
+/// single, externally-spawned trainer (see `multiworld_train`). When present,
+/// the plugin uses the shared inference net + segment channel and spawns
+/// neither a trainer nor an experiment. `swap_phase_segments` seeds this
+/// world's [`SegmentCounter`] so periodic system swaps are staggered across
+/// worlds (amortising each swap's value-EV dip).
+pub struct SharedCollection {
+    pub inference_net: Arc<std::sync::Mutex<crate::model::InferenceNet>>,
+    pub segment_tx: mpsc::SyncSender<Segment>,
+    pub swap_phase_segments: usize,
+    /// When true, this world never runs a system swap — it stays pinned to its
+    /// `starting_system` for the whole run (used to keep one world permanently
+    /// in the `simulator` combat arena so Fighters always have enemies).
+    pub pin_system: bool,
+}
+
 pub struct RLCollectionPlugin {
     pub mode: crate::AppMode,
     pub fresh: bool,
     pub training: crate::config::TrainingConfig,
+    /// `Some` ⇒ multi-world rollout client (shared net/channel, no own trainer).
+    pub shared: Option<SharedCollection>,
 }
 
 impl Plugin for RLCollectionPlugin {
@@ -266,74 +289,97 @@ impl Plugin for RLCollectionPlugin {
         let (rl_tx, rl_rx) = mpsc::sync_channel::<Segment>(1024);
         let (bc_tx, bc_rx) = mpsc::sync_channel::<BCTransition>(65536);
 
-        // Create RLResource first so we can clone the Arc before inserting it.
-        let rl_resource = RLResource::new();
-        let inference_net_arc = Arc::clone(&rl_resource.inference_net);
+        // Resolve the inference net + segment sender. In multi-world rollout
+        // (`SharedCollection` injected) these are shared across worlds feeding a
+        // single, externally-spawned trainer — so this app spawns neither a
+        // trainer nor an experiment. Otherwise we own them and spawn this app's
+        // own training thread per `mode` (experiment dir created for training
+        // modes only; inference/classic don't touch checkpoints).
+        let (rl_resource, rl_sender_tx, swap_phase, shared_mode) = if let Some(shared) =
+            self.shared.as_ref()
+        {
+            drop(rl_rx);
+            drop(bc_rx);
+            drop(rl_tx);
+            let res = RLResource {
+                inference_net: Arc::clone(&shared.inference_net),
+            };
+            (res, shared.segment_tx.clone(), shared.swap_phase_segments, true)
+        } else {
+            let rl_resource = RLResource::new();
+            let inference_net_arc = Arc::clone(&rl_resource.inference_net);
+            match self.mode {
+                crate::AppMode::BCTraining => {
+                    let experiment = crate::experiments::setup_experiment(self.fresh);
+                    app.insert_resource(crate::experiments::ExperimentDir {
+                        run_dir: experiment.run_dir.clone(),
+                        is_fresh: experiment.is_fresh,
+                    });
+                    bc::spawn_bc_training_thread(bc_rx, inference_net_arc, experiment);
+                    drop(rl_rx);
+                }
+                crate::AppMode::RLTraining => {
+                    let experiment = crate::experiments::setup_experiment(self.fresh);
+                    app.insert_resource(crate::experiments::ExperimentDir {
+                        run_dir: experiment.run_dir.clone(),
+                        is_fresh: experiment.is_fresh,
+                    });
+                    crate::ppo::spawn_ppo_training_thread(
+                        rl_rx,
+                        inference_net_arc,
+                        experiment,
+                        self.training.ppo.clone(),
+                        self.training.rewards.clone(),
+                    );
+                    // BC labels now travel inline with each `Transition`, so the
+                    // separate BC channel is unused during RL training.
+                    drop(bc_rx);
+                }
+                crate::AppMode::Inference => {
+                    // Kick off an async load of the bundled policy asset; the
+                    // `apply_loaded_policy` system below applies its bytes to the
+                    // shared inference net once the asset is ready.
+                    let asset_server = app.world().resource::<AssetServer>();
+                    let handle: Handle<PolicyAsset> =
+                        asset_server.load(DEFAULT_POLICY_ASSET_PATH);
+                    app.insert_resource(PendingPolicyHandle(handle));
+                    drop(bc_rx);
+                    drop(rl_rx);
+                }
+                crate::AppMode::Classic => {
+                    // No training — channels have no consumer; data is dropped.
+                    drop(bc_rx);
+                    drop(rl_rx);
+                }
+            }
+            (rl_resource, rl_tx, 0usize, false)
+        };
 
-        // Spawn training threads only for the modes that need them. The
-        // experiment directory is only created/inserted for training modes —
-        // inference and classic don't read or write checkpoints, and creating
-        // `experiments/run_N/` from a CWD like `/` (Finder-launched .app)
-        // would fail noisily.
-        match self.mode {
-            crate::AppMode::BCTraining => {
-                let experiment = crate::experiments::setup_experiment(self.fresh);
-                app.insert_resource(crate::experiments::ExperimentDir {
-                    run_dir: experiment.run_dir.clone(),
-                    is_fresh: experiment.is_fresh,
-                });
-                bc::spawn_bc_training_thread(bc_rx, inference_net_arc, experiment);
-                drop(rl_rx);
+        // Map the app mode to the in-game AI control mode. Multi-world rollout
+        // always behaves like RL training: net-driven + stochastic sampling.
+        let ai_play_mode = if shared_mode {
+            AIPlayMode::RLControl
+        } else {
+            match self.mode {
+                crate::AppMode::Classic | crate::AppMode::BCTraining => {
+                    AIPlayMode::BehavioralCloning
+                }
+                crate::AppMode::Inference | crate::AppMode::RLTraining => AIPlayMode::RLControl,
             }
-            crate::AppMode::RLTraining => {
-                let experiment = crate::experiments::setup_experiment(self.fresh);
-                app.insert_resource(crate::experiments::ExperimentDir {
-                    run_dir: experiment.run_dir.clone(),
-                    is_fresh: experiment.is_fresh,
-                });
-                crate::ppo::spawn_ppo_training_thread(
-                    rl_rx,
-                    inference_net_arc,
-                    experiment,
-                    self.training.ppo.clone(),
-                    self.training.rewards.clone(),
-                );
-                // BC labels now travel inline with each `Transition`, so the
-                // separate BC channel is unused during RL training.
-                drop(bc_rx);
-            }
-            crate::AppMode::Inference => {
-                // Kick off an async load of the bundled policy asset; the
-                // `apply_loaded_policy` system below applies its bytes to the
-                // shared inference net once the asset is ready.
-                let asset_server = app.world().resource::<AssetServer>();
-                let handle: Handle<PolicyAsset> =
-                    asset_server.load(DEFAULT_POLICY_ASSET_PATH);
-                app.insert_resource(PendingPolicyHandle(handle));
-                drop(bc_rx);
-                drop(rl_rx);
-            }
-            crate::AppMode::Classic => {
-                // No training — channels have no consumer; data is silently dropped.
-                drop(bc_rx);
-                drop(rl_rx);
-            }
-        }
-
-        // Map the app mode to the in-game AI control mode.
-        let ai_play_mode = match self.mode {
-            crate::AppMode::Classic | crate::AppMode::BCTraining => AIPlayMode::BehavioralCloning,
-            crate::AppMode::Inference | crate::AppMode::RLTraining => AIPlayMode::RLControl,
         };
 
         // Stochastic sampling during RL training (required for PPO);
         // argmax at inference time.
-        let inference_temperature = match self.mode {
-            crate::AppMode::RLTraining => InferenceTemperature(1.0),
-            _ => InferenceTemperature(0.0),
+        let inference_temperature = if shared_mode {
+            InferenceTemperature(1.0)
+        } else {
+            match self.mode {
+                crate::AppMode::RLTraining => InferenceTemperature(1.0),
+                _ => InferenceTemperature(0.0),
+            }
         };
 
-        app.insert_resource(RLSender(rl_tx))
+        app.insert_resource(RLSender(rl_sender_tx))
             .insert_resource(BCSender(bc_tx))
             .insert_resource(rl_resource)
             .insert_resource(ai_play_mode)
@@ -361,19 +407,28 @@ impl Plugin for RLCollectionPlugin {
             app.add_systems(Update, apply_loaded_policy);
         }
 
-        // ── Training-only: periodic random system swap ──────────────────
+        // ── Periodic random system swap (training + multi-world rollout) ──
         // `simulator_fraction` is sourced from the PPO section but consumed
         // entirely by game-thread systems; the trainer never sees it.
-        let is_training = matches!(
-            self.mode,
-            crate::AppMode::RLTraining | crate::AppMode::BCTraining
-        );
-        if is_training {
+        // `swap_phase` staggers swaps across multi-world rollout workers.
+        let enable_swap = shared_mode
+            || matches!(
+                self.mode,
+                crate::AppMode::RLTraining | crate::AppMode::BCTraining
+            );
+        // A pinned world (multi-world combat arena) uses interval 0 → never
+        // swaps, so it stays in its starting system for the whole run.
+        let swap_interval = if self.shared.as_ref().map(|s| s.pin_system).unwrap_or(false) {
+            0
+        } else {
+            self.training.ppo.system_swap_segments
+        };
+        if enable_swap {
             app.insert_resource(SystemSwapConfig {
-                interval: self.training.ppo.system_swap_segments,
+                interval: swap_interval,
                 simulator_fraction: self.training.ppo.simulator_fraction,
             })
-            .init_resource::<SegmentCounter>()
+            .insert_resource(SegmentCounter(swap_phase))
             .init_resource::<PendingSystemRespawn>()
             .add_systems(
                 Update,
@@ -736,7 +791,12 @@ fn check_system_swap(
         let candidates: Vec<&String> = item_universe
             .star_systems
             .keys()
-            .filter(|name| name.as_str() != "simulator")
+            // Exclude all isolated training-only systems (combat/escort/mining
+            // arenas) from random swaps — they're reserved for pinned worlds.
+            .filter(|name| {
+                !crate::item_universe::ItemUniverse::TRAINING_SYSTEM_KEYS
+                    .contains(&name.as_str())
+            })
             .collect();
         candidates
             .choose(&mut rng)
@@ -808,6 +868,62 @@ fn build_all_observations(
 ) -> Vec<(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)> {
     let mut results = Vec::new();
 
+    // ── Ally snapshot (Phase 1 cooperation) ──────────────────────────────
+    // Snapshot every ship's faction / pose / health / weapons-target up-front
+    // so the per-agent loop can summarise each observer's allies without
+    // hitting Bevy borrow conflicts (mirrors the reward-sharing pre-pass).
+    struct AllyInfo {
+        faction: String,
+        pos: Vec2,
+        vel: Vec2,
+        health_frac: f32,
+        distressed: bool,
+        wep_target: Option<Entity>,
+    }
+    let mut ally_snapshot: Vec<(Entity, AllyInfo)> = Vec::new();
+    for (e, _agent, a_ship, a_pos, a_vel, _av, _ms, _tf, _host, a_distressed, _tracers) in
+        agents.iter()
+    {
+        if let Some(faction) = a_ship.data.faction.clone() {
+            ally_snapshot.push((
+                e,
+                AllyInfo {
+                    faction,
+                    pos: a_pos.0,
+                    vel: a_vel.0,
+                    health_frac: a_ship.health as f32 / a_ship.data.max_health.max(1) as f32,
+                    distressed: a_distressed.level > 0.0,
+                    wep_target: a_ship.weapons_target.as_ref().map(|t| t.get_entity()),
+                },
+            ));
+        }
+    }
+    for (e, s_ship, _host) in ship_query.iter() {
+        let Some(faction) = s_ship.data.faction.clone() else {
+            continue;
+        };
+        let Ok(world_pos) = all_positions
+            .get(e)
+            .map(|p| p.0)
+            .or_else(|_| all_transforms.get(e).map(|t| t.translation.truncate()))
+        else {
+            continue;
+        };
+        let vel = all_velocities.get(e).map(|v| v.0).unwrap_or(Vec2::ZERO);
+        let distressed = all_distressed.get(e).map(|d| d.level > 0.0).unwrap_or(false);
+        ally_snapshot.push((
+            e,
+            AllyInfo {
+                faction,
+                pos: world_pos,
+                vel,
+                health_frac: s_ship.health as f32 / s_ship.data.max_health.max(1) as f32,
+                distressed,
+                wep_target: s_ship.weapons_target.as_ref().map(|t| t.get_entity()),
+            },
+        ));
+    }
+
     for (
         entity,
         agent,
@@ -826,6 +942,64 @@ fn build_all_observations(
         let ship_dir = (transform.rotation * Vec3::Y).xy();
         let heading = [ship_dir.x, ship_dir.y];
         let (sin_a, cos_a) = rl_obs::ego_frame_sincos(heading);
+
+        // ── Team context: ego-frame summary of in-range allies ───────────
+        // Allies = ships whose faction is in this ship's `allies` list, within
+        // DETECTION_RADIUS. Aggregated permutation-invariantly so the policy
+        // and value heads can coordinate (regroup, support, deconflict fire).
+        let self_wep_target = ship.weapons_target.as_ref().map(|t| t.get_entity());
+        let det_sq = DETECTION_RADIUS * DETECTION_RADIUS;
+        let mut t_count = 0usize;
+        let mut t_sum_pos = Vec2::ZERO;
+        let mut t_sum_vel = Vec2::ZERO;
+        let mut t_sum_health = 0.0_f32;
+        let mut t_n_distressed = 0usize;
+        let mut t_n_shared = 0usize;
+        let mut t_nearest = Vec2::ZERO;
+        let mut t_nearest_d2 = f32::INFINITY;
+        for (ally_e, info) in &ally_snapshot {
+            if *ally_e == entity || !ship.allies.contains(&info.faction) {
+                continue;
+            }
+            let off = info.pos - pos.0;
+            let d2 = off.length_squared();
+            if d2 > det_sq {
+                continue;
+            }
+            t_count += 1;
+            t_sum_pos += off;
+            t_sum_vel += info.vel - vel.0;
+            t_sum_health += info.health_frac;
+            if info.distressed {
+                t_n_distressed += 1;
+            }
+            if let (Some(a), Some(b)) = (self_wep_target, info.wep_target) {
+                if a == b {
+                    t_n_shared += 1;
+                }
+            }
+            if d2 < t_nearest_d2 {
+                t_nearest_d2 = d2;
+                t_nearest = off;
+            }
+        }
+        let team_context = if t_count > 0 {
+            let inv = 1.0 / t_count as f32;
+            let centroid = t_sum_pos * inv;
+            let mean_vel = t_sum_vel * inv;
+            rl_obs::TeamContext {
+                count: t_count,
+                centroid_pos: rl_obs::rotate_to_ego([centroid.x, centroid.y], sin_a, cos_a),
+                mean_vel: rl_obs::rotate_to_ego([mean_vel.x, mean_vel.y], sin_a, cos_a),
+                nearest_pos: rl_obs::rotate_to_ego([t_nearest.x, t_nearest.y], sin_a, cos_a),
+                mean_health: t_sum_health * inv,
+                frac_distressed: t_n_distressed as f32 * inv,
+                frac_shared_target: t_n_shared as f32 * inv,
+            }
+        } else {
+            rl_obs::TeamContext::default()
+        };
+
         // Spatial query: all entities within DETECTION_RADIUS.
         let filter = SpatialQueryFilter::from_mask([
             GameLayer::Planet,
@@ -1426,6 +1600,7 @@ fn build_all_observations(
             distressed: self_distressed.level,
             other_projectile_slots,
             own_projectile_slots,
+            team: team_context,
         };
         let obs = rl_obs::encode_observation(&obs_input);
         let max_speed = ship.data.max_speed.max(f32::EPSILON);
@@ -1449,11 +1624,12 @@ fn build_all_observations(
 /// order of entity buckets.
 ///
 /// Priority:
-/// 1. Traders with cargo → planet with highest value
-/// 2. All personalities → nearest pickup
-/// 3. Miner → nearest asteroid → nearest planet
-///    Fighter → nearest hostile ship → nearest planet
-///    Trader → nearest planet
+/// 1. Traders with cargo (or Miners with a nearly-full hold) → highest-value
+///    planet to sell. Miners thus mine until full, sell, then resume mining.
+/// 2. Sticky: keep the current valid target.
+/// 3. Miner → nearest pickup → asteroid → viable planet
+///    Fighter → nearest hostile ship → pickup → viable planet
+///    Trader → nearest viable planet → pickup
 ///
 /// Returns the slot index, or `N_OBJECTS` for "no target".
 fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -> u8 {
@@ -1498,8 +1674,17 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
             && (planet_profit(i) > 0.0 || low_health || planet_has_ammo(i) || has_free_cargo)
     };
 
-    // 1. Traders with cargo → planet with highest value (= cargo_profit_value).
-    if has_cargo && matches!(personality, Personality::Trader) {
+    // 1. Sellers head to the highest-value planet to offload cargo:
+    //    - Traders with any cargo (their buy-low / sell-high loop).
+    //    - Miners whose hold is (nearly) full → break off mining to sell their
+    //      ore for a profit, then resume mining. Miners don't buy on landing
+    //      (only Traders do), so they return to mining with an empty hold.
+    const MINER_SELL_FILL_FRAC: f32 = 0.8;
+    let miner_hold_full =
+        matches!(personality, Personality::Miner) && obs[SELF_CARGO_FRAC] >= MINER_SELL_FILL_FRAC;
+    let wants_to_sell =
+        (has_cargo && matches!(personality, Personality::Trader)) || miner_hold_full;
+    if wants_to_sell {
         let best_planet = (0..n)
             .filter(|&i| is_present(i) && is_planet(i) && planet_viable(i))
             .max_by(|&a, &b| {
@@ -1575,15 +1760,16 @@ pub(crate) fn mix_ally_rewards(
         ([f32; crate::consts::N_REWARD_TYPES], Option<String>),
     >,
     reward_cfg: &crate::config::RewardConfig,
-) {
+) -> [f32; crate::consts::N_REWARD_TYPES] {
     use crate::consts::{N_REWARD_TYPES, REWARD_HEALTH_RAW};
+    let mut shared = [0.0_f32; N_REWARD_TYPES];
     let alpha = match personality {
         Personality::Fighter => reward_cfg.reward_sharing_fighter,
         Personality::Miner => reward_cfg.reward_sharing_miner,
         Personality::Trader => reward_cfg.reward_sharing_trader,
     };
     if alpha <= 0.0 || allies.is_empty() {
-        return;
+        return shared;
     }
     let mut ally_reward_sum = [0.0_f32; N_REWARD_TYPES];
     let mut ally_count = 0u32;
@@ -1611,9 +1797,12 @@ pub(crate) fn mix_ally_rewards(
     if ally_count > 0 {
         let scale = alpha / ally_count as f32;
         for ch in 0..N_REWARD_TYPES {
-            rewards[ch] += scale * ally_reward_sum[ch];
+            let add = scale * ally_reward_sum[ch];
+            rewards[ch] += add;
+            shared[ch] = add;
         }
     }
+    shared
 }
 
 fn store_obs_actions(
@@ -1838,8 +2027,9 @@ fn store_obs_actions(
             rewards[crate::consts::REWARD_HEALTH_RAW] =
                 ship.health as f32 / ship.data.max_health.max(1) as f32;
 
-            // Reward sharing: mix visible allies' rewards.
-            mix_ally_rewards(
+            // Reward sharing: mix visible allies' rewards (returns the shared
+            // delta added, for diagnostics).
+            let shared_rewards = mix_ally_rewards(
                 &mut rewards,
                 slot_targets,
                 &ship.allies,
@@ -1855,6 +2045,7 @@ fn store_obs_actions(
                 action: last_action,
                 rule_based_action: agent.last_rule_based_action.unwrap_or(last_action),
                 rewards,
+                shared_rewards,
                 done: false,
                 log_prob: agent.last_log_prob,
             };

@@ -72,8 +72,17 @@ pub const TARGET_OUTPUT_DIM: usize = N_OBJECTS + 1;
 /// Value output: one head per reward type.
 pub const VALUE_OUTPUT_DIM: usize = crate::consts::N_REWARD_TYPES;
 
-/// Default hidden dimension for all network layers.
+/// Default hidden dimension for the policy network.
 pub const HIDDEN_DIM: usize = 64;
+
+/// Hidden dimension for the **value** network. Sized independently of (and
+/// larger than) the policy: the value net must regress `N_REWARD_TYPES`
+/// diverse, spiky multi-system return channels, so it needs more capacity to
+/// explain the variance. The value net is rebuilt fresh each RL stage (BC only
+/// trains the policy), so growing this never breaks an existing checkpoint.
+/// Baseline was 64 (== HIDDEN_DIM); bumped to test whether capacity raises
+/// explained variance.
+pub const VALUE_HIDDEN_DIM: usize = 128;
 
 /// Whether to use skip connections in `NetBlock`.
 pub const USE_SKIP: bool = false;

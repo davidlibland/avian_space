@@ -14,6 +14,8 @@ mod item_universe;
 mod jump_ui;
 mod main_menu;
 mod missions;
+mod multiworld_spike;
+mod multiworld_train;
 mod planet_ui;
 mod planets;
 mod policy_asset;
@@ -53,7 +55,7 @@ mod world_assets;
 #[path = "tests/policy_tests.rs"]
 mod policy_tests;
 
-use asteroids::{Asteroid, ShatterAsteroid, build_asteroid_field};
+use asteroids::{Asteroid, AsteroidAtlases, ShatterAsteroid, build_asteroid_field};
 use explosions::explosions_plugin;
 use game_save::game_save_plugin;
 use help_ui::help_ui_plugin;
@@ -180,6 +182,24 @@ pub struct AppArgs {
     #[arg(long)]
     pub headless: bool,
 
+    /// FEASIBILITY SPIKE: instead of one world, stand up N headless sim worlds
+    /// (each in a different star system) on N threads in one process and report
+    /// init cost / concurrency. Probes Path A for concurrent multi-system
+    /// rollout. Rollout-only (no trainer); throwaway diagnostic.
+    #[arg(long, value_name = "N")]
+    pub spike_multiworld: Option<usize>,
+
+    /// PROTOTYPE: concurrent multi-system RL training — N rollout worlds (each
+    /// in a different star system, with staggered system swaps) feeding ONE
+    /// shared trainer + inference net. Implies headless RL training.
+    #[arg(long, value_name = "N")]
+    pub multiworld_train: Option<usize>,
+
+    /// System to seed a single-world run in (default: sol). Useful for
+    /// diagnostics, e.g. `--classic --headless --starting-system mining`.
+    #[arg(long = "starting-system", value_name = "SYSTEM")]
+    pub starting_system: Option<String>,
+
     /// Path to a YAML training config (reward weights + PPO hyperparameters).
     /// When omitted, `./training_config.yaml` is loaded if present; otherwise
     /// defaults from `consts.rs` are used.
@@ -298,7 +318,37 @@ fn main() {
     let headless = args.headless;
     let training = load_training_config(args.config.as_deref());
 
+    if let Some(n) = args.spike_multiworld {
+        multiworld_spike::run(n, app_mode, training);
+        return;
+    }
+
+    if let Some(n) = args.multiworld_train {
+        multiworld_train::run(n, fresh, training);
+        return;
+    }
+
+    let start_sys = args.starting_system.as_deref().unwrap_or("sol");
+    build_app(app_mode, fresh, headless, training, start_sys, false, None).run();
+}
+
+/// Build the full game `App` for a single world. Factored out of `main` so the
+/// multi-world feasibility spike can stand up several at once.
+///
+/// * `starting_system` seeds `CurrentStarSystem`.
+/// * `disable_log` skips Bevy's `LogPlugin`, whose global tracing subscriber can
+///   only be installed once per process — required when building >1 app.
+fn build_app(
+    app_mode: AppMode,
+    fresh: bool,
+    headless: bool,
+    training: config::TrainingConfig,
+    starting_system: &str,
+    disable_log: bool,
+    shared: Option<rl_collection::SharedCollection>,
+) -> App {
     let mut app = App::new();
+    let multiworld = shared.is_some();
 
     // ── Embedded assets (bundle feature) ─────────────────────────────────
     // Must be added BEFORE DefaultPlugins so it can register an asset source
@@ -318,19 +368,37 @@ fn main() {
         // schedule runner.  The render pipeline still initialises (to satisfy
         // asset-type registrations) but draws nothing because there is no
         // surface to present to.
-        app.add_plugins(
-            DefaultPlugins
-                .build()
-                .disable::<bevy::winit::WinitPlugin>()
-                .set(WindowPlugin {
-                    primary_window: None,
-                    exit_condition: bevy::window::ExitCondition::DontExit,
-                    ..default()
-                }),
-        )
-        .add_plugins(ScheduleRunnerPlugin::run_loop(
-            std::time::Duration::from_millis(1),
-        ))
+        let mut plugins = DefaultPlugins
+            .build()
+            .disable::<bevy::winit::WinitPlugin>()
+            .set(WindowPlugin {
+                primary_window: None,
+                exit_condition: bevy::window::ExitCondition::DontExit,
+                ..default()
+            });
+        // LogPlugin installs a process-global tracing subscriber; only the
+        // first app in a process may keep it.
+        if disable_log {
+            plugins = plugins.disable::<bevy::log::LogPlugin>();
+        }
+        // Multi-world rollout: cap the process-global compute task pool so that
+        // N concurrent worlds don't each fan out across all cores and thrash
+        // (the spike showed sub-linear scaling from this contention). Only the
+        // first app to build actually creates the pool; the rest are no-ops.
+        if multiworld {
+            if let Some(k) = std::env::var("MW_COMPUTE_THREADS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+            {
+                plugins = plugins.set(bevy::app::TaskPoolPlugin {
+                    task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(k),
+                });
+            }
+        }
+        app.add_plugins(plugins)
+            // Run frames back-to-back with no inter-frame sleep so headless
+            // training saturates the CPU instead of idling ~1ms/frame.
+            .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
         // Advance 50ms of game time per frame (~10-25x real-time).
         .insert_resource(TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_millis(50),
@@ -368,6 +436,7 @@ fn main() {
             main_menu_plugin,
             missions_ui_plugin,
             sfx::sfx_plugin,
+            explosions::ship_smoke_plugin, // damage smoke — rendering only
         ));
     }
     // Explosions plugin registers messages used by game logic (asteroid shatter),
@@ -384,6 +453,7 @@ fn main() {
             mode: app_mode,
             fresh,
             training: training.clone(),
+            shared,
         },
         game_save_plugin,
         missions_plugin,
@@ -393,7 +463,7 @@ fn main() {
     // ── State and resources ──────────────────────────────────────────────
     app.init_state::<PlayState>()
         .init_resource::<TravelContext>()
-        .insert_resource(CurrentStarSystem("sol".to_string()))
+        .insert_resource(CurrentStarSystem(starting_system.to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
         .insert_resource(training.rewards.clone())
         .insert_resource(match app_mode {
@@ -441,8 +511,9 @@ fn main() {
             .after(collision_system)
             .before(weapon_lifetime),
     )
-    .add_systems(Update, travel_system.run_if(in_state(PlayState::Traveling)))
-    .run();
+    .add_systems(Update, travel_system.run_if(in_state(PlayState::Traveling)));
+
+    app
 }
 
 #[derive(Component)]
@@ -457,20 +528,13 @@ fn setup(mut commands: Commands) {
 
 fn spawn_asteroids(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    atlases: Res<AsteroidAtlases>,
     item_universe: Res<ItemUniverse>,
     star_system: Res<CurrentStarSystem>,
 ) {
     if let Some(system_data) = item_universe.star_systems.get(&star_system.0) {
         for field in system_data.astroid_fields.iter() {
-            build_asteroid_field(
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                field,
-                &item_universe,
-            );
+            build_asteroid_field(&mut commands, &atlases, field, &item_universe);
         }
     }
 }
@@ -923,7 +987,12 @@ fn collision_system(
 
         if let Some((asteroid_entity, ship_entity)) = asteroid_ship_entity {
             if shattered.insert(asteroid_entity) {
-                shatter_writer.write(ShatterAsteroid(asteroid_entity));
+                // Ramming shatters the rock but drops no pickups — only shooting
+                // an asteroid yields commodities (and the asteroid_hit reward).
+                shatter_writer.write(ShatterAsteroid {
+                    entity: asteroid_entity,
+                    drop_pickups: false,
+                });
             }
             damage_writer.write(DamageShip {
                 entity: ship_entity,
@@ -941,7 +1010,11 @@ fn collision_system(
 
         if let Some((asteroid_entity, weapon_entity)) = asteroid_weapon_entity {
             if shattered.insert(asteroid_entity) {
-                shatter_writer.write(ShatterAsteroid(asteroid_entity));
+                // Shot asteroid: drops pickups (mining payoff).
+                shatter_writer.write(ShatterAsteroid {
+                    entity: asteroid_entity,
+                    drop_pickups: true,
+                });
             }
             if despawned_weapons.insert(weapon_entity) {
                 safe_despawn(&mut commands, weapon_entity);

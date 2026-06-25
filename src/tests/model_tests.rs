@@ -208,6 +208,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
         distressed: 0.0,
         other_projectile_slots: vec![],
         own_projectile_slots: vec![],
+        team: Default::default(),
     });
     assert_eq!(obs.len(), OBS_DIM);
 

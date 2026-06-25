@@ -14,8 +14,13 @@ rewards:
   combat_hit_eps: 0.5
   combat_personality_fighter: 1.0
   combat_personality_other: 0.3
-  asteroid_hit_miner: 3.0
+  asteroid_hit_miner: 1.00
   asteroid_hit_other: 0.3
+  # Ore dropped per shattered asteroid = 1..=(size * asteroid_drop_scale).
+  # Started HIGH (4.0) so a prospector's tiny 6-unit hold fills in ~1 hit and it
+  # learns to land & sell immediately; a daemon titrates this back down toward a
+  # reasonable value (still > the old 0.2) while selling persists.
+  asteroid_drop_scale: 4.0
   landing_trader_can_sell: 0.5
   landing_trader_can_buy: 0.3
   landing_fighter_can_rearm: 0.5
@@ -26,10 +31,14 @@ rewards:
   landing_off_target_multiplier: 1.0
   landing_cooldown_secs: 30.0
   cargo_sold_fighter: 0.1
-  cargo_sold_miner: 0.8
+  cargo_sold_miner: 1.5
   cargo_sold_trader: 1.0
+  # Superlinear fill shaping: cargo_sold payout *= cargo_frac^(exponent-1), so a
+  # full hold pays disproportionately more than partial loads. Teaches miners to
+  # FILL before selling (they were landing ~half-full). 1.0=linear; 2.5 here.
+  cargo_sold_fill_exponent: 3.0
   pickup_reward_fighter: 0.1
-  pickup_reward_miner: 0.8
+  pickup_reward_miner: 1.70
   pickup_reward_trader: 0.1
   reward_sharing_fighter: 0.3
   reward_sharing_miner: 0.05
@@ -38,20 +47,20 @@ ppo:
   gamma: 0.99
   lambda: 0.95
   clip_eps: 0.1
-  entropy_coeff: 0.01
-  bc_coeff: 0.01
+  entropy_coeff: 0.002
+  bc_coeff: 0.10
   policy_lr: 0.0003
   value_lr: 0.001
-  policy_epochs: 2
-  value_epochs: 4
-  mini_batch_size: 512
-  min_segments: 16
-  max_segments: 64
+  policy_epochs: 6
+  value_epochs: 16
+  mini_batch_size: 2048
+  min_segments: 20
+  max_segments: 128
   weight_sync_interval: 1
   save_interval: 30
   huber_delta: 1.0
-  value_burnin_ev_threshold: 0.3
-  value_replay_capacity: 8192
+  value_burnin_ev_threshold: 0.2
+  value_replay_capacity: 200000
   value_replay_fraction: 0.25
   value_replay_extra_batches: 4
   # Swap the training environment to a randomly chosen system every N

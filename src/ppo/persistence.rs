@@ -127,6 +127,8 @@ pub fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
                 // to the executed action.
                 rule_based_action: action,
                 rewards,
+                // Diagnostic-only; not persisted in the rl buffer.
+                shared_rewards: [0.0; crate::consts::N_REWARD_TYPES],
                 done,
                 log_prob,
             });

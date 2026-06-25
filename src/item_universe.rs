@@ -33,6 +33,16 @@ pub struct ItemUniverse {
     /// `star_systems` under the key "simulator" by `materialize_simulator_system`.
     #[serde(default)]
     pub simulator_system: Option<StarSystem>,
+    /// Isolated "escort" training system (assets/escort_system.yaml): traders +
+    /// pirates + Fed/Rebel defenders. Pirates hunt traders, defenders hunt
+    /// pirates → escort/protection dynamic. Folded into `star_systems` as "escort".
+    #[serde(default)]
+    pub escort_system: Option<StarSystem>,
+    /// Isolated "mining" training system (assets/mining_system.yaml): dense
+    /// asteroid fields + miners (+ traders/pirates/defender for context).
+    /// Folded into `star_systems` as "mining".
+    #[serde(default)]
+    pub mining_system: Option<StarSystem>,
     #[serde(default)]
     pub outfitter_items: HashMap<String, OutfitterItem>,
     // A map from my faction, to which factions engage me
@@ -119,26 +129,34 @@ impl ItemUniverse {
         crate::validate_assets::validate(self);
     }
 
-    /// Fold the "simulator" star system loaded from
-    /// `assets/simulator_system.yaml` into `star_systems` under the key
-    /// "simulator". The simulator is intentionally disconnected from the
-    /// rest of the star map (no jump connections), so it cannot be reached
-    /// or seen by the player. Used by RL training to diversify environments
-    /// without affecting normal gameplay.
-    fn materialize_simulator_system(&mut self) {
-        if self.star_systems.contains_key("simulator") {
-            return; // already defined explicitly in star_systems.yaml
+    /// Fold the isolated RL-training systems (simulator / escort / mining),
+    /// each loaded from its own `assets/<name>_system.yaml`, into
+    /// `star_systems` under a fixed key. They are intentionally disconnected
+    /// from the gameplay galaxy (no jump connections) so they can never be
+    /// reached or seen by the player — used only to give training dedicated
+    /// scenario worlds (combat arena, escort run, mining belt).
+    pub const TRAINING_SYSTEM_KEYS: [&'static str; 3] = ["simulator", "escort", "mining"];
+
+    fn materialize_training_systems(&mut self) {
+        let entries = [
+            (self.simulator_system.take(), "simulator", "Simulator"),
+            (self.escort_system.take(), "escort", "Escort Run"),
+            (self.mining_system.take(), "mining", "Mining Belt"),
+        ];
+        for (sys, key, name) in entries {
+            if self.star_systems.contains_key(key) {
+                continue; // already defined explicitly in star_systems.yaml
+            }
+            let Some(mut s) = sys else {
+                continue;
+            };
+            // Connections empty so it stays unreachable from the gameplay galaxy.
+            s.connections.clear();
+            if s.display_name.is_empty() {
+                s.display_name = name.to_string();
+            }
+            self.star_systems.insert(key.to_string(), s);
         }
-        let Some(mut simulator) = self.simulator_system.take() else {
-            return;
-        };
-        // Connections must be empty so the simulator stays unreachable from
-        // the gameplay galaxy, regardless of what the YAML file specifies.
-        simulator.connections.clear();
-        if simulator.display_name.is_empty() {
-            simulator.display_name = "Simulator".to_string();
-        }
-        self.star_systems.insert("simulator".to_string(), simulator);
     }
 
     fn compute_global_averages(&mut self) {
@@ -493,7 +511,7 @@ pub fn item_universe_plugin(app: &mut App) {
         );
 
     item_universe.fill_display_names();
-    item_universe.materialize_simulator_system();
+    item_universe.materialize_training_systems();
     item_universe.compute_global_averages();
     item_universe.compute_trade_maps();
     item_universe.compute_planet_ammo();
@@ -507,9 +525,23 @@ pub fn item_universe_plugin(app: &mut App) {
 fn preload_sprites(
     asset_server: Res<AssetServer>,
     mut item_universe: ResMut<ItemUniverse>,
+    // Optional so headless training apps without the sprite asset type still run.
+    atlas_layouts: Option<ResMut<Assets<TextureAtlasLayout>>>,
 ) {
+    use crate::ship::{SHIP_ATLAS_COLS, SHIP_ATLAS_ROWS, SHIP_ATLAS_TILE};
+    // One shared layout for every ship atlas (all are N×N grids of equal tiles).
+    let ship_atlas_layout = atlas_layouts.map(|mut layouts| {
+        layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(SHIP_ATLAS_TILE),
+            SHIP_ATLAS_COLS,
+            SHIP_ATLAS_ROWS,
+            None,
+            None,
+        ))
+    });
     for data in item_universe.ships.values_mut() {
         data.sprite_handle = asset_server.load(data.sprite_path.clone());
+        data.atlas_layout = ship_atlas_layout.clone();
     }
     for system in item_universe.star_systems.values_mut() {
         for (name, planet) in system.planets.iter_mut() {

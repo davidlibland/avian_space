@@ -6,7 +6,7 @@ use crate::rl_obs::K_PROJECTILES;
 
 use super::{
     HIDDEN_DIM, InferBackend, N_OBJECTS, OBJECT_INPUT_DIM, POLICY_OUTPUT_DIM, PROJ_INPUT_DIM,
-    SELF_INPUT_DIM, TrainBackend,
+    SELF_INPUT_DIM, TrainBackend, VALUE_HIDDEN_DIM,
     net::{RLNet, net_to_bytes},
 };
 
@@ -132,7 +132,9 @@ pub fn load_training_net(
     }
 }
 
-/// Like [`load_training_net`] but with an explicit `output_dim` (e.g. for the value network).
+/// Like [`load_training_net`] but with an explicit `output_dim` — used for the
+/// **value** network, so it is built at [`VALUE_HIDDEN_DIM`] (not the policy's
+/// `HIDDEN_DIM`).
 pub fn load_training_net_with_dim(
     path: &str,
     device: &<TrainBackend as Backend>::Device,
@@ -141,7 +143,7 @@ pub fn load_training_net_with_dim(
     use burn::record::{BinBytesRecorder, BinFileRecorder, FullPrecisionSettings, Recorder};
     let infer_device: <InferBackend as Backend>::Device = Default::default();
     let recorder = BinFileRecorder::<FullPrecisionSettings>::default();
-    let infer_net = match RLNet::<InferBackend>::new(&infer_device, HIDDEN_DIM, output_dim)
+    let infer_net = match RLNet::<InferBackend>::new(&infer_device, VALUE_HIDDEN_DIM, output_dim)
         .load_file(path, &recorder, &infer_device)
     {
         Ok(net) => net,
@@ -155,7 +157,7 @@ pub fn load_training_net_with_dim(
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
         Ok(record) => {
             let net =
-                RLNet::<TrainBackend>::new(device, HIDDEN_DIM, output_dim).load_record(record);
+                RLNet::<TrainBackend>::new(device, VALUE_HIDDEN_DIM, output_dim).load_record(record);
             println!("[model] Loaded training net (dim={output_dim}) from {path}");
             Some(net)
         }

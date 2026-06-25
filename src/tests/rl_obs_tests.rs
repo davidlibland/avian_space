@@ -47,6 +47,7 @@ fn minimal_obs_input(ship: &Ship) -> ObsInput<'_> {
         distressed: 0.0,
         other_projectile_slots: vec![],
         own_projectile_slots: vec![],
+        team: Default::default(),
     }
 }
 
@@ -96,6 +97,7 @@ fn test_observation_shape_constant() {
         distressed: 0.0,
         other_projectile_slots: vec![],
         own_projectile_slots: vec![],
+        team: Default::default(),
     });
     assert_eq!(obs1.len(), OBS_DIM, "some entities");
 
@@ -123,6 +125,7 @@ fn test_observation_shape_constant() {
         distressed: 0.0,
         other_projectile_slots: vec![],
         own_projectile_slots: vec![],
+        team: Default::default(),
     });
     assert_eq!(obs2.len(), OBS_DIM, "full buckets");
 }
@@ -321,6 +324,7 @@ fn test_target_pursuit_angle_ahead() {
         distressed: 0.0,
         other_projectile_slots: vec![],
         own_projectile_slots: vec![],
+        team: Default::default(),
     });
     // The asteroid is in slot 0 (first and only entity).
     let slot_offset = SELF_SIZE;
@@ -405,6 +409,7 @@ fn test_slot_block_extraction() {
         distressed: 0.0,
         other_projectile_slots: vec![],
         own_projectile_slots: vec![],
+        team: Default::default(),
     });
 
     // Slot 0 starts at SELF_SIZE.
@@ -512,6 +517,7 @@ fn test_planet_slot_block_extraction() {
         distressed: 0.0,
         other_projectile_slots: vec![],
         own_projectile_slots: vec![],
+        team: Default::default(),
     });
 
     let s = SELF_SIZE;

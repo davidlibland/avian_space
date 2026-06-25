@@ -14,6 +14,14 @@ struct ReplayStep {
     priority: f32,
 }
 
+/// Steps are stored as a binary **min-heap** keyed by `priority` (root = lowest
+/// priority). This makes "evict the lowest-priority step when full" an
+/// `O(log n)` operation instead of an `O(n)` scan per insert, which matters a
+/// lot once the buffer is large (e.g. 200k): a full scan per inserted step
+/// would make each update spend many seconds just maintaining the buffer.
+///
+/// Heap order is irrelevant to `sample`, which draws uniformly at random by
+/// index, so we get cheap eviction without affecting sampling semantics.
 pub struct ValueReplayBuffer {
     steps: Vec<ReplayStep>,
     capacity: usize,
@@ -27,8 +35,40 @@ impl ValueReplayBuffer {
         }
     }
 
+    fn sift_up(&mut self, mut i: usize) {
+        while i > 0 {
+            let parent = (i - 1) / 2;
+            if self.steps[i].priority < self.steps[parent].priority {
+                self.steps.swap(i, parent);
+                i = parent;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn sift_down(&mut self, mut i: usize) {
+        let n = self.steps.len();
+        loop {
+            let (l, r) = (2 * i + 1, 2 * i + 2);
+            let mut smallest = i;
+            if l < n && self.steps[l].priority < self.steps[smallest].priority {
+                smallest = l;
+            }
+            if r < n && self.steps[r].priority < self.steps[smallest].priority {
+                smallest = r;
+            }
+            if smallest == i {
+                break;
+            }
+            self.steps.swap(i, smallest);
+            i = smallest;
+        }
+    }
+
     /// Insert high-priority steps from a batch. Priority = max absolute advantage
-    /// across heads; evicts lower-priority steps when at capacity.
+    /// across heads; when at capacity, evicts the lowest-priority step (heap
+    /// root) iff the incoming step ranks higher.
     pub fn insert_from_batch(
         &mut self,
         batch: &PpoBatch,
@@ -42,6 +82,12 @@ impl ValueReplayBuffer {
                 .fold(0.0_f32, f32::max);
 
             if priority < 1e-8 {
+                continue;
+            }
+
+            // Skip cheaply if the buffer is full and this step can't beat the
+            // current minimum — avoids constructing the (heavy) ReplayStep.
+            if self.steps.len() >= self.capacity && priority <= self.steps[0].priority {
                 continue;
             }
 
@@ -61,15 +107,11 @@ impl ValueReplayBuffer {
 
             if self.steps.len() < self.capacity {
                 self.steps.push(step);
-            } else if let Some((min_idx, min_step)) = self
-                .steps
-                .iter()
-                .enumerate()
-                .min_by(|(_, a), (_, b)| a.priority.partial_cmp(&b.priority).unwrap())
-            {
-                if priority > min_step.priority {
-                    self.steps[min_idx] = step;
-                }
+                self.sift_up(self.steps.len() - 1);
+            } else {
+                // Replace the lowest-priority step (root) and restore heap order.
+                self.steps[0] = step;
+                self.sift_down(0);
             }
         }
     }

@@ -5,7 +5,9 @@ use burn::{
     tensor::backend::AutodiffBackend,
 };
 
-use super::{HIDDEN_DIM, POLICY_OUTPUT_DIM, TrainBackend, VALUE_OUTPUT_DIM, net::RLNet};
+use super::{
+    HIDDEN_DIM, POLICY_OUTPUT_DIM, TrainBackend, VALUE_HIDDEN_DIM, VALUE_OUTPUT_DIM, net::RLNet,
+};
 
 /// All mutable training state owned by the background thread.
 ///
@@ -25,7 +27,7 @@ impl<B: AutodiffBackend> RLInner<B> {
         let adam = AdamConfig::new();
         Self {
             policy_net: Some(RLNet::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM)),
-            value_net: Some(RLNet::new(device, HIDDEN_DIM, VALUE_OUTPUT_DIM)),
+            value_net: Some(RLNet::new(device, VALUE_HIDDEN_DIM, VALUE_OUTPUT_DIM)),
             policy_optim: adam.init::<B, RLNet<B>>(),
             value_optim: adam.init::<B, RLNet<B>>(),
         }

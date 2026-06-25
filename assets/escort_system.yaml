@@ -1,0 +1,81 @@
+# Isolated "escort" training system (RL only — unreachable in normal play).
+# Designed to elicit the escort/piracy cooperation dynamic:
+#   * Traders (Merchant) are prey — pirates engage them (enemies.yaml:
+#     "Merchant: [Pirate]"), and traders don't fight back.
+#   * Pirates are predators.
+#   * Federation/Rebel warships hunt pirates (enemies.yaml: "Pirate: [Rebel,
+#     Federation]"), so they effectively defend the traders.
+#   * allies.yaml gives Federation/Rebel a reward share of nearby Merchants,
+#     incentivising Fighters to keep traders alive.
+# Trader-heavy so there is plenty to protect; a couple of planets give traders
+# somewhere to land/sell.
+
+display_name: "Escort Run"
+map_position: [0.0, 0.0]
+connections: []
+planets:
+  haven:
+    planet_type: habitable
+    faction: Federation
+    location: [0.0, 0.0]
+    description: "A bustling Federation trade hub at the heart of the run."
+    radius: 55.0
+    color: [0.2, 0.6, 0.3]
+    commodities:
+      food: 12
+      water: 8
+      iron: 22
+      chemicals: 30
+      gold: 90
+    outfitter: []
+  outpost:
+    planet_type: rocky
+    faction: Federation
+    location: [1400.0, -900.0]
+    description: "A frontier depot at the far end — the traders' destination."
+    radius: 26.0
+    color: [0.6, 0.5, 0.45]
+    commodities:
+      iron: 6
+      silicates: 8
+      food: 48
+      water: 32
+      gold: 120
+    outfitter: []
+  waystation:
+    planet_type: rocky
+    faction: Federation
+    location: [-1200.0, 800.0]
+    description: "A mid-run refuelling stop with its own quirky prices."
+    radius: 24.0
+    color: [0.5, 0.55, 0.6]
+    commodities:
+      chemicals: 8
+      silicates: 34
+      iron: 15
+      food: 28
+      water: 18
+      gold: 104
+    outfitter: []
+astroid_fields:
+  -
+    location: [600.0, 500.0]
+    number: 20
+    radius: 1400.
+ships:
+  # Trader-heavy convoy (prey) + pirates (predators) + Fed/Rebel escorts.
+  min: 30
+  max: 42
+  types:
+    # Traders (Merchant) — the convoy being raided / protected
+    hauler: 3.0
+    freighter: 2.0
+    shuttle: 1.5
+    courier: 1.0
+    # Pirates — raid the convoy
+    pirate_corvette: 2.5
+    pirate_missile_boat: 0.5
+    # Federation / Rebel escorts — hunt pirates (effectively defend traders)
+    fed_patrol: 2.5
+    fed_destroyer: 0.5
+    rebel_fighter: 1.0

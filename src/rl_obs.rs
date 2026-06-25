@@ -194,11 +194,45 @@ pub const TARGET_TYPE_IDX_PLANET: usize = 2;
 pub const TARGET_TYPE_IDX_PICKUP: usize = 3;
 pub const TARGET_TYPE_IDX_NONE: usize = 4;
 
-pub const SELF_NAV_TARGET_TYPE: usize = SELF_SECONDARY_SPEED + 1; // 19
-pub const SELF_WEP_TARGET_TYPE: usize = SELF_NAV_TARGET_TYPE + TARGET_TYPE_SIZE; // 24
+// Base the target-type one-hots on the LAST weapon-stat field
+// (`SELF_SECONDARY_FIRE_RATE`). The previous `SELF_SECONDARY_SPEED + 1`
+// collided with `SELF_PRIMARY_FIRE_RATE` / `SELF_SECONDARY_FIRE_RATE` (which
+// are `SELF_SECONDARY_SPEED + 1/+2`), so the nav one-hot silently clobbered
+// the fire-rate self-features. Indices below are post-fix.
+pub const SELF_NAV_TARGET_TYPE: usize = SELF_SECONDARY_FIRE_RATE + 1; // 27
+pub const SELF_WEP_TARGET_TYPE: usize = SELF_NAV_TARGET_TYPE + TARGET_TYPE_SIZE; // 32
+
+// ── Team-context block (Phase 1 cooperation features) ────────────────────
+// Permutation-invariant, ego-frame summary of nearby allies (ships whose
+// faction is in the observer's `allies` list) within `DETECTION_RADIUS`.
+// Feeding this through the shared self pathway makes BOTH the policy heads
+// and the value head team-aware without a learned inter-agent attention
+// layer (that is Phase 2). The caller aggregates allies into `TeamContext`.
+pub const SELF_TEAM_START: usize = SELF_WEP_TARGET_TYPE + TARGET_TYPE_SIZE; // 37
+/// `min(n_allies / TEAM_COUNT_REF, 1)`.
+pub const SELF_TEAM_COUNT: usize = SELF_TEAM_START; // 37
+/// 1.0 if any ally is in range, else 0.0 (block presence mask).
+pub const SELF_TEAM_PRESENT: usize = SELF_TEAM_START + 1; // 38
+/// Ego-frame centroid of ally relative positions (2 floats, raw units).
+pub const SELF_TEAM_CENTROID_POS: usize = SELF_TEAM_START + 2; // 39
+/// Ego-frame mean ally relative velocity (2 floats, raw units).
+pub const SELF_TEAM_MEAN_VEL: usize = SELF_TEAM_START + 4; // 41
+/// Ego-frame relative position of the nearest ally (2 floats).
+pub const SELF_TEAM_NEAREST_POS: usize = SELF_TEAM_START + 6; // 43
+/// Mean ally health fraction.
+pub const SELF_TEAM_MEAN_HEALTH: usize = SELF_TEAM_START + 8; // 45
+/// Fraction of in-range allies currently distressed.
+pub const SELF_TEAM_FRAC_DISTRESSED: usize = SELF_TEAM_START + 9; // 46
+/// Fraction of in-range allies whose weapons-target equals ours
+/// (focus-fire / deconfliction signal; 0 if we have no weapons target).
+pub const SELF_TEAM_FRAC_SHARED_TARGET: usize = SELF_TEAM_START + 10; // 47
+/// Number of floats in the team-context block.
+pub const SELF_TEAM_SIZE: usize = 11;
+/// Reference ally count for `SELF_TEAM_COUNT` normalisation.
+pub const TEAM_COUNT_REF: f32 = 4.0;
 
 /// Floats for the self-state block.
-pub const SELF_SIZE: usize = SELF_WEP_TARGET_TYPE + TARGET_TYPE_SIZE; // 29
+pub const SELF_SIZE: usize = SELF_TEAM_START + SELF_TEAM_SIZE; // 48
 
 /// Reference damage for weapon-damage normalisation (≈ max single-hit damage).
 pub const WEAPON_DAMAGE_REF: f32 = 50.0;
@@ -372,6 +406,30 @@ pub struct ProjectileSlotData {
 /// The Bevy system is responsible for collecting entity data, performing the
 /// spatial query, rotating vectors into the ego frame, and normalising values
 /// before populating this struct.
+/// Aggregate, ego-frame summary of the observer's nearby allies. Built by the
+/// Bevy collection system (which has access to all ships' state) and written
+/// into the self-state team-context block by [`encode_observation`].
+///
+/// All vectors are already rotated into the observer's ego frame (+x =
+/// forward) and use the same raw units as entity-slot positions/velocities.
+#[derive(Default, Clone, Copy)]
+pub struct TeamContext {
+    /// Number of in-range allies (excluding self).
+    pub count: usize,
+    /// Centroid of ally relative positions.
+    pub centroid_pos: [f32; 2],
+    /// Mean ally relative velocity.
+    pub mean_vel: [f32; 2],
+    /// Relative position of the nearest ally.
+    pub nearest_pos: [f32; 2],
+    /// Mean ally health fraction in [0, 1].
+    pub mean_health: f32,
+    /// Fraction of in-range allies currently distressed.
+    pub frac_distressed: f32,
+    /// Fraction of in-range allies sharing the observer's weapons target.
+    pub frac_shared_target: f32,
+}
+
 pub struct ObsInput<'a> {
     pub personality: &'a Personality,
     pub ship: &'a Ship,
@@ -419,6 +477,8 @@ pub struct ObsInput<'a> {
     pub other_projectile_slots: Vec<ProjectileSlotData>,
     /// Tracer projectiles fired by this ship (up to `K_OWN_PROJECTILES`).
     pub own_projectile_slots: Vec<ProjectileSlotData>,
+    /// Aggregate summary of nearby allies (team-context block).
+    pub team: TeamContext,
 }
 
 // ---------------------------------------------------------------------------
@@ -705,6 +765,21 @@ pub fn encode_observation(input: &ObsInput<'_>) -> Vec<f32> {
     let wep_idx = (input.weapons_target_type as usize).min(TARGET_TYPE_IDX_NONE);
     self_buf[SELF_NAV_TARGET_TYPE + nav_idx] = 1.0;
     self_buf[SELF_WEP_TARGET_TYPE + wep_idx] = 1.0;
+
+    // Team-context block: aggregate summary of nearby allies (already
+    // ego-rotated by the caller). Lets the shared policy/value condition on
+    // the team's state to coordinate (regroup, support, deconflict targets).
+    let team = &input.team;
+    self_buf[SELF_TEAM_COUNT] = (team.count as f32 / TEAM_COUNT_REF).min(1.0);
+    self_buf[SELF_TEAM_PRESENT] = if team.count > 0 { 1.0 } else { 0.0 };
+    self_buf[SELF_TEAM_CENTROID_POS..SELF_TEAM_CENTROID_POS + 2]
+        .copy_from_slice(&team.centroid_pos);
+    self_buf[SELF_TEAM_MEAN_VEL..SELF_TEAM_MEAN_VEL + 2].copy_from_slice(&team.mean_vel);
+    self_buf[SELF_TEAM_NEAREST_POS..SELF_TEAM_NEAREST_POS + 2].copy_from_slice(&team.nearest_pos);
+    self_buf[SELF_TEAM_MEAN_HEALTH] = team.mean_health;
+    self_buf[SELF_TEAM_FRAC_DISTRESSED] = team.frac_distressed;
+    self_buf[SELF_TEAM_FRAC_SHARED_TARGET] = team.frac_shared_target;
+
     obs.extend_from_slice(&self_buf);
     debug_assert_eq!(obs.len(), SELF_SIZE);
 

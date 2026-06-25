@@ -1,0 +1,78 @@
+# Isolated "mining" training system (RL only — unreachable in normal play).
+# Purpose: give Miners abundant asteroids so they actually mine (miner
+# asteroid_hit reward had been lagging). Several large asteroid fields dominate.
+#
+# Miners are now Merchant faction (ships.yaml), so pirates raid them directly
+# and Federation/Rebel patrols are reward-incentivised (allies.yaml) to defend
+# them. The Federation patrol + haulers round out the threat/escort dynamic.
+# Two planets (refinery + prospect) with differing prices let haulers trade and
+# give miners a high-price market for their ore.
+
+display_name: "Mining Belt"
+map_position: [0.0, 0.0]
+connections: []
+planets:
+  refinery:
+    planet_type: rocky
+    faction: Federation
+    location: [0.0, 0.0]
+    description: "An ore refinery station — where miners sell their haul."
+    radius: 30.0
+    color: [0.6, 0.5, 0.45]
+    commodities:
+      iron: 35
+      silicates: 30
+      gold: 110
+      food: 45
+      water: 35
+    outfitter: []
+  prospect:
+    planet_type: rocky
+    faction: Federation
+    location: [1500.0, 900.0]
+    description: "A frontier mining colony — cheap raw ore, dear on supplies."
+    radius: 24.0
+    color: [0.65, 0.5, 0.4]
+    commodities:
+      iron: 8
+      silicates: 6
+      gold: 95
+      food: 52
+      water: 42
+      chemicals: 26
+    outfitter: []
+astroid_fields:
+  -
+    location: [-1000.0, -600.0]
+    number: 60
+    radius: 1600.
+  -
+    location: [1100.0, -400.0]
+    number: 60
+    radius: 1600.
+  -
+    location: [200.0, 1100.0]
+    number: 55
+    radius: 1500.
+  -
+    location: [-900.0, 800.0]
+    number: 50
+    radius: 1400.
+ships:
+  # Miner-dominant, with haulers (pirate-bait) + a few pirates + a patrol.
+  min: 28
+  max: 38
+  types:
+    # Miners — the focus; dense asteroids above keep them busy. Half are heavy
+    # asteroid_miners (big hold), half are small nimble prospectors (tiny hold)
+    # that must ferry ore back to a planet to sell.
+    asteroid_miner: 2.5
+    prospector: 2.5
+    # Merchant haulers — move ore + give pirates something to raid
+    hauler: 1.5
+    freighter: 0.5
+    # Pirates — raid the haulers (threat/context)
+    pirate_corvette: 1.5
+    pirate_missile_boat: 0.25
+    # Federation patrol — hunts pirates
+    fed_patrol: 1.0
