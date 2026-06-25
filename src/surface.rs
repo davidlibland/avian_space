@@ -264,6 +264,7 @@ pub fn surface_plugin(app: &mut App) {
                 save_on_explore,
                 teardown_surface,
                 crate::surface_civilians::cleanup_civilians,
+                crate::surface_fauna::cleanup_fauna,
             )
                 .chain(),
         )
@@ -292,6 +293,9 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_npc_chat::npc_chat_interact,
                 crate::surface_npc::update_npc_markers,
                 crate::surface_civilians::depth_sort_npcs,
+                crate::surface_fauna::spawn_fauna,
+                crate::surface_fauna::run_fauna,
+                crate::surface_fauna::depth_sort_fauna,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )
@@ -1525,6 +1529,19 @@ fn setup_surface(
                 map_h,
                 seed,
                 &placed_buildings,
+            );
+
+            // ── Setup roaming fauna (deer, rabbit, …) ────────────────
+            crate::surface_fauna::setup_fauna(
+                &mut commands,
+                &asset_server,
+                &mut atlas_layouts,
+                &terrain_flat,
+                &terrain_names,
+                biome_name,
+                map_w,
+                map_h,
+                seed,
             );
         }
 

@@ -40,6 +40,7 @@ mod starfield;
 mod surface;
 mod surface_character;
 mod surface_civilians;
+mod surface_fauna;
 mod surface_npc;
 mod surface_npc_chat;
 mod surface_objects;
