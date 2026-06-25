@@ -994,6 +994,87 @@ def draw_sewage(
 # ║  Biome object definitions                                                ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
+def draw_oak(img, draw, variant, frame, w, h):
+    """Broad round oak — big dark canopy, thick trunk."""
+    greens = [(34, 92, 30), (28, 80, 24), (40, 100, 34), (30, 84, 26)]
+    c = greens[variant % 4]; sx = _sway(frame, 4, 0.7); cx = w // 2
+    draw.rectangle([cx - 1, h // 2, cx + 2, h - 2], fill=(70, 46, 26))
+    r = w // 2 - 2
+    draw.ellipse([cx - r + int(sx), h // 6, cx + r + int(sx), h // 2 + 3], fill=c)
+    hl = tuple(min(255, v + 18) for v in c)
+    draw.ellipse([cx - r + 2 + int(sx), h // 6, cx + int(sx), h // 3], fill=hl)
+
+
+def draw_birch(img, draw, variant, frame, w, h):
+    """Slender birch — pale trunk, light airy canopy."""
+    greens = [(70, 140, 55), (60, 130, 48), (80, 150, 62), (65, 135, 52)]
+    c = greens[variant % 4]; sx = _sway(frame, 4, 1.0); cx = w // 2
+    draw.rectangle([cx - 1, h // 3, cx, h - 1], fill=(212, 212, 202))
+    draw.point((cx - 1, h // 2), fill=(60, 60, 55)); draw.point((cx, h * 2 // 3), fill=(60, 60, 55))
+    r = w // 4 + 1
+    draw.ellipse([cx - r + int(sx), h // 8, cx + r + int(sx), h // 3 + 2], fill=c)
+
+
+def draw_willow(img, draw, variant, frame, w, h):
+    """Weeping willow — drooping strands."""
+    greens = [(80, 130, 50), (70, 120, 44), (90, 140, 58), (74, 124, 48)]
+    c = greens[variant % 4]; sx = _sway(frame, 4, 1.3); cx = w // 2
+    draw.rectangle([cx - 1, h // 2, cx + 1, h - 2], fill=(72, 52, 34))
+    draw.ellipse([cx - w // 2 + 2, h // 6, cx + w // 2 - 2, h // 2], fill=c)
+    for dx in range(-w // 2 + 3, w // 2 - 2, 3):
+        draw.line([(cx + dx, h // 3), (cx + dx + int(sx), h - 3)], fill=c, width=1)
+
+
+def draw_dead_tree(img, draw, variant, frame, w, h):
+    """Bare gnarled snag."""
+    c = [(95, 72, 50), (80, 60, 42), (70, 52, 36), (88, 66, 46)][variant % 4]
+    cx = w // 2; sx = _sway(frame, 4, 0.5)
+    draw.rectangle([cx - 1, h // 3, cx + 1, h - 2], fill=c)
+    for ang in (-1, 1):
+        draw.line([(cx, h // 2), (cx + ang * (w // 3) + int(sx), h // 5)], fill=c, width=1)
+        draw.line([(cx, h * 2 // 5), (cx + ang * (w // 4) + int(sx), h // 8)], fill=c, width=1)
+
+
+def draw_fern(img, draw, variant, frame, w, h):
+    """Arching forest-floor fern."""
+    c = [(40, 110, 40), (35, 100, 34), (48, 120, 46), (38, 104, 38)][variant % 4]
+    cx = w // 2; sx = _sway(frame, 4, 1.0)
+    for ang in (-1, 0, 1):
+        draw.line([(cx, h - 2), (cx + ang * (w // 3) + int(sx), h // 4)], fill=c, width=1)
+
+
+def draw_mushroom(img, draw, variant, frame, w, h):
+    """Small mushroom cluster."""
+    cap = [(170, 60, 50), (150, 120, 90), (180, 90, 60), (140, 100, 70)][variant % 4]
+    for dx, dy in ((-2, 0), (2, 1), (0, -1)):
+        x = w // 2 + dx; y = h - 3 + dy
+        draw.rectangle([x, y, x, y + 1], fill=(212, 202, 182))
+        draw.ellipse([x - 1, y - 2, x + 1, y], fill=cap)
+
+
+def draw_wildflower(img, draw, variant, frame, w, h):
+    """Grass tuft topped with a coloured flower."""
+    fc = [(222, 82, 92), (232, 202, 72), (182, 122, 222), (240, 142, 82)][variant % 4]
+    cx = w // 2; sx = _sway(frame, 4, 1.0); gc = (60, 120, 45)
+    for dx in (-2, 0, 2):
+        draw.line([(cx + dx, h - 1), (cx + dx + int(sx), h // 3)], fill=gc, width=1)
+    draw.ellipse([cx - 1 + int(sx), h // 3 - 1, cx + 1 + int(sx), h // 3 + 1], fill=fc)
+
+
+def draw_fallen_log(img, draw, variant, frame, w, h):
+    """Mossy fallen log."""
+    lc = [(90, 66, 44), (80, 58, 40), (96, 70, 48)][variant % 3]
+    y = h - 4
+    draw.rectangle([2, y, w - 3, y + 3], fill=lc)
+    draw.line([(2, y), (w - 3, y)], fill=(60, 110, 50), width=1)
+    draw.ellipse([1, y, 3, y + 3], fill=tuple(max(0, v - 20) for v in lc))
+
+
+# NOTE: garden is now generated in 3D toon by scripts/ship3d/objects3d.py (bake);
+# the garden block in objects_manifest.ron + garden_objects.png come from there.
+# Re-running THIS script regenerates the (flat 2D) garden too, so re-run
+# `objects3d.py bake` afterwards. The other four biomes are still 2D here pending
+# the same re-art. This 2D garden roster is kept only as reference.
 GARDEN_OBJECTS = BiomeObjects(
     biome="garden",
     objects=[
@@ -1027,77 +1108,67 @@ GARDEN_OBJECTS = BiomeObjects(
             y_offset=0.0,
             draw_fn=draw_ripple,
         ),
+        # ── ground cover (dense, repetition is fine) ──
         ObjectType(
-            "grass_tuft",
-            n_frames=4,
-            terrains=["sand", "grass"],
-            density=0.70,
-            min_distance=0.8,
-            max_per_tile=3,
-            y_offset=6.0,
-            draw_fn=draw_grass_tuft,
+            "grass_tuft", n_frames=4, terrains=["sand", "grass"],
+            density=0.90, min_distance=0.8, max_per_tile=4, y_offset=6.0, draw_fn=draw_grass_tuft,
+        ),
+        ObjectType(  # meadow colour on grass
+            "wildflower", n_frames=4, terrains=["grass"],
+            density=0.50, min_distance=0.8, max_per_tile=2, y_offset=6.0, draw_fn=draw_wildflower,
+        ),
+        ObjectType(  # forest-floor undergrowth
+            "fern", n_frames=4, terrains=["forest"],
+            density=0.60, min_distance=0.8, max_per_tile=2, y_offset=6.0, draw_fn=draw_fern,
         ),
         ObjectType(
-            "bush",
-            n_frames=4,
-            terrains=["grass", "forest"],
-            density=0.36,
-            min_distance=2.0,
-            max_per_tile=1,
-            y_offset=4.0,
-            draw_fn=draw_bush,
+            "mushroom", n_frames=1, terrains=["forest"],
+            density=0.35, min_distance=1.0, max_per_tile=2, y_offset=4.0, draw_fn=draw_mushroom,
         ),
         ObjectType(
-            "rock",
-            n_frames=1,
-            terrains=["sand", "grass", "mountain"],
-            density=0.10,
-            min_distance=2.5,
-            max_per_tile=2,
-            y_offset=6.0,
-            draw_fn=draw_rock,
+            "bush", n_frames=4, terrains=["grass", "forest"],
+            density=0.45, min_distance=2.0, max_per_tile=2, y_offset=4.0, draw_fn=draw_bush,
         ),
         ObjectType(
-            "tree",
-            n_frames=4,
-            terrains=["grass", "forest"],
-            density=0.36,
-            min_distance=2.5,
-            max_per_tile=1,
-            y_offset=8.0,
-            draw_fn=draw_tree,
+            "fallen_log", n_frames=1, terrains=["forest"],
+            density=0.10, min_distance=3.0, max_per_tile=1, y_offset=6.0, draw_fn=draw_fallen_log,
         ),
         ObjectType(
-            "conifer",
-            n_frames=4,
-            terrains=["forest", "mountain"],
-            density=0.36,
-            min_distance=2.5,
-            max_per_tile=1,
-            y_offset=8.0,
-            draw_fn=draw_conifer,
+            "rock", n_frames=1, terrains=["sand", "grass", "mountain"],
+            density=0.10, min_distance=2.5, max_per_tile=2, y_offset=6.0, draw_fn=draw_rock,
+        ),
+        # ── trees: a dense, varied forest canopy (forest-focused) ──
+        ObjectType(
+            "tree", n_frames=4, terrains=["grass", "forest"],
+            density=0.40, min_distance=2.5, max_per_tile=1, y_offset=8.0, draw_fn=draw_tree,
         ),
         ObjectType(
-            "tall_tree",
-            n_frames=4,
-            tile_h=32,
-            terrains=["grass", "forest"],
-            density=0.24,
-            min_distance=3.0,
-            max_per_tile=1,
-            y_offset=14.0,
-            draw_fn=draw_tall_tree,
+            "oak", n_frames=4, terrains=["forest"],
+            density=0.55, min_distance=2.0, max_per_tile=1, y_offset=8.0, draw_fn=draw_oak,
         ),
         ObjectType(
-            "tall_conifer",
-            n_frames=4,
-            tile_h=48,
-            terrains=["forest", "mountain"],
-            density=0.24,
-            min_distance=4.0,
-            max_per_tile=1,
-            y_offset=22.0,
-            draw_fn=draw_tall_conifer,
+            "birch", n_frames=4, terrains=["forest"],
+            density=0.50, min_distance=1.8, max_per_tile=1, y_offset=8.0, draw_fn=draw_birch,
+        ),
+        ObjectType(
+            "conifer", n_frames=4, terrains=["forest", "mountain"],
+            density=0.50, min_distance=2.0, max_per_tile=1, y_offset=8.0, draw_fn=draw_conifer,
+        ),
+        ObjectType(
+            "willow", n_frames=4, terrains=["forest"],
+            density=0.20, min_distance=2.5, max_per_tile=1, y_offset=8.0, draw_fn=draw_willow,
+        ),
+        ObjectType(
+            "dead_tree", n_frames=4, terrains=["forest"],
+            density=0.12, min_distance=3.0, max_per_tile=1, y_offset=8.0, draw_fn=draw_dead_tree,
+        ),
+        ObjectType(
+            "tall_tree", n_frames=4, tile_h=32, terrains=["forest"],
+            density=0.40, min_distance=2.5, max_per_tile=1, y_offset=14.0, draw_fn=draw_tall_tree,
+        ),
+        ObjectType(
+            "tall_conifer", n_frames=4, tile_h=48, terrains=["forest", "mountain"],
+            density=0.35, min_distance=3.0, max_per_tile=1, y_offset=22.0, draw_fn=draw_tall_conifer,
         ),
         ObjectType(
             "large_rock",
