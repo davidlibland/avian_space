@@ -890,6 +890,10 @@ ORTHO_B = 4.2
 PX_PER_UNIT = {"garden": 12.0, "rocky": 17.0, "ice": 20.0, "desert": 20.0, "interior": 36.0}
 # sit in lava/water/fluid, not on ground → skip the baked contact shadow
 NO_SHADOW = {"lava_bubble", "lava_spurt", "fish", "seaweed", "ice_floe", "ice_glint", "coolant"}
+# man-made station objects snap to tile-grid centres (planned interior, not
+# organic growth); leaks/vermin stay random.
+GRID_OBJECTS = {"crate", "canister", "kiosk", "machine", "floor_vent", "holo_sign",
+                "cabling", "wall_pipe", "planter"}
 TMP = os.path.join(OUT, "_obj_bake_tmp.png")
 
 
@@ -988,6 +992,7 @@ def _merge_manifest(out_dir, meta, biome):
                   f"                    terrains: {tr},", f"                    density: {dens},",
                   f"                    min_distance: {mind},", f"                    max_per_tile: {mx},",
                   f"                    y_offset: {yo},", f"                    shy: {str(shy).lower()},",
+                  f"                    grid: {str(nm in GRID_OBJECTS).lower()},",
                   "                ),"]
     lines += ["            ],", "        ),"]
     block = "\n".join(lines)

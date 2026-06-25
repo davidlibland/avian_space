@@ -948,6 +948,7 @@
                     max_per_tile: 1,
                     y_offset: 5.6,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "canister",
@@ -962,6 +963,7 @@
                     max_per_tile: 1,
                     y_offset: 7.0,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "kiosk",
@@ -976,6 +978,7 @@
                     max_per_tile: 1,
                     y_offset: 9.6,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "machine",
@@ -990,6 +993,7 @@
                     max_per_tile: 1,
                     y_offset: 10.0,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "floor_vent",
@@ -1004,6 +1008,7 @@
                     max_per_tile: 1,
                     y_offset: 9.5,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "holo_sign",
@@ -1018,6 +1023,7 @@
                     max_per_tile: 1,
                     y_offset: 12.1,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "cabling",
@@ -1032,6 +1038,7 @@
                     max_per_tile: 1,
                     y_offset: 4.1,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "wall_pipe",
@@ -1046,6 +1053,7 @@
                     max_per_tile: 1,
                     y_offset: 10.6,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "coolant",
@@ -1060,6 +1068,7 @@
                     max_per_tile: 1,
                     y_offset: 1.0,
                     shy: false,
+                    grid: false,
                 ),
                 (
                     name: "planter",
@@ -1074,6 +1083,7 @@
                     max_per_tile: 1,
                     y_offset: 5.2,
                     shy: false,
+                    grid: true,
                 ),
                 (
                     name: "rat",
@@ -1088,6 +1098,7 @@
                     max_per_tile: 1,
                     y_offset: 1.2,
                     shy: true,
+                    grid: false,
                 ),
                 (
                     name: "roach",
@@ -1102,6 +1113,7 @@
                     max_per_tile: 1,
                     y_offset: 1.1,
                     shy: true,
+                    grid: false,
                 ),
             ],
         ),

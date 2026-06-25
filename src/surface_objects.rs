@@ -49,6 +49,10 @@ struct ObjectDef {
     max_per_tile: u32,
     y_offset: f32,
     shy: bool,
+    /// Snap to the tile-grid centre instead of random in-tile jitter — for
+    /// man-made objects in planned interiors. Defaults to false (organic).
+    #[serde(default)]
+    grid: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -213,9 +217,16 @@ pub fn spawn_landscape_objects(
                     .count();
 
                 for _ in 0..count {
-                    // Jitter within the tile.
-                    let jx = rng.r#gen_range(-0.4..0.4) * tile_px;
-                    let jy = rng.r#gen_range(-0.4..0.4) * tile_px;
+                    // Grid objects snap to the tile centre (planned interior);
+                    // organic objects jitter randomly within the tile.
+                    let (jx, jy) = if obj_def.grid {
+                        (0.0, 0.0)
+                    } else {
+                        (
+                            rng.r#gen_range(-0.4..0.4) * tile_px,
+                            rng.r#gen_range(-0.4..0.4) * tile_px,
+                        )
+                    };
 
                     let world_x = (x as f32 - map_w as f32 / 2.0) * tile_px
                         + tile_px / 2.0
