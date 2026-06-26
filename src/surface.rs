@@ -617,6 +617,18 @@ fn spawn_building_3d(
     scale: f32,
     tile_px: f32,
 ) {
+    // _floor: the building's own floor + thresholds (walkable). ALWAYS below the
+    // player (and above terrain at -10), so the player walks over it and it hides
+    // the ground under the footprint / through the doorway.
+    commands.spawn((
+        DespawnOnExit(PlayState::Exploring),
+        Sprite::from_image(
+            asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_floor.png")),
+        ),
+        bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
+        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) - 2.0)
+            .with_scale(Vec3::splat(scale)),
+    ));
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Sprite::from_image(
