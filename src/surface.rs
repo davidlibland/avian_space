@@ -838,11 +838,6 @@ fn setup_surface(
         // Baked 3/4 building sprites (replace the flat exterior tiles, visually).
         let b3d = load_ron("buildings3d_manifest.ron")
             .and_then(|t| ron::from_str::<crate::world_assets::Buildings3dManifest>(&t).ok());
-        let ext_collision: Vec<u8> = bldg_manifest
-            .as_ref()
-            .map(|m| m.ext_collision.clone())
-            .unwrap_or_default();
-        const EXT_DOOR: u32 = 28;
 
         // Place the landing pad at the map center.
         let pad_cx = map_w / 2;
@@ -1246,26 +1241,24 @@ fn setup_surface(
             if let Some(tmpl) = tmpl {
                 // Footprint collision + the door sensor stay on the grid; the flat
                 // exterior tiles are no longer drawn (the 3/4 sprite replaces them).
+                // Every footprint tile is solid except the door tiles — the 3/4
+                // sprite is a solid building with a centred doorway. Doors come
+                // from the template's `entry_points` (not tile values), so the
+                // collision matches the floorplan + sprite exactly.
+                let door_set: std::collections::HashSet<(u32, u32)> =
+                    tmpl.entry_points.iter().copied().collect();
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
-                        let tile_idx = tmpl.tiles[row as usize][col as usize];
-                        if tile_idx == 0 {
-                            continue;
-                        }
                         let tx = anchor_tx + col;
                         let ty = anchor_ty + row;
                         let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
-
-                        let is_door = tile_idx == EXT_DOOR;
-                        let collision_code =
-                            ext_collision.get(tile_idx as usize).copied().unwrap_or(1);
 
                         let mut entity = commands.spawn((
                             DespawnOnExit(PlayState::Exploring),
                             Transform::from_xyz(world_pos.x, world_pos.y, bldg_z),
                         ));
 
-                        if is_door {
+                        if door_set.contains(&(col, row)) {
                             entity.insert((
                                 Building { kind },
                                 DoorSprite {
@@ -1280,7 +1273,7 @@ fn setup_surface(
                                     [GameLayer::Surface, GameLayer::Character],
                                 ),
                             ));
-                        } else if collision_code == 1 {
+                        } else {
                             entity.insert((
                                 RigidBody::Static,
                                 Collider::rectangle(tile_px, tile_px),
