@@ -626,19 +626,23 @@ fn spawn_building_3d(
         Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y + tile_px))
             .with_scale(Vec3::splat(scale)),
     ));
-    // _front sits ABOVE the player: it holds the parts that should always occlude
-    // them — the door frame, plus front-protruding props (awnings, the mechanic's
-    // engine, crates). A single depth_z(fc.y) would let a player standing *in
-    // front* of the building (y south of fc.y) sort over it, so lift it clear of
-    // the whole player z-band while keeping per-building ordering + staying under
-    // labels (z 5) and fliers (z 8).
+    // _front normally sits ABOVE the player: it holds the parts that should
+    // occlude them — the door frame + front-protruding props (awnings, the
+    // mechanic's engine, market crates). depth_z(fc.y) alone would let a player
+    // standing *in front* (y south of fc.y) sort over it, so lift it clear of the
+    // player z-band (under labels z5 / fliers z8), keeping per-building ordering.
+    //
+    // EXCEPT the shipyard: it's an open hull-bay with no door cut, so its "front"
+    // is a walkable threshold the player steps onto — that must stay BELOW the
+    // player (no lift), so they walk into the bay rather than under it.
+    let front_lift = if func == "shipyard" { 0.0 } else { 8.0 };
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Sprite::from_image(
             asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_front.png")),
         ),
         bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + 8.0)
+        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift)
             .with_scale(Vec3::splat(scale)),
     ));
 }
