@@ -2,7 +2,7 @@ use crate::{
     CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse, ship::BuyShip,
 };
 use crate::session::SessionResourceExt;
-use crate::ship_anim::{ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp, image_size};
+use crate::ship_anim::{ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp};
 use avian2d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};

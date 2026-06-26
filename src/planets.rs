@@ -10,7 +10,7 @@ use crate::item_universe::ItemUniverse;
 use crate::missions::PlayerLandedOnPlanet;
 use crate::planet_ui::LandedContext;
 use crate::ship::{ShipHostility, Target};
-use crate::ship_anim::{self, ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, image_size};
+use crate::ship_anim::{PLANET_ANIM_DURATION, ScalingDown, ScaleDownFinished};
 use crate::session::SessionResourceExt;
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player, Ship};
 
@@ -134,11 +134,10 @@ fn landing_input(
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
     mut player_query: Query<
-        (Entity, &mut Ship, &ShipHostility, &Sprite),
+        (Entity, &mut Ship, &ShipHostility),
         (With<Player>, Without<PlayerLanding>),
     >,
     mut commands: Commands,
-    images: Res<Assets<Image>>,
 ) {
     if !keyboard_input.just_pressed(KeyCode::KeyL) {
         return;
@@ -149,7 +148,7 @@ fn landing_input(
     let Ok(planet) = planet_query.get(planet_entity) else {
         return;
     };
-    let Ok((entity, mut ship, hostility, sprite)) = player_query.single_mut() else {
+    let Ok((entity, mut ship, hostility)) = player_query.single_mut() else {
         return;
     };
 
@@ -178,8 +177,10 @@ fn landing_input(
     landed_context.planet_name = Some(planet.0.clone());
 
     // Start scale-down animation; actual state transition happens in
-    // finish_player_landing when the animation completes.
-    let full_size = image_size(sprite, &images);
+    // finish_player_landing when the animation completes. Start from the ship's
+    // on-screen display size (one atlas frame), NOT image_size — that returns the
+    // whole atlas, which made the ship balloon to full size before shrinking.
+    let full_size = crate::ship::ship_display_size(ship.data.radius);
     commands.entity(entity).insert((
         PlayerLanding,
         ScalingDown {

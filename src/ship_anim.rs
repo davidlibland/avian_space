@@ -53,16 +53,6 @@ pub struct ScaleDownFinished {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Get the natural pixel size of a sprite from its image asset.
-/// Ignores `custom_size` because that may be a mid-animation value.
-pub fn image_size(sprite: &Sprite, images: &Assets<Image>) -> Vec2 {
-    if let Some(img) = images.get(&sprite.image) {
-        let s = img.size();
-        return Vec2::new(s.x as f32, s.y as f32);
-    }
-    Vec2::splat(32.0)
-}
-
 // ---------------------------------------------------------------------------
 // Systems
 // ---------------------------------------------------------------------------

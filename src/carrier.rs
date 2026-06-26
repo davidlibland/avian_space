@@ -16,7 +16,7 @@ use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::rl_collection::{RLAgent, RLStepSet};
 use crate::sfx::EscortSfx;
 use crate::ship::{Ship, ShipCommand, ShipHostility, Target};
-use crate::ship_anim::{self, ANIM_MIN_SCALE, ScalingUp, image_size};
+use crate::ship_anim::{self, ANIM_MIN_SCALE, ScalingUp};
 use crate::utils::safe_despawn;
 use crate::weapons::FireCommand;
 use crate::{GameLayer, PlayState, Player};

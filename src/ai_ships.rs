@@ -6,7 +6,7 @@ use crate::optimal_control::{pursuit_controls_ego, turn_to_angle};
 use crate::planets::Planet;
 use crate::rl_collection::{RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
 use crate::ship::{Personality, Ship, ShipHostility, Target, ship_bundle};
-use crate::ship_anim::{self, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, ScaleUpFinished, image_size};
+use crate::ship_anim::{self, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, ScaleUpFinished};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::{CurrentStarSystem, GameLayer, PlayState};
 use avian2d::prelude::*;
