@@ -863,12 +863,12 @@ fn setup_surface(
             )
         };
 
-        let min_building_spacing = 10_u32;
+        let min_building_spacing = 14_u32;
         let mut placed_buildings: Vec<(u32, u32, u32, u32)> = Vec::new(); // (x, y, w, h)
         // Reserve the pad area (3x3 centered on pad_cx, pad_cy).
         placed_buildings.push((pad_cx - 1, pad_cy - 1, 3, 3));
-        // Reserve the mechanic area (4×3).
-        placed_buildings.push((mech_x, mech_y, 4, 3));
+        // Reserve the mechanic area (6×4 — matches the 3/4 sprite footprint).
+        placed_buildings.push((mech_x.saturating_sub(1), mech_y, 6, 4));
         let mut building_assignments: Vec<(BuildingKind, u32, u32, usize)> = Vec::new(); // (kind, x, y, template_idx)
 
         for kind in &building_kinds {
@@ -1517,6 +1517,17 @@ fn setup_surface(
                 .get(biome_name)
                 .map(|b| b.terrains.iter().map(|t| t.name.clone()).collect())
                 .unwrap_or_default();
+            // Keep objects off the footprints AND a clearance band — especially
+            // the 2 tiles in front (south), where a tall object would overlap the
+            // building facade — plus 1 tile on the other sides.
+            let object_exclusion: Vec<(u32, u32, u32, u32)> = placed_buildings
+                .iter()
+                .map(|&(bx, by, bw, bh)| {
+                    let nx = bx.saturating_sub(1);
+                    let ny = by.saturating_sub(2);
+                    (nx, ny, bw + 2, (by + bh + 1).saturating_sub(ny))
+                })
+                .collect();
             crate::surface_objects::spawn_landscape_objects(
                 &mut commands,
                 &asset_server,
@@ -1527,7 +1538,7 @@ fn setup_surface(
                 map_w,
                 map_h,
                 seed,
-                &placed_buildings,
+                &object_exclusion,
             );
 
             // ── Setup roaming fauna (deer, rabbit, …) ────────────────
