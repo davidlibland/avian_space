@@ -626,13 +626,19 @@ fn spawn_building_3d(
         Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y + tile_px))
             .with_scale(Vec3::splat(scale)),
     ));
+    // _front sits ABOVE the player: it holds the parts that should always occlude
+    // them — the door frame, plus front-protruding props (awnings, the mechanic's
+    // engine, crates). A single depth_z(fc.y) would let a player standing *in
+    // front* of the building (y south of fc.y) sort over it, so lift it clear of
+    // the whole player z-band while keeping per-building ordering + staying under
+    // labels (z 5) and fliers (z 8).
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Sprite::from_image(
             asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_front.png")),
         ),
         bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y))
+        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + 8.0)
             .with_scale(Vec3::splat(scale)),
     ));
 }
@@ -850,12 +856,14 @@ fn setup_surface(
                 .fold(0u64, |acc, b| acc.wrapping_mul(37).wrapping_add(b as u64));
             let mut rng = rand::rngs::StdRng::seed_from_u64(mech_seed);
             let dist = rng.gen_range(3i32..=6);
-            let dir = rng.gen_range(0u8..4);
+            // Never place the mechanic SOUTH of the pad: it draws in front and its
+            // tall roof extends north over the pad, hiding the ship. Only
+            // right / left / north (where the pad stays in front, unobscured).
+            let dir = rng.gen_range(0u8..3);
             let (dx, dy) = match dir {
-                0 => (dist, 0),      // right
-                1 => (-dist - 3, 0), // left (offset by mechanic width)
-                2 => (0, dist),      // up
-                _ => (0, -dist - 2), // down (offset by mechanic height)
+                0 => (dist + 2, 0),  // right
+                1 => (-dist - 5, 0), // left (offset by the 6-wide mechanic)
+                _ => (0, dist + 2),  // up / north
             };
             (
                 (pad_cx as i32 + dx).max(2) as u32,
