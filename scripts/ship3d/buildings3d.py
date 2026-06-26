@@ -22,7 +22,8 @@ from PIL import Image, ImageDraw
 import blender_gen as B
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
-RES = 320
+RES = 576       # → px_per_tile ≈ 33.9 ≥ tile_px(32), so the game DOWN-scales the
+                # sprite (crisp) instead of up-scaling 1.7× (the old soft look)
 ELEV, AZIM = 50.0, 0.0       # forward-facing oblique: tilted down ~midway
                              # between front-on (0) and top-down (90), no azimuth
 ORTHO = 17.0                 # fixed across the montage so relative sizes show
