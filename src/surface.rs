@@ -1156,15 +1156,21 @@ fn setup_surface(
         let mech_z = crate::surface_objects::depth_z(mech_floor_world.y - tile_px * 0.5);
         let _ = (mech_atlas_handle.as_ref(), mech_layout.as_ref(), mech_z);
         {
-            // Collision footprint (4×3) + garage-door sensor stay on the grid; the
-            // flat mechanic tiles are replaced by the 3/4 sprite.
-            for row in 0..3u32 {
-                for col in 0..4u32 {
-                    let atlas_row = 2 - row; // bottom-up
-                    let tx = mech_x + col;
-                    let ty = mech_y + row;
+            // Collision footprint matches the 6-wide × 4-deep 3/4 sprite (centred
+            // on mech_x+1.5, the sprite's anchor). All solid except the two
+            // centre-front garage-door tiles, so the whole building blocks.
+            let base_col = mech_x as i32 - 1; // 6 cols: mech_x-1 .. mech_x+4
+            for row in 0..4i32 {
+                for col in 0..6i32 {
+                    let tx_i = base_col + col;
+                    let ty_i = mech_y as i32 + row;
+                    if tx_i < 0 || ty_i < 0 || tx_i as u32 >= map_w || ty_i as u32 >= map_h {
+                        continue;
+                    }
+                    let tx = tx_i as u32;
+                    let ty = ty_i as u32;
                     let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
-                    let is_garage = atlas_row == 2 && (col == 1 || col == 2);
+                    let is_garage = row == 0 && (tx == mech_x + 1 || tx == mech_x + 2);
 
                     let mut entity = commands.spawn((
                         DespawnOnExit(PlayState::Exploring),

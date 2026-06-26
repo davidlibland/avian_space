@@ -518,7 +518,10 @@ def bake():
             if fn in door_funcs:                               # cut the doorway open in _front
                 z0 = z0_for_biome(s["biome"]); hw, zt = door_funcs[fn]
                 lx = int(ax - hw * ppt); rx = int(ax + hw * ppt)
-                yt = int(ay - (z0 + zt) * ce * ppt); yb = int(ay) + 2
+                # Cut from the lintel down to the FLOOR (z0), not the ground — the
+                # plinth below the floor stays opaque so the doorway never exposes
+                # the terrain behind/below the building.
+                yt = int(ay - (z0 + zt) * ce * ppt); yb = int(ay - z0 * ce * ppt) + 1
                 fr[max(yt, 0):max(yb, 0), max(lx, 0):max(rx, 0), 3] = 0
             full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
             Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
