@@ -1108,6 +1108,10 @@ fn score_hits(
     ships: Query<&Ship>,
     positions: Query<&Position>,
     rl_agents: Query<&RLAgent>,
+    // Read-only scan of allies (entity + ship + position + distress) used to
+    // detect the distress-gated focus-fire assist. Overlaps `ships`/`positions`
+    // read-only, which Bevy permits.
+    ally_scan: Query<(Entity, &Ship, &Position, &Distressed)>,
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut combat_stats: ResMut<CombatHitStats>,
     reward_cfg: Res<crate::config::RewardConfig>,
@@ -1186,19 +1190,25 @@ fn score_hits(
                     };
 
                     // Cooperative assist (escort / threat-interception): a Fighter
-                    // that hits a ship which is itself attacking a NEARBY ALLY earns
-                    // a bonus — rewarding "defend your teammate by killing what's
-                    // shooting them" (the escort+focus-fire signal). Off by default
-                    // (cooperative_assist_bonus = 0).
+                    // that hits a ship earns a bonus in two cases —
+                    //   (a) the ship it hit is itself attacking a NEARBY ALLY
+                    //       ("kill what's shooting my teammate"), or
+                    //   (b) the ship it hit is the weapons_target of a nearby
+                    //       DISTRESSED ally — converging on the threat a teammate
+                    //       in trouble has identified (distress-gated focus-fire /
+                    //       target-sharing).
+                    // Off by default (cooperative_assist_bonus = 0).
                     const ASSIST_RADIUS: f32 = 800.0;
+                    const DISTRESS_MIN: f32 = 0.3;
                     let assist_bonus = if is_engaged
                         && matches!(agent.personality, Personality::Fighter)
                         && reward_cfg.cooperative_assist_bonus > 0.0
                     {
+                        // (a) the ship I hit is attacking a nearby ally.
                         let victim = target_ship
                             .and_then(|ts| ts.weapons_target.as_ref())
                             .map(|t| t.get_entity());
-                        let helped = match (victim, source_ship) {
+                        let helped_aggressor = match (victim, source_ship) {
                             (Some(victim_e), Some(ss)) if victim_e != *source => {
                                 match (
                                     ships.get(victim_e).ok(),
@@ -1219,7 +1229,29 @@ fn score_hits(
                             }
                             _ => false,
                         };
-                        if helped {
+                        // (b) the ship I hit is a nearby distressed ally's target.
+                        let helped_distressed = match (source_ship, positions.get(*source).ok()) {
+                            (Some(ss), Some(sp)) => ally_scan.iter().any(
+                                |(ally_e, ally_ship, ally_pos, ally_distress)| {
+                                    ally_e != *source
+                                        && ally_distress.level >= DISTRESS_MIN
+                                        && ally_ship
+                                            .data
+                                            .faction
+                                            .as_ref()
+                                            .map(|f| ss.allies.contains(f))
+                                            .unwrap_or(false)
+                                        && ally_ship
+                                            .weapons_target
+                                            .as_ref()
+                                            .map(|t| t.get_entity() == *target)
+                                            .unwrap_or(false)
+                                        && (sp.0 - ally_pos.0).length() <= ASSIST_RADIUS
+                                },
+                            ),
+                            _ => false,
+                        };
+                        if helped_aggressor || helped_distressed {
                             reward_cfg.cooperative_assist_bonus
                         } else {
                             0.0
