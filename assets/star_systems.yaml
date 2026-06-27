@@ -305,6 +305,7 @@ sol:
       fed_destroyer: 0.25
       fed_missile_cruiser: 0.125
       shuttle: 1.5
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 1.0
       courier: 0.5
@@ -365,6 +366,7 @@ kepler_22:
     types:
       fed_patrol: 3.0
       fed_destroyer: 1.0
+      cargo_transport: 1.5
       hauler: 2.0
       courier: 1.0
       asteroid_miner: 1.0
@@ -413,6 +415,7 @@ tau_ceti:
     max: 6
     types:
       fed_patrol: 2.0
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 1.0
       courier: 1.0
@@ -466,6 +469,7 @@ epsilon_eridani:
     max: 4
     types:
       fed_patrol: 2.0
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 2.0
       bulk_carrier: 1.0
@@ -532,6 +536,7 @@ vega:
     max: 6
     types:
       fed_patrol: 1.0
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 1.0
       asteroid_miner: 2.0
@@ -592,6 +597,7 @@ barnard:
     types:
       fed_patrol: 2.0
       fed_destroyer: 1.0
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 1.0
       asteroid_miner: 2.0
@@ -707,6 +713,7 @@ procyon:
     types:
       rebel_fighter: 2.0
       rebel_gunboat: 1.0
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 2.0
       bulk_carrier: 1.0
@@ -772,6 +779,7 @@ sirius:
       rebel_fighter: 1.0
       rebel_gunboat: 2.0
       rebel_frigate: 1.0
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 2.0
       asteroid_miner: 1.5
@@ -829,6 +837,7 @@ rigel:
       rebel_gunboat: 2.0
       rebel_frigate: 2.0
       rebel_fighter: 2.0
+      cargo_transport: 1.5
       hauler: 1.0
       asteroid_miner: 1.0
       prospector: 1.0
@@ -887,6 +896,7 @@ altair:
     types:
       rebel_fighter: 2.0
       rebel_gunboat: 1.0
+      cargo_transport: 1.5
       hauler: 2.0
       courier: 2.0
       asteroid_miner: 1.0
@@ -952,5 +962,6 @@ deneb:
       rebel_frigate: 2.0
       rebel_gunboat: 2.0
       rebel_fighter: 2.0
+      cargo_transport: 1.5
       hauler: 2.0
       freighter: 1.0
