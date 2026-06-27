@@ -32,6 +32,10 @@ struct FuelText;
 #[derive(Component)]
 struct TargetText;
 
+/// The small military-style wireframe of the current target (top-right HUD).
+#[derive(Component)]
+struct TargetWireframe;
+
 #[derive(Component)]
 struct SecondaryWeaponText;
 
@@ -135,6 +139,7 @@ impl Plugin for HudPlugin {
             Update,
             (
                 update_target_display,
+                update_target_wireframe,
                 update_secondary_weapon,
             )
                 .run_if(not(in_state(crate::PlayState::Exploring))),
@@ -328,6 +333,23 @@ fn spawn_hud(mut commands: Commands) {
                     TextColor(Color::srgb(0.5, 0.5, 0.55)),
                 ));
             });
+
+            // ── Target wireframe ─────────────────────────────────────────
+            root.spawn((
+                SpaceOnlyHud,
+                TargetWireframe,
+                ImageNode::default(),
+                Node {
+                    width: Val::Px(92.0),
+                    height: Val::Px(92.0),
+                    align_self: AlignSelf::FlexEnd,
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BorderColor::all(Color::srgba(0.3, 0.9, 0.6, 0.5)),
+                BackgroundColor(Color::srgba(0.0, 0.06, 0.04, 0.55)),
+                Visibility::Hidden,
+            ));
 
             // ── Target ───────────────────────────────────────────────────
             root.spawn((
@@ -755,6 +777,46 @@ fn update_target_display(
 }
 
 /// Draw 4 corner brackets around the player's current nav_target.
+/// Swap the HUD target wireframe image to match the current nav target — a baked
+/// per-ship wireframe, or a generic asteroid / pickup / planet-type schematic.
+/// Hidden (transparent) when there's no target.
+fn update_target_wireframe(
+    asset_server: Res<AssetServer>,
+    player: Query<&Ship, With<Player>>,
+    ships: Query<&Ship, Without<Player>>,
+    planets: Query<&Planet>,
+    item_universe: Res<ItemUniverse>,
+    current_system: Res<CurrentStarSystem>,
+    mut panel: Query<&mut ImageNode, With<TargetWireframe>>,
+) {
+    let Ok(mut img) = panel.single_mut() else {
+        return;
+    };
+    let key = player
+        .single()
+        .ok()
+        .and_then(|p| p.nav_target.as_ref())
+        .and_then(|t| match t {
+            Target::Ship(e) => ships.get(*e).ok().map(|s| s.ship_type.clone()),
+            Target::Asteroid(_) => Some("asteroid".to_string()),
+            Target::Pickup(_) => Some("pickup".to_string()),
+            Target::Planet(e) => planets.get(*e).ok().and_then(|p| {
+                item_universe
+                    .star_systems
+                    .get(&current_system.0)
+                    .and_then(|s| s.planets.get(&p.0))
+                    .map(|pd| format!("planet_{}", pd.planet_type))
+            }),
+        });
+    match key {
+        Some(k) => {
+            img.image = asset_server.load(format!("sprites/wireframes/{k}.png"));
+            img.color = Color::WHITE;
+        }
+        None => img.color = Color::NONE,
+    }
+}
+
 fn draw_target_reticle(
     mut gizmos: Gizmos,
     player: Query<&Ship, With<Player>>,
