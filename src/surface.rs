@@ -296,6 +296,7 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_fauna::spawn_fauna,
                 crate::surface_fauna::run_fauna,
                 crate::surface_fauna::depth_sort_fauna,
+                animate_building_doors,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )
@@ -657,6 +658,62 @@ fn spawn_building_3d(
         Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift)
             .with_scale(Vec3::splat(scale)),
     ));
+    // Animated roll-up door (over the facade): overlays _front exactly (same
+    // anchor/pos), and rolls open when the player nears. Only door buildings.
+    if matches!(func, "market" | "outfitter" | "bar" | "mechanic") {
+        let frames: Vec<Handle<Image>> = (0..4)
+            .map(|k| {
+                asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_door{k}.png"))
+            })
+            .collect();
+        commands.spawn((
+            DespawnOnExit(PlayState::Exploring),
+            Sprite::from_image(frames[0].clone()),
+            bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
+            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift + 0.1)
+                .with_scale(Vec3::splat(scale)),
+            BuildingDoor {
+                frames,
+                door_pos: fc,
+                openness: 0.0,
+            },
+        ));
+    }
+}
+
+/// An animated roll-up building door. `openness` 0 (closed) → 1 (open) eases
+/// toward open when the player is within range; the sprite swaps to the matching
+/// baked frame.
+#[derive(Component)]
+struct BuildingDoor {
+    frames: Vec<Handle<Image>>,
+    door_pos: Vec2,
+    openness: f32,
+}
+
+/// Roll building doors open when the player is near, closed when far.
+fn animate_building_doors(
+    time: Res<Time>,
+    walker: Query<&Transform, With<Walker>>,
+    mut doors: Query<(&mut BuildingDoor, &mut Sprite)>,
+) {
+    let Ok(player) = walker.single() else { return };
+    let pp = player.translation.truncate();
+    const OPEN_RADIUS: f32 = TILE_PX * 2.5;
+    for (mut door, mut sprite) in &mut doors {
+        let target = if door.door_pos.distance(pp) < OPEN_RADIUS { 1.0 } else { 0.0 };
+        let step = time.delta_secs() * 5.0;
+        door.openness += (target - door.openness).clamp(-step, step);
+        door.openness = door.openness.clamp(0.0, 1.0);
+        let n = door.frames.len();
+        if n == 0 {
+            continue;
+        }
+        let frame = ((door.openness * (n - 1) as f32).round() as usize).min(n - 1);
+        if sprite.image != door.frames[frame] {
+            sprite.image = door.frames[frame].clone();
+        }
+    }
 }
 
 /// Landing pad: all 9 tiles of the 3×3 atlas.
