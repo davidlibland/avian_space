@@ -14,16 +14,16 @@ sol:
       radius: 20.0
       color: [0.55, 0.5, 0.45]
       commodities:
-        water: 13
-        oxygen: 15
-        iron: 17
-        silicates: 31
-        food: 36
-        cooling_gel: 128
-        fuel_cells: 137
-        electronics: 178
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        electronics: 14
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
     venus:
       planet_type: cloud
@@ -33,15 +33,15 @@ sol:
       radius: 35.0
       color: [0.75, 0.65, 0.3]
       commodities:
-        water: 14
-        oxygen: 12
-        silicates: 64
-        food: 39
-        chemicals: 74
-        cooling_gel: 65
-        fuel_cells: 70
-        uranium: 616
-        exotic_matter: 1220
+        water: 1
+        oxygen: 1
+        silicates: 5
+        food: 3
+        chemicals: 6
+        cooling_gel: 5
+        fuel_cells: 6
+        uranium: 45
+        exotic_matter: 90
       outfitter: []
     earth:
       planet_type: habitable
@@ -51,21 +51,21 @@ sol:
       radius: 60.0
       color: [0.2, 0.6, 0.3]
       commodities:
-        water: 24
-        oxygen: 27
-        silicates: 59
-        food: 28
-        chemicals: 87
-        cooling_gel: 128
-        fuel_cells: 137
-        medical_supplies: 124
-        gold: 265
-        electronics: 232
-        uranium: 313
-        weapons_parts: 451
-        exotic_matter: 620
+        water: 2
+        oxygen: 2
+        silicates: 4
+        food: 2
+        chemicals: 7
+        cooling_gel: 10
+        fuel_cells: 11
+        medical_supplies: 10
+        gold: 19
+        electronics: 18
+        uranium: 24
+        weapons_parts: 34
+        exotic_matter: 48
       outfitter: [laser, proton_beam, ir_missile, space_mine, javelin]
-      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, prospector, hauler, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
+      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, prospector, hauler, cargo_transport, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
     moon:
       planet_type: rocky
       faction: Federation
@@ -74,16 +74,16 @@ sol:
       radius: 22.0
       color: [0.6, 0.6, 0.65]
       commodities:
-        water: 13
-        oxygen: 15
-        iron: 17
-        silicates: 31
-        food: 37
-        cooling_gel: 128
-        fuel_cells: 137
-        electronics: 179
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        electronics: 14
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
       shipyard: [shuttle, courier, prospector]
     mars:
@@ -94,15 +94,15 @@ sol:
       radius: 30.0
       color: [0.7, 0.35, 0.2]
       commodities:
-        water: 13
-        oxygen: 15
-        iron: 15
-        silicates: 31
-        food: 37
-        cooling_gel: 128
-        fuel_cells: 137
-        uranium: 138
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        uranium: 11
+        exotic_matter: 48
       outfitter: []
     jupiter:
       planet_type: gas_giant
@@ -122,16 +122,16 @@ sol:
       radius: 15.0
       color: [0.8, 0.7, 0.3]
       commodities:
-        water: 13
-        oxygen: 14
-        iron: 17
-        silicates: 31
-        food: 36
-        cooling_gel: 128
-        fuel_cells: 137
-        electronics: 175
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        electronics: 14
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
     europa:
       planet_type: icy_dwarf
@@ -141,13 +141,13 @@ sol:
       radius: 16.0
       color: [0.7, 0.7, 0.75]
       commodities:
-        water: 9
-        oxygen: 14
-        food: 35
-        cooling_gel: 128
-        fuel_cells: 137
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
     saturn:
       planet_type: gas_giant
@@ -171,15 +171,15 @@ sol:
       radius: 25.0
       color: [0.7, 0.55, 0.25]
       commodities:
-        water: 14
-        oxygen: 11
-        silicates: 64
-        food: 38
-        chemicals: 74
-        cooling_gel: 65
-        fuel_cells: 70
-        uranium: 616
-        exotic_matter: 1220
+        water: 1
+        oxygen: 1
+        silicates: 5
+        food: 3
+        chemicals: 6
+        cooling_gel: 5
+        fuel_cells: 6
+        uranium: 45
+        exotic_matter: 90
       outfitter: []
     enceladus:
       planet_type: icy_dwarf
@@ -189,13 +189,13 @@ sol:
       radius: 12.0
       color: [0.85, 0.85, 0.9]
       commodities:
-        water: 9
-        oxygen: 14
-        food: 35
-        cooling_gel: 128
-        fuel_cells: 137
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
     uranus:
       planet_type: ice_giant
@@ -220,16 +220,16 @@ sol:
       radius: 12.0
       color: [0.5, 0.48, 0.45]
       commodities:
-        water: 12
-        oxygen: 14
-        iron: 17
-        silicates: 31
-        food: 35
-        cooling_gel: 128
-        fuel_cells: 137
-        electronics: 174
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        electronics: 14
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
     neptune:
       planet_type: ice_giant
@@ -249,13 +249,13 @@ sol:
       radius: 14.0
       color: [0.55, 0.5, 0.55]
       commodities:
-        water: 9
-        oxygen: 14
-        food: 35
-        cooling_gel: 128
-        fuel_cells: 137
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
     pluto:
       planet_type: icy_dwarf
@@ -265,13 +265,13 @@ sol:
       radius: 12.0
       color: [0.55, 0.45, 0.4]
       commodities:
-        water: 9
-        oxygen: 14
-        food: 35
-        cooling_gel: 128
-        fuel_cells: 137
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
     charon:
       planet_type: rocky
@@ -281,16 +281,16 @@ sol:
       radius: 10.0
       color: [0.45, 0.42, 0.4]
       commodities:
-        water: 12
-        oxygen: 14
-        iron: 17
-        silicates: 31
-        food: 35
-        cooling_gel: 128
-        fuel_cells: 137
-        electronics: 172
-        uranium: 313
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        electronics: 14
+        uranium: 24
+        exotic_matter: 48
       outfitter: []
   astroid_fields:
     -
@@ -328,14 +328,14 @@ kepler_22:
       radius: 50.0
       color: [0.35, 0.35, 0.45]
       commodities:
-        water: 31
-        oxygen: 43
-        silicates: 57
-        food: 27
-        chemicals: 85
-        medical_supplies: 121
-        electronics: 311
-        weapons_parts: 626
+        water: 2
+        oxygen: 3
+        silicates: 4
+        food: 2
+        chemicals: 7
+        medical_supplies: 10
+        electronics: 24
+        weapons_parts: 45
       outfitter: [proton_beam, ir_missile, space_mine]
       shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, courier, hauler]
     kepler_22_station:
@@ -346,13 +346,13 @@ kepler_22:
       radius: 22.0
       color: [0.3, 0.3, 0.4]
       commodities:
-        water: 22
-        iron: 16
-        silicates: 34
-        food: 29
-        chemicals: 85
-        medical_supplies: 129
-        electronics: 264
+        water: 2
+        iron: 1
+        silicates: 3
+        food: 2
+        chemicals: 7
+        medical_supplies: 10
+        electronics: 20
       outfitter: []
   astroid_fields:
     -
@@ -382,13 +382,13 @@ tau_ceti:
       radius: 52.0
       color: [0.5, 0.4, 0.6]
       commodities:
-        water: 16
-        iron: 16
-        silicates: 30
-        food: 36
-        electronics: 219
+        water: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        electronics: 17
       outfitter: []
-      shipyard: [shuttle, courier, hauler, freighter]
+      shipyard: [shuttle, courier, hauler, cargo_transport, freighter]
     tau_ceti_2:
       planet_type: rocky
       faction: Federation
@@ -397,11 +397,11 @@ tau_ceti:
       radius: 38.0
       color: [0.45, 0.35, 0.55]
       commodities:
-        water: 15
-        iron: 16
-        silicates: 30
-        food: 35
-        electronics: 212
+        water: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        electronics: 17
       outfitter: []
   astroid_fields:
     -
@@ -431,17 +431,17 @@ epsilon_eridani:
       radius: 40.0
       color: [0.3, 0.6, 0.5]
       commodities:
-        water: 26
-        oxygen: 36
-        silicates: 57
-        food: 24
-        chemicals: 91
-        medical_supplies: 106
-        gold: 139
-        electronics: 281
-        weapons_parts: 614
+        water: 2
+        oxygen: 3
+        silicates: 4
+        food: 2
+        chemicals: 7
+        medical_supplies: 8
+        gold: 11
+        electronics: 21
+        weapons_parts: 45
       outfitter: [laser, space_mine]
-      shipyard: [shuttle, courier, hauler, freighter, bulk_carrier]
+      shipyard: [shuttle, courier, hauler, cargo_transport, freighter, bulk_carrier]
     eridani_moon:
       planet_type: icy_dwarf
       faction: Federation
@@ -450,11 +450,11 @@ epsilon_eridani:
       radius: 18.0
       color: [0.25, 0.5, 0.45]
       commodities:
-        water: 13
-        food: 28
-        chemicals: 86
-        medical_supplies: 124
-        gold: 107
+        water: 1
+        food: 2
+        chemicals: 7
+        medical_supplies: 10
+        gold: 9
       outfitter: []
   astroid_fields:
     -
@@ -488,14 +488,18 @@ vega:
         outer_radius: 3.80
         tilt_deg: 22.0
       commodities:
-        water: 14
-        iron: 15
-        silicates: 31
-        food: 35
-        gold: 93
-        uranium: 129
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 11
+        fuel_cells: 11
+        gold: 7
+        uranium: 11
+        exotic_matter: 48
       outfitter: [laser, ir_missile, space_mine]
-      shipyard: [corvette, courier, hauler, asteroid_miner, prospector, freighter]
+      shipyard: [corvette, courier, hauler, asteroid_miner, prospector, cargo_transport, freighter]
     vega_2:
       planet_type: rocky
       faction: Federation
@@ -504,12 +508,17 @@ vega:
       radius: 30.0
       color: [0.65, 0.65, 0.35]
       commodities:
-        water: 14
-        iron: 16
-        silicates: 31
-        food: 35
-        gold: 108
-        electronics: 203
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 11
+        fuel_cells: 11
+        gold: 9
+        electronics: 16
+        uranium: 20
+        exotic_matter: 48
       outfitter: []
   astroid_fields:
     -
@@ -540,16 +549,16 @@ barnard:
       radius: 35.0
       color: [0.45, 0.4, 0.35]
       commodities:
-        water: 14
-        oxygen: 16
-        iron: 17
-        silicates: 30
-        food: 39
-        cooling_gel: 135
-        fuel_cells: 144
-        electronics: 182
-        uranium: 321
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        electronics: 15
+        uranium: 24
+        exotic_matter: 48
       outfitter: [space_mine]
       shipyard: [shuttle, courier, asteroid_miner, prospector]
     barnard_station:
@@ -560,18 +569,18 @@ barnard:
       radius: 20.0
       color: [0.5, 0.45, 0.5]
       commodities:
-        water: 13
-        oxygen: 15
-        iron: 17
-        silicates: 30
-        food: 37
-        cooling_gel: 135
-        fuel_cells: 144
-        electronics: 174
-        uranium: 321
-        exotic_matter: 620
+        water: 1
+        oxygen: 1
+        iron: 1
+        silicates: 2
+        food: 3
+        cooling_gel: 10
+        fuel_cells: 11
+        electronics: 14
+        uranium: 24
+        exotic_matter: 48
       outfitter: [ir_missile, space_mine]
-      shipyard: [courier, freighter, bulk_carrier, prospector]
+      shipyard: [courier, cargo_transport, freighter, bulk_carrier, prospector]
   astroid_fields:
     -
       location: [0., 0.]
@@ -660,18 +669,18 @@ procyon:
         tilt_deg: 75.0
         style: thin
       commodities:
-        water: 72
-        oxygen: 88
-        iron: 73
-        food: 67
-        chemicals: 81
-        titanium: 154
-        medical_supplies: 301
-        gold: 760
-        electronics: 218
-        weapons_parts: 100
+        water: 5
+        oxygen: 6
+        iron: 5
+        food: 5
+        chemicals: 6
+        titanium: 12
+        medical_supplies: 22
+        gold: 59
+        electronics: 17
+        weapons_parts: 8
       outfitter: [laser, ir_missile, javelin, space_mine]
-      shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, freighter, bulk_carrier, asteroid_miner, prospector]
+      shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, cargo_transport, freighter, bulk_carrier, asteroid_miner, prospector]
     procyon_ii:
       planet_type: rocky
       faction: Rebel
@@ -680,16 +689,16 @@ procyon:
       radius: 28.0
       color: [0.15, 0.35, 0.45]
       commodities:
-        water: 56
-        oxygen: 69
-        iron: 48
-        silicates: 25
-        food: 72
-        titanium: 113
-        medical_supplies: 324
-        gold: 760
-        electronics: 203
-        weapons_parts: 139
+        water: 4
+        oxygen: 5
+        iron: 4
+        silicates: 2
+        food: 5
+        titanium: 9
+        medical_supplies: 24
+        gold: 59
+        electronics: 16
+        weapons_parts: 11
       outfitter: []
   astroid_fields: []
   ships:
@@ -721,16 +730,16 @@ sirius:
         outer_radius: 3.90
         tilt_deg: 15.0
       commodities:
-        water: 42
-        iron: 37
-        silicates: 20
-        food: 75
-        titanium: 72
-        electronics: 228
-        uranium: 72
-        weapons_parts: 183
+        water: 3
+        iron: 3
+        silicates: 2
+        food: 6
+        titanium: 6
+        electronics: 17
+        uranium: 6
+        weapons_parts: 14
       outfitter: [laser, javelin, space_mine]
-      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, freighter]
+      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, cargo_transport, freighter]
     sirius_c:
       planet_type: rocky
       faction: Rebel
@@ -739,15 +748,15 @@ sirius:
       radius: 32.0
       color: [0.15, 0.4, 0.3]
       commodities:
-        water: 42
-        iron: 38
-        silicates: 22
-        food: 75
-        titanium: 75
-        gold: 726
-        electronics: 192
-        uranium: 96
-        weapons_parts: 183
+        water: 3
+        iron: 3
+        silicates: 2
+        food: 5
+        titanium: 6
+        gold: 51
+        electronics: 15
+        uranium: 8
+        weapons_parts: 14
       outfitter: []
   astroid_fields:
     -
@@ -781,14 +790,14 @@ rigel:
       radius: 42.0
       color: [0.15, 0.3, 0.5]
       commodities:
-        water: 61
-        iron: 37
-        silicates: 18
-        food: 87
-        titanium: 81
-        gold: 760
-        electronics: 212
-        weapons_parts: 184
+        water: 4
+        iron: 3
+        silicates: 2
+        food: 6
+        titanium: 6
+        gold: 59
+        electronics: 16
+        weapons_parts: 14
       outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
@@ -799,14 +808,14 @@ rigel:
       radius: 22.0
       color: [0.1, 0.25, 0.45]
       commodities:
-        water: 60
-        iron: 37
-        silicates: 18
-        food: 84
-        titanium: 81
-        gold: 760
-        electronics: 206
-        weapons_parts: 184
+        water: 4
+        iron: 3
+        silicates: 2
+        food: 6
+        titanium: 6
+        gold: 59
+        electronics: 16
+        weapons_parts: 14
       outfitter: []
   astroid_fields:
     -
@@ -836,16 +845,16 @@ altair:
       radius: 38.0
       color: [0.2, 0.45, 0.4]
       commodities:
-        water: 72
-        oxygen: 88
-        iron: 77
-        food: 76
-        chemicals: 81
-        titanium: 197
-        medical_supplies: 342
-        gold: 760
-        electronics: 243
-        weapons_parts: 95
+        water: 6
+        oxygen: 7
+        iron: 6
+        food: 6
+        chemicals: 6
+        titanium: 14
+        medical_supplies: 25
+        gold: 59
+        electronics: 18
+        weapons_parts: 8
       outfitter: [laser, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, courier, asteroid_miner, prospector]
     altair_rock:
@@ -856,16 +865,16 @@ altair:
       radius: 20.0
       color: [0.25, 0.4, 0.35]
       commodities:
-        water: 72
-        oxygen: 88
-        iron: 53
-        silicates: 23
-        food: 78
-        titanium: 152
-        medical_supplies: 349
-        gold: 760
-        electronics: 224
-        weapons_parts: 127
+        water: 6
+        oxygen: 7
+        iron: 4
+        silicates: 2
+        food: 6
+        titanium: 11
+        medical_supplies: 25
+        gold: 59
+        electronics: 17
+        weapons_parts: 10
       outfitter: []
   astroid_fields:
     -
@@ -900,18 +909,18 @@ deneb:
         tilt_deg: 62.0
         style: thin
       commodities:
-        water: 72
-        oxygen: 88
-        iron: 71
-        food: 82
-        chemicals: 81
-        titanium: 146
-        medical_supplies: 369
-        gold: 760
-        electronics: 255
-        weapons_parts: 103
+        water: 6
+        oxygen: 7
+        iron: 5
+        food: 6
+        chemicals: 6
+        titanium: 11
+        medical_supplies: 27
+        gold: 59
+        electronics: 19
+        weapons_parts: 8
       outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
-      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, freighter]
+      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, cargo_transport, freighter]
     deneb_station:
       planet_type: rocky
       faction: Rebel
@@ -920,16 +929,16 @@ deneb:
       radius: 25.0
       color: [0.1, 0.3, 0.5]
       commodities:
-        water: 71
-        oxygen: 88
-        iron: 45
-        silicates: 20
-        food: 83
-        titanium: 104
-        medical_supplies: 371
-        gold: 760
-        electronics: 221
-        weapons_parts: 150
+        water: 5
+        oxygen: 6
+        iron: 3
+        silicates: 2
+        food: 6
+        titanium: 8
+        medical_supplies: 27
+        gold: 59
+        electronics: 17
+        weapons_parts: 12
       outfitter: []
   astroid_fields:
     -

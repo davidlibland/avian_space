@@ -78,7 +78,7 @@ hauler:
   base_weapons:
     "space_mine": [1, 12]
   radius: 40.0
-  price: 50000
+  price: 42333
   sprite_path: sprites/ships/atlas/hauler.png
   personality: Trader
   fuel_capacity: 7
@@ -139,17 +139,33 @@ courier:
   fuel_capacity: 8
   faction: Merchant
 
+cargo_transport:
+  thrust: 52.0
+  max_speed: 88.0
+  torque: 15.0
+  max_health: 60
+  cargo_space: 20
+  item_space: 10
+  base_weapons:
+    space_mine: [1, 4]
+  radius: 20.0
+  price: 10333
+  sprite_path: sprites/ships/atlas/cargo_transport.png
+  personality: Trader
+  fuel_capacity: 5
+  faction: Merchant
+
 freighter:
   thrust: 55.0
   max_speed: 70.0
   torque: 8.0
   max_health: 120
-  cargo_space: 55
+  cargo_space: 40
   item_space: 20
   base_weapons:
     space_mine: [1, 8]
   radius: 32.0
-  price: 45000
+  price: 21000
   sprite_path: sprites/ships/atlas/freighter.png
   personality: Trader
   fuel_capacity: 7

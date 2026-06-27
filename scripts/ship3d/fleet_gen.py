@@ -253,6 +253,35 @@ def build_freighter():
         plume("ft_pl", sx, -0.92, 0, 0.05, 0.24, 1.0, glow)
 
 
+def build_cargo_transport():
+    hull = toon_material("ct", C(138, 150, 128), spec=0.5)
+    dark = toon_material("ct_d", C(96, 105, 90))
+    cargo = toon_material("ct_c", C(126, 134, 120))
+    glass = toon_material("ct_g", C(130, 185, 205), spec=1.4, glass=True)
+    glow = glow_material("ct_e", C(255, 170, 90), 4)
+    # a stubby "box truck": short cab up front, a big ribbed container on the deck
+    loft_hull("ct_h", [
+        dict(y=0.76, w=0.11, h=0.13, cz=0.02),
+        dict(y=0.48, w=0.21, h=0.18, cz=0.03),
+        dict(y=0.08, w=0.24, h=0.2, cz=0.02),
+        dict(y=-0.42, w=0.22, h=0.18, cz=0.02),
+        dict(y=-0.7, w=0.16, h=0.13, cz=0.01),
+    ], hull, m=12, n=3.4, flatten=0.5, subsurf=2)
+    add_box("ct_cab", (0, 0.5, 0.13), (0.19, 0.22, 0.18), hull, taper=0.62)
+    add_sphere("ct_can", (0, 0.58, 0.22), (0.07, 0.08, 0.05), glass)
+    # the defining feature: a ribbed container box riding the rear deck
+    add_box("ct_box", (0, -0.16, 0.17), (0.34, 0.6, 0.27), cargo, taper=0.97, bevel=0.02)
+    for yc in (0.04, -0.16, -0.36):
+        add_box("ct_rib", (0, yc, 0.31), (0.36, 0.035, 0.04), dark)
+    # side rails along the deck
+    for sx in (-1, 1):
+        add_box("ct_rail", (sx * 0.29, -0.16, 0.03), (0.05, 0.58, 0.13), dark, taper=0.95)
+    # twin engines
+    for sx in (-0.12, 0.12):
+        add_cylinder("ct_nz", (sx, -0.72, 0.0), 0.06, 0.1, dark, r2=0.075)
+        plume("ct_pl", sx, -0.78, 0, 0.05, 0.24, 1.0, glow)
+
+
 def build_hauler():
     spine = toon_material("ha_s", C(140, 142, 150))
     spine_d = toon_material("ha_sd", C(98, 100, 110))
@@ -701,6 +730,7 @@ REGISTRY = {
     "courier": (build_courier, 2.5, "merchant", "r12 · parcel needle"),
     "prospector": (build_prospector, 2.2, "merchant", "r14 · drill-spike dart"),
     "asteroid_miner": (build_asteroid_miner, 2.4, "merchant", "r20 · drill-arm crab"),
+    "cargo_transport": (build_cargo_transport, 2.2, "merchant", "r20 · boxy container truck"),
     "freighter": (build_freighter, 2.5, "merchant", "r32 · side-module hauler"),
     "hauler": (build_hauler, 2.6, "merchant", "r40 · container spine"),
     "bulk_carrier": (build_bulk_carrier, 2.7, "merchant", "r55 · cargo-pod brick"),
