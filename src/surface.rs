@@ -1246,6 +1246,22 @@ fn setup_surface(
                     tile_px,
                 );
             }
+            // The repair engine sits front-left of the door (sprite-local x=-1.5,
+            // ~2 tiles south → tile (mech_x, mech_y-2)). Make it solid so the player
+            // can't walk onto or behind it; it stays clear of the centre door.
+            {
+                let eng = tile_to_world(mech_x, mech_y.saturating_sub(2), map_w, map_h, tile_px);
+                commands.spawn((
+                    DespawnOnExit(PlayState::Exploring),
+                    RigidBody::Static,
+                    Collider::rectangle(tile_px * 1.4, tile_px * 2.2),
+                    CollisionLayers::new(
+                        GameLayer::Surface,
+                        [GameLayer::Surface, GameLayer::Character],
+                    ),
+                    Transform::from_xyz(eng.x, eng.y, 0.0),
+                ));
+            }
             // Mechanic label above garage door.
             let label_world = tile_to_world(mech_x + 1, mech_y, map_w, map_h, tile_px);
             spawn_building_label(

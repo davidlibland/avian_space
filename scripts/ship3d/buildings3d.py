@@ -386,8 +386,9 @@ def build_mechanic(s, m):
     for sx in (-bw / 2 - 0.18, bw / 2 + 0.18):
         B.add_box("jamb", (sx, -d / 2 - 0.05, z0 + 1.2), (0.18, 0.2, 2.5), m["wall_d"], bevel=0.03)
     B.add_box("hazard", (0, -d / 2 - 0.12, z0 + 0.08), (bw, 0.06, 0.18), m["glow"], bevel=0.0)
-    # a ship engine pulled out front on a stand, opened up for repair
-    repair_engine(-0.8, -d / 2 - 1.9, m)
+    # a ship engine pulled out front on a stand, opened up for repair — to the
+    # LEFT of the door approach, so it can be a solid (impassable) tile in-game
+    repair_engine(-1.5, -d / 2 - 1.5, m)
     B.add_box("plate", (w / 2 - 0.5, -d / 2 - 1.1, 1.1), (1.4, 0.14, 2.0), m["wall_d"], bevel=0.05)
     B.add_box("toolbox", (w / 2 - 1.5, -d / 2 - 1.4, 0.35), (0.9, 0.6, 0.5), m["roof"], bevel=0.05)
     B.add_cylinder("jib_p", (w / 2 - 0.3, d / 2 - 0.3, top + 0.8), 0.14, 2.0, m["metal"], axis="z")
