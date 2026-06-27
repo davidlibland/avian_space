@@ -966,12 +966,23 @@ fn build_all_observations(
         let mut t_n_shared = 0usize;
         let mut t_nearest = Vec2::ZERO;
         let mut t_nearest_d2 = f32::INFINITY;
+        // Targets of DISTRESSED allies within the assist radius — drives the
+        // per-entity SHIP_ALLY_DISTRESS_TARGET observation feature, matching the
+        // distress-gated focus-fire assist reward in ship.rs (ASSIST_RADIUS=800).
+        const ASSIST_RADIUS_SQ: f32 = 800.0 * 800.0;
+        let mut distressed_ally_targets: std::collections::HashSet<Entity> =
+            std::collections::HashSet::new();
         for (ally_e, info) in &ally_snapshot {
             if *ally_e == entity || !ship.allies.contains(&info.faction) {
                 continue;
             }
             let off = info.pos - pos.0;
             let d2 = off.length_squared();
+            if info.distressed && d2 <= ASSIST_RADIUS_SQ {
+                if let Some(tgt) = info.wep_target {
+                    distressed_ally_targets.insert(tgt);
+                }
+            }
             if d2 > det_sq {
                 continue;
             }
@@ -1293,6 +1304,11 @@ fn build_all_observations(
                         is_targeting_me,
                         thrust: data.map(|d| d.thrust).unwrap_or(0.0),
                         primary_fire_rate: other_primary_fire_rate,
+                        ally_distress_target: if distressed_ally_targets.contains(&e) {
+                            1.0
+                        } else {
+                            0.0
+                        },
                     };
                     (sd, 0.0_f32)
                 })

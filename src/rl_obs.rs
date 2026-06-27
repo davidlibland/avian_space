@@ -103,7 +103,7 @@ pub const SLOT_VALUE: usize = TYPE_BLOCK_START; // 16
 /// Offset of entity-kind features (after value).
 pub const SLOT_TYPE_SPECIFIC: usize = TYPE_BLOCK_START + 1; // 17
 /// Number of entity-kind feature floats (padded to max across all types).
-pub const TYPE_SPECIFIC_SIZE: usize = 16;
+pub const TYPE_SPECIFIC_SIZE: usize = 17;
 /// Total size of block 4 (value + type_specific).
 pub const TYPE_BLOCK_SIZE: usize = 1 + TYPE_SPECIFIC_SIZE; // 17
 
@@ -124,6 +124,10 @@ pub const SHIP_PRIMARY_FIRE_RATE: usize = 14;
 /// -1.0 otherwise. Distinct from `should_engage`/`is_hostile`, which are
 /// per-encounter hostility flags rather than faction alliance.
 pub const SHIP_IS_ALLY: usize = 15;
+/// 1.0 if this ship is the weapons_target of a DISTRESSED ally near the
+/// observer (within the assist radius), else 0.0. Lets the policy deliberately
+/// pursue the distress-gated focus-fire assist reward (target-sharing).
+pub const SHIP_ALLY_DISTRESS_TARGET: usize = 16;
 
 // ── Planet type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ───
 pub const PLANET_CARGO_PROFIT_VALUE: usize = 0;
@@ -311,6 +315,9 @@ pub struct ShipSlotData {
     /// Primary-weapon shots-per-second (1 / effective_cooldown_seconds), 0 if
     /// unarmed or cooldown unknown.
     pub primary_fire_rate: f32,
+    /// 1.0 if this ship is the weapons_target of a distressed ally near the
+    /// observer (assist radius), else 0.0. See [`SHIP_ALLY_DISTRESS_TARGET`].
+    pub ally_distress_target: f32,
 }
 
 /// Planet-specific features.
@@ -911,6 +918,7 @@ fn encode_slot(
             ts[SHIP_THRUST] = ship.thrust;
             ts[SHIP_PRIMARY_FIRE_RATE] = ship.primary_fire_rate;
             ts[SHIP_IS_ALLY] = ship.is_ally;
+            ts[SHIP_ALLY_DISTRESS_TARGET] = ship.ally_distress_target;
         }
         EntityKind::Planet(planet) => {
             ts[0] = planet.cargo_profit_value;

@@ -380,6 +380,7 @@ fn test_slot_block_extraction() {
             is_targeting_me: 0.0,
             thrust: 0.0,
             primary_fire_rate: 0.0,
+            ally_distress_target: 0.0,
         }),
         value: 0.0,
         is_nav_target: true,

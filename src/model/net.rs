@@ -231,6 +231,23 @@ impl<B: Backend> RLNet<B> {
         self.self_embed.weight.val().dims()[0]
     }
 
+    /// Migrate a checkpoint whose type-specific block is narrower than the
+    /// current [`TYPE_BLOCK_SIZE`] (e.g. saved before `SHIP_ALLY_DISTRESS_TARGET`
+    /// was added). `type_embed_w` is `[N_ENTITY_TYPES, hidden, TYPE_BLOCK_SIZE]`;
+    /// burn's `load_record` adopts the checkpoint's narrower dim-2, so we append
+    /// zero columns there. The new feature(s) start at zero weight, so the loaded
+    /// policy/value behaves identically and then learns the feature during training.
+    pub fn migrate_type_block(mut self, device: &B::Device) -> Self {
+        let dims = self.type_embed_w.val().dims();
+        if dims[2] < TYPE_BLOCK_SIZE {
+            let pad =
+                Tensor::<B, 3>::zeros([dims[0], dims[1], TYPE_BLOCK_SIZE - dims[2]], device);
+            let w = Tensor::cat(vec![self.type_embed_w.val(), pad], 2);
+            self.type_embed_w = Param::from_tensor(w);
+        }
+        self
+    }
+
     /// Forward pass without team-state input (decentralized; policy net path).
     pub fn forward(
         &self,

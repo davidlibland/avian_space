@@ -75,7 +75,9 @@ impl InferenceNet {
         let recorder = BinBytesRecorder::<FullPrecisionSettings>::default();
         let record = Recorder::<InferBackend>::load(&recorder, bytes, &self.device)
             .expect("failed to deserialize weights");
-        self.net = RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM).load_record(record);
+        self.net = RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM)
+            .load_record(record)
+            .migrate_type_block(&self.device);
     }
 }
 
@@ -88,6 +90,7 @@ pub fn load_inference_net(path: &str) -> Option<InferenceNet> {
         .load_file(path, &recorder, &device)
     {
         Ok(net) => {
+            let net = net.migrate_type_block(&device);
             println!("[model] Loaded policy net from {path}");
             Some(InferenceNet { net, device })
         }
@@ -163,6 +166,7 @@ pub fn load_training_net_with_dim(
         );
         return None;
     }
+    let infer_net = infer_net.migrate_type_block(&infer_device);
     let bytes = net_to_bytes(infer_net);
     let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
