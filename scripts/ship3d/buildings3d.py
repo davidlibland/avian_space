@@ -30,7 +30,7 @@ ORTHO = 17.0                 # fixed across the montage so relative sizes show
 
 # footprint W×D in tiles (base/collision box); roofs/awnings may overhang
 FOOTPRINTS = {"market": (6, 5), "outfitter": (4, 4), "shipyard": (8, 6),
-              "mechanic": (6, 4), "bar": (6, 5), "pad": (3, 3)}
+              "mechanic": (6, 4), "bar": (6, 5), "pad": (3, 3), "fuel_station": (4, 4)}
 
 
 def C(*v):
@@ -468,8 +468,36 @@ def repair_engine(cx, cy, m):
     B.add_box("epanel", (cx + 0.62, cy - 0.3, 1.55), (0.1, 0.6, 0.5), m["wall_d"], bevel=0.03)  # open access hatch
 
 
+def build_fuel_station(s, m):
+    w, d, h = 4, 4, 2.5        # fuel station → small_house 4×4 booth + canopy forecourt
+    # A utilitarian depot, not a house: build the walls but cap it with a FLAT
+    # roof (no gable/chimney), then the door, so it reads as a fuel kiosk.
+    z0, top = base_and_walls(s, m, w, d, h)
+    wall_skin(s, m, w, d, h, z0, top, (2, 1), True)
+    B.add_box("fs_roof", (0, 0, top + 0.07), (w + 0.24, d + 0.24, 0.16), m["roof"], bevel=0.03)
+    B.add_box("fs_para", (0, -d / 2 - 0.12, top + 0.22), (w + 0.24, 0.14, 0.18), m["trim"], bevel=0.0)
+    entry(s, m, w, d, z0)
+    # roadside glowing FUEL totem on a pole beside the booth — a strong top-down read
+    B.add_cylinder("fs_pole", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 1.6), 0.1, 3.4, m["metal"], axis="z")
+    B.add_box("fs_totem", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 3.1), (0.72, 0.72, 0.95), m["glow"], bevel=0.06)
+    # bulk storage tank on a cradle along the right side
+    B.add_cylinder("fs_tank", (w / 2 + 0.6, 0.25, z0 + 0.8), 0.58, 2.5, m["metal"], axis="y")
+    B.add_box("fs_cradle", (w / 2 + 0.6, 0.25, z0 + 0.16), (0.9, 2.2, 0.32), m["dark"], bevel=0.0)
+    # a row of fuel pumps in the OPEN forecourt (the defining feature — no canopy
+    # over them, so they read clearly from above): base + body + lit readout + topper
+    for px in (-1.0, 0.0, 1.0):
+        B.add_box("fs_base", (px, -d / 2 - 1.6, z0 + 0.18), (0.46, 0.5, 0.36), m["dark"], bevel=0.04)
+        B.add_box("fs_pump", (px, -d / 2 - 1.6, z0 + 0.85), (0.44, 0.46, 1.0), m["wall_d"], bevel=0.06)
+        B.add_box("fs_screen", (px, -d / 2 - 1.84, z0 + 1.05), (0.3, 0.05, 0.34), m["glow"], bevel=0.0)
+        B.add_box("fs_top", (px, -d / 2 - 1.6, z0 + 1.45), (0.46, 0.5, 0.18), m["metal"], bevel=0.03)
+        B.add_cylinder("fs_hose", (px + 0.3, -d / 2 - 1.54, z0 + 0.7), 0.05, 0.9, m["dark"], axis="z")
+    # hazard stripe marking the forecourt apron
+    B.add_box("fs_hazard", (0, -d / 2 - 2.25, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
+
+
 BUILDERS = {"market": build_market, "outfitter": build_outfitter, "shipyard": build_shipyard,
-            "mechanic": build_mechanic, "bar": build_bar, "pad": build_pad}
+            "mechanic": build_mechanic, "bar": build_bar, "pad": build_pad,
+            "fuel_station": build_fuel_station}
 
 
 # ── camera / render ─────────────────────────────────────────────────────────

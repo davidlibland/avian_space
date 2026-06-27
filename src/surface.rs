@@ -66,6 +66,7 @@ pub enum BuildingKind {
     Outfitter,
     Shipyard,
     Bar,
+    FuelStation,
 }
 
 impl BuildingKind {
@@ -77,6 +78,7 @@ impl BuildingKind {
             BuildingKind::Outfitter => "Outfitter",
             BuildingKind::Shipyard => "Shipyard",
             BuildingKind::Bar => "Bar",
+            BuildingKind::FuelStation => "Fuel",
         }
     }
 
@@ -88,6 +90,7 @@ impl BuildingKind {
             BuildingKind::Outfitter => Color::srgb(0.7, 0.3, 0.3),
             BuildingKind::Shipyard => Color::srgb(0.3, 0.5, 0.8),
             BuildingKind::Bar => Color::srgb(0.8, 0.4, 0.1),
+            BuildingKind::FuelStation => Color::srgb(0.3, 0.8, 0.9),
         }
     }
 }
@@ -570,6 +573,9 @@ fn building_kinds_for_planet(
         }
     }
     kinds.push(BuildingKind::Bar);
+    // Every landable colony has a fuel station — you must be able to refuel
+    // wherever you set down (or you'd risk being stranded with an empty tank).
+    kinds.push(BuildingKind::FuelStation);
     kinds
 }
 
@@ -578,9 +584,10 @@ fn building_kinds_for_planet(
 /// these three (cryo/station were given the missing two).
 fn kind_template(kind: BuildingKind) -> &'static str {
     match kind {
-        BuildingKind::Outfitter => "small_house",   // 4×4
-        BuildingKind::Shipyard => "large_building",  // 8×6
-        _ => "medium_house",                         // 6×5 — Market, Bar (+ fallback)
+        BuildingKind::Outfitter => "small_house",    // 4×4
+        BuildingKind::FuelStation => "small_house",   // 4×4 (booth + forecourt)
+        BuildingKind::Shipyard => "large_building",   // 8×6
+        _ => "medium_house",                          // 6×5 — Market, Bar (+ fallback)
     }
 }
 
@@ -593,6 +600,7 @@ fn kind_func(kind: BuildingKind) -> &'static str {
         BuildingKind::Bar => "bar",
         BuildingKind::MechanicShop => "mechanic",
         BuildingKind::ShipPad => "pad",
+        BuildingKind::FuelStation => "fuel_station",
     }
 }
 
@@ -660,7 +668,7 @@ fn spawn_building_3d(
     ));
     // Animated roll-up door (over the facade): overlays _front exactly (same
     // anchor/pos), and rolls open when the player nears. Only door buildings.
-    if matches!(func, "market" | "outfitter" | "bar" | "mechanic") {
+    if matches!(func, "market" | "outfitter" | "bar" | "mechanic" | "fuel_station") {
         let frames: Vec<Handle<Image>> = (0..4)
             .map(|k| {
                 asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_door{k}.png"))
@@ -2147,10 +2155,14 @@ fn surface_building_ui(
                             ui.label("Hull is at full integrity. No repairs needed.");
                         }
 
-                        // ── Refuel ──────────────────────────────────────────
+                        ui.add_space(4.0);
+                        ui.label(format!("Credits: {}", ship.credits));
+                    }
+                }
+                BuildingKind::FuelStation => {
+                    if let Ok(mut ship) = player_query.single_mut() {
                         let fuel = ship.fuel;
                         let cap = ship.data.fuel_capacity;
-                        ui.add_space(8.0);
                         ui.label(format!("Fuel: {}/{} jumps", fuel, cap));
                         if fuel < cap {
                             let per_unit = (ship.data.price / 100).max(20);
@@ -2175,7 +2187,6 @@ fn surface_building_ui(
                             ui.add_space(4.0);
                             ui.label("Tank is full.");
                         }
-
                         ui.add_space(4.0);
                         ui.label(format!("Credits: {}", ship.credits));
                     }
