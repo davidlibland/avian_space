@@ -24,6 +24,12 @@ struct CreditsText;
 struct CargoText;
 
 #[derive(Component)]
+struct FuelBarFill;
+
+#[derive(Component)]
+struct FuelText;
+
+#[derive(Component)]
 struct TargetText;
 
 #[derive(Component)]
@@ -120,6 +126,7 @@ impl Plugin for HudPlugin {
             Update,
             (
                 update_health_bar,
+                update_fuel,
                 update_cargo_credits,
                 update_comms_ticker,
             ),
@@ -252,6 +259,51 @@ fn spawn_hud(mut commands: Commands) {
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0.85, 0.15, 0.15)),
+                ));
+            });
+
+            // ── Fuel bar (jumps remaining) ───────────────────────────────
+            root.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(14.0),
+                    border: UiRect::all(Val::Px(2.0)),
+                    padding: UiRect::all(Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(4.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.08, 0.12, 0.85)),
+                BorderColor::all(Color::srgb(0.2, 0.6, 0.78)),
+            ))
+            .with_children(|bar| {
+                bar.spawn((
+                    FuelBarFill,
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        border_radius: BorderRadius::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.3, 0.72, 0.85)),
+                ));
+            });
+            root.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(4.0), Val::Px(2.0)),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+            ))
+            .with_children(|w| {
+                w.spawn((
+                    FuelText,
+                    Text::new("Fuel: 0/0"),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.6, 0.82, 0.95)),
                 ));
             });
 
@@ -389,6 +441,24 @@ fn update_health_bar(
     };
     let pct = (ship.health as f32 / ship.data.max_health as f32 * 100.0).clamp(0.0, 100.0);
     node.width = Val::Percent(pct);
+}
+
+fn update_fuel(
+    player_query: Query<&Ship, With<Player>>,
+    mut fill_query: Query<&mut Node, With<FuelBarFill>>,
+    mut text_query: Query<&mut Text, With<FuelText>>,
+) {
+    let Ok(ship) = player_query.single() else {
+        return;
+    };
+    let cap = ship.data.fuel_capacity.max(1);
+    let pct = (ship.fuel as f32 / cap as f32 * 100.0).clamp(0.0, 100.0);
+    if let Ok(mut node) = fill_query.single_mut() {
+        node.width = Val::Percent(pct);
+    }
+    if let Ok(mut text) = text_query.single_mut() {
+        **text = format!("Fuel: {}/{}", ship.fuel, ship.data.fuel_capacity);
+    }
 }
 
 fn update_radar_dots(

@@ -44,6 +44,9 @@ pub struct PilotSave {
     pub health: i32,
     pub cargo: HashMap<String, u16>,
     pub credits: i128,
+    /// Fuel (jumps remaining). `None` in old saves → loaded as a full tank.
+    #[serde(default)]
+    pub fuel: Option<u16>,
     /// weapon_type → (count, ammo_quantity)
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
     pub enemies: HashMap<String, f32>,
@@ -133,6 +136,10 @@ impl PlayerGameState {
             );
         }
 
+        let fuel = save
+            .fuel
+            .map(|f| f.min(ship_data.fuel_capacity))
+            .unwrap_or(ship_data.fuel_capacity);
         let ship = Ship {
             ship_type: save.ship_type.clone(),
             data: ship_data,
@@ -142,6 +149,7 @@ impl PlayerGameState {
             reserved_cargo: save.reserved_cargo.clone(),
             recent_landings: HashMap::new(),
             credits: save.credits,
+            fuel,
             allies: Vec::new(),
             nav_target: None,
             weapons_target: None,
@@ -173,6 +181,7 @@ impl PlayerGameState {
             health: self.player_ship.health,
             cargo: self.player_ship.cargo.clone(),
             credits: self.player_ship.credits,
+            fuel: Some(self.player_ship.fuel),
             weapon_loadout: self.weapon_loadout.clone(),
             enemies: self.player_ship.enemies.clone(),
             visited_systems: self.visited_systems.clone(),

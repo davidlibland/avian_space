@@ -206,6 +206,9 @@ fn default_reverse_kp() -> Scalar {
 fn default_reverse_kd() -> Scalar {
     1.5
 }
+fn default_fuel_capacity() -> u16 {
+    4
+}
 
 /// All-zero derived default — used only as a sentinel (e.g. uninitialised resource).
 /// Real ship data always comes from the YAML item universe.
@@ -248,6 +251,10 @@ pub struct ShipData {
     pub reverse_kp: Scalar,
     #[serde(default = "default_reverse_kd")]
     pub reverse_kd: Scalar,
+    /// Max system-to-system jumps on a full tank. Higher = longer range
+    /// (e.g. courier > shuttle). Each jump consumes 1.
+    #[serde(default = "default_fuel_capacity")]
+    pub fuel_capacity: u16,
 }
 
 /// Number of pre-baked heading frames per ship sprite atlas. MUST match
@@ -351,6 +358,10 @@ pub struct Ship {
     #[serde(skip)]
     pub recent_landings: HashMap<String, f32>,
     pub credits: i128,
+    /// Current fuel = jumps remaining (max = `data.fuel_capacity`). Each system
+    /// jump consumes 1; refuel at the mechanic.
+    #[serde(default)]
+    pub fuel: u16,
     // A map indicating inclusion in factions
     pub enemies: HashMap<String, f32>,
     /// Factions whose rewards are shared into this ship's reward signal.
@@ -384,6 +395,7 @@ impl Ship {
             reserved_cargo: HashMap::new(),
             recent_landings: HashMap::new(),
             credits: 10000,
+            fuel: data.fuel_capacity,
             allies: Vec::new(),
             nav_target: None,
             weapons_target: None,

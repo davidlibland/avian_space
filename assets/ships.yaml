@@ -11,6 +11,7 @@ shuttle:
   price: 5000
   sprite_path: sprites/ships/atlas/shuttle.png
   personality: Trader
+  fuel_capacity: 4
   faction: Merchant
 
 fighter:
@@ -26,6 +27,7 @@ fighter:
   price: 25000
   sprite_path: sprites/ships/atlas/fighter.png
   personality: Fighter
+  fuel_capacity: 4
   required_unlocks: [fighter_license]
 
 asteroid_miner:
@@ -41,6 +43,7 @@ asteroid_miner:
   price: 35000
   sprite_path: sprites/ships/atlas/asteroid_miner.png
   personality: Miner
+  fuel_capacity: 5
   faction: Merchant
   required_unlocks: [mining_license]
 
@@ -61,6 +64,7 @@ prospector:
   price: 9000
   sprite_path: sprites/ships/atlas/prospector.png
   personality: Miner
+  fuel_capacity: 4
   faction: Merchant
   required_unlocks: [mining_license]
 
@@ -77,6 +81,7 @@ hauler:
   price: 50000
   sprite_path: sprites/ships/atlas/hauler.png
   personality: Trader
+  fuel_capacity: 7
   faction: Merchant
   required_unlocks: [merchant_hauler_license]
 
@@ -97,6 +102,7 @@ corvette:
   price: 18000
   sprite_path: sprites/ships/atlas/corvette.png
   personality: Fighter
+  fuel_capacity: 5
 
 frigate:
   thrust: 90.0
@@ -112,6 +118,7 @@ frigate:
   price: 120000
   sprite_path: sprites/ships/atlas/frigate.png
   personality: Fighter
+  fuel_capacity: 6
   required_unlocks: [frigate_license]
 
 # ── Trader variants ───────────────────────────────────────────────────────────
@@ -129,6 +136,7 @@ courier:
   price: 15000
   sprite_path: sprites/ships/atlas/courier.png
   personality: Trader
+  fuel_capacity: 9
   faction: Merchant
 
 freighter:
@@ -144,6 +152,7 @@ freighter:
   price: 45000
   sprite_path: sprites/ships/atlas/freighter.png
   personality: Trader
+  fuel_capacity: 7
   faction: Merchant
   required_unlocks: [merchant_freighter_license]
 
@@ -160,6 +169,7 @@ bulk_carrier:
   price: 85000
   sprite_path: sprites/ships/atlas/bulk_carrier.png
   personality: Trader
+  fuel_capacity: 8
   faction: Merchant
   required_unlocks: [merchant_bulk_license]
 
@@ -179,6 +189,7 @@ fed_patrol:
   price: 30000
   sprite_path: sprites/ships/atlas/fed_patrol.png
   personality: Fighter
+  fuel_capacity: 5
   faction: Federation
   required_unlocks: [federation_ship_license]
 
@@ -196,6 +207,7 @@ fed_destroyer:
   price: 180000
   sprite_path: sprites/ships/atlas/fed_destroyer.png
   personality: Fighter
+  fuel_capacity: 6
   faction: Federation
   required_unlocks: [federation_ship_license, federation_capital_license]
 
@@ -214,6 +226,7 @@ fed_missile_cruiser:
   price: 150000
   sprite_path: sprites/ships/atlas/fed_missile_cruiser.png
   personality: Fighter
+  fuel_capacity: 6
   faction: Federation
   required_unlocks: [federation_ship_license]
 
@@ -233,6 +246,7 @@ rebel_fighter:
   price: 22000
   sprite_path: sprites/ships/atlas/rebel_fighter.png
   personality: Fighter
+  fuel_capacity: 4
   faction: Rebel
   required_unlocks: [rebel_ship_license]
 
@@ -249,6 +263,7 @@ rebel_gunboat:
   price: 55000
   sprite_path: sprites/ships/atlas/rebel_gunboat.png
   personality: Fighter
+  fuel_capacity: 5
   faction: Rebel
   required_unlocks: [rebel_ship_license]
 
@@ -267,6 +282,7 @@ rebel_frigate:
   price: 100000
   sprite_path: sprites/ships/atlas/rebel_frigate.png
   personality: Fighter
+  fuel_capacity: 6
   faction: Rebel
   required_unlocks: [rebel_ship_license, rebel_capital_license]
 
@@ -286,6 +302,7 @@ pirate_corvette:
   price: 16000
   sprite_path: sprites/ships/atlas/pirate_corvette.png
   personality: Fighter
+  fuel_capacity: 5
   faction: Pirate
 
 pirate_missile_boat:
@@ -302,6 +319,7 @@ pirate_missile_boat:
   price: 40000
   sprite_path: sprites/ships/atlas/pirate_missile_boat.png
   personality: Fighter
+  fuel_capacity: 5
   faction: Pirate
 
 # ── Carriers ─────────────────────────────────────────────────────────────────
@@ -320,6 +338,7 @@ surplus_carrier:
   price: 200000
   sprite_path: sprites/ships/atlas/surplus_carrier.png
   personality: Fighter
+  fuel_capacity: 7
   required_unlocks: [carrier_license]
 
 fed_carrier:
@@ -337,6 +356,7 @@ fed_carrier:
   price: 300000
   sprite_path: sprites/ships/atlas/fed_carrier.png
   personality: Fighter
+  fuel_capacity: 8
   faction: Federation
   required_unlocks: [fed_carrier_license]
 

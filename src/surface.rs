@@ -2090,6 +2090,35 @@ fn surface_building_ui(
                             ui.label("Hull is at full integrity. No repairs needed.");
                         }
 
+                        // ── Refuel ──────────────────────────────────────────
+                        let fuel = ship.fuel;
+                        let cap = ship.data.fuel_capacity;
+                        ui.add_space(8.0);
+                        ui.label(format!("Fuel: {}/{} jumps", fuel, cap));
+                        if fuel < cap {
+                            let per_unit = (ship.data.price / 100).max(20);
+                            let cost = (per_unit * (cap - fuel) as i128).max(1);
+                            ui.add_space(4.0);
+                            ui.label(format!("Refuel cost: {} credits", cost));
+                            let can_afford = ship.credits >= cost;
+                            if ui
+                                .add_enabled(can_afford, bevy_egui::egui::Button::new("Refuel"))
+                                .clicked()
+                            {
+                                ship.credits -= cost;
+                                ship.fuel = cap;
+                            }
+                            if !can_afford {
+                                ui.colored_label(
+                                    bevy_egui::egui::Color32::RED,
+                                    "Not enough credits.",
+                                );
+                            }
+                        } else {
+                            ui.add_space(4.0);
+                            ui.label("Tank is full.");
+                        }
+
                         ui.add_space(4.0);
                         ui.label(format!("Credits: {}", ship.credits));
                     }

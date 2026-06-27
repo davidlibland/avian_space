@@ -135,10 +135,16 @@ fn jump_ui(
     mission_catalog: Res<MissionCatalog>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mut virtual_time: ResMut<Time<Virtual>>,
+    mut player_ship: Query<&mut crate::ship::Ship, With<crate::Player>>,
 ) {
     if !ui_state.open {
         return;
     }
+    // Fuel (jumps remaining) drives whether a jump is allowed + the readout.
+    let (fuel, fuel_cap) = player_ship
+        .single()
+        .map(|s| (s.fuel, s.data.fuel_capacity))
+        .unwrap_or((0, 0));
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
@@ -363,16 +369,29 @@ fn jump_ui(
             });
 
             ui.separator();
+            ui.label(format!("Fuel: {fuel}/{fuel_cap} jumps"));
+            if fuel == 0 {
+                ui.colored_label(
+                    Color32::from_rgb(220, 80, 80),
+                    "Out of fuel — land at a mechanic to refuel.",
+                );
+            }
             if ui.button("Close  [J]").clicked() {
                 close = true;
             }
         });
 
+    // Only jump if there's fuel; a jump burns one unit.
     if let Some(dest) = jump_target {
-        travel_ctx.destination = dest;
-        travel_ctx.phase = TravelPhase::Accelerating;
-        ui_state.open = false;
-        virtual_time.unpause();
+        if fuel > 0 {
+            if let Ok(mut ship) = player_ship.single_mut() {
+                ship.fuel = ship.fuel.saturating_sub(1);
+            }
+            travel_ctx.destination = dest;
+            travel_ctx.phase = TravelPhase::Accelerating;
+            ui_state.open = false;
+            virtual_time.unpause();
+        }
     }
     if close {
         ui_state.open = false;
