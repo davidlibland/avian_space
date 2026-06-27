@@ -589,14 +589,9 @@ def bake():
             ax = RES / 2 - x0
             ay = (RES / 2 + (d_t / 2 * math.sin(E) + tgt) * ppt) - y0
             fx, fy = ax / cw - 0.5, 0.5 - ay / ch
-            if fn in door_funcs:                               # cut the doorway open in _front
-                z0 = z0_for_biome(s["biome"]); hw, zt = door_funcs[fn]
-                lx = int(ax - hw * ppt); rx = int(ax + hw * ppt)
-                # Cut from the lintel down to the FLOOR (z0), not the ground — the
-                # plinth below the floor stays opaque so the doorway never exposes
-                # the terrain behind/below the building.
-                yt = int(ay - (z0 + zt) * ce * ppt); yb = int(ay) + 2
-                fr[max(yt, 0):max(yb, 0), max(lx, 0):max(rx, 0), 3] = 0
+            # The doorway is NOT cut out — the full facade (door included) stays in
+            # _front. The player steps behind the door (it's z-sorted over them),
+            # rather than showing through a hole. `door_funcs` kept for reference.
             full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
             Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
             bk.save(os.path.join(out_dir, f"{st}_{fn}_back.png"))
