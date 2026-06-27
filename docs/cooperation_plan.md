@@ -38,41 +38,92 @@ The incentive was the bigger gap, so we started there.
 > to get the reinforcing reward). Wean back down once it's learned (teach-then-
 > handoff, like the economic loop). The assist reward needs no BC.
 
-## Centralized critic / decentralized policy (CTDE) — plan
-**Today:** the `value_net` is an `RLNet` run *per-agent on the agent's own obs*
-(`value_fn.rs`), which includes only the `SELF_TEAM_*` *summary*. So it is mildly
-team-aware but **not** a centralized critic — it never sees the full joint/team
-state. Cooperative rewards (assist, shared outcomes) have notoriously bad credit
-assignment from a single agent's view; a centralized critic fixes that **at
-training time only**, leaving execution decentralized (policy unchanged).
+## Centralized critic / decentralized policy (CTDE) — implementation plan
 
-**Recommended approach — A: team-pooled value input (minimal CTDE).**
-- Compute, at obs-build time (`build_all_observations`, which already processes all
-  agents in a world together), a **per-faction pooled team embedding** — a
-  permutation-invariant mean (or attention) pool over *all* same-faction allies'
-  self-states (health, pos/vel, distress, weapons-target, personality), not just
-  the in-range summary.
-- Feed that pooled vector **only to the value net** (concatenate into the value
-  trunk). The **policy net keeps its current per-agent obs** → decentralized
-  execution preserved (CTDE).
-- Plumbing: the trainer recomputes the value on stored transitions (`value_fn.rs`),
-  so the pooled team vector must be **stored in the segment** alongside the obs (or
-  stored ally states to re-pool). Extend `Transition`/`Segment` with the team
-  vector.
-- Net change: value trunk takes an extra input; `VALUE_*` heads unchanged. Retrain
-  (or fine-tune from the current checkpoint).
-- Effort: **medium**. Risk: more value params; pooling must handle variable agent
-  counts (mean-pool or masked attention); only pays off because we now have a
-  cooperative reward to credit.
+### Where we are (verified in code)
+- The **value net** is a *separate* `RLNet` instance: `RLNet::new(device,
+  VALUE_HIDDEN_DIM, VALUE_OUTPUT_DIM)` (`model/training.rs`) — so we can change its
+  architecture **without touching the policy net**.
+- It runs *per-agent on the agent's own obs*: `value_fn::batch_value_inference`
+  takes `self_flat`/`obj_flat`/`proj_flat` (assembled from each step's
+  `Transition.obs`/`proj_obs` via `ppo/buffer.rs`) and calls
+  `RLNet::forward(self_t, obj_t, proj_t)`.
+- The obs already contains **in-range** ally slots (`friendly_ships`) + a
+  `SELF_TEAM_*` summary, and the net already has **entity attention** (`ent_q/k/v`)
+  over object slots. So the critic is *locally* team-aware — but it never sees
+  out-of-range allies or a holistic team state, so advantages for cooperative
+  rewards (assist, shared outcomes, "we ganged up and killed the pirate") are
+  high-variance.
+- Rollout builds obs for **all agents in a world together** (`build_all_observations`),
+  so a per-world team state is cheap to compute there.
 
-**Later — C: attention critic.** Replace the mean-pool with a set-transformer /
-masked-attention pool over allies in the value net. More expressive; a stepping
-stone to (and shares code with) the Phase-2 *policy* attention. Keep execution
-decentralized by attending only in the critic.
+### Recommended: **A — team-pooled value input** (minimal, true CTDE)
+Condition the value net (only) on a per-faction **team-state vector** pooled over
+*all* same-faction agents in the world. Policy net is unchanged → decentralized
+execution. The team vector is needed only at *training* time.
 
-**Not recommended first — B: full global-state MAPPO critic.** Concatenate every
-agent's full state; powerful but heavy and awkward with variable agent counts.
-Start with A.
+**Step 1 — compute the team-state vector** (`rl_collection::build_all_observations`).
+After gathering the world's RLAgent ships, compute per faction a fixed-size
+`TEAM_STATE_DIM` (~16–24) permutation-invariant, frame-invariant summary:
+- `n_allies` (norm by ref), `mean/min health_frac`, `frac_distressed`,
+  `frac_engaging` (has a hostile weapons-target), `mean cargo_frac`,
+  positional **spread** (std of positions — translation-invariant), `n_enemies`
+  in system / mean enemy proximity, `mean ally–nearest-enemy distance`,
+  `n_allies_with_shared_target` (focus-fire potential).
+Mean-pool ⇒ permutation-invariant + variable-count-safe. Computed once per faction
+per step, shared by all that faction's agents.
+
+**Step 2 — store it** in `Transition` and `Segment` (add `pub team_state:
+Vec<f32>` next to `obs`), thread through the flush
+(`rl_collection` ~L2069/L2090) and the trainer flattening (`ppo/buffer.rs`: add a
+`team_flat` alongside `self_flat`/`obj_flat`/`proj_flat`; `StepData` gains
+`team_feat`). Also store the **last-step** team vector (for
+`recompute_bootstrap_values`).
+
+**Step 3 — value-net architecture** (`model/net.rs`). Add an optional team branch
+to `RLNet`:
+- new field `team_embed: Option<Linear<B>>` (built only when a `team_input: bool`
+  ctor arg is true; policy passes false, value passes true);
+- `forward(self_t, obj_t, proj_t, team: Option<Tensor<B,2>>)` — when `team` is
+  `Some`, `silu(team_embed(team))` is **added into the merged trunk** just before
+  the `output` head (same place the self/entity/proj streams merge). Policy calls
+  with `team = None` → identical behaviour to today.
+- `VALUE_*` head dims unchanged. ~`TEAM_STATE_DIM×hidden + hidden` extra params.
+
+**Step 4 — pass it through training** (`value_fn.rs`): `batch_value_inference`,
+the gradient value-loss path, and `recompute_bootstrap_values` each gain a
+`team_flat` arg, build `team_t: [B, TEAM_STATE_DIM]`, and pass `Some(team_t)`.
+Policy forward (inference + PPO policy loss) passes `None`.
+
+**Step 5 — execution unchanged**: the game-thread inference uses the **policy**
+net (`team = None`), so no team state is needed at runtime → decentralized
+execution preserved. This is the CTDE property.
+
+**Gating & retrain.** Put it behind a config flag `ppo.ctde_enabled` (default
+false) so it merges safely and we can A/B. Because the value-net *architecture*
+changes, the old `value.bin` won't load — **re-init the value net** (keep
+`policy.bin`, which is what execution uses) and let it re-warm (value burn-in
+handles this); the policy keeps training throughout.
+
+**Effort:** medium (net.rs + value_fn + Transition/Segment/buffer plumbing + one
+config flag). **Risk:** more value params; team summary must be informative; only
+pays off because cooperative rewards now exist to credit.
+
+**A/B success criteria:** vs the non-CTDE run — (1) higher explained variance on
+the `ship_hit`/assist channels, (2) lower advantage variance, (3) the `[COOP]`
+behaviors (focus_fire, threat_resp, escort_cov, merch_def, merchant `ship_hit`)
+rise faster / higher. Same expert-vs-policy escort A/B harness.
+
+### Later — C: attention critic
+Replace the mean-pool with masked **attention over per-ally embeddings** in the
+value path (reuse the existing `ent_q/k/v` machinery, applied to the full team set
+rather than just in-range slots). More expressive; shares code with the eventual
+Phase-2 *policy* attention. Keep execution decentralized (attend only in critic).
+
+### Not first — B: full global-state MAPPO critic
+Concatenate every agent's full state into a global vector. Powerful but heavy and
+awkward with variable agent counts; A (pooled) gets most of the benefit for far
+less. Revisit only if A's pooled summary proves too lossy.
 
 ## Other levers (queued)
 - **Friendly-fire obs feature.** Fed/Rebel fighters *are* penalized for hitting

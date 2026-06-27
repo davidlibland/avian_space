@@ -22,6 +22,10 @@ pub const N_ENTITY_SLOTS: usize =
 /// Detection radius (must match ai_ships.rs DETECTION_RADIUS).
 pub const DETECTION_RADIUS: f32 = 2000.0;
 
+/// Length of the per-faction pooled team-state vector fed to the centralized
+/// critic (CTDE). See `docs/cooperation_plan.md`.
+pub const TEAM_STATE_DIM: usize = 12;
+
 /// Length scale for the proximity feature: K / (distance + K).
 /// Gives proximity = 0.5 at distance K, ~0.2 at the detection edge.
 const PROXIMITY_SCALE: f32 = DETECTION_RADIUS / 4.0;

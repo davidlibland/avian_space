@@ -225,6 +225,9 @@ pub struct PpoConfig {
     pub system_swap_segments: usize,
     /// Probability a swap picks the isolated `simulator` system.
     pub simulator_fraction: f32,
+    /// Enable CTDE (centralized critic): feed the value net a per-faction
+    /// pooled team-state vector. The policy net is unaffected.
+    pub ctde_enabled: bool,
 }
 
 impl Default for PpoConfig {
@@ -251,6 +254,7 @@ impl Default for PpoConfig {
             value_replay_extra_batches: VALUE_REPLAY_EXTRA_BATCHES,
             system_swap_segments: PPO_SYSTEM_SWAP_SEGMENTS,
             simulator_fraction: PPO_SIMULATOR_FRACTION,
+            ctde_enabled: true,
         }
     }
 }

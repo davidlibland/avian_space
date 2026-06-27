@@ -132,7 +132,9 @@ pub(super) fn spawn_bc_training_thread(
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let device = Default::default();
-        let mut inner = RLInner::<TrainBackend>::new(&device);
+        // BC training only updates the policy net; CTDE (value-net team input)
+        // is irrelevant here.
+        let mut inner = RLInner::<TrainBackend>::new(&device, false);
 
         let checkpoint_path = experiment.policy_checkpoint_path();
 

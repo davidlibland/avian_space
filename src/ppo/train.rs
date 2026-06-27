@@ -39,7 +39,7 @@ pub fn spawn_ppo_training_thread(
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let device: <TrainBackend as Backend>::Device = Default::default();
-        let mut inner = RLInner::<TrainBackend>::new(&device);
+        let mut inner = RLInner::<TrainBackend>::new(&device, ppo.ctde_enabled);
 
         let policy_path = experiment.policy_checkpoint_path();
         let value_path = experiment.value_checkpoint_path();
@@ -56,16 +56,41 @@ pub fn spawn_ppo_training_thread(
                     lock.load_bytes(bytes);
                 }
             }
-            if let Some(net) =
-                model::load_training_net_with_dim(&value_path, &device, VALUE_OUTPUT_DIM)
-            {
-                inner.value_net = Some(net);
+            // CTDE: the value net's self_embed is widened by TEAM_STATE_DIM, so a
+            // pre-CTDE value.bin is shape-incompatible. We load at the expected
+            // width; `load_training_net_with_dim` shape-guards and returns None on
+            // mismatch (→ fresh team-sized value net, re-warms via burn-in). After
+            // the first CTDE save, value.bin matches and persists across restarts.
+            let value_self_dim =
+                SELF_INPUT_DIM + if ppo.ctde_enabled { crate::rl_obs::TEAM_STATE_DIM } else { 0 };
+            let value_loaded = match model::load_training_net_with_dim(
+                &value_path,
+                &device,
+                VALUE_OUTPUT_DIM,
+                value_self_dim,
+            ) {
+                Some(net) => {
+                    inner.value_net = Some(net);
+                    true
+                }
+                None => {
+                    if ppo.ctde_enabled {
+                        println!(
+                            "[ppo] value.bin not loaded (shape-incompatible/missing) → fresh \
+                             team-sized value net; re-warms via burn-in. Policy preserved."
+                        );
+                    }
+                    false
+                }
+            };
+            // Value optimizer state only matches when the value net itself loaded.
+            if value_loaded {
+                if let Some(optim) = model::load_optimizer(&value_optim_path, &device) {
+                    inner.value_optim = optim;
+                }
             }
             if let Some(optim) = model::load_optimizer(&policy_optim_path, &device) {
                 inner.policy_optim = optim;
-            }
-            if let Some(optim) = model::load_optimizer(&value_optim_path, &device) {
-                inner.value_optim = optim;
             }
         }
 
@@ -74,7 +99,10 @@ pub fn spawn_ppo_training_thread(
         } else {
             0
         };
-        let mut segments: Vec<Segment> = if !experiment.is_fresh {
+        // The rl_buffer serialization format gained a per-transition team_state
+        // block with CTDE, so a pre-CTDE buffer is incompatible — reading it
+        // misaligns and can fault on a garbage length. Start fresh when ctde.
+        let mut segments: Vec<Segment> = if !experiment.is_fresh && !ppo.ctde_enabled {
             load_rl_buffer(&buffer_path).unwrap_or_default()
         } else {
             Vec::new()
@@ -440,6 +468,13 @@ pub fn spawn_ppo_training_thread(
                 ),
                 &device,
             );
+            let all_team = Tensor::<TrainBackend, 2>::from_data(
+                TensorData::new(
+                    batch.team_flat.clone(),
+                    [total_steps, crate::rl_obs::TEAM_STATE_DIM],
+                ),
+                &device,
+            );
 
             for epoch in 0..ppo.value_epochs {
                 let values = value_fn::batch_value_inference(
@@ -447,6 +482,7 @@ pub fn spawn_ppo_training_thread(
                     &batch.self_flat,
                     &batch.obj_flat,
                     &batch.proj_flat,
+                    &batch.team_flat,
                     total_steps,
                     &device,
                 );
@@ -597,6 +633,7 @@ pub fn spawn_ppo_training_thread(
                     let self_t = all_self.clone().select(0, idx_t.clone());
                     let obj_t = all_obj.clone().select(0, idx_t.clone());
                     let proj_t = all_proj.clone().select(0, idx_t.clone());
+                    let team_t = all_team.clone().select(0, idx_t.clone());
                     let targets = all_returns.clone().select(0, idx_t);
 
                     if !skip_policy && epoch < ppo.policy_epochs {
@@ -689,7 +726,8 @@ pub fn spawn_ppo_training_thread(
 
                     let value_grads = {
                         let vnet = inner.value_net.as_ref().unwrap();
-                        let (value_out, _, _) = vnet.forward(self_t, obj_t, proj_t);
+                        let (value_out, _, _) =
+                            vnet.forward_with_team(self_t, obj_t, proj_t, Some(team_t));
                         let vloss = value_fn::huber_value_loss(value_out, targets, ppo.huber_delta);
 
                         epoch_value_loss += f32::from(vloss.clone().into_scalar());
@@ -719,7 +757,7 @@ pub fn spawn_ppo_training_thread(
             if value_replay.len() > 0 {
                 let replay_mb_size = (ppo.mini_batch_size as f32 * ppo.value_replay_fraction) as usize;
                 for _ in 0..ppo.value_replay_extra_batches {
-                    if let Some((r_self, r_obj, r_proj, r_ret)) =
+                    if let Some((r_self, r_obj, r_proj, r_team, r_ret)) =
                         value_replay.sample(replay_mb_size.max(1), &mut rng)
                     {
                         let mb = replay_mb_size.max(1);
@@ -738,9 +776,14 @@ pub fn spawn_ppo_training_thread(
                             ),
                             &device,
                         );
+                        let team_t = Tensor::<TrainBackend, 2>::from_data(
+                            TensorData::new(r_team, [mb, crate::rl_obs::TEAM_STATE_DIM]),
+                            &device,
+                        );
                         let value_grads = {
                             let vnet = inner.value_net.as_ref().unwrap();
-                            let (value_out, _, _) = vnet.forward(self_t, obj_t, proj_t);
+                            let (value_out, _, _) =
+                                vnet.forward_with_team(self_t, obj_t, proj_t, Some(team_t));
                             let targets = Tensor::<TrainBackend, 2>::from_data(
                                 TensorData::new(r_ret, [mb, N_REWARD_TYPES]),
                                 &device,

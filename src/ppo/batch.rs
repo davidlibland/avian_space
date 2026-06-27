@@ -4,7 +4,7 @@ use crate::consts::N_REWARD_TYPES;
 use crate::gae::SegmentInfo;
 use crate::model::{self, N_OBJECTS, OBJECT_INPUT_DIM, SELF_INPUT_DIM};
 use crate::rl_collection::Segment;
-use crate::rl_obs::DiscreteAction;
+use crate::rl_obs::{DiscreteAction, TEAM_STATE_DIM};
 
 pub fn personality_index(p: &crate::ship::Personality) -> usize {
     match p {
@@ -22,6 +22,9 @@ pub struct PpoBatch {
     pub self_flat: Vec<f32>,
     pub obj_flat: Vec<f32>,
     pub proj_flat: Vec<f32>,
+    /// Per-faction pooled team-state, flattened `[total_steps × TEAM_STATE_DIM]`
+    /// (CTDE centralized critic). All-zeros for steps without a team-state.
+    pub team_flat: Vec<f32>,
     pub actions: Vec<DiscreteAction>,
     /// Rule-based (expert) actions paired with each observation, used as BC
     /// labels for the in-PPO BC auxiliary loss.
@@ -40,6 +43,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
     let mut self_flat = Vec::with_capacity(total_steps * SELF_INPUT_DIM);
     let mut obj_flat = Vec::with_capacity(total_steps * N_OBJECTS * OBJECT_INPUT_DIM);
     let mut proj_flat = Vec::with_capacity(total_steps * model::PROJECTILES_FLAT_DIM);
+    let mut team_flat = Vec::with_capacity(total_steps * TEAM_STATE_DIM);
     let mut actions = Vec::with_capacity(total_steps);
     let mut rule_based_actions = Vec::with_capacity(total_steps);
     let mut rewards = Vec::with_capacity(total_steps);
@@ -56,6 +60,11 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
             self_flat.extend_from_slice(s);
             obj_flat.extend_from_slice(o);
             proj_flat.extend_from_slice(&t.proj_obs);
+            if t.team_state.len() == TEAM_STATE_DIM {
+                team_flat.extend_from_slice(&t.team_state);
+            } else {
+                team_flat.extend_from_slice(&[0.0; TEAM_STATE_DIM]);
+            }
             actions.push(t.action);
             rule_based_actions.push(t.rule_based_action);
             rewards.push(t.rewards);
@@ -75,6 +84,7 @@ pub fn flatten_segments(segments: &[Segment]) -> PpoBatch {
         self_flat,
         obj_flat,
         proj_flat,
+        team_flat,
         actions,
         rule_based_actions,
         rewards,

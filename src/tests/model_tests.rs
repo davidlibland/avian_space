@@ -359,7 +359,7 @@ fn zero_inputs(
 #[test]
 fn test_rlnet_policy_output_shape() {
     let device = Default::default();
-    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
+    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM, false);
     let batch = 4usize;
     let (s, o, p) = zero_inputs(batch);
     let (action_out, nav_target_out, wep_target_out) = net.forward(s, o, p);
@@ -371,7 +371,7 @@ fn test_rlnet_policy_output_shape() {
 #[test]
 fn test_rlnet_value_output_shape() {
     let device = Default::default();
-    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, VALUE_OUTPUT_DIM);
+    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, VALUE_OUTPUT_DIM, false);
     let batch = 3usize;
     let (s, o, p) = zero_inputs(batch);
     let (action_out, nav_target_out, wep_target_out) = net.forward(s, o, p);
@@ -383,7 +383,7 @@ fn test_rlnet_value_output_shape() {
 #[test]
 fn test_rlnet_output_zero_init() {
     let device = Default::default();
-    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
+    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM, false);
     let (s, o, p) = zero_inputs(1);
     let (action_logits, _, _) = net.forward(s, o, p);
     let logits: Vec<f32> = action_logits
@@ -401,7 +401,7 @@ fn test_rlnet_output_zero_init() {
 #[test]
 fn test_rlnet_target_logits_masked() {
     let device = Default::default();
-    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM);
+    let net = RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM, false);
     let (s, o, p) = zero_inputs(1);
     let (_, nav_target_logits, _) = net.forward(s, o, p);
     let tl: Vec<f32> = nav_target_logits

@@ -23,7 +23,7 @@ impl InferenceNet {
     pub fn new() -> Self {
         let device = Default::default();
         Self {
-            net: RLNet::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM),
+            net: RLNet::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM),
             device,
         }
     }
@@ -75,7 +75,7 @@ impl InferenceNet {
         let recorder = BinBytesRecorder::<FullPrecisionSettings>::default();
         let record = Recorder::<InferBackend>::load(&recorder, bytes, &self.device)
             .expect("failed to deserialize weights");
-        self.net = RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM).load_record(record);
+        self.net = RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM).load_record(record);
     }
 }
 
@@ -84,7 +84,7 @@ pub fn load_inference_net(path: &str) -> Option<InferenceNet> {
     use burn::record::{BinFileRecorder, FullPrecisionSettings};
     let device: <InferBackend as Backend>::Device = Default::default();
     let recorder = BinFileRecorder::<FullPrecisionSettings>::default();
-    match RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM)
+    match RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM)
         .load_file(path, &recorder, &device)
     {
         Ok(net) => {
@@ -120,7 +120,7 @@ pub fn load_training_net(
     let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
         Ok(record) => {
-            let net = RLNet::<TrainBackend>::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM)
+            let net = RLNet::<TrainBackend>::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM)
                 .load_record(record);
             println!("[model] Loaded training net from {path}");
             Some(net)
@@ -139,11 +139,12 @@ pub fn load_training_net_with_dim(
     path: &str,
     device: &<TrainBackend as Backend>::Device,
     output_dim: usize,
+    self_input_dim: usize,
 ) -> Option<RLNet<TrainBackend>> {
     use burn::record::{BinBytesRecorder, BinFileRecorder, FullPrecisionSettings, Recorder};
     let infer_device: <InferBackend as Backend>::Device = Default::default();
     let recorder = BinFileRecorder::<FullPrecisionSettings>::default();
-    let infer_net = match RLNet::<InferBackend>::new(&infer_device, VALUE_HIDDEN_DIM, output_dim)
+    let infer_net = match RLNet::<InferBackend>::new(&infer_device, VALUE_HIDDEN_DIM, output_dim, self_input_dim)
         .load_file(path, &recorder, &infer_device)
     {
         Ok(net) => net,
@@ -152,12 +153,22 @@ pub fn load_training_net_with_dim(
             return None;
         }
     };
+    // burn's loader silently adopts the checkpoint's shape, so verify the loaded
+    // self_embed width matches what we expect; reject (→ fresh net) if not.
+    if infer_net.self_input_dim() != self_input_dim {
+        eprintln!(
+            "[model] {path}: self_input_dim {} != expected {self_input_dim} (e.g. pre-CTDE \
+             value.bin); discarding and re-initialising.",
+            infer_net.self_input_dim()
+        );
+        return None;
+    }
     let bytes = net_to_bytes(infer_net);
     let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
         Ok(record) => {
-            let net =
-                RLNet::<TrainBackend>::new(device, VALUE_HIDDEN_DIM, output_dim).load_record(record);
+            let net = RLNet::<TrainBackend>::new(device, VALUE_HIDDEN_DIM, output_dim, self_input_dim)
+                .load_record(record);
             println!("[model] Loaded training net (dim={output_dim}) from {path}");
             Some(net)
         }

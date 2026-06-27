@@ -44,6 +44,7 @@ use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, DETECTION_RADIUS, DiscreteAction, EntityKind,
     EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_OTHER_PROJECTILES, K_PICKUPS,
     K_PLANETS, ObsInput, PickupSlotData, PlanetSlotData, ProjectileSlotData, ShipSlotData,
+    TEAM_STATE_DIM,
 };
 use crate::ship::{Personality, Ship, ShipCommand, ShipHostility, Target};
 use crate::weapons::{FireCommand, GuidedMissile, Projectile, TracerSlots};
@@ -88,6 +89,10 @@ pub struct Transition {
     /// Sum of per-head log π(a|s) at the time the action was sampled.
     /// `0.0` for rule-based actions (BC mode).
     pub log_prob: f32,
+    /// Per-faction pooled team-state vector for the centralized critic (CTDE).
+    /// Length `TEAM_STATE_DIM`; all-zeros when CTDE is unused or the agent has
+    /// no faction. Consumed only by the value net.
+    pub team_state: Vec<f32>,
 }
 
 /// A fixed-length segment of transitions, ready for PPO / recurrent-PPO training.
@@ -212,6 +217,9 @@ pub struct RLAgent {
     pub last_obs: Option<Vec<f32>>,
     /// Projectile observation from the previous decision step.
     pub last_proj_obs: Option<Vec<f32>>,
+    /// Per-faction pooled team-state (CTDE) from the previous decision step.
+    /// Empty until first populated; length `TEAM_STATE_DIM` once set.
+    pub last_team_state: Vec<f32>,
     /// Action chosen at the previous decision step.
     pub last_action: Option<DiscreteAction>,
     /// Rule-based (expert) action at the previous decision step — used as the
@@ -238,6 +246,7 @@ impl RLAgent {
             personality,
             last_obs: None,
             last_proj_obs: None,
+            last_team_state: Vec::new(),
             last_action: None,
             last_rule_based_action: None,
             last_log_prob: 0.0,
@@ -1830,6 +1839,123 @@ pub(crate) fn mix_ally_rewards(
     shared
 }
 
+/// Compute the per-faction pooled team-state vector (CTDE centralized critic)
+/// from a snapshot of every `RLAgent` ship in the world.
+///
+/// `members` is `(faction, health_frac, distressed_level, targeting_ship,
+/// cargo_frac, position, speed)` per agent, plus a parallel list of all ship
+/// factions+hostility for enemy counting. The returned map keys are factions;
+/// agents with no faction get a zero vector (handled by the caller).
+///
+/// All entries are frame-invariant and roughly in `[0, 1]`, and the pooling is
+/// permutation-invariant (means / fracs / counts).
+fn compute_team_states(
+    members: &[TeamMember],
+) -> std::collections::HashMap<String, [f32; TEAM_STATE_DIM]> {
+    use std::collections::HashMap;
+
+    // Group member indices by faction.
+    let mut by_faction: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, m) in members.iter().enumerate() {
+        if let Some(f) = m.faction.as_deref() {
+            by_faction.entry(f).or_default().push(i);
+        }
+    }
+
+    let mut out: HashMap<String, [f32; TEAM_STATE_DIM]> = HashMap::new();
+    for (faction, idxs) in &by_faction {
+        let n = idxs.len() as f32;
+        let mut v = [0.0_f32; TEAM_STATE_DIM];
+
+        let mut sum_health = 0.0;
+        let mut min_health = 1.0_f32;
+        let mut sum_distressed = 0.0;
+        let mut count_distressed = 0u32;
+        let mut count_targeting = 0u32;
+        let mut sum_cargo = 0.0;
+        let mut count_low_health = 0u32;
+        let mut cx = 0.0;
+        let mut cy = 0.0;
+        for &i in idxs {
+            let m = &members[i];
+            sum_health += m.health_frac;
+            min_health = min_health.min(m.health_frac);
+            sum_distressed += m.distressed;
+            if m.distressed > 0.3 {
+                count_distressed += 1;
+            }
+            if m.targeting_ship {
+                count_targeting += 1;
+            }
+            sum_cargo += m.cargo_frac;
+            if m.health_frac < 0.5 {
+                count_low_health += 1;
+            }
+            cx += m.pos[0];
+            cy += m.pos[1];
+        }
+        cx /= n;
+        cy /= n;
+        let mut sum_dist = 0.0;
+        for &i in idxs {
+            let m = &members[i];
+            let dx = m.pos[0] - cx;
+            let dy = m.pos[1] - cy;
+            sum_dist += (dx * dx + dy * dy).sqrt();
+        }
+
+        // Enemy count: ships of a different faction that this faction is
+        // hostile toward, or that are hostile toward this faction.
+        let mut n_enemies = 0u32;
+        for m in members.iter() {
+            let Some(other_f) = m.faction.as_deref() else {
+                continue;
+            };
+            if other_f == *faction {
+                continue;
+            }
+            let they_hostile_to_us = m.hostility_map.get(*faction).map(|v| *v > 0.0).unwrap_or(false);
+            let we_hostile_to_them = idxs.iter().any(|&i| {
+                members[i]
+                    .hostility_map
+                    .get(other_f)
+                    .map(|v| *v > 0.0)
+                    .unwrap_or(false)
+            });
+            if they_hostile_to_us || we_hostile_to_them {
+                n_enemies += 1;
+            }
+        }
+
+        v[0] = (n / 8.0).min(1.0);
+        v[1] = sum_health / n;
+        v[2] = min_health;
+        v[3] = sum_distressed / n;
+        v[4] = count_distressed as f32 / n;
+        v[5] = count_targeting as f32 / n;
+        v[6] = sum_cargo / n;
+        v[7] = count_low_health as f32 / n;
+        v[8] = (sum_dist / n) / DETECTION_RADIUS;
+        v[9] = (n_enemies as f32 / 8.0).min(1.0);
+        v[10] = 0.0; // reserved (speed)
+        v[11] = 0.0; // reserved
+
+        out.insert((*faction).to_string(), v);
+    }
+    out
+}
+
+/// Per-`RLAgent` snapshot used to build the pooled team-state.
+struct TeamMember {
+    faction: Option<String>,
+    hostility_map: std::collections::HashMap<String, f32>,
+    health_frac: f32,
+    distressed: f32,
+    targeting_ship: bool,
+    cargo_frac: f32,
+    pos: [f32; 2],
+}
+
 fn store_obs_actions(
     decisions: &[(Entity, Vec<f32>, Vec<f32>, Vec<Option<Target>>)],
     model_actions: Option<&[(DiscreteAction, f32)]>,
@@ -1867,6 +1993,28 @@ fn store_obs_actions(
             (e, (agent.accumulated_rewards, s.data.faction.clone()))
         })
         .collect();
+
+    // CTDE: snapshot a per-faction pooled team-state over ALL RLAgent ships,
+    // computed once per step. Each agent later stores its faction's vector.
+    let team_members: Vec<TeamMember> = agents
+        .iter()
+        .map(|(_, _, s, pos, vel, _, _, _, hostility, distressed, _)| {
+            let cargo_used: u16 = s.cargo.values().sum();
+            let cargo_frac = cargo_used as f32 / s.data.cargo_space.max(1) as f32;
+            let speed = (vel.0.x * vel.0.x + vel.0.y * vel.0.y).sqrt();
+            let _ = speed; // reserved team-state dims [10],[11]
+            TeamMember {
+                faction: s.data.faction.clone(),
+                hostility_map: hostility.0.clone(),
+                health_frac: (s.health as f32 / s.data.max_health.max(1) as f32).clamp(0.0, 1.0),
+                distressed: distressed.level,
+                targeting_ship: matches!(s.weapons_target, Some(Target::Ship(_))),
+                cargo_frac: cargo_frac.clamp(0.0, 1.0),
+                pos: [pos.0.x, pos.0.y],
+            }
+        })
+        .collect();
+    let team_states = compute_team_states(&team_members);
 
     for (idx, (entity, obs, proj_obs, slot_targets)) in decisions.iter().enumerate() {
         let Ok((
@@ -2064,6 +2212,11 @@ fn store_obs_actions(
                 reward_cfg,
             );
 
+            let team_state = if agent.last_team_state.len() == TEAM_STATE_DIM {
+                agent.last_team_state.clone()
+            } else {
+                vec![0.0; TEAM_STATE_DIM]
+            };
             let transition = Transition {
                 obs: last_obs,
                 proj_obs: last_proj.clone(),
@@ -2073,6 +2226,7 @@ fn store_obs_actions(
                 shared_rewards,
                 done: false,
                 log_prob: agent.last_log_prob,
+                team_state,
             };
             agent.segment_buffer.push(transition.clone());
             agent.accumulated_rewards = [0.0; crate::consts::N_REWARD_TYPES];
@@ -2107,6 +2261,15 @@ fn store_obs_actions(
         }
 
         // Update agent with new observation and action.
+        // CTDE: stash this step's per-faction pooled team-state (zeros when the
+        // ship has no faction or its faction has no pooled vector).
+        agent.last_team_state = ship
+            .data
+            .faction
+            .as_ref()
+            .and_then(|f| team_states.get(f))
+            .map(|v| v.to_vec())
+            .unwrap_or_else(|| vec![0.0; TEAM_STATE_DIM]);
         agent.last_obs = Some(obs.clone());
         agent.last_proj_obs = Some(proj_obs.clone());
         agent.last_action = Some(executed_action);

@@ -148,7 +148,16 @@ pub struct RLNet<B: Backend> {
 }
 
 impl<B: Backend> RLNet<B> {
-    pub fn new(device: &B::Device, hidden_dim: usize, output_dim: usize) -> Self {
+    /// `self_input_dim` is the width of the self-feature block: `SELF_INPUT_DIM`
+    /// for the policy net (unchanged record → old `policy.bin` loads), or
+    /// `SELF_INPUT_DIM + TEAM_STATE_DIM` for a CTDE value net, which concatenates
+    /// the per-faction pooled team-state onto its self-input (centralized critic).
+    pub fn new(
+        device: &B::Device,
+        hidden_dim: usize,
+        output_dim: usize,
+        self_input_dim: usize,
+    ) -> Self {
         let lin = |i, o| LinearConfig::new(i, o).init(device);
         let lin_xavier = |i, o| {
             LinearConfig::new(i, o)
@@ -188,7 +197,7 @@ impl<B: Backend> RLNet<B> {
             cross_v_proj: lin_xavier(hidden_dim, hidden_dim),
             cross_norm: LayerNormConfig::new(hidden_dim).init(device),
 
-            self_embed: lin(SELF_INPUT_DIM, hidden_dim),
+            self_embed: lin(self_input_dim, hidden_dim),
             self_fc2: lin(hidden_dim, hidden_dim),
             self_enc_norm: LayerNormConfig::new(hidden_dim).init(device),
 
@@ -213,12 +222,45 @@ impl<B: Backend> RLNet<B> {
         }
     }
 
+    /// Width of the self-feature input this net was built/loaded for (read from
+    /// the `self_embed` weight, shape `[d_input, d_output]`). Used to reject a
+    /// shape-incompatible checkpoint: burn's `load_record` silently adopts the
+    /// checkpoint's shape, so after loading we compare this against the expected
+    /// width and discard the net if they differ (e.g. a pre-CTDE value.bin).
+    pub fn self_input_dim(&self) -> usize {
+        self.self_embed.weight.val().dims()[0]
+    }
+
+    /// Forward pass without team-state input (decentralized; policy net path).
     pub fn forward(
         &self,
         self_feat: Tensor<B, 2>,
         obj_feat: Tensor<B, 3>,
         proj_feat: Tensor<B, 3>,
     ) -> (Tensor<B, 2>, Tensor<B, 2>, Tensor<B, 2>) {
+        self.forward_with_team(self_feat, obj_feat, proj_feat, None)
+    }
+
+    /// Forward pass with an optional per-faction pooled team-state vector for
+    /// the centralized critic (CTDE). When `team` is `Some` and `team_embed`
+    /// is present, the embedded team-state is merged late-additively into the
+    /// decoder; otherwise the pass is identical to the policy path.
+    pub fn forward_with_team(
+        &self,
+        self_feat: Tensor<B, 2>,
+        obj_feat: Tensor<B, 3>,
+        proj_feat: Tensor<B, 3>,
+        team: Option<Tensor<B, 2>>,
+    ) -> (Tensor<B, 2>, Tensor<B, 2>, Tensor<B, 2>) {
+        // CTDE: a value net (with a widened `self_embed`) concatenates the
+        // per-faction pooled team-state onto its self-input. Policy nets pass
+        // `team = None`, leaving self_feat — and the record format — unchanged.
+        // The self-feature narrows below use low offsets, so appending the team
+        // block at the end doesn't disturb them.
+        let self_feat = match team {
+            Some(t) => Tensor::cat(vec![self_feat, t], 1),
+            None => self_feat,
+        };
         let h = self.hidden_dim;
         let (type_onehot, is_present, core_feat, type_feat) = split_obj_feat(obj_feat);
 

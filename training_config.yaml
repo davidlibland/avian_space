@@ -72,3 +72,6 @@ ppo:
   # Probability that a swap targets the isolated `simulator` system
   # (a copy of sol with no jump connections).
   simulator_fraction: 0.25
+  # CTDE: feed the value net a per-faction pooled team-state (centralized critic);
+  # policy net is unchanged (decentralized execution). Re-inits the value net.
+  ctde_enabled: true
