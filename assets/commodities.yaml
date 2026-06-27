@@ -10,6 +10,10 @@ food:
   color: [0.3, 0.8, 0.2]
 water:
   color: [0.2, 0.5, 0.9]
+oxygen:
+  color: [0.6, 0.9, 1.0]
+medical_supplies:
+  color: [0.95, 0.95, 0.95]
 chemicals:
   color: [0.7, 0.3, 0.8]
 exotic_matter:
