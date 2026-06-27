@@ -869,6 +869,11 @@ fn ship_movement(
             continue;
         };
         let dt = time.delta_secs();
+        // Battle damage degrades handling: a linear roll-off from 100% at full
+        // health to 50% of speed / acceleration / turn rate when fully damaged.
+        let hp_frac =
+            (ship.health.max(0) as f32 / ship.data.max_health.max(1) as f32).clamp(0.0, 1.0);
+        let agility = 0.5 + 0.5 * hp_frac;
         // Drive flame is shown whenever forward thrust is commanded.
         drive.0 = cmd.thrust.abs() > f32::EPSILON;
 
@@ -877,15 +882,15 @@ fn ship_movement(
 
         if cmd.thrust.abs() > f32::EPSILON {
             let forward_speed = velocity.dot(forward);
-            let speed_deficit = ship.data.max_speed - forward_speed;
+            let speed_deficit = ship.data.max_speed * agility - forward_speed;
             let pd_force = (ship.data.thrust_kp * speed_deficit
                 - ship.data.thrust_kd * forward_speed)
-                .clamp(0.0, ship.data.thrust);
+                .clamp(0.0, ship.data.thrust * agility);
             (*velocity).0 += forward * pd_force * cmd.thrust * dt;
         }
 
         if cmd.turn.abs() > f32::EPSILON {
-            (*ang_vel).0 += -ship.data.torque * cmd.turn * dt;
+            (*ang_vel).0 += -ship.data.torque * agility * cmd.turn * dt;
         }
 
         let new_ang_vel = ang_vel.0 * (-ship.data.angular_drag * dt).exp();
@@ -895,7 +900,7 @@ fn ship_movement(
             let retrograde = -velocity.normalize();
             let angle_err = forward.angle_to(retrograde);
             let pd_torque = (ship.data.reverse_kp * angle_err - ship.data.reverse_kd * new_ang_vel)
-                .clamp(-ship.data.torque, ship.data.torque);
+                .clamp(-ship.data.torque * agility, ship.data.torque * agility);
             (*ang_vel).0 += pd_torque * cmd.reverse * dt;
         }
     }
