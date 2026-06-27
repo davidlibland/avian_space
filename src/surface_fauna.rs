@@ -299,12 +299,16 @@ pub fn spawn_fauna(
             ),
             Transform::from_xyz(pos.x, pos.y, z),
         ));
-        // Roamers collide with the terrain; fliers pass over everything.
+        // Roamers collide with the terrain; fliers pass over everything but still
+        // need explicit mass (a dynamic body with no collider is mass-less → avian
+        // "no mass or inertia" NaN warning).
         if !flier {
             ent.insert((
                 Collider::circle(4.0),
                 CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
             ));
+        } else {
+            ent.insert(MassPropertiesBundle::from_shape(&Collider::circle(4.0), 0.5));
         }
     }
 }
