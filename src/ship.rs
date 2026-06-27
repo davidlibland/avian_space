@@ -1094,6 +1094,7 @@ fn score_hits(
     mut reader: MessageReader<ScoreHit>,
     mut ship_hostilities: Query<&mut ShipHostility>,
     ships: Query<&Ship>,
+    positions: Query<&Position>,
     rl_agents: Query<&RLAgent>,
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut combat_stats: ResMut<CombatHitStats>,
@@ -1172,9 +1173,52 @@ fn score_hits(
                         }
                     };
 
+                    // Cooperative assist (escort / threat-interception): a Fighter
+                    // that hits a ship which is itself attacking a NEARBY ALLY earns
+                    // a bonus — rewarding "defend your teammate by killing what's
+                    // shooting them" (the escort+focus-fire signal). Off by default
+                    // (cooperative_assist_bonus = 0).
+                    const ASSIST_RADIUS: f32 = 800.0;
+                    let assist_bonus = if is_engaged
+                        && matches!(agent.personality, Personality::Fighter)
+                        && reward_cfg.cooperative_assist_bonus > 0.0
+                    {
+                        let victim = target_ship
+                            .and_then(|ts| ts.weapons_target.as_ref())
+                            .map(|t| t.get_entity());
+                        let helped = match (victim, source_ship) {
+                            (Some(victim_e), Some(ss)) if victim_e != *source => {
+                                match (
+                                    ships.get(victim_e).ok(),
+                                    positions.get(*source).ok(),
+                                    positions.get(victim_e).ok(),
+                                ) {
+                                    (Some(vs), Some(sp), Some(vp)) => {
+                                        let is_ally = vs
+                                            .data
+                                            .faction
+                                            .as_ref()
+                                            .map(|f| ss.allies.contains(f))
+                                            .unwrap_or(false);
+                                        is_ally && (sp.0 - vp.0).length() <= ASSIST_RADIUS
+                                    }
+                                    _ => false,
+                                }
+                            }
+                            _ => false,
+                        };
+                        if helped {
+                            reward_cfg.cooperative_assist_bonus
+                        } else {
+                            0.0
+                        }
+                    } else {
+                        0.0
+                    };
+
                     rl_reward_writer.write(RLReward {
                         entity: *source,
-                        reward: r * personality_scale,
+                        reward: r * personality_scale + assist_bonus,
                         reward_type: crate::consts::REWARD_SHIP_HIT,
                     });
                     if let Some(ss) = ships.get(*source).ok() {

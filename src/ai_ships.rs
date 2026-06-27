@@ -169,7 +169,7 @@ fn coop_sampler(
 
     // Escort coverage + threat response for merchants.
     let (mut merch, mut covered, mut dist_sum, mut dist_n) = (0u32, 0u32, 0.0f32, 0u32);
-    let (mut threatened, mut threat_defended) = (0u32, 0u32);
+    let (mut threatened, mut threat_defended, mut self_def) = (0u32, 0u32, 0u32);
     for m in 0..n {
         if !is_merchant(m) {
             continue;
@@ -201,19 +201,24 @@ fn coop_sampler(
             if nearest <= ESCORT_RADIUS {
                 threat_defended += 1;
             }
+            // Merchant self-defense: is the threatened merchant returning fire
+            // (weapons-target locked on a ship)?
+            if matches!(infos[m].1.weapons_target, Some(Target::Ship(_))) {
+                self_def += 1;
+            }
         }
     }
 
     let f = |num: u32, den: u32| if den > 0 { num as f32 / den as f32 } else { f32::NAN };
     println!(
-        "[COOP] sys={} ships={} | focus_fire={:.3} eng={} allies_near={:.2} enemies_near={:.2} | escort_cov={:.3} merch={} mean_def_dist={:.0} | threatened={} threat_resp={:.3}",
+        "[COOP] sys={} ships={} | focus_fire={:.3} eng={} allies_near={:.2} enemies_near={:.2} | escort_cov={:.3} merch={} mean_def_dist={:.0} | threatened={} threat_resp={:.3} merch_def={:.3}",
         system.0, n,
         f(shared, eng), eng,
         if eng > 0 { allies_near_sum / eng as f32 } else { f32::NAN },
         if eng > 0 { enemies_near_sum / eng as f32 } else { f32::NAN },
         f(covered, merch), merch,
         if dist_n > 0 { dist_sum / dist_n as f32 } else { f32::NAN },
-        threatened, f(threat_defended, threatened),
+        threatened, f(threat_defended, threatened), f(self_def, threatened),
     );
 }
 

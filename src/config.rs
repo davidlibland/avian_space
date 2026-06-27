@@ -127,6 +127,10 @@ pub struct RewardConfig {
     pub reward_sharing_fighter: f32,
     pub reward_sharing_miner: f32,
     pub reward_sharing_trader: f32,
+    /// Cooperative-assist bonus: extra ship-hit reward a Fighter earns for
+    /// hitting a ship that is itself attacking a nearby ally (escort /
+    /// threat-interception / focus-fire on a shared threat). 0 = disabled.
+    pub cooperative_assist_bonus: f32,
 }
 
 impl Default for RewardConfig {
@@ -169,6 +173,7 @@ impl Default for RewardConfig {
             reward_sharing_fighter: REWARD_SHARING_FIGHTER,
             reward_sharing_miner: REWARD_SHARING_MINER,
             reward_sharing_trader: REWARD_SHARING_TRADER,
+            cooperative_assist_bonus: 0.0,
         }
     }
 }

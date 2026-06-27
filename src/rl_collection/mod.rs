@@ -1674,6 +1674,31 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
             && (planet_profit(i) > 0.0 || low_health || planet_has_ammo(i) || has_free_cargo)
     };
 
+    // 0. Self-defense: a distressed merchant (Trader/Miner) that is under attack
+    //    breaks off its economic task to face and fire at its attacker —
+    //    preferring the ship currently targeting us, else the nearest
+    //    hostile/should-engage ship. Returning that ship as the NAV target makes
+    //    the weapons-target logic lock onto it too, so the merchant aims AND
+    //    shoots back. When the distress decays (no longer under fire) it resumes
+    //    trading/mining. (Pirates already register hostile to merchants, and an
+    //    intentional hit flips the merchant's should_engage on the attacker.)
+    const DISTRESS_DEFEND_THRESHOLD: f32 = 0.3;
+    let is_hostile_slot =
+        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_IS_HOSTILE] > 0.5;
+    let is_targeting_me =
+        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_IS_TARGETING_ME] > 0.5;
+    let engageable_ship = |i: usize| is_ship(i) && (is_hostile_slot(i) || should_engage(i));
+    if matches!(personality, Personality::Trader | Personality::Miner)
+        && obs[SELF_DISTRESSED] > DISTRESS_DEFEND_THRESHOLD
+    {
+        let attacker = (0..n)
+            .find(|&i| is_present(i) && engageable_ship(i) && is_targeting_me(i))
+            .or_else(|| (0..n).find(|&i| is_present(i) && engageable_ship(i)));
+        if let Some(idx) = attacker {
+            return idx as u8;
+        }
+    }
+
     // 1. Sellers head to the highest-value planet to offload cargo:
     //    - Traders with any cargo (their buy-low / sell-high loop).
     //    - Miners whose hold is (nearly) full → break off mining to sell their
