@@ -497,7 +497,7 @@ fn build_app(
     } else {
         app.add_systems(
             Update,
-            (keyboard_input, collision_system, accelerate_for_jump)
+            (keyboard_input, click_to_target, collision_system, accelerate_for_jump)
                 .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(
@@ -718,6 +718,67 @@ fn compute_intercept_command(
         player_ship.data.angular_drag,
     );
     Some(turn)
+}
+
+/// Left-click a ship / planet / asteroid / pickup to make it the nav target
+/// (the weapons target then mirrors automatically in `keyboard_input`). Picks
+/// the entity whose circle the cursor falls inside, nearest first. Clicking
+/// empty space leaves the current target unchanged.
+fn click_to_target(
+    mouse: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    cameras: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut player_query: Query<(Entity, &mut Ship), With<Player>>,
+    ships_query: Query<(Entity, &Transform, &Ship), Without<Player>>,
+    asteroids_query: Query<(Entity, &Transform, &Asteroid)>,
+    pickups_query: Query<(Entity, &Transform), With<pickups::Pickup>>,
+    planets_query: Query<(Entity, &Transform, &planets::Planet)>,
+    current_star_system: Res<CurrentStarSystem>,
+    item_universe: Res<ItemUniverse>,
+) {
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let Ok(window) = windows.single() else { return };
+    let Some(cursor) = window.cursor_position() else { return };
+    let Ok((camera, cam_tf)) = cameras.single() else { return };
+    let Ok(world) = camera.viewport_to_world_2d(cam_tf, cursor) else { return };
+    let Ok((player_entity, mut player_ship)) = player_query.single_mut() else { return };
+
+    // Nearest entity whose circle contains the cursor wins.
+    fn consider(best: &mut Option<(f32, Target)>, dist: f32, hit_r: f32, t: Target) {
+        if dist <= hit_r && best.as_ref().map_or(true, |(bd, _)| dist < *bd) {
+            *best = Some((dist, t));
+        }
+    }
+    let mut best: Option<(f32, Target)> = None;
+    for (e, tf, ship) in &ships_query {
+        if e == player_entity {
+            continue;
+        }
+        let d = (tf.translation.truncate() - world).length();
+        consider(&mut best, d, ship.data.radius * 1.5, Target::Ship(e));
+    }
+    for (e, tf, ast) in &asteroids_query {
+        let d = (tf.translation.truncate() - world).length();
+        consider(&mut best, d, ast.size * 1.5, Target::Asteroid(e));
+    }
+    for (e, tf) in &pickups_query {
+        let d = (tf.translation.truncate() - world).length();
+        consider(&mut best, d, 16.0, Target::Pickup(e));
+    }
+    let sys = item_universe.star_systems.get(&current_star_system.0);
+    for (e, tf, planet) in &planets_query {
+        let r = sys
+            .and_then(|s| s.planets.get(&planet.0))
+            .map(|p| p.radius)
+            .unwrap_or(60.0);
+        let d = (tf.translation.truncate() - world).length();
+        consider(&mut best, d, r, Target::Planet(e));
+    }
+    if let Some((_, target)) = best {
+        player_ship.nav_target = Some(target);
+    }
 }
 
 /// Sends [`MovementAction`] events based on keyboard input.
