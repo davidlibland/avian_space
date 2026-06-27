@@ -23,6 +23,7 @@ fn basic_universe() -> ItemUniverse {
         base_weapons: HashMap::new(),
         sprite_path: "shuttle.png".to_string(),
         sprite_handle: Default::default(),
+        atlas_layout: None,
         radius: 10.0,
         price: 1000,
         personality: Personality::Trader,
@@ -33,6 +34,7 @@ fn basic_universe() -> ItemUniverse {
         thrust_kd: 1.0,
         reverse_kp: 20.0,
         reverse_kd: 1.5,
+        fuel_capacity: 4,
     };
     let base_mission = MissionDef {
         briefing: "base".into(),
@@ -62,6 +64,8 @@ fn basic_universe() -> ItemUniverse {
             },
         )]),
         simulator_system: None,
+        escort_system: None,
+        mining_system: None,
         outfitter_items: HashMap::new(),
         commodities: HashMap::new(),
         missions: HashMap::from([("base_quest".to_string(), base_mission)]),

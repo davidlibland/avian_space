@@ -17,6 +17,7 @@ fn sample_save() -> PilotSave {
         visited_systems: HashSet::new(),
         reserved_cargo: HashMap::new(),
         resources: HashMap::new(),
+        fuel: Some(4),
     }
 }
 
@@ -34,6 +35,7 @@ fn basic_item_universe() -> ItemUniverse {
         base_weapons: HashMap::new(),
         sprite_path: "shuttle.png".to_string(),
         sprite_handle: Default::default(),
+        atlas_layout: None,
         radius: 10.0,
         price: 1000,
         personality: Personality::Trader,
@@ -44,6 +46,7 @@ fn basic_item_universe() -> ItemUniverse {
         thrust_kd: 1.0,
         reverse_kp: 20.0,
         reverse_kd: 1.5,
+        fuel_capacity: 4,
     };
     ItemUniverse {
         weapons: HashMap::new(),
@@ -60,6 +63,8 @@ fn basic_item_universe() -> ItemUniverse {
             },
         )]),
         simulator_system: None,
+        escort_system: None,
+        mining_system: None,
         outfitter_items: HashMap::new(),
         commodities: HashMap::new(),
         missions: HashMap::new(),
