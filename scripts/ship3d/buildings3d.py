@@ -144,14 +144,21 @@ def gable(cx, cy, z0, w, d, rh, mat):
     B._obj_from_pydata("gable", v, f, mat, smooth=False, bevel=0.02)
 
 
-def windows(cx, cy, w, d, z0, z1, glow, cols=3, rows=2):
-    """Glowing window grid on the camera-facing front wall (-Y). Forward-facing
-    view is azimuth 0, so side faces are edge-on / invisible — front only."""
+def windows(cx, cy, w, d, z0, z1, glow, cols=3, rows=2, m=None):
+    """Glowing window grid on the camera-facing front wall (-Y), with trim frame,
+    sill and shutters when `m` is given. Side faces are edge-on at azimuth 0."""
     zs = np.linspace(z0, z1, rows + 2)[1:-1]
     xs = np.linspace(cx - w / 2, cx + w / 2, cols + 2)[1:-1]
+    ww = w / (cols + 2) * 0.9
     for z in zs:
         for x in xs:
-            B.add_box("win", (x, cy - d / 2 - 0.03, z), (w / (cols + 2) * 0.9, 0.06, 0.55), glow, bevel=0.0)
+            if m is not None:
+                B.add_box("winframe", (x, cy - d / 2 - 0.04, z), (ww + 0.16, 0.05, 0.72), m["trim"], bevel=0.01)
+                B.add_box("winsill", (x, cy - d / 2 - 0.07, z - 0.36), (ww + 0.24, 0.09, 0.07), m["beam"], bevel=0.0)
+                for _sx in (-1, 1):
+                    B.add_box("shutter", (x + _sx * (ww * 0.55 + 0.12), cy - d / 2 - 0.06, z),
+                              (0.09, 0.05, 0.62), m["beam"], bevel=0.0)
+            B.add_box("win", (x, cy - d / 2 - 0.03, z), (ww, 0.06, 0.55), glow, bevel=0.0)
 
 
 def door(cx, cy, d, m, glow):
@@ -164,6 +171,19 @@ def roof_for(style, cx, cy, z0, w, d, m):
     if rt == "gable":
         gable(cx, cy, z0 - 0.05, w + 0.9, d + 0.9, 1.9, m["roof"])   # deep eaves
         B.add_box("ridge", (cx, cy, z0 + 1.85), (0.2, d + 0.9, 0.12), m["beam"], bevel=0.0)
+        # shingle courses — proud darker lines across both slopes read as rows
+        for _t in (0.18, 0.4, 0.62, 0.84):
+            yy = (d + 0.9) / 2 * (1 - _t); zz = z0 - 0.05 + _t * 1.9
+            for _s in (-1, 1):
+                B.add_box("course", (cx, cy + _s * yy, zz + 0.05), (w + 0.82, 0.06, 0.05), m["beam"], bevel=0.0)
+        # gable-end eave brackets + a stone chimney poking above the ridge
+        B.add_box("chimney", (cx - w * 0.32, cy + d * 0.18, z0 + 1.55), (0.42, 0.42, 1.5), m["stone"], bevel=0.04)
+        B.add_box("chimcap", (cx - w * 0.32, cy + d * 0.18, z0 + 2.34), (0.54, 0.54, 0.14), m["beam"], bevel=0.02)
+        if style["biome"] == "garden":                  # moss creeping up the front roof slope
+            for _mx, _mt, _r in ((-w * 0.28, 0.26, 0.42), (w * 0.3, 0.5, 0.34),
+                                 (-w * 0.06, 0.72, 0.3), (w * 0.12, 0.2, 0.3)):
+                yy = (d + 0.9) / 2 * (1 - _mt); zz = z0 - 0.05 + _mt * 1.9
+                B.add_sphere("moss", (cx + _mx, cy - yy, zz + 0.06), (_r, _r * 0.7, 0.07), m["plant"])
     elif rt == "dome":                          # steep snow-shedding dome (within the walls) + finial
         B.add_sphere("dome", (cx, cy, z0 - 0.9), (w / 2 - 0.15, d / 2 - 0.15, 2.7), m["roof"], zclip=z0 - 0.05)
         B.add_cylinder("finial", (cx, cy, z0 + 1.6), 0.1, 0.5, m["trim"], axis="z")
@@ -227,7 +247,7 @@ def wall_skin(s, m, w, d, h, z0, top, win=(3, 2), front=True):
             B.add_box("post", (sx, fz - 0.02, z0 + h / 2), (0.2, 0.16, h), m["beam"], bevel=0.02)
         B.add_box("plate", (0, fz - 0.03, top - 0.08), (w, 0.1, 0.16), m["beam"], bevel=0.0)
         if front:
-            windows(0, 0, w, d, z0 + 0.7, top - 0.6, m["glow"], cols=win[0], rows=win[1])
+            windows(0, 0, w, d, z0 + 0.7, top - 0.6, m["glow"], cols=win[0], rows=win[1], m=m)
     elif b == "ice":                       # padded buttress corners, heat-trace seams, deep windows
         for sx in (-w / 2, w / 2):
             B.add_cylinder("butt", (sx, fz + 0.16, z0 + h / 2), 0.46, h, m["wall"], axis="z")
@@ -311,6 +331,8 @@ def build_market(s, m):
         B.add_box("ppost", (sx, yf, zf / 2), (0.16, 0.16, zf), m["beam"], bevel=0.02)
     for i, (bx, by) in enumerate([(-wp / 2 + 0.55, yf + 0.2), (-wp / 2 + 1.0, yf + 0.3), (wp / 2 - 0.6, yf + 0.2)]):
         B.add_box("crate", (bx, by, 0.42), (0.8, 0.8, 0.8), m["wall_d"] if i % 2 else m["beam"], bevel=0.04)
+        B.add_box("crlabel", (bx, by - 0.42, 0.46), (0.46, 0.03, 0.26), m["trim"], bevel=0.0)        # shipping label
+        B.add_box("crband", (bx, by - 0.41, 0.42), (0.84, 0.02, 0.08), m["beam"], bevel=0.0)         # strap
 
 
 def build_outfitter(s, m):

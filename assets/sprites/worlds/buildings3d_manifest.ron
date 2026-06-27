@@ -5,7 +5,7 @@
     sprites: [
         (style: "colony", func: "market", w: 6, d: 5, anchor: (0.0, -0.3565)),
         (style: "colony", func: "outfitter", w: 4, d: 4, anchor: (0.0, -0.3699)),
-        (style: "colony", func: "shipyard", w: 8, d: 6, anchor: (0.0, -0.4833)),
+        (style: "colony", func: "shipyard", w: 8, d: 6, anchor: (0.0, -0.4834)),
         (style: "colony", func: "mechanic", w: 6, d: 4, anchor: (0.0, -0.2894)),
         (style: "colony", func: "bar", w: 6, d: 5, anchor: (0.0042, -0.4556)),
         (style: "colony", func: "pad", w: 3, d: 3, anchor: (0.0, -0.4753)),
