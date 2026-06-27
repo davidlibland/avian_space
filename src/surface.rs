@@ -1250,16 +1250,19 @@ fn setup_surface(
             // ~2 tiles south → tile (mech_x, mech_y-2)). Make it solid so the player
             // can't walk onto or behind it; it stays clear of the centre door.
             {
-                let eng = tile_to_world(mech_x, mech_y.saturating_sub(2), map_w, map_h, tile_px);
+                // Solid over tiles (mech_x, mech_y-1) + (mech_x, mech_y-2): the
+                // engine and the gap right behind it, but NOT the empty tile
+                // further south (so the player can walk up to the engine).
+                let base = tile_to_world(mech_x, mech_y, map_w, map_h, tile_px);
                 commands.spawn((
                     DespawnOnExit(PlayState::Exploring),
                     RigidBody::Static,
-                    Collider::rectangle(tile_px * 1.4, tile_px * 2.2),
+                    Collider::rectangle(tile_px * 1.4, tile_px * 2.0),
                     CollisionLayers::new(
                         GameLayer::Surface,
                         [GameLayer::Surface, GameLayer::Character],
                     ),
-                    Transform::from_xyz(eng.x, eng.y, 0.0),
+                    Transform::from_xyz(base.x, base.y - 1.5 * tile_px, 0.0),
                 ));
             }
             // Mechanic label above garage door.
