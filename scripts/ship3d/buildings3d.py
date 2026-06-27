@@ -123,6 +123,7 @@ def mats(s):
         wall_d=textured(B.toon_material("wall_d", s["wall_d"], spec=0.05), tex, s["wall_d"], scale=2.6),
         roof=textured(B.toon_material("roof", s["roof_c"], spec=0.12), ROOF_TEX[s["biome"]],
                       s["roof_c"], scale=5.5),
+        roof_d=B.toon_material("roof_d", tuple(c * 0.7 for c in s["roof_c"]), spec=0.12),  # shingle-course shadow
         trim=B.toon_material("trim", s["trim"], spec=0.2),
         beam=textured(B.toon_material("beam", s.get("beam", s["wall_d"]), spec=0.0), "wood",
                       s.get("beam", s["wall_d"]), scale=4.0),
@@ -169,21 +170,22 @@ def door(cx, cy, d, m, glow):
 def roof_for(style, cx, cy, z0, w, d, m):
     rt = style["roof"]
     if rt == "gable":
-        gable(cx, cy, z0 - 0.05, w + 0.9, d + 0.9, 1.9, m["roof"])   # deep eaves
+        gable(cx, cy, z0 - 0.05, w + 0.9, d + 0.9, 1.9, m["roof"])   # deep eaves (shingle texture)
         B.add_box("ridge", (cx, cy, z0 + 1.85), (0.2, d + 0.9, 0.12), m["beam"], bevel=0.0)
-        # shingle courses — proud darker lines across both slopes read as rows
-        for _t in (0.18, 0.4, 0.62, 0.84):
-            yy = (d + 0.9) / 2 * (1 - _t); zz = z0 - 0.05 + _t * 1.9
+        # shingle courses: run ALONG the eave (Y), stepping up each ±X slope
+        for _t in (0.2, 0.42, 0.64, 0.86):
+            zz = z0 - 0.05 + _t * 1.9
             for _s in (-1, 1):
-                B.add_box("course", (cx, cy + _s * yy, zz + 0.05), (w + 0.82, 0.06, 0.05), m["beam"], bevel=0.0)
-        # gable-end eave brackets + a stone chimney poking above the ridge
+                xx = _s * (w + 0.9) / 2 * (1 - _t)
+                B.add_box("course", (xx + _s * 0.03, cy, zz + 0.03), (0.05, d + 0.82, 0.06), m["roof_d"], bevel=0.0)
+        # stone chimney + cap poking above the ridge
         B.add_box("chimney", (cx - w * 0.32, cy + d * 0.18, z0 + 1.55), (0.42, 0.42, 1.5), m["stone"], bevel=0.04)
         B.add_box("chimcap", (cx - w * 0.32, cy + d * 0.18, z0 + 2.34), (0.54, 0.54, 0.14), m["beam"], bevel=0.02)
-        if style["biome"] == "garden":                  # moss creeping up the front roof slope
-            for _mx, _mt, _r in ((-w * 0.28, 0.26, 0.42), (w * 0.3, 0.5, 0.34),
-                                 (-w * 0.06, 0.72, 0.3), (w * 0.12, 0.2, 0.3)):
+        if style["biome"] == "garden":                  # a couple of small moss clumps low on the front slope
+            for _mx, _mt in ((-w * 0.33, 0.14), (w * 0.26, 0.2)):
                 yy = (d + 0.9) / 2 * (1 - _mt); zz = z0 - 0.05 + _mt * 1.9
-                B.add_sphere("moss", (cx + _mx, cy - yy, zz + 0.06), (_r, _r * 0.7, 0.07), m["plant"])
+                for _ox, _oy, _r in ((0.0, 0.0, 0.16), (0.15, 0.03, 0.1), (-0.12, -0.02, 0.09)):
+                    B.add_sphere("moss", (cx + _mx + _ox, cy - yy + _oy, zz + 0.04), (_r, _r * 0.8, 0.05), m["plant"])
     elif rt == "dome":                          # steep snow-shedding dome (within the walls) + finial
         B.add_sphere("dome", (cx, cy, z0 - 0.9), (w / 2 - 0.15, d / 2 - 0.15, 2.7), m["roof"], zclip=z0 - 0.05)
         B.add_cylinder("finial", (cx, cy, z0 + 1.6), 0.1, 0.5, m["trim"], axis="z")
