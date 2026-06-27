@@ -85,6 +85,20 @@ def textured(mat, kind, base, scale=3.0):
         if "Mortar Size" in t.inputs:
             t.inputs["Mortar Size"].default_value = 0.025
         nt.links.new(tc.outputs["Object"], t.inputs["Vector"]); nt.links.new(t.outputs["Color"], mul.inputs[1])
+    elif kind == "shingle":                              # overlapping roof tiles / shingles
+        t = nt.nodes.new("ShaderNodeTexBrick")
+        try:
+            t.offset = 0.5
+        except Exception:
+            pass
+        t.inputs["Scale"].default_value = scale
+        t.inputs["Color1"].default_value = (*base, 1)
+        t.inputs["Color2"].default_value = (*tuple(c * 0.66 for c in base), 1)   # strong row contrast
+        t.inputs["Mortar"].default_value = (*tuple(c * 0.4 for c in base), 1)
+        for _k, _v in (("Mortar Size", 0.06), ("Row Height", 0.3), ("Brick Width", 0.6)):
+            if _k in t.inputs:
+                t.inputs[_k].default_value = _v
+        nt.links.new(tc.outputs["Object"], t.inputs["Vector"]); nt.links.new(t.outputs["Color"], mul.inputs[1])
     else:                                                # subtle noise (brushed metal / adobe / ice)
         t = nt.nodes.new("ShaderNodeTexNoise"); t.inputs["Scale"].default_value = scale
         nt.links.new(tc.outputs["Object"], t.inputs["Vector"])
@@ -96,6 +110,9 @@ def textured(mat, kind, base, scale=3.0):
 
 
 WALL_TEX = {"garden": "wood", "ice": "noise", "rocky": "brick", "city": "noise", "desert": "noise"}
+# roof material per biome: shingles for pitched timber roofs, clay-tile shingles
+# for the desert vault, brushed-panel noise for the tech/industrial flat roofs.
+ROOF_TEX = {"garden": "shingle", "ice": "noise", "rocky": "noise", "city": "noise", "desert": "shingle"}
 
 
 def mats(s):
@@ -104,7 +121,8 @@ def mats(s):
         # timber/stone/adobe = matte (spec~0); metal = shiny; glow = emissive
         wall=textured(B.toon_material("wall", s["wall"], spec=0.05), tex, s["wall"], scale=2.6),
         wall_d=textured(B.toon_material("wall_d", s["wall_d"], spec=0.05), tex, s["wall_d"], scale=2.6),
-        roof=B.toon_material("roof", s["roof_c"], spec=0.12),
+        roof=textured(B.toon_material("roof", s["roof_c"], spec=0.12), ROOF_TEX[s["biome"]],
+                      s["roof_c"], scale=5.5),
         trim=B.toon_material("trim", s["trim"], spec=0.2),
         beam=textured(B.toon_material("beam", s.get("beam", s["wall_d"]), spec=0.0), "wood",
                       s.get("beam", s["wall_d"]), scale=4.0),
@@ -172,7 +190,7 @@ def roof_for(style, cx, cy, z0, w, d, m):
 # ── functional silhouettes (footprint w×d in ~tile units, biome-agnostic) ───
 def base_block(cx, cy, w, d, h, m, plinth=True):
     if plinth:
-        B.add_box("plinth", (cx, cy, 0.18), (w + 0.4, d + 0.4, 0.36), m["stone"], bevel=0.05)
+        B.add_box("fl_plinth", (cx, cy, 0.18), (w + 0.4, d + 0.4, 0.36), m["stone"], bevel=0.05)
     B.add_box("body", (cx, cy, 0.36 + h / 2), (w, d, h), m["wall"], bevel=0.06)
     return 0.36 + h
 
@@ -184,17 +202,17 @@ def base_and_walls(s, m, w, d, h):
     if b == "rocky":                       # raised on stone piers over bad ground
         for ox in (-w / 2 + 0.5, w / 2 - 0.5):
             for oy in (-d / 2 + 0.5, d / 2 - 0.5):
-                B.add_box("pier", (ox, oy, 0.28), (0.55, 0.55, 0.56), m["stone"], bevel=0.04)
-        B.add_box("deck", (0, 0, 0.6), (w + 0.2, d + 0.2, 0.28), m["metal"], bevel=0.03)
+                B.add_box("fl_pier", (ox, oy, 0.28), (0.55, 0.55, 0.56), m["stone"], bevel=0.04)
+        B.add_box("fl_deck", (0, 0, 0.6), (w + 0.2, d + 0.2, 0.28), m["metal"], bevel=0.03)
         z0 = 0.74
     elif b == "ice":                       # bermed insulation skirt vs drift + wind
-        B.add_box("berm", (0, 0, 0.3), (w + 1.1, d + 1.1, 0.6), m["wall"], bevel=0.55)
+        B.add_box("fl_berm", (0, 0, 0.3), (w + 1.1, d + 1.1, 0.6), m["wall"], bevel=0.55)
         z0 = 0.5
     elif b == "desert":                    # flared dust-skirt vs storms + burial
-        B.add_box("skirt", (0, 0, 0.26), (w + 0.9, d + 0.9, 0.5), m["wall_d"], bevel=0.4)
+        B.add_box("fl_skirt", (0, 0, 0.26), (w + 0.9, d + 0.9, 0.5), m["wall_d"], bevel=0.4)
         z0 = 0.46
     else:                                  # garden / city: cut-stone plinth
-        B.add_box("plinth", (0, 0, 0.18), (w + 0.4, d + 0.4, 0.36), m["stone"], bevel=0.05)
+        B.add_box("fl_plinth", (0, 0, 0.18), (w + 0.4, d + 0.4, 0.36), m["stone"], bevel=0.05)
         z0 = 0.36
     B.add_box("body", (0, 0, z0 + h / 2), (w, d, h), m["wall"], bevel=0.06)
     return z0, z0 + h
@@ -253,6 +271,20 @@ def entry(s, m, w, d, z0):
         B.add_box("lintel", (0, fz - 0.06, z0 + 1.34), (1.3, 0.16, 0.16), m["glow"], bevel=0.0)
 
 
+def ivy_climb(w, d, z0, top, m):
+    """Climbing ivy up the front-wall corners (garden) — clusters of leaves."""
+    fy = -d / 2 - 0.06
+    for sx in (-w / 2 + 0.35, w / 2 - 0.35):
+        inward = -1 if sx > 0 else 1
+        n = 10
+        for i in range(n):
+            t = i / (n - 1)
+            zz = z0 + (top - z0 + 0.4) * t
+            xx = sx + inward * (0.05 + 0.5 * t) * abs(math.sin(i * 1.2))
+            r = 0.17 - 0.06 * t
+            B.add_sphere(f"ivy{'L' if sx < 0 else 'R'}{i}", (xx, fy, zz), (r, 0.05, r * 0.85), m["plant"])
+
+
 def shell(s, m, w, d, h, win=(3, 2), front=True, door=True):
     if s["biome"] == "city":
         h *= 1.3                           # the city builds UP (floor area is scarce)
@@ -261,6 +293,8 @@ def shell(s, m, w, d, h, win=(3, 2), front=True, door=True):
     roof_for(s, 0, 0, top, w, d, m)
     if door:
         entry(s, m, w, d, z0)
+    if front and s["biome"] == "garden":
+        ivy_climb(w, d, z0, top, m)
     return z0, top
 
 
@@ -294,7 +328,7 @@ def build_outfitter(s, m):
 
 def build_shipyard(s, m):
     w, d, h = 8, 6, 6.5        # shipyard → large_building 8×6
-    B.add_box("plinth", (0, 0, 0.18), (w + 0.5, d + 0.5, 0.36), m["stone"], bevel=0.05)
+    B.add_box("fl_plinth", (0, 0, 0.18), (w + 0.5, d + 0.5, 0.36), m["stone"], bevel=0.05)
     # three walls (front open hull-bay)
     B.add_box("backw", (0, d / 2 - 0.2, 0.36 + h / 2), (w, 0.4, h), m["wall"], bevel=0.04)
     for sx in (-w / 2 + 0.2, w / 2 - 0.2):
@@ -508,12 +542,12 @@ def bake():
             depth = sum((pp[i] - cam_loc[i]) * view[i] for i in range(3))
             # FLOOR pass: floor slab only
             for o in meshes:
-                o.hide_render = not o.name.startswith("floor")
+                o.hide_render = not o.name.startswith(("floor", "fl_"))
             cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
             B.render_to(tmp("floor")); floor_im = Image.open(tmp("floor")).convert("RGBA")
             # STRUCTURE passes: hide the floor slab, split by the door plane
             for o in meshes:
-                o.hide_render = o.name.startswith("floor")
+                o.hide_render = o.name.startswith(("floor", "fl_"))
             cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
             B.render_to(tmp("full")); full = Image.open(tmp("full")).convert("RGBA")
             cam.data.clip_end = depth
@@ -537,7 +571,7 @@ def bake():
                 # Cut from the lintel down to the FLOOR (z0), not the ground — the
                 # plinth below the floor stays opaque so the doorway never exposes
                 # the terrain behind/below the building.
-                yt = int(ay - (z0 + zt) * ce * ppt); yb = int(ay - z0 * ce * ppt) + 1
+                yt = int(ay - (z0 + zt) * ce * ppt); yb = int(ay) + 2
                 fr[max(yt, 0):max(yb, 0), max(lx, 0):max(rx, 0), 3] = 0
             full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
             Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
