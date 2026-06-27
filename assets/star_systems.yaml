@@ -85,7 +85,7 @@ sol:
         uranium: 24
         exotic_matter: 48
       outfitter: []
-      shipyard: [shuttle, courier, prospector]
+      shipyard: [shuttle, cargo_transport, courier, prospector]
     mars:
       planet_type: desert
       faction: Federation
@@ -337,7 +337,7 @@ kepler_22:
         electronics: 24
         weapons_parts: 45
       outfitter: [proton_beam, ir_missile, space_mine]
-      shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, courier, hauler]
+      shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, cargo_transport, courier, hauler]
     kepler_22_station:
       planet_type: rocky
       faction: Federation
@@ -560,7 +560,7 @@ barnard:
         uranium: 24
         exotic_matter: 48
       outfitter: [space_mine]
-      shipyard: [shuttle, courier, asteroid_miner, prospector]
+      shipyard: [shuttle, cargo_transport, courier, asteroid_miner, prospector]
     barnard_station:
       planet_type: rocky
       faction: Federation
@@ -856,7 +856,7 @@ altair:
         electronics: 18
         weapons_parts: 8
       outfitter: [laser, javelin, space_mine]
-      shipyard: [rebel_fighter, rebel_gunboat, courier, asteroid_miner, prospector]
+      shipyard: [rebel_fighter, rebel_gunboat, cargo_transport, courier, asteroid_miner, prospector]
     altair_rock:
       planet_type: rocky
       faction: Rebel
