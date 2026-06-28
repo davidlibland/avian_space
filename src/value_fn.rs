@@ -13,7 +13,6 @@ use crate::model::{
     self, InnerTrainBackend, N_OBJECTS, OBJECT_INPUT_DIM, RLNet, SELF_INPUT_DIM, TrainBackend,
 };
 use crate::rl_collection::Segment;
-use crate::rl_obs::TEAM_STATE_DIM;
 
 // Maximum steps to forward through the value net at once (avoid OOM).
 const VALUE_CHUNK_SIZE: usize = 2048;
@@ -31,7 +30,6 @@ pub fn batch_value_inference(
     self_flat: &[f32],
     obj_flat: &[f32],
     proj_flat: &[f32],
-    team_flat: &[f32],
     total_steps: usize,
     _device: &<TrainBackend as Backend>::Device,
 ) -> Vec<[f32; N_REWARD_TYPES]> {
@@ -51,8 +49,6 @@ pub fn batch_value_inference(
         let obj_slice = &obj_flat[obj_offset..obj_offset + b * N_OBJECTS * OBJECT_INPUT_DIM];
         let proj_offset = chunk_start * model::PROJECTILES_FLAT_DIM;
         let proj_slice = &proj_flat[proj_offset..proj_offset + b * model::PROJECTILES_FLAT_DIM];
-        let team_offset = chunk_start * TEAM_STATE_DIM;
-        let team_slice = &team_flat[team_offset..team_offset + b * TEAM_STATE_DIM];
 
         let self_t = Tensor::<InnerTrainBackend, 2>::from_data(
             TensorData::new(self_slice.to_vec(), [b, SELF_INPUT_DIM]),
@@ -66,12 +62,8 @@ pub fn batch_value_inference(
             TensorData::new(proj_slice.to_vec(), [b, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
             &inner_device,
         );
-        let team_t = Tensor::<InnerTrainBackend, 2>::from_data(
-            TensorData::new(team_slice.to_vec(), [b, TEAM_STATE_DIM]),
-            &inner_device,
-        );
 
-        let (value_out, _, _) = inner_net.forward_with_team(self_t, obj_t, proj_t, Some(team_t));
+        let (value_out, _, _) = inner_net.forward(self_t, obj_t, proj_t);
         // value_out: [B, N_REWARD_TYPES]
         let flat: Vec<f32> = value_out.into_data().to_vec().expect("f32 conversion");
         for row in flat.chunks_exact(N_REWARD_TYPES) {
@@ -118,16 +110,7 @@ pub fn recompute_bootstrap_values(
                 TensorData::new(last_t.proj_obs.clone(), [1, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
                 &inner_device,
             );
-            let team_vec = if last_t.team_state.len() == TEAM_STATE_DIM {
-                last_t.team_state.clone()
-            } else {
-                vec![0.0; TEAM_STATE_DIM]
-            };
-            let team_t = Tensor::<InnerTrainBackend, 2>::from_data(
-                TensorData::new(team_vec, [1, TEAM_STATE_DIM]),
-                &inner_device,
-            );
-            let (val, _, _) = inner_net.forward_with_team(self_t, obj_t, proj_t, Some(team_t));
+            let (val, _, _) = inner_net.forward(self_t, obj_t, proj_t);
             // val: [1, N_REWARD_TYPES] → extract as array.
             let flat: Vec<f32> = val.into_data().to_vec().expect("f32 conversion");
             let mut bv = [0.0_f32; N_REWARD_TYPES];

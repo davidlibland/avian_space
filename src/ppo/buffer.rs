@@ -3,7 +3,6 @@
 
 use crate::consts::N_REWARD_TYPES;
 use crate::model::{self, N_OBJECTS, OBJECT_INPUT_DIM, SELF_INPUT_DIM};
-use crate::rl_obs::TEAM_STATE_DIM;
 
 use super::batch::PpoBatch;
 
@@ -11,8 +10,6 @@ struct ReplayStep {
     self_feat: Vec<f32>,
     obj_feat: Vec<f32>,
     proj_feat: Vec<f32>,
-    /// Per-faction pooled team-state (CTDE). Length `TEAM_STATE_DIM`.
-    team_feat: Vec<f32>,
     returns: [f32; N_REWARD_TYPES],
     priority: f32,
 }
@@ -97,20 +94,13 @@ impl ValueReplayBuffer {
             let s_start = i * SELF_INPUT_DIM;
             let o_start = i * N_OBJECTS * OBJECT_INPUT_DIM;
             let p_start = i * model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM;
-            let t_start = i * TEAM_STATE_DIM;
 
-            let team_feat = if t_start + TEAM_STATE_DIM <= batch.team_flat.len() {
-                batch.team_flat[t_start..t_start + TEAM_STATE_DIM].to_vec()
-            } else {
-                vec![0.0; TEAM_STATE_DIM]
-            };
             let step = ReplayStep {
                 self_feat: batch.self_flat[s_start..s_start + SELF_INPUT_DIM].to_vec(),
                 obj_feat: batch.obj_flat[o_start..o_start + N_OBJECTS * OBJECT_INPUT_DIM].to_vec(),
                 proj_feat: batch.proj_flat
                     [p_start..p_start + model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM]
                     .to_vec(),
-                team_feat,
                 returns: head_returns[i],
                 priority,
             };
@@ -131,7 +121,7 @@ impl ValueReplayBuffer {
         &self,
         n: usize,
         rng: &mut impl rand::Rng,
-    ) -> Option<(Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>)> {
+    ) -> Option<(Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>)> {
         if self.steps.is_empty() || n == 0 {
             return None;
         }
@@ -139,7 +129,6 @@ impl ValueReplayBuffer {
         let mut obj_flat = Vec::with_capacity(n * N_OBJECTS * OBJECT_INPUT_DIM);
         let mut proj_flat =
             Vec::with_capacity(n * model::N_PROJECTILE_SLOTS * model::PROJ_INPUT_DIM);
-        let mut team_flat = Vec::with_capacity(n * TEAM_STATE_DIM);
         let mut ret_flat = Vec::with_capacity(n * N_REWARD_TYPES);
 
         for _ in 0..n {
@@ -148,11 +137,10 @@ impl ValueReplayBuffer {
             self_flat.extend_from_slice(&step.self_feat);
             obj_flat.extend_from_slice(&step.obj_feat);
             proj_flat.extend_from_slice(&step.proj_feat);
-            team_flat.extend_from_slice(&step.team_feat);
             ret_flat.extend_from_slice(&step.returns);
         }
 
-        Some((self_flat, obj_flat, proj_flat, team_flat, ret_flat))
+        Some((self_flat, obj_flat, proj_flat, ret_flat))
     }
 
     pub fn len(&self) -> usize {

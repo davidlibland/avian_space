@@ -6,10 +6,8 @@ use burn::{
 };
 
 use super::{
-    HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM, TrainBackend, VALUE_HIDDEN_DIM, VALUE_OUTPUT_DIM,
-    net::RLNet,
+    HIDDEN_DIM, POLICY_OUTPUT_DIM, TrainBackend, VALUE_HIDDEN_DIM, VALUE_OUTPUT_DIM, net::RLNet,
 };
-use crate::rl_obs::TEAM_STATE_DIM;
 
 /// All mutable training state owned by the background thread.
 ///
@@ -25,16 +23,11 @@ pub struct RLInner<B: AutodiffBackend> {
 
 #[allow(dead_code)]
 impl<B: AutodiffBackend> RLInner<B> {
-    pub fn new(device: &B::Device, ctde_enabled: bool) -> Self {
+    pub fn new(device: &B::Device) -> Self {
         let adam = AdamConfig::new();
         Self {
-            policy_net: Some(RLNet::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM)),
-            value_net: Some(RLNet::new(
-                device,
-                VALUE_HIDDEN_DIM,
-                VALUE_OUTPUT_DIM,
-                SELF_INPUT_DIM + if ctde_enabled { TEAM_STATE_DIM } else { 0 },
-            )),
+            policy_net: Some(RLNet::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM)),
+            value_net: Some(RLNet::new(device, VALUE_HIDDEN_DIM, VALUE_OUTPUT_DIM)),
             policy_optim: adam.init::<B, RLNet<B>>(),
             value_optim: adam.init::<B, RLNet<B>>(),
         }

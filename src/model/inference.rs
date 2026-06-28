@@ -23,7 +23,7 @@ impl InferenceNet {
     pub fn new() -> Self {
         let device = Default::default();
         Self {
-            net: RLNet::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM),
+            net: RLNet::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM),
             device,
         }
     }
@@ -75,7 +75,7 @@ impl InferenceNet {
         let recorder = BinBytesRecorder::<FullPrecisionSettings>::default();
         let record = Recorder::<InferBackend>::load(&recorder, bytes, &self.device)
             .expect("failed to deserialize weights");
-        self.net = RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM)
+        self.net = RLNet::new(&self.device, HIDDEN_DIM, POLICY_OUTPUT_DIM)
             .load_record(record)
             .migrate_type_block(&self.device);
     }
@@ -86,7 +86,7 @@ pub fn load_inference_net(path: &str) -> Option<InferenceNet> {
     use burn::record::{BinFileRecorder, FullPrecisionSettings};
     let device: <InferBackend as Backend>::Device = Default::default();
     let recorder = BinFileRecorder::<FullPrecisionSettings>::default();
-    match RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM)
+    match RLNet::<InferBackend>::new(&device, HIDDEN_DIM, POLICY_OUTPUT_DIM)
         .load_file(path, &recorder, &device)
     {
         Ok(net) => {
@@ -123,7 +123,7 @@ pub fn load_training_net(
     let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
         Ok(record) => {
-            let net = RLNet::<TrainBackend>::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM)
+            let net = RLNet::<TrainBackend>::new(device, HIDDEN_DIM, POLICY_OUTPUT_DIM)
                 .load_record(record);
             println!("[model] Loaded training net from {path}");
             Some(net)
@@ -142,12 +142,11 @@ pub fn load_training_net_with_dim(
     path: &str,
     device: &<TrainBackend as Backend>::Device,
     output_dim: usize,
-    self_input_dim: usize,
 ) -> Option<RLNet<TrainBackend>> {
     use burn::record::{BinBytesRecorder, BinFileRecorder, FullPrecisionSettings, Recorder};
     let infer_device: <InferBackend as Backend>::Device = Default::default();
     let recorder = BinFileRecorder::<FullPrecisionSettings>::default();
-    let infer_net = match RLNet::<InferBackend>::new(&infer_device, VALUE_HIDDEN_DIM, output_dim, self_input_dim)
+    let infer_net = match RLNet::<InferBackend>::new(&infer_device, VALUE_HIDDEN_DIM, output_dim)
         .load_file(path, &recorder, &infer_device)
     {
         Ok(net) => net,
@@ -156,12 +155,12 @@ pub fn load_training_net_with_dim(
             return None;
         }
     };
-    // burn's loader silently adopts the checkpoint's shape, so verify the loaded
-    // self_embed width matches what we expect; reject (→ fresh net) if not.
-    if infer_net.self_input_dim() != self_input_dim {
+    // Reject a checkpoint whose self_embed width doesn't match SELF_INPUT_DIM
+    // (e.g. an old CTDE value.bin with a team-widened self-input) — discard it so
+    // a fresh net re-warms rather than crashing on the dimension mismatch.
+    if infer_net.self_input_dim() != SELF_INPUT_DIM {
         eprintln!(
-            "[model] {path}: self_input_dim {} != expected {self_input_dim} (e.g. pre-CTDE \
-             value.bin); discarding and re-initialising.",
+            "[model] {path}: self_input_dim {} != {SELF_INPUT_DIM}; discarding and re-initialising.",
             infer_net.self_input_dim()
         );
         return None;
@@ -171,8 +170,8 @@ pub fn load_training_net_with_dim(
     let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
         Ok(record) => {
-            let net = RLNet::<TrainBackend>::new(device, VALUE_HIDDEN_DIM, output_dim, self_input_dim)
-                .load_record(record);
+            let net =
+                RLNet::<TrainBackend>::new(device, VALUE_HIDDEN_DIM, output_dim).load_record(record);
             println!("[model] Loaded training net (dim={output_dim}) from {path}");
             Some(net)
         }

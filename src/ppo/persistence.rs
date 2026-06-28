@@ -2,7 +2,6 @@
 
 use crate::consts::N_REWARD_TYPES;
 use crate::model::{self, TrainBackend};
-use crate::rl_obs::TEAM_STATE_DIM;
 use crate::rl_collection::Segment;
 
 use super::batch::personality_index;
@@ -35,12 +34,6 @@ pub fn save_rl_buffer(segments: &[Segment], path: &str) {
                 f.write_all(&[t.done as u8])?;
                 f.write_all(&t.log_prob.to_le_bytes())?;
                 for &v in &t.obs {
-                    f.write_all(&v.to_le_bytes())?;
-                }
-                // CTDE per-faction team-state: always TEAM_STATE_DIM floats
-                // (zero-pad / truncate so the on-disk record is fixed-width).
-                for i in 0..crate::rl_obs::TEAM_STATE_DIM {
-                    let v = t.team_state.get(i).copied().unwrap_or(0.0);
                     f.write_all(&v.to_le_bytes())?;
                 }
             }
@@ -118,12 +111,6 @@ pub fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
                 .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
                 .collect();
 
-            let mut team_state = vec![0.0_f32; TEAM_STATE_DIM];
-            for v in &mut team_state {
-                f.read_exact(&mut f32_buf).ok()?;
-                *v = f32::from_le_bytes(f32_buf);
-            }
-
             let action = (
                 action_buf[0],
                 action_buf[1],
@@ -144,7 +131,6 @@ pub fn load_rl_buffer(path: &str) -> Option<Vec<Segment>> {
                 shared_rewards: [0.0; crate::consts::N_REWARD_TYPES],
                 done,
                 log_prob,
-                team_state,
             });
         }
 
