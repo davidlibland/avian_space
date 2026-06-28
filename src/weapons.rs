@@ -215,10 +215,25 @@ pub struct Weapon {
     pub carrier_bay: Option<String>,
 }
 
+/// Fraction of the launching ship's velocity a *guided* missile keeps at launch.
+/// (Unguided shots inherit it fully, so you can lead targets with ballistic fire.)
+/// Partial inheritance + drag-to-cruise lets a fast ship eventually outrun a homing
+/// missile instead of it riding the launcher's chase velocity forever.
+const MISSILE_LAUNCH_INHERIT: f32 = 0.5;
+/// The launch-speed excess decays to this fraction of its initial value by the end
+/// of the missile's lifetime — this drives the drag rate (see `missile_guidance`).
+const MISSILE_SETTLE_FRACTION: f32 = 0.05;
+
 #[derive(Component)]
 pub struct GuidedMissile {
     pub target: Option<Entity>,
     pub turn_rate: f32,
+    /// The missile's own cruise speed (`weapon.speed`); the inherited launch boost
+    /// drags back down to this over the missile's lifetime.
+    pub cruise_speed: f32,
+    /// Exponential drag rate (1/s) toward `cruise_speed`, from solving
+    /// dv/dt = -r·(v − cruise) for r given the settle boundary condition.
+    pub drag_rate: f32,
 }
 
 impl Weapon {
@@ -362,7 +377,15 @@ pub fn weapon_fire(
         const SPAWN_MARGIN: f32 = 1.0;
         let spawn_offset = ship_radius + PROJECTILE_RADIUS + SPAWN_MARGIN;
         let tip = ship_transform.translation + forward * spawn_offset;
-        let vel = forward.truncate() * weapon.speed + linear_velocity.0;
+        // Guided missiles keep only part of the launcher's velocity (the rest drags
+        // off over their lifetime, see GuidedMissile); unguided shots inherit it
+        // fully so ballistic fire can lead a moving target.
+        let inherit = if weapon.guided {
+            MISSILE_LAUNCH_INHERIT
+        } else {
+            1.0
+        };
+        let vel = forward.truncate() * weapon.speed + linear_velocity.0 * inherit;
         let [r, g, b] = weapon.color;
         let sprite = if let Some(handle) = &weapon.sprite_handle {
             Sprite::from_image(handle.clone())
@@ -397,6 +420,10 @@ pub fn weapon_fire(
             entity_cmd.insert(GuidedMissile {
                 target: cmd.target,
                 turn_rate: weapon.turn_rate,
+                cruise_speed: weapon.speed,
+                // Solve dv/dt = -r·(v − cruise): the excess decays to
+                // MISSILE_SETTLE_FRACTION by t = lifetime, so r = ln(1/ε)/lifetime.
+                drag_rate: (1.0 / MISSILE_SETTLE_FRACTION).ln() / weapon.lifetime.max(0.01),
             });
         }
 
@@ -472,31 +499,36 @@ fn missile_guidance(
 ) {
     let dt = time.delta_secs();
     for (mut transform, mut vel, mut missile) in &mut missiles {
-        // If we have no target, just fly straight.
-        let Some(target) = missile.target else {
-            continue;
-        };
-        let Ok(target_pos) = all_positions.get(target) else {
-            missile.target = None;
-            continue;
-        };
-
         let speed = vel.0.length();
         if speed < f32::EPSILON {
             continue;
         }
-        let current_dir = vel.0 / speed;
-        let to_target = (target_pos.0 - transform.translation.xy()).normalize_or_zero();
+        // Drag the inherited launch boost back toward the missile's own cruise speed
+        // — analytic step of dv/dt = -drag_rate·(v − cruise). Applies whether or not
+        // we currently have a target, so a homing missile fired from a chasing ship
+        // can be outrun once the boost bleeds off.
+        let dragged = missile.cruise_speed
+            + (speed - missile.cruise_speed) * (-missile.drag_rate * dt).exp();
 
-        let angle = current_dir.angle_to(to_target);
-        let max_turn = missile.turn_rate * dt;
-        let turn = angle.clamp(-max_turn, max_turn);
-        let (sin_t, cos_t) = turn.sin_cos();
-        let new_dir = Vec2::new(
-            current_dir.x * cos_t - current_dir.y * sin_t,
-            current_dir.x * sin_t + current_dir.y * cos_t,
-        );
-        vel.0 = new_dir * speed;
+        let current_dir = vel.0 / speed;
+        // Steer toward the target if we still have one; otherwise keep heading.
+        let new_dir = match missile.target.and_then(|t| all_positions.get(t).ok()) {
+            Some(target_pos) => {
+                let to_target = (target_pos.0 - transform.translation.xy()).normalize_or_zero();
+                let angle = current_dir.angle_to(to_target);
+                let turn = angle.clamp(-missile.turn_rate * dt, missile.turn_rate * dt);
+                let (sin_t, cos_t) = turn.sin_cos();
+                Vec2::new(
+                    current_dir.x * cos_t - current_dir.y * sin_t,
+                    current_dir.x * sin_t + current_dir.y * cos_t,
+                )
+            }
+            None => {
+                missile.target = None;
+                current_dir
+            }
+        };
+        vel.0 = new_dir * dragged;
 
         // Rotate sprite to match travel direction (+Y is forward).
         let visual_angle = new_dir.x.atan2(new_dir.y);
