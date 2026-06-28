@@ -7,7 +7,8 @@ use std::collections::HashSet;
 use crate::session::SessionResourceExt;
 use crate::{
     CurrentStarSystem, PlayState, TravelContext, TravelPhase,
-    game_save::PlayerGameState, item_universe::ItemUniverse,
+    game_save::PlayerGameState,
+    item_universe::{ItemUniverse, StarSystem},
     missions::{MissionCatalog, MissionLog},
     missions::types::{MissionStatus, Objective},
 };
@@ -18,6 +19,74 @@ use crate::{
 const MAP_PAD: f32 = 120.0;
 const NODE_R: f32 = 3.5;   // visual dot radius
 const CLICK_R: f32 = 12.0; // invisible click hit radius
+
+/// Map factions shown on the star map (Free Frontier's spaced label, others as-is).
+const LEGEND_FACTIONS: &[&str] = &[
+    "Federation", "Rebel", "FreeFrontier", "Helios", "Bastion", "Order", "Precursor",
+];
+
+/// A faction's signature colour on the star map. Keep in sync with the design
+/// bible / faction palette. Unknown or contested space reads as neutral grey.
+fn faction_color(faction: &str) -> Color32 {
+    match faction {
+        "Federation" => Color32::from_rgb(78, 120, 196),
+        "Rebel" => Color32::from_rgb(90, 190, 110),
+        "FreeFrontier" => Color32::from_rgb(228, 198, 92),
+        "Helios" => Color32::from_rgb(84, 200, 230),
+        "Bastion" => Color32::from_rgb(188, 64, 56),
+        "Order" => Color32::from_rgb(162, 110, 214),
+        "Precursor" => Color32::from_rgb(196, 84, 206),
+        "Independent" => Color32::from_rgb(176, 166, 150),
+        _ => Color32::from_rgb(120, 125, 140), // contested / unknown
+    }
+}
+
+fn faction_label(faction: &str) -> &str {
+    match faction {
+        "FreeFrontier" => "Free Frontier",
+        other => other,
+    }
+}
+
+/// Lerp a colour toward the map void — used to dim discovered-but-unvisited systems.
+fn dim(c: Color32, t: f32) -> Color32 {
+    let l = |a: u8, b: u8| (a as f32 * (1.0 - t) + b as f32 * t) as u8;
+    Color32::from_rgb(l(c.r(), 4), l(c.g(), 4), l(c.b(), 18))
+}
+
+/// The controlling faction of a system: the faction holding its planets, or — for
+/// uninhabited systems — the single faction that dominates its spawns (so the
+/// Precursor deep reads Precursor). Contested borderlands (e.g. the Drift, an even
+/// Federation/Rebel split) return "" and read neutral.
+fn system_faction(sys: &StarSystem, iu: &ItemUniverse) -> String {
+    use std::collections::HashMap;
+    let mut by: HashMap<&str, f32> = HashMap::new();
+    for p in sys.planets.values() {
+        if !p.faction.is_empty() {
+            *by.entry(p.faction.as_str()).or_default() += 1.0;
+        }
+    }
+    if by.is_empty() {
+        for (name, weight) in &sys.ships.types {
+            if let Some(f) = iu.ships.get(name).and_then(|s| s.faction.as_deref()) {
+                if f != "Pirate" && f != "Merchant" {
+                    *by.entry(f).or_default() += *weight;
+                }
+            }
+        }
+    }
+    let mut ranked: Vec<(&str, f32)> = by.into_iter().collect();
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.0.cmp(b.0))
+    });
+    match ranked.as_slice() {
+        [(f, _)] => f.to_string(),
+        [(f, w0), (_, w1), ..] if *w0 > *w1 * 1.4 => f.to_string(),
+        _ => String::new(),
+    }
+}
 
 #[derive(Resource, Default)]
 pub struct JumpUiOpen {
@@ -302,22 +371,20 @@ fn jump_ui(
                         }
                     }
 
-                    let fill = if is_current {
-                        Color32::from_rgb(100, 190, 255)
-                    } else if is_visited {
-                        Color32::from_rgb(200, 210, 230)
+                    let base = faction_color(&system_faction(sys, &item_universe));
+                    let fill = if is_current || is_visited {
+                        base
                     } else {
-                        // Discovered but unvisited — greyed.
-                        Color32::from_rgb(80, 85, 100)
+                        // Discovered but unvisited — faction colour dimmed toward the void.
+                        dim(base, 0.55)
                     };
 
                     painter.circle_filled(pos, NODE_R, fill);
-                    if is_current || is_visited {
-                        painter.circle_stroke(
-                            pos,
-                            NODE_R,
-                            Stroke::new(1.0, Color32::from_rgb(160, 170, 210)),
-                        );
+                    if is_current {
+                        // "You are here" — bright white ring.
+                        painter.circle_stroke(pos, NODE_R + 1.5, Stroke::new(2.0, Color32::WHITE));
+                    } else if is_visited {
+                        painter.circle_stroke(pos, NODE_R, Stroke::new(1.0, dim(base, 0.35)));
                     }
 
                     if is_visited {
@@ -384,6 +451,12 @@ fn jump_ui(
             });
 
             ui.separator();
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 12.0;
+                for fac in LEGEND_FACTIONS {
+                    ui.colored_label(faction_color(fac), faction_label(fac));
+                }
+            });
             ui.label(format!("Fuel: {fuel}/{fuel_cap} jumps"));
             if fuel == 0 {
                 ui.colored_label(
