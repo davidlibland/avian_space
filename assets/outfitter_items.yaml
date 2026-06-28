@@ -198,4 +198,4 @@ precursor_beam:
     price: 2200
     space: 3
     weapon_type: precursor_beam
-    required_unlocks: [precursor_ship_license]
+    required_unlocks: [precursor_tech_license]
