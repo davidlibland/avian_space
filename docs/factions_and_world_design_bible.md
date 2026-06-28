@@ -641,6 +641,71 @@ This document feeds `scripts/ship3d/fleet_gen.py` (hulls) and
 
 ---
 
+## 6. Alliances & enmities
+
+Relationships are deliberately **cross-cutting** so the galaxy never reads as a
+single line. `++` close ally · `+` sympathetic · `~` wary/transactional ·
+`-` hostile · `--` war.
+
+| | Fed | Reb | FF | Helios | Order | Bastion | Pirate | Guild | Precursor |
+|---|---|---|---|---|---|---|---|---|---|
+| **Federation** | — | -- | ~(rules) | ~(buys) | ~ | -- (civil war) | - | ~ | - |
+| **Rebels** | -- | — | + (wary) | ~ | · | -- | - | ~ | - |
+| **Free Frontier** | ~ | + (wary) | — | -- | · | -- | ~ (frenemy) | + | - |
+| **Helios Combine** | ~ | ~ | -- | — | -- | ~ | ~ | ~ (rival/partner) | ~ (would harvest) |
+| **Artifact Order** | ~ | · | · | -- | — | · | - | · | ++ (worship) |
+| **Fed Bastion** | -- | -- | -- | ~ | · | — | - | ~ | - |
+| **Pirates** | - | - | ~ | ~ | - | - | -- (internal) | - | - |
+| **Merchant Guild** | ~ | ~ | + | ~ | — | ~ | - | — | - |
+| **Precursors** | - | - | - | - | (uncomprehending) | - | - | - | — |
+
+**The relationships to lean on dramatically:**
+1. **Federation ⚔ Bastion** — a *civil war* for the soul of the Federation. The
+   splinter is the truly heavy hand, which lets the lawful Fed stay grey-not-evil.
+2. **Artifact Order ⚔ Helios** — *sacred vs. profane*. The Order venerates
+   Precursor tech; Helios patents and strip-mines it. The cleanest hatred in the game.
+3. **Free Frontier ↔ Rebels** — a *wary alliance* the player can cement or break;
+   driven together by terror of the Bastion's scorched-earth doctrine.
+4. **Everyone ⚔ Precursors** — the *endgame truce*: Fed + Rebel + Frontier forced
+   to stand together while Helios exploits and the Order splits over the sleeper.
+
+**Two twists:**
+- **The managed war.** The Merchant Guild *finances* and Helios *arms* both sides;
+  neither wants victory — they want the conflict to continue, profitably. Revealed
+  in the cross-faction arc "The Arms Bazaar."
+- **The Order's schism.** Scholars want to *seal* the Rift; zealots want to *wake*
+  the sleeper. Which wins is the game's ending fork.
+
+The player's allegiance should carry a **light reputation cost**: siding with one
+pole cools contracts at the opposite pole, so choices have weight and the map has
+replay value.
+
+## 7. Ship-aesthetic assignments
+
+The visual + mechanical signature locked per faction (each new faction gets a
+unique **propulsion** *and* **weapon** identity; two existing factions get a cue):
+
+| Aesthetic idea | Faction | Expression |
+|---|---|---|
+| **Steampunk** | **Artifact Order** | Brass-and-gothic reliquaries; exposed steam/pressure/gears and rivet-work treated as *venerated* old-tech; copper, bronze, stained glass. Updates the Order palette toward **brass + violet + white**. |
+| **Solar-wind sails** | **Free Frontier** | Large **solar sails** are the primary drive — leading the hull or on side booms; free energy = frontier self-sufficiency. Only a small warm-white plasma drive for maneuver. |
+| **Asymmetric / outriggers** | **Free Frontier** | The sail booms are **asymmetric outriggers** — *designed* asymmetry (clean, painted, intentional), distinct from the Pirates' *salvage* asymmetry. |
+| **Drone swarms + fast-launch carriers** | **Helios Combine** | Fleets of weak, fast, identical **drones**; the larger hulls are **drone-carriers** with a `drone_bay` that relaunches far more often (and cheaper) than a normal `fighter_bay`. Smooth, branded, no cockpits. |
+| **Long-range slugs / chainguns** | **Fed Bastion** | Heavy arms are **kinetic, not guided**: long-range turrets + slightly-aimed forward **chainguns** firing **animated slugs** (real projectile entities, *not* sprites — cheap to animate). Outranges everyone; no missiles. |
+| **All angles, nothing smooth** | **Fed Bastion** | Faceted **iron brutalism** — every surface a flat plane, no curves. Pairs with the slug-guns: archaic, industrial, grim. |
+| **Forward-swept wings** | **Rebels** | Refines the existing winged-dart language — forward-swept wings/canards for an aggressive, unstable-fast look. |
+
+**Resulting polarity to preserve:** **Helios = all-smooth branded product** ↔
+**Bastion = all-angles iron brute**; **Free Frontier sails/asymmetric (organic
+ingenuity)** ↔ **Helios drones (cold uniformity)**; **Order brass-baroque** ↔
+everyone's functionalism. If two factions' hulls could be confused in grayscale
+shadow, the design is wrong (ship-bible rule 5).
+
+*(These supersede the drive/palette notes in §2–§3 where they differ — notably the
+Free Frontier's primary drive is now sails, and the Order's palette gains brass.)*
+
+---
+
 *Living document — extend per faction as ships, weapons, systems, and missions are
 built. Pairs with [ship_design_bible.md](ship_design_bible.md),
 [star_systems.yaml](../assets/star_systems.yaml),
