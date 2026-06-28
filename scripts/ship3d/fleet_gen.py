@@ -881,6 +881,110 @@ def build_frontier_monitor():
         plume("fm_pl", sx, -1.05, 0, 0.06, 0.32, 0.8, glow)
 
 
+# ════════════════════════ Helios Combine (drones) ══════════════════════════
+# Megacorp product design: smooth seamless GLOSS-WHITE shells, gold brand trim,
+# CYAN accents & near-silent cyan drives. NO cockpits — automated, so a cyan
+# sensor "eye" instead of a canopy. Recessed weapons; drone swarms + drone-bays.
+# The deliberate opposite of the Free Frontier's flat painted sails.
+def _helios_mats(tag):
+    return dict(
+        white=toon_material(tag + "w", C(236, 240, 245), spec=1.7, spec_sharp=0.82),
+        wd=toon_material(tag + "wd", C(180, 190, 202)),
+        gold=glow_material(tag + "au", C(232, 196, 96), 1.6),     # bright brand trim
+        dark=toon_material(tag + "k", C(38, 48, 60)),
+        bay=toon_material(tag + "b", C(24, 34, 46)),
+        seam=toon_material(tag + "s", C(150, 162, 176)),          # panel seam
+        cyan=glow_material(tag + "e", C(55, 215, 255), 14),       # saturated brand cyan
+    )
+
+
+def _hnz(tag, sx, y, r, m):
+    """Recessed cyan drive ring."""
+    add_cylinder(tag + "nz", (sx, y, 0.0), r, r * 1.4, m["dark"], r2=r * 1.1)
+    add_cylinder(tag + "ring", (sx, y - r * 0.7, 0.0), r * 0.8, r * 0.18, m["cyan"])
+    plume(tag + "pl", sx, y - r * 0.9, 0, r * 0.8, r * 4.5, 0.85, m["cyan"])
+
+
+def build_helios_drone():
+    m = _helios_mats("hd")
+    # a crisp flat delta wedge (minimal, purposeful — not an egg)
+    loft_hull("hd_h", [
+        dict(y=0.52, w=0.03, h=0.04, cz=0.0),
+        dict(y=0.1, w=0.14, h=0.08, cz=0.0),
+        dict(y=-0.28, w=0.22, h=0.09, cz=0.0),
+        dict(y=-0.42, w=0.16, h=0.07, cz=0.0),
+    ], m["white"], m=12, n=3.0, flatten=0.7, subsurf=2)
+    add_box("hd_tr", (0, -0.28, 0.06), (0.4, 0.03, 0.015), m["gold"], bevel=0.006)
+    add_sphere("hd_eye", (0, 0.18, 0.05), (0.07, 0.14, 0.045), m["cyan"])  # big camera eye
+    add_cylinder("hd_tip", (0, 0.46, 0.02), 0.02, 0.06, m["cyan"], r2=0.004)
+    _hnz("hd_", 0, -0.42, 0.05, m)
+
+
+def build_helios_enforcer():
+    m = _helios_mats("he")
+    loft_hull("he_h", [
+        dict(y=0.98, w=0.04, h=0.06, cz=0.0),
+        dict(y=0.5, w=0.18, h=0.14, cz=0.0),
+        dict(y=0.0, w=0.22, h=0.16, cz=0.0),
+        dict(y=-0.5, w=0.17, h=0.13, cz=0.0),
+        dict(y=-0.95, w=0.06, h=0.07, cz=0.0),
+    ], m["white"], m=16, n=2.9, flatten=0.55, subsurf=2)
+    add_box("he_seam", (0, 0.05, 0.165), (0.06, 1.3, 0.012), m["gold"], bevel=0.004)
+    add_sphere("he_eye", (0, 0.52, 0.1), (0.085, 0.16, 0.05), m["cyan"])  # bigger eye
+    # cyan running lights along the flanks
+    for sx in (-0.16, 0.16):
+        add_box("he_run", (sx, 0.18, 0.14), (0.018, 0.34, 0.018), m["cyan"])
+    for sy in (0.25, -0.25):
+        add_box("he_pan", (0, sy, 0.155), (0.34, 0.012, 0.012), m["seam"])
+    for sx in (-1, 1):
+        elliptical_wing("he_fin", m["wd"], span=0.42, root_chord=0.36, tip_chord=0.05,
+                        root_y=-0.12, thick=0.04, cz=0.0, sweep=0.34, sections=6,
+                        side=sx, mirror=False)
+        add_box("he_port", (sx * 0.17, 0.36, 0.09), (0.035, 0.22, 0.04), m["dark"], bevel=0.008)
+    _hnz("he_", 0, -0.95, 0.075, m)
+
+
+def build_helios_overseer():
+    m = _helios_mats("ho")
+    loft_hull("ho_h", [
+        dict(y=1.0, w=0.07, h=0.1, cz=0.0),
+        dict(y=0.5, w=0.26, h=0.16, cz=0.0),
+        dict(y=0.0, w=0.3, h=0.18, cz=0.0),
+        dict(y=-0.55, w=0.24, h=0.15, cz=0.0),
+        dict(y=-1.0, w=0.09, h=0.1, cz=0.0),
+    ], m["white"], m=16, n=2.9, flatten=0.5, subsurf=2)
+    add_box("ho_seam", (0, 0.0, 0.185), (0.06, 1.6, 0.012), m["gold"], bevel=0.004)
+    add_sphere("ho_eye", (0, 0.58, 0.12), (0.11, 0.18, 0.07), m["cyan"])
+    add_box("ho_pan", (0, 0.78, 0.16), (0.22, 0.012, 0.012), m["seam"])
+    # recessed drone berths with bright cyan launch strips
+    for sy in (0.22, -0.08, -0.4):
+        for sx in (-0.22, 0.22):
+            add_box("ho_bay", (sx, sy, 0.15), (0.12, 0.18, 0.06), m["bay"], bevel=0.0)
+            add_box("ho_lt", (sx, sy + 0.09, 0.2), (0.1, 0.025, 0.025), m["cyan"])
+    for sx in (-0.14, 0.14):
+        _hnz("ho_", sx, -1.0, 0.072, m)
+
+
+def build_helios_titan():
+    m = _helios_mats("ht")
+    loft_hull("ht_h", [
+        dict(y=1.2, w=0.09, h=0.12, cz=0.0),
+        dict(y=0.6, w=0.34, h=0.2, cz=0.0),
+        dict(y=0.0, w=0.4, h=0.24, cz=0.0),
+        dict(y=-0.6, w=0.34, h=0.2, cz=0.0),
+        dict(y=-1.2, w=0.13, h=0.12, cz=0.0),
+    ], m["white"], m=18, n=3.0, flatten=0.5, subsurf=2)
+    for yc in (0.45, 0.0, -0.45):
+        add_box("ht_band", (0, yc, 0.24), (0.74, 0.06, 0.018), m["gold"], bevel=0.005)
+    add_sphere("ht_eye", (0, 0.74, 0.16), (0.12, 0.19, 0.08), m["cyan"])
+    # central drone-launch trench with bright cyan rails (the factory ship)
+    add_box("ht_trench", (0, -0.1, 0.22), (0.18, 1.0, 0.08), m["bay"], bevel=0.0)
+    for yc in (0.3, 0.0, -0.3, -0.6):
+        add_box("ht_rail", (0, yc, 0.28), (0.2, 0.035, 0.025), m["cyan"])
+    for sx in (-0.24, 0.0, 0.24):
+        _hnz("ht%d_" % int(sx * 10), sx, -1.2, 0.08, m)
+
+
 # ════════════════════════════════ registry ═════════════════════════════════
 REGISTRY = {
     # name: (builder, ortho, group, label)
@@ -911,6 +1015,10 @@ REGISTRY = {
     "frontier_harvester": (build_frontier_harvester, 2.6, "frontier", "r24 · boom gunboat"),
     "frontier_sailtender": (build_frontier_sailtender, 2.7, "frontier", "r20 · outrigger sails"),
     "frontier_monitor": (build_frontier_monitor, 2.9, "frontier", "r40 · sun-shield fort"),
+    "helios_drone": (build_helios_drone, 1.5, "helios", "r7 · swarm wedge"),
+    "helios_enforcer": (build_helios_enforcer, 2.5, "helios", "r16 · security gunship"),
+    "helios_overseer": (build_helios_overseer, 2.8, "helios", "r28 · drone command"),
+    "helios_titan": (build_helios_titan, 3.0, "helios", "r50 · factory carrier"),
 }
 
 
