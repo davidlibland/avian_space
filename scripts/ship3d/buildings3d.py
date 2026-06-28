@@ -410,13 +410,7 @@ def build_mechanic(s, m):
     z0, top = shell(s, m, w, d, h, front=False, door=False)
     fz = -d / 2
     dw = 1.8                       # garage door ≈ the 2-tile collision doorway
-    # roll-up garage door (centred, cut transparent in _front) + drum + jambs
-    B.add_box("doorpanel", (0, fz - 0.07, z0 + 1.1), (dw, 0.1, 2.1), m["wall_d"], bevel=0.02)
-    # Cut the garage doorway DEEP (almost the full body depth) so the back interior
-    # wall sits at the far end — reads as an open deep garage with the floor showing,
-    # not a wall right behind the door. (A true through-cut isn't reliable: Blender's
-    # boolean leaves the lower half uncut on a full-depth cut, all solvers.)
-    cut_doorway(m, ["body"], 0, fz, dw, 2.15, z0 + 1.1, d - 0.3)
+    cut_doorway(m, ["body"], 0, fz, dw, 2.15, z0 + 0.64, d / 2 + 0.3)
     B.add_box("lintel", (0, fz - 0.05, z0 + 2.2), (dw + 0.3, 0.16, 0.18), m["glow"], bevel=0.0)
     for sx in (-dw / 2 - 0.16, dw / 2 + 0.16):
         B.add_box("jamb", (sx, fz - 0.05, z0 + 1.15), (0.16, 0.18, 2.2), m["wall_d"], bevel=0.03)
