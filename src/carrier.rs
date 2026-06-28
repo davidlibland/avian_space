@@ -45,7 +45,7 @@ pub struct CarrierEscort {
 
 /// Escort is in the dock animation — shrinking as it returns to the mother.
 #[derive(Component)]
-struct DockingEscort {
+pub struct DockingEscort {
     /// Distance to the mother when docking started, used to compute scale.
     start_distance: f32,
     full_size: Vec2,

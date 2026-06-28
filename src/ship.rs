@@ -1,3 +1,5 @@
+use crate::ai_ships::{JumpingIn, JumpingOut};
+use crate::carrier::DockingEscort;
 use crate::item_universe::{ItemUniverse, OutfitterItem};
 use crate::rl_collection::{RLAgent, RLReward, RLShipDied, build_rl_ship_died};
 use crate::weapons::{WeaponSystem, WeaponSystems};
@@ -136,7 +138,9 @@ pub fn ship_plugin(app: &mut App) {
         .add_systems(Startup, load_combat_stats)
         .add_systems(
             FixedUpdate,
-            ship_movement.run_if(in_state(PlayState::Flying)),
+            (apply_damage_handicap, ship_movement)
+                .chain()
+                .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(
             Update,
@@ -647,6 +651,16 @@ impl Ship {
         };
         other.0.get(my_faction).map(|v| *v > 0.0).unwrap_or(false)
     }
+
+    /// Battle damage degrades handling: a linear roll-off from 1.0 at full health
+    /// to 0.5 when fully destroyed. The same factor scales acceleration, torque,
+    /// top speed, and max turn rate, so a damaged ship handles like itself — just
+    /// more sluggishly.
+    pub fn handling_factor(&self) -> f32 {
+        let hp_frac =
+            (self.health.max(0) as f32 / self.data.max_health.max(1) as f32).clamp(0.0, 1.0);
+        0.5 + 0.5 * hp_frac
+    }
 }
 
 #[derive(Bundle)]
@@ -869,11 +883,10 @@ fn ship_movement(
             continue;
         };
         let dt = time.delta_secs();
-        // Battle damage degrades handling: a linear roll-off from 100% at full
-        // health to 50% of speed / acceleration / turn rate when fully damaged.
-        let hp_frac =
-            (ship.health.max(0) as f32 / ship.data.max_health.max(1) as f32).clamp(0.0, 1.0);
-        let agility = 0.5 + 0.5 * hp_frac;
+        // Battle damage degrades handling (see Ship::handling_factor): the same
+        // factor scales acceleration and torque here, and the physics speed/turn
+        // caps in apply_damage_handicap.
+        let agility = ship.handling_factor();
         // Drive flame is shown whenever forward thrust is commanded.
         drive.0 = cmd.thrust.abs() > f32::EPSILON;
 
@@ -903,6 +916,23 @@ fn ship_movement(
                 .clamp(-ship.data.torque * agility, ship.data.torque * agility);
             (*ang_vel).0 += pd_torque * cmd.reverse * dt;
         }
+    }
+}
+
+/// Scale the physics speed/turn caps by battle damage, so a damaged ship's top
+/// speed and max turn rate fall in step with its (already-scaled) acceleration
+/// and torque — see [`Ship::handling_factor`]. Ships mid-jump or mid-dock have
+/// their caps driven by those animations, so they are skipped.
+fn apply_damage_handicap(
+    mut query: Query<
+        (&Ship, &mut MaxLinearSpeed, &mut MaxAngularSpeed),
+        (Without<JumpingIn>, Without<JumpingOut>, Without<DockingEscort>),
+    >,
+) {
+    for (ship, mut max_lin, mut max_ang) in &mut query {
+        let hf = ship.handling_factor();
+        max_lin.0 = ship.data.max_speed * hf;
+        max_ang.0 = MAX_ANG_SPEED * hf;
     }
 }
 
