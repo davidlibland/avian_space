@@ -196,7 +196,7 @@ prox_mine:
     guided: true
     turn_rate: 1.0
     aimable_arc: 180
-    sprite_path: sprites/weapons/space_mine.png
+    sprite_path: sprites/weapons/prox_mine.png
     sound_path: sounds/weapons/space_mine.ogg
     display_name: "Proximity Mine"
     ammo:
@@ -222,7 +222,7 @@ seeker:
     damage: 18
     guided: true
     turn_rate: 3.0
-    sprite_path: sprites/weapons/javelin.png
+    sprite_path: sprites/weapons/seeker.png
     sound_path: sounds/weapons/javelin.ogg
     display_name: "Seeker Drone-Missile"
     ammo:
@@ -241,6 +241,7 @@ chaingun:
     sound_path: sounds/weapons/laser.ogg
 siege_cannon:
     name: siege_cannon
+    sprite_path: sprites/weapons/siege_shell.png
     lifetime: 1.6
     speed: 800.0
     cooldown: 5.0
@@ -279,7 +280,7 @@ censer_charge:
     damage: 70
     guided: true
     turn_rate: 1.5
-    sprite_path: sprites/weapons/ir_missile.png
+    sprite_path: sprites/weapons/censer_charge.png
     sound_path: sounds/weapons/ir_missile.ogg
     display_name: "Censer Charge"
     ammo:
@@ -318,6 +319,7 @@ flak_turret:
     sound_path: sounds/weapons/laser.ogg
 siege_turret:
     name: siege_turret
+    sprite_path: sprites/weapons/siege_shell.png
     lifetime: 1.6
     speed: 800.0
     cooldown: 5.2
