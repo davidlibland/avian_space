@@ -229,3 +229,20 @@ fn test_full_assets_parse_like_the_game() {
         assert!(!name.is_empty());
     }
 }
+
+/// Strict, enforced asset invariants (trade routes, sprites, reachability,
+/// mission coherence). See `validate_assets::collect_problems`. This FAILS the
+/// build if any are violated, unlike the advisory `warn!` passes.
+#[test]
+fn test_asset_validators_pass() {
+    use std::path::Path;
+    let iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
+        .expect("assets/ must parse");
+    let problems = crate::validate_assets::collect_problems(&iu);
+    assert!(
+        problems.is_empty(),
+        "asset validation found {} problem(s):\n  - {}",
+        problems.len(),
+        problems.join("\n  - ")
+    );
+}

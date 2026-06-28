@@ -441,6 +441,8 @@ bounty_story_4_catch:
       name: federation_weapons_license
     - kind: grant_unlock
       name: bounty_hunter_license
+    - kind: grant_unlock
+      name: federation_ship_license
 
 # Phase 3: Carrier tier (2 missions — pirate carriers in border systems)
 # These are endgame-difficulty missions targeting the heavily armed pirate
@@ -515,6 +517,10 @@ bounty_story_6_catch:
       name: carrier_license
     - kind: grant_unlock
       name: turret_license
+    - kind: grant_unlock
+      name: federation_capital_license
+    - kind: grant_unlock
+      name: fed_carrier_license
 
 # ── Espionage storyline ────────────────────────────────────────────────────
 # A 15-mission arc offered by Federation Intelligence operating out of the
@@ -900,6 +906,8 @@ espionage_final:
       credits: 100000
     - kind: grant_unlock
       name: rebel_ship_license
+    - kind: grant_unlock
+      name: rebel_capital_license
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Free Frontier — "The Reaches"  (grants free_frontier_license at stage 1, so the

@@ -5,13 +5,16 @@
 //! problem in the console without crashing the game.
 
 use bevy::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
+use std::path::Path;
 
 use crate::item_universe::{ItemUniverse, OutfitterItem};
 use crate::missions::types::{
     CompletionEffect, CompletionRequirement, MissionTemplate, Objective, OfferKind,
     Precondition, StartEffect,
 };
+use crate::planets::PlanetData;
+use crate::ship::Personality;
 
 /// Run every validation pass and log warnings for anything broken.
 pub fn validate(iu: &ItemUniverse) {
@@ -24,6 +27,9 @@ pub fn validate(iu: &ItemUniverse) {
     validate_missions(iu);
     validate_mission_templates(iu);
     validate_ship_steering(iu);
+    for problem in collect_problems(iu) {
+        warn!("asset check: {problem}");
+    }
 }
 
 /// Maximum rotation (degrees) the RL agent should be able to commit to in a
@@ -516,6 +522,286 @@ fn validate_completion_effects(
                 }
             }
             CompletionEffect::Pay { .. } | CompletionEffect::GrantUnlock { .. } => {}
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strict, TEST-ENFORCED asset checks.
+//
+// The `warn!` passes above are advisory (logged, non-fatal). The checks below
+// return a list of problems instead: `validate()` logs them at load time, and
+// the asset-load test asserts the list is EMPTY — so a broken asset fails CI/dev
+// rather than silently shipping. Covers the invariants the game relies on:
+//   * merchant-heavy systems have a real within-system trade route,
+//   * every ship/planet has its in-game + HUD-wireframe sprites,
+//   * every star system is reachable from the start,
+//   * missions are offered/fulfilled on landable planets at buildings that exist.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Training-only systems folded in by `materialize_training_systems`; they are
+/// intentionally disconnected from the campaign jump graph, so skip them in the
+/// reachability check.
+const TRAINING_SYSTEMS: &[&str] = &["simulator", "escort", "mining"];
+
+/// A planet is "landable" (has a surface with buildings) iff it is colonised,
+/// which the data models as having a non-empty commodity market.
+fn is_landable(pd: &PlanetData) -> bool {
+    !pd.commodities.is_empty()
+}
+
+/// Whether `building` (a mission offer/objective building name) is present on a
+/// landable planet. bar / fuel / mechanic exist on every colony; market needs a
+/// market; shipyard / outfitter need that specific facility.
+fn planet_has_building(pd: &PlanetData, building: &str) -> bool {
+    match building {
+        "market" | "bar" | "fuel_station" | "mechanicshop" => is_landable(pd),
+        "outfitter" => !pd.outfitter.is_empty(),
+        "shipyard" => !pd.shipyard.is_empty(),
+        _ => false, // unknown building name => typo
+    }
+}
+
+fn find_planet<'a>(iu: &'a ItemUniverse, name: &str) -> Option<&'a PlanetData> {
+    iu.star_systems.values().find_map(|s| s.planets.get(name))
+}
+
+/// Run all strict checks and collect human-readable problems (empty == good).
+pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
+    let mut p = Vec::new();
+    check_trade_routes(iu, &mut p);
+    check_sprites_exist(iu, &mut p);
+    check_reachability(iu, &mut p);
+    check_mission_coherence(iu, &mut p);
+    check_unlock_obtainability(iu, &mut p);
+    p
+}
+
+/// Every ship/weapon actually SOLD in a shipyard or outfitter that is gated by a
+/// `required_unlock` must have that unlock granted by some mission — otherwise
+/// the player can see it for sale but can never buy it.
+fn check_unlock_obtainability(iu: &ItemUniverse, p: &mut Vec<String>) {
+    let mut granted: HashSet<&str> = HashSet::new();
+    for def in iu.missions.values() {
+        for eff in &def.completion_effects {
+            if let CompletionEffect::GrantUnlock { name } = eff {
+                granted.insert(name.as_str());
+            }
+        }
+    }
+    let mut sold_ships: HashSet<&str> = HashSet::new();
+    let mut sold_items: HashSet<&str> = HashSet::new();
+    for sys in iu.star_systems.values() {
+        for pd in sys.planets.values() {
+            sold_ships.extend(pd.shipyard.iter().map(String::as_str));
+            sold_items.extend(pd.outfitter.iter().map(String::as_str));
+        }
+    }
+    for s in &sold_ships {
+        if let Some(ship) = iu.ships.get(*s) {
+            for u in &ship.required_unlocks {
+                if !granted.contains(u.as_str()) {
+                    p.push(format!(
+                        "ship '{s}' is sold but its unlock '{u}' is never granted \
+                         by any mission — the player can never buy it"
+                    ));
+                }
+            }
+        }
+    }
+    for i in &sold_items {
+        if let Some(item) = iu.outfitter_items.get(*i) {
+            for u in item.required_unlocks() {
+                if !granted.contains(u.as_str()) {
+                    p.push(format!(
+                        "outfitter item '{i}' is sold but its unlock '{u}' is never \
+                         granted by any mission — the player can never buy it"
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// Systems where more than 10% of spawn traffic is merchants must have a valid
+/// within-system trade route (>= 2 colonised planets). A rare merchant passing
+/// through a border system (<= 10%) is fine. Miners likewise need ore to mine.
+fn check_trade_routes(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (name, sys) in &iu.star_systems {
+        if TRAINING_SYSTEMS.contains(&name.as_str()) {
+            continue;
+        }
+        let total: f32 = sys.ships.types.values().copied().sum();
+        if total <= 0.0 {
+            continue;
+        }
+        let is_personality = |ship: &str, want: &Personality| {
+            iu.ships.get(ship).map(|s| &s.personality) == Some(want)
+        };
+        let merchant: f32 = sys
+            .ships
+            .types
+            .iter()
+            .filter(|(n, _)| is_personality(n, &Personality::Trader))
+            .map(|(_, w)| *w)
+            .sum();
+        if merchant / total > 0.10 {
+            let colonised = sys.planets.values().filter(|pd| is_landable(pd)).count();
+            if colonised < 2 {
+                p.push(format!(
+                    "system '{name}': {:.0}% merchant traffic but {colonised} colonised \
+                     planet(s) — traders have no within-system route to run",
+                    merchant / total * 100.0
+                ));
+            }
+        }
+        let has_miner = sys
+            .ships
+            .types
+            .keys()
+            .any(|n| is_personality(n, &Personality::Miner));
+        if has_miner && sys.astroid_fields.is_empty() {
+            p.push(format!(
+                "system '{name}': spawns miner ships but has no asteroid fields to mine"
+            ));
+        }
+    }
+}
+
+/// Every ship needs its in-game atlas sprite and a HUD target wireframe; every
+/// planet type and the generic asteroid/pickup targets need a wireframe too.
+fn check_sprites_exist(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (name, ship) in &iu.ships {
+        if !Path::new("assets").join(&ship.sprite_path).exists() {
+            p.push(format!(
+                "ship '{name}': missing in-game sprite assets/{}",
+                ship.sprite_path
+            ));
+        }
+        let wf = format!("assets/sprites/wireframes/{name}.png");
+        if !Path::new(&wf).exists() {
+            p.push(format!("ship '{name}': missing HUD wireframe {wf}"));
+        }
+    }
+    let mut planet_types = HashSet::new();
+    for sys in iu.star_systems.values() {
+        for pd in sys.planets.values() {
+            if !pd.planet_type.is_empty() {
+                planet_types.insert(pd.planet_type.clone());
+            }
+        }
+    }
+    for pt in &planet_types {
+        let wf = format!("assets/sprites/wireframes/planet_{pt}.png");
+        if !Path::new(&wf).exists() {
+            p.push(format!(
+                "planet type '{pt}': missing HUD wireframe {wf}"
+            ));
+        }
+    }
+    for generic in ["asteroid", "pickup"] {
+        let wf = format!("assets/sprites/wireframes/{generic}.png");
+        if !Path::new(&wf).exists() {
+            p.push(format!("missing generic HUD wireframe {wf}"));
+        }
+    }
+}
+
+/// Every (non-training) star system must be reachable from the start system via
+/// the jump-connection graph, or the player can never get there.
+fn check_reachability(iu: &ItemUniverse, p: &mut Vec<String>) {
+    let start = if iu.star_systems.contains_key(&iu.starting_system) {
+        iu.starting_system.clone()
+    } else {
+        match iu.star_systems.keys().next() {
+            Some(s) => s.clone(),
+            None => return,
+        }
+    };
+    let mut seen = HashSet::new();
+    let mut queue = VecDeque::new();
+    seen.insert(start.clone());
+    queue.push_back(start);
+    while let Some(s) = queue.pop_front() {
+        if let Some(sys) = iu.star_systems.get(&s) {
+            for c in &sys.connections {
+                if iu.star_systems.contains_key(c) && seen.insert(c.clone()) {
+                    queue.push_back(c.clone());
+                }
+            }
+        }
+    }
+    for name in iu.star_systems.keys() {
+        if !TRAINING_SYSTEMS.contains(&name.as_str()) && !seen.contains(name) {
+            p.push(format!(
+                "system '{name}' is unreachable from start system \
+                 '{}' (no jump path)",
+                iu.starting_system
+            ));
+        }
+    }
+}
+
+/// Missions must be offered, and have surface objectives, on landable planets at
+/// buildings that actually exist there.
+fn check_mission_coherence(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (id, def) in &iu.missions {
+        // offer location
+        if let OfferKind::NpcOffer {
+            planet, building, ..
+        } = &def.offer
+        {
+            if let Some(pd) = find_planet(iu, planet) {
+                check_surface(id, "offered on", planet, pd, building.as_deref(), p);
+            }
+        }
+        // surface objectives
+        match &def.objective {
+            Objective::LandOnPlanet { planet } => {
+                if let Some(pd) = find_planet(iu, planet) {
+                    if !is_landable(pd) {
+                        p.push(format!(
+                            "mission '{id}': land objective '{planet}' is \
+                             uncolonised — nowhere to set down"
+                        ));
+                    }
+                }
+            }
+            Objective::MeetNpc {
+                planet, building, ..
+            }
+            | Objective::CatchNpc {
+                planet, building, ..
+            } => {
+                if let Some(pd) = find_planet(iu, planet) {
+                    check_surface(id, "has a surface objective on", planet, pd, building.as_deref(), p);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn check_surface(
+    id: &str,
+    verb: &str,
+    planet: &str,
+    pd: &PlanetData,
+    building: Option<&str>,
+    p: &mut Vec<String>,
+) {
+    if !is_landable(pd) {
+        p.push(format!(
+            "mission '{id}': {verb} '{planet}' which is uncolonised — can't land there"
+        ));
+        return;
+    }
+    if let Some(b) = building {
+        if !planet_has_building(pd, b) {
+            p.push(format!(
+                "mission '{id}': {verb} '{planet}' at building '{b}', \
+                 which that planet does not have"
+            ));
         }
     }
 }
