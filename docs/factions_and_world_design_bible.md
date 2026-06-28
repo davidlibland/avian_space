@@ -682,28 +682,39 @@ replay value.
 
 ### 6.1 The live relations table (as implemented)
 
-The matrix above is the narrative intent (with nuance the engine doesn't model);
-the one below is the concrete state the game reads from `assets/enemies.yaml` and
-`assets/allies.yaml`. Hostility is **bidirectional** (two factions are at war if
-*either* lists the other); alliances are softer — they share reward signal, so
-allied fighters protect each other's traders.
+The §6 matrix is the narrative intent; this is the concrete state the game reads
+from `assets/enemies.yaml` and `assets/allies.yaml`. **Relations are directional —
+the matrix is deliberately not symmetric.** Read it *across a row*: it shows what
+that faction's ships *do* to each column faction.
 
-Legend: ⚔ at war · 🤝 allied · · neutral
+- ⚔ **opens fire on sight.**  A faction's `enemies` entry lists who is hostile *to
+  it* — so putting Pirate in the Merchant Guild's entry is what sends pirates after
+  convoys. Combat is one-directional unless both sides list each other (most open
+  wars do).
+- 🛡 **shields.**  A faction's `allies` entry mixes those factions' reward signal
+  into its own, so its fighters are paid to keep them alive — and to hunt whatever
+  attacks them.
+- · ignores / neutral.
 
-| | Fed | Reb | FF | Hel | Bas | Ord | Mer | Pir | Pre |
+| row → col | Fed | Reb | FF | Hel | Bas | Ord | Mer | Pir | Pre |
 |---|---|---|---|---|---|---|---|---|---|
-| **Fed** | ▪ | ⚔ | · | · | ⚔ | · | 🤝 | ⚔ | ⚔ |
-| **Reb** | ⚔ | ▪ | 🤝 | · | ⚔ | · | 🤝 | ⚔ | ⚔ |
-| **FF** | · | 🤝 | ▪ | ⚔ | ⚔ | · | 🤝 | ⚔ | ⚔ |
-| **Hel** | · | · | ⚔ | ▪ | · | ⚔ | 🤝 | ⚔ | ⚔ |
-| **Bas** | ⚔ | ⚔ | ⚔ | · | ▪ | · | · | ⚔ | ⚔ |
+| **Fed** | ▪ | ⚔ | · | · | ⚔ | · | 🛡 | ⚔ | ⚔ |
+| **Reb** | ⚔ | ▪ | 🛡 | · | ⚔ | · | 🛡 | ⚔ | ⚔ |
+| **FF** | · | 🛡 | ▪ | ⚔ | ⚔ | · | 🛡 | ⚔ | ⚔ |
+| **Hel** | · | · | ⚔ | ▪ | · | ⚔ | 🛡 | ⚔ | ⚔ |
+| **Bas** | ⚔ | ⚔ | ⚔ | · | ▪ | · | · | · | ⚔ |
 | **Ord** | · | · | · | ⚔ | · | ▪ | · | ⚔ | ⚔ |
-| **Mer** | 🤝 | 🤝 | 🤝 | 🤝 | · | · | ▪ | ⚔ | ⚔ |
-| **Pir** | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ▪ | ⚔ |
-| **Pre** | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ▪ |
+| **Mer** | · | · | · | · | · | · | ▪ | · | ⚔ |
+| **Pir** | · | · | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ▪ | ⚔ |
+| **Pre** | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | · | ⚔ | ▪ |
 
 *(Fed = Federation, Reb = Rebel, FF = Free Frontier, Hel = Helios, Bas = Bastion,
 Ord = Order, Mer = Merchant Guild, Pir = Pirate, Pre = Precursor.)*
+
+The asymmetry is the point. Every armed faction — Federation, Rebel, Free Frontier,
+Helios — **shields the Merchant Guild**, but the Guild's own row shields no one:
+escorts guard the convoys, the convoys don't man the guns. Rebel and Free Frontier
+shield **each other** (the wary alliance); the Guild and the Pirates shield nobody.
 
 ### Where the wars are fought
 
@@ -731,9 +742,7 @@ with ambient skirmishes, and that's by design.
 
 **Precursor** is hostile to *everyone*, but its systems are sealed beyond the Rift
 (only Precursor ships spawn there). That war is the **player's**, fought in the
-endgame Rift arc — no ambient Precursor-vs-faction skirmishes, by design. The
-**Merchant Guild** fields no warships, so its "war" with the Pirates is simply the
-pirates preying on Guild convoys wherever the two meet.
+endgame Rift arc — no ambient Precursor-vs-faction skirmishes, by design.
 
 ## 7. Ship-aesthetic assignments
 
