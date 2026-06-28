@@ -309,11 +309,13 @@ def entry(s, m, w, d, z0):
     # floor shows through the open door, with the frame/lintel/roof intact.
     b = s["biome"]; fz = -d / 2
     if b == "ice":                         # storm-porch airlock vestibule
-        B.add_box("vest", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.12)
+        B.add_box("vest", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.06)
         B.add_box("vroof", (0, fz - 0.7, z0 + 1.78), (2.1, 1.62, 0.18), m["roof"], bevel=0.04)
         B.add_box("doorpanel", (0, fz - 1.44, z0 + 0.68), (0.96, 0.08, 1.3), m["wall_d"], bevel=0.03)
         B.add_box("vglow", (0, fz - 1.46, z0 + 1.42), (1.1, 0.1, 0.13), m["glow"], bevel=0.0)
-        cut_doorway(m, ["vest", "body"], 0, fz - 1.4, 0.96, 1.32, z0 + 0.68, 1.4 + d / 2 + 0.3)
+        # the cut runs from in FRONT of the vestibule (which juts forward) all the
+        # way back through the body, so the whole doorway is a real opening
+        cut_doorway(m, ["vest", "body"], 0, fz - 1.55, 1.02, 1.46, z0 + 0.72, 1.55 + d / 2 + 0.4)
     else:
         B.add_box("doorpanel", (0, fz - 0.06, z0 + 0.65), (1.0, 0.08, 1.3), m["wall_d"], bevel=0.02)
         B.add_box("lintel", (0, fz - 0.06, z0 + 1.34), (1.3, 0.16, 0.16), m["glow"], bevel=0.0)
@@ -508,15 +510,18 @@ def build_fuel_station(s, m):
     B.add_cylinder("fs_tank", (w / 2 + 0.6, 0.25, z0 + 0.8), 0.58, 2.5, m["metal"], axis="y")
     B.add_box("fs_cradle", (w / 2 + 0.6, 0.25, z0 + 0.16), (0.9, 2.2, 0.32), m["dark"], bevel=0.0)
     # a row of fuel pumps in the OPEN forecourt (the defining feature — no canopy
-    # over them, so they read clearly from above): base + body + lit readout + topper
+    # over them, so they read clearly from above): base + body + lit readout + topper.
+    # On ice the storm-porch vestibule juts forward, so push the whole forecourt
+    # further out so the pumps don't sit on top of the door.
+    fwd = 1.2 if s["biome"] == "ice" else 0.0
     for px in (-1.0, 0.0, 1.0):
-        B.add_box("fs_base", (px, -d / 2 - 1.6, z0 + 0.18), (0.46, 0.5, 0.36), m["dark"], bevel=0.04)
-        B.add_box("fs_pump", (px, -d / 2 - 1.6, z0 + 0.85), (0.44, 0.46, 1.0), m["wall_d"], bevel=0.06)
-        B.add_box("fs_screen", (px, -d / 2 - 1.84, z0 + 1.05), (0.3, 0.05, 0.34), m["glow"], bevel=0.0)
-        B.add_box("fs_top", (px, -d / 2 - 1.6, z0 + 1.45), (0.46, 0.5, 0.18), m["metal"], bevel=0.03)
-        B.add_cylinder("fs_hose", (px + 0.3, -d / 2 - 1.54, z0 + 0.7), 0.05, 0.9, m["dark"], axis="z")
+        B.add_box("fs_base", (px, -d / 2 - 1.6 - fwd, z0 + 0.18), (0.46, 0.5, 0.36), m["dark"], bevel=0.04)
+        B.add_box("fs_pump", (px, -d / 2 - 1.6 - fwd, z0 + 0.85), (0.44, 0.46, 1.0), m["wall_d"], bevel=0.06)
+        B.add_box("fs_screen", (px, -d / 2 - 1.84 - fwd, z0 + 1.05), (0.3, 0.05, 0.34), m["glow"], bevel=0.0)
+        B.add_box("fs_top", (px, -d / 2 - 1.6 - fwd, z0 + 1.45), (0.46, 0.5, 0.18), m["metal"], bevel=0.03)
+        B.add_cylinder("fs_hose", (px + 0.3, -d / 2 - 1.54 - fwd, z0 + 0.7), 0.05, 0.9, m["dark"], axis="z")
     # hazard stripe marking the forecourt apron
-    B.add_box("fs_hazard", (0, -d / 2 - 2.25, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
+    B.add_box("fs_hazard", (0, -d / 2 - 2.25 - fwd, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
 
 
 BUILDERS = {"market": build_market, "outfitter": build_outfitter, "shipyard": build_shipyard,
