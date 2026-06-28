@@ -723,6 +723,164 @@ def build_surplus_carrier():
         plume("sc_pl", sx, -1.02, 0, 0.06, 0.32, 0.8, glow)
 
 
+# ══════════════════════ Free Frontier (solar sails) ════════════════════════
+# Defensive farm-militia. SOLAR SAILS are the primary drive — large pale film
+# panels on ASYMMETRIC outrigger booms (designed asymmetry, painted with pride;
+# not the pirates' salvage-asymmetry). Sun-bleached yellow/white, warm-white
+# auxiliary plasma. Converted workboats that fight.
+def _sail(name, cx, cy, cz, w, l, sail, spar, spars=2):
+    """A taut solar sail: a gently BILLOWED translucent membrane (arched across
+    its width so the cel light gradients over it = reads as cloth catching sun),
+    in a visible outer frame with a few light spars."""
+    segs = 10
+    verts, faces = [], []
+    for i in range(segs + 1):
+        fx = i / segs - 0.5
+        x = cx + fx * w
+        zz = cz + 0.07 * math.cos(fx * math.pi)      # belly bulges sunward (z+)
+        verts.append((x, cy - l / 2, zz))
+        verts.append((x, cy + l / 2, zz))
+    for i in range(segs):
+        a = 2 * i
+        faces.append((a, a + 2, a + 3, a + 1))
+    _obj_from_pydata(name, verts, faces, sail, smooth=True)
+    add_box(f"{name}_fl", (cx - w / 2, cy, cz + 0.004), (0.02, l, 0.03), spar)
+    add_box(f"{name}_fr", (cx + w / 2, cy, cz + 0.004), (0.02, l, 0.03), spar)
+    add_box(f"{name}_ft", (cx, cy + l / 2, cz + 0.05), (w, 0.022, 0.03), spar)
+    add_box(f"{name}_fb", (cx, cy - l / 2, cz + 0.05), (w, 0.022, 0.03), spar)
+    for k in range(spars):
+        fx = (-0.5 + (k + 1) / (spars + 1))
+        zz = cz + 0.07 * math.cos(fx * math.pi)
+        add_box(f"{name}_s", (cx + fx * w, cy, zz + 0.004), (0.009, l * 0.94, 0.02), spar)
+
+
+def _boom(name, x0, x1, y, z, r, mat):
+    """A visible box strut from hull (x0) out to the sail (x1) along X — must
+    overlap both so the sail never looks detached."""
+    add_box(name, ((x0 + x1) / 2, y, z), (abs(x1 - x0), r * 2.0, r * 2.4), mat,
+            bevel=0.006)
+
+
+# warm sun-catching film — same recipe across the fleet so the faction reads
+_FSAIL = lambda tag: toon_material(tag, C(250, 242, 205), spec=1.7, spec_sharp=0.8, glass=True)
+
+
+def build_frontier_skiff():
+    hull = toon_material("fk", C(228, 205, 128), spec=0.9)    # sun-bleached yellow
+    dark = toon_material("fk_d", C(165, 142, 86))
+    chev = toon_material("fk_c", C(120, 150, 90))             # hand-painted chevron
+    sail = _FSAIL("fk_sl"); spar = toon_material("fk_sp", C(120, 108, 76))
+    glass = toon_material("fk_g", C(150, 210, 200), spec=1.5, glass=True)
+    glow = glow_material("fk_e", C(255, 240, 195), 5)         # warm-white plasma
+    loft_hull("fk_h", [
+        dict(y=0.62, w=0.05, h=0.06, cz=0.02),
+        dict(y=0.30, w=0.13, h=0.13, cz=0.03),
+        dict(y=-0.08, w=0.12, h=0.12, cz=0.02),
+        dict(y=-0.52, w=0.085, h=0.09, cz=0.01),
+    ], hull, m=14, n=2.4, flatten=0.65, subsurf=2)
+    add_sphere("fk_can", (0, 0.18, 0.13), (0.075, 0.1, 0.08), glass, zclip=0.13)
+    add_box("fk_chev", (0, 0.0, 0.14), (0.12, 0.06, 0.04), chev, bevel=0.01)
+    # leading sail clearly OFFSET to starboard on a thick mast (asymmetric)
+    add_cylinder("fk_mast", (0.0, 0.55, 0.05), 0.03, 0.5, spar, axis="y")
+    _boom("fk_arm", 0.0, 0.34, 0.78, 0.07, 0.024, spar)
+    _sail("fk_sail", 0.34, 0.86, 0.07, 0.46, 0.5, sail, spar, spars=2)
+    add_cylinder("fk_gun", (-0.05, 0.5, 0.0), 0.022, 0.2, dark, r2=0.015)
+    add_cylinder("fk_nz", (0, -0.52, 0.0), 0.05, 0.08, dark, r2=0.06)
+    plume("fk_pl", 0, -0.56, 0, 0.04, 0.22, 0.8, glow)
+
+
+def build_frontier_harvester():
+    # GUN-forward gunboat: prominent reaper-boom arms, modest sails.
+    hull = toon_material("fh", C(222, 198, 120), spec=0.8)
+    dark = toon_material("fh_d", C(158, 136, 82))
+    green = toon_material("fh_gr", C(120, 165, 80))
+    sail = _FSAIL("fh_sl"); spar = toon_material("fh_sp", C(118, 106, 74))
+    glass = toon_material("fh_g", C(150, 205, 195), spec=1.4, glass=True)
+    glow = glow_material("fh_e", C(255, 238, 190), 5)
+    loft_hull("fh_h", [
+        dict(y=0.72, w=0.1, h=0.12, cz=0.02),
+        dict(y=0.35, w=0.22, h=0.19, cz=0.03),
+        dict(y=-0.05, w=0.24, h=0.2, cz=0.03),
+        dict(y=-0.45, w=0.19, h=0.16, cz=0.02),
+        dict(y=-0.82, w=0.12, h=0.12, cz=0.01),
+    ], hull, m=14, n=2.6, flatten=0.6, subsurf=2)
+    add_sphere("fh_can", (0, 0.26, 0.18), (0.1, 0.13, 0.1), glass, zclip=0.18)
+    add_box("fh_str", (0, 0.42, 0.16), (0.3, 0.04, 0.05), green, bevel=0.01)
+    # twin BIG forward reaper-boom gun arms (the signature) projecting ahead
+    for sx in (-0.22, 0.22):
+        add_box("fh_arm", (sx, 0.5, 0.05), (0.09, 0.66, 0.16), dark, taper=0.8)
+        add_cylinder("fh_drum", (sx, 0.78, 0.05), 0.06, 0.12, green, r2=0.04)
+        add_cylinder("fh_muz", (sx, 0.9, 0.05), 0.022, 0.1, dark, r2=0.016)
+    # modest asymmetric outrigger sails on visible booms (port bigger)
+    _boom("fh_bl", -0.15, -0.72, 0.05, 0.07, 0.03, spar)
+    _sail("fh_sail_l", -0.82, 0.05, 0.07, 0.3, 0.6, sail, spar, spars=2)
+    _boom("fh_br", 0.15, 0.6, -0.08, 0.07, 0.026, spar)
+    _sail("fh_sail_r", 0.66, -0.08, 0.07, 0.22, 0.42, sail, spar, spars=1)
+    for sx in (-0.12, 0.12):
+        add_cylinder("fh_nz", (sx, -0.84, 0.0), 0.06, 0.1, dark, r2=0.072)
+        plume("fh_pl", sx, -0.9, 0, 0.05, 0.3, 0.8, glow)
+
+
+def build_frontier_sailtender():
+    # SAIL-dominant showcase: a slim hull dwarfed by huge asymmetric sails.
+    hull = toon_material("ft", C(225, 202, 124), spec=0.8)
+    dark = toon_material("ft_d", C(160, 138, 84))
+    sail = _FSAIL("ft_sl"); spar = toon_material("ft_sp", C(116, 104, 72))
+    glass = toon_material("ft_g", C(150, 205, 195), spec=1.4, glass=True)
+    glow = glow_material("ft_e", C(255, 238, 190), 5)
+    loft_hull("ft_h", [
+        dict(y=0.78, w=0.055, h=0.07, cz=0.02),
+        dict(y=0.4, w=0.13, h=0.13, cz=0.03),
+        dict(y=0.0, w=0.14, h=0.13, cz=0.02),
+        dict(y=-0.45, w=0.11, h=0.11, cz=0.02),
+        dict(y=-0.85, w=0.08, h=0.09, cz=0.01),
+    ], hull, m=14, n=2.4, flatten=0.6, subsurf=2)
+    add_sphere("ft_can", (0, 0.34, 0.14), (0.08, 0.11, 0.08), glass, zclip=0.14)
+    # huge port sail on a long visible boom; medium starboard sail set aft —
+    # strongly asymmetric outrigger rig
+    _boom("ft_bl", -0.1, -0.86, 0.18, 0.08, 0.034, spar)
+    _sail("ft_sail_big", -1.02, 0.2, 0.08, 0.5, 1.15, sail, spar, spars=3)
+    _boom("ft_br", 0.1, 0.7, -0.2, 0.075, 0.028, spar)
+    _sail("ft_sail_mid", 0.82, -0.2, 0.075, 0.34, 0.7, sail, spar, spars=2)
+    add_box("ft_grap", (0.0, -0.66, 0.04), (0.1, 0.2, 0.1), dark, taper=0.7)
+    for sx in (-0.09, 0.09):
+        add_cylinder("ft_nz", (sx, -0.87, 0.0), 0.05, 0.1, dark, r2=0.06)
+        plume("ft_pl", sx, -0.93, 0, 0.045, 0.28, 0.8, glow)
+
+
+def build_frontier_monitor():
+    hull = toon_material("fm", C(218, 195, 116), spec=0.7)
+    dark = toon_material("fm_d", C(152, 132, 80))
+    plate = toon_material("fm_p", C(180, 162, 100))
+    chev = toon_material("fm_c", C(120, 150, 90))
+    sail = _FSAIL("fm_sl"); spar = toon_material("fm_sp", C(114, 102, 70))
+    glass = toon_material("fm_g", C(150, 205, 195), spec=1.3, glass=True)
+    glow = glow_material("fm_e", C(255, 238, 188), 5)
+    loft_hull("fm_h", [
+        dict(y=0.85, w=0.16, h=0.16, cz=0.02),
+        dict(y=0.4, w=0.34, h=0.24, cz=0.03),
+        dict(y=-0.1, w=0.38, h=0.26, cz=0.03),
+        dict(y=-0.55, w=0.32, h=0.22, cz=0.02),
+        dict(y=-0.95, w=0.2, h=0.16, cz=0.01),
+    ], hull, m=14, n=2.8, flatten=0.55, subsurf=2)
+    for yc in (0.2, -0.25):
+        add_box("fm_belt", (0, yc, 0.24), (0.74, 0.06, 0.05), plate, bevel=0.01)
+    add_box("fm_chev", (0, -0.05, 0.26), (0.3, 0.08, 0.04), chev, bevel=0.01)
+    add_box("fm_brg", (0, 0.32, 0.26), (0.2, 0.26, 0.16), dark, taper=0.7, bevel=0.02)
+    add_sphere("fm_g", (0, 0.38, 0.34), (0.07, 0.08, 0.05), glass)
+    # huge leading sun-shield sail, offset to port (asymmetric) on a thick mast
+    add_cylinder("fm_mast", (-0.05, 0.72, 0.06), 0.035, 0.7, spar, axis="y")
+    _boom("fm_arm", -0.05, -0.32, 1.05, 0.08, 0.03, spar)
+    _sail("fm_sail", -0.2, 1.18, 0.09, 0.95, 0.62, sail, spar, spars=4)
+    # flak-turret blisters on the flanks (visible barrels)
+    for sx in (-0.36, 0.36):
+        add_cylinder("fm_turr", (sx, 0.0, 0.28), 0.085, 0.1, dark, axis="z")
+        add_cylinder("fm_bbl", (sx, 0.14, 0.32), 0.02, 0.2, plate, r2=0.014)
+    for sx in (-0.22, 0.0, 0.22):
+        add_cylinder("fm_nz", (sx, -0.98, 0.0), 0.07, 0.12, dark, r2=0.085)
+        plume("fm_pl", sx, -1.05, 0, 0.06, 0.32, 0.8, glow)
+
+
 # ════════════════════════════════ registry ═════════════════════════════════
 REGISTRY = {
     # name: (builder, ortho, group, label)
@@ -749,6 +907,10 @@ REGISTRY = {
     "pirate_corvette": (build_pirate_corvette, 2.1, "pirates", "r11 · scrap blade"),
     "pirate_missile_boat": (build_pirate_missile_boat, 2.4, "pirates", "r18 · bolt-on racks"),
     "pirate_carrier": (build_pirate_carrier, 2.8, "pirates", "r50 · welded hulk"),
+    "frontier_skiff": (build_frontier_skiff, 2.1, "frontier", "r11 · sail interceptor"),
+    "frontier_harvester": (build_frontier_harvester, 2.6, "frontier", "r24 · boom gunboat"),
+    "frontier_sailtender": (build_frontier_sailtender, 2.7, "frontier", "r20 · outrigger sails"),
+    "frontier_monitor": (build_frontier_monitor, 2.9, "frontier", "r40 · sun-shield fort"),
 }
 
 
