@@ -1,4 +1,10 @@
+# faction -> factions it is hostile toward (mutual entries = open war)
 Merchant: ["Pirate"]
-Federation: ["Rebel"]
-Rebel: ["Federation"]
-Pirate: ["Rebel", "Federation"]
+Federation: ["Rebel", "Bastion", "Precursor"]
+Rebel: ["Federation", "Bastion", "Precursor"]
+Pirate: ["Rebel", "Federation", "FreeFrontier", "Helios", "Order", "Precursor"]
+FreeFrontier: ["Helios", "Bastion", "Pirate", "Precursor"]
+Helios: ["FreeFrontier", "Order", "Pirate", "Precursor"]
+Bastion: ["Rebel", "Federation", "FreeFrontier", "Pirate", "Precursor"]
+Order: ["Helios", "Pirate", "Precursor"]
+Precursor: ["Federation", "Rebel", "Pirate", "Merchant", "FreeFrontier", "Helios", "Bastion", "Order"]

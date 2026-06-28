@@ -336,3 +336,15 @@ relic_turret:
     aimable_arc: 180
     display_name: "Relic Turret"
     sound_path: sounds/weapons/proton_beam.ogg
+drone_bay:
+    name: drone_bay
+    lifetime: 0.0
+    speed: 0.0
+    cooldown: 4.0
+    color: [0.4, 0.9, 1.0]
+    damage: 0
+    display_name: "Drone Bay"
+    carrier_bay: helios_drone
+    ammo:
+        !Ammo:
+            space: 6

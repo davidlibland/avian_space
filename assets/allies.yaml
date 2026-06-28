@@ -5,6 +5,12 @@
 # "Federation: [Merchant]" means Federation ships get a fraction of nearby
 # Merchant ships' rewards — incentivising Fighters to protect traders.
 Federation: ["Merchant", "Federation"]
-Rebel: ["Merchant", "Rebel"]
+Rebel: ["Merchant", "Rebel", "FreeFrontier"]
 Merchant: ["Merchant"]
 Pirate: ["Pirate"]
+# New factions
+FreeFrontier: ["FreeFrontier", "Merchant", "Rebel"]
+Helios: ["Helios", "Merchant"]
+Bastion: ["Bastion"]
+Order: ["Order"]
+Precursor: ["Precursor"]

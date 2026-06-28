@@ -413,3 +413,340 @@ pirate_carrier:
   personality: Fighter
   fuel_capacity: 8
   faction: Pirate
+# ── Free Frontier (solar-sail militia) ───────────────────────────────────────────
+frontier_skiff:
+  thrust: 112.0
+  max_speed: 182.0
+  torque: 28.0
+  max_health: 55
+  cargo_space: 4
+  item_space: 6
+  base_weapons:
+    flak_gun: [1, null]
+  radius: 11.0
+  price: 18000
+  sprite_path: sprites/ships/atlas/frontier_skiff.png
+  personality: Fighter
+  fuel_capacity: 3
+  faction: FreeFrontier
+  required_unlocks: [free_frontier_license]
+frontier_harvester:
+  thrust: 72.0
+  max_speed: 122.0
+  torque: 14.0
+  max_health: 165
+  cargo_space: 8
+  item_space: 12
+  base_weapons:
+    mass_driver: [1, null]
+    flak_gun: [1, null]
+  radius: 24.0
+  price: 55000
+  sprite_path: sprites/ships/atlas/frontier_harvester.png
+  personality: Fighter
+  fuel_capacity: 4
+  faction: FreeFrontier
+  required_unlocks: [free_frontier_license]
+frontier_sailtender:
+  thrust: 78.0
+  max_speed: 132.0
+  torque: 16.0
+  max_health: 120
+  cargo_space: 12
+  item_space: 12
+  base_weapons:
+    flak_gun: [1, null]
+    prox_mine: [1, 6]
+  radius: 20.0
+  price: 46000
+  sprite_path: sprites/ships/atlas/frontier_sailtender.png
+  personality: Fighter
+  fuel_capacity: 5
+  faction: FreeFrontier
+  required_unlocks: [free_frontier_license]
+frontier_monitor:
+  thrust: 50.0
+  max_speed: 86.0
+  torque: 9.0
+  max_health: 340
+  cargo_space: 8
+  item_space: 24
+  base_weapons:
+    flak_turret: [1, null]
+    mass_driver: [1, null]
+  radius: 40.0
+  price: 140000
+  sprite_path: sprites/ships/atlas/frontier_monitor.png
+  personality: Fighter
+  fuel_capacity: 5
+  faction: FreeFrontier
+  required_unlocks: [free_frontier_license]
+
+# ── Helios Combine (drones) ──────────────────────────────────────────────────────
+helios_drone:
+  thrust: 132.0
+  max_speed: 222.0
+  torque: 36.0
+  max_health: 28
+  cargo_space: 0
+  item_space: 4
+  base_weapons:
+    helios_lance: [1, null]
+  radius: 7.0
+  price: 6500
+  sprite_path: sprites/ships/atlas/helios_drone.png
+  personality: Fighter
+  fuel_capacity: 2
+  faction: Helios
+  required_unlocks: [helios_license]
+helios_enforcer:
+  thrust: 100.0
+  max_speed: 178.0
+  torque: 28.0
+  max_health: 90
+  cargo_space: 4
+  item_space: 10
+  base_weapons:
+    helios_lance: [1, null]
+    seeker: [1, 4]
+  radius: 16.0
+  price: 42000
+  sprite_path: sprites/ships/atlas/helios_enforcer.png
+  personality: Fighter
+  fuel_capacity: 4
+  faction: Helios
+  required_unlocks: [helios_license]
+helios_overseer:
+  thrust: 70.0
+  max_speed: 122.0
+  torque: 14.0
+  max_health: 150
+  cargo_space: 6
+  item_space: 18
+  base_weapons:
+    drone_bay: [1, 6]
+    helios_lance: [1, null]
+  radius: 28.0
+  price: 95000
+  sprite_path: sprites/ships/atlas/helios_overseer.png
+  personality: Fighter
+  fuel_capacity: 5
+  faction: Helios
+  required_unlocks: [helios_license]
+helios_titan:
+  thrust: 50.0
+  max_speed: 86.0
+  torque: 8.0
+  max_health: 280
+  cargo_space: 8
+  item_space: 30
+  base_weapons:
+    drone_bay: [1, 6]
+    helios_lance: [2, null]
+  radius: 50.0
+  price: 175000
+  sprite_path: sprites/ships/atlas/helios_titan.png
+  personality: Fighter
+  fuel_capacity: 6
+  faction: Helios
+  required_unlocks: [helios_license]
+
+# ── Fed Bastion (iron siege) ─────────────────────────────────────────────────────
+bastion_guard:
+  thrust: 86.0
+  max_speed: 142.0
+  torque: 24.0
+  max_health: 105
+  cargo_space: 4
+  item_space: 8
+  base_weapons:
+    chaingun: [2, null]
+  radius: 15.0
+  price: 32000
+  sprite_path: sprites/ships/atlas/bastion_guard.png
+  personality: Fighter
+  fuel_capacity: 4
+  faction: Bastion
+  required_unlocks: [bastion_license]
+bastion_lance:
+  thrust: 65.0
+  max_speed: 112.0
+  torque: 14.0
+  max_health: 200
+  cargo_space: 6
+  item_space: 16
+  base_weapons:
+    chaingun: [1, null]
+    chaingun_turret: [1, null]
+  radius: 24.0
+  price: 72000
+  sprite_path: sprites/ships/atlas/bastion_lance.png
+  personality: Fighter
+  fuel_capacity: 4
+  faction: Bastion
+  required_unlocks: [bastion_license]
+siege_monitor:
+  thrust: 50.0
+  max_speed: 82.0
+  torque: 9.0
+  max_health: 280
+  cargo_space: 6
+  item_space: 20
+  base_weapons:
+    siege_cannon: [1, null]
+    chaingun: [2, null]
+  radius: 34.0
+  price: 145000
+  sprite_path: sprites/ships/atlas/siege_monitor.png
+  personality: Fighter
+  fuel_capacity: 5
+  faction: Bastion
+  required_unlocks: [bastion_license]
+iron_dreadnought:
+  thrust: 42.0
+  max_speed: 70.0
+  torque: 7.0
+  max_health: 430
+  cargo_space: 8
+  item_space: 38
+  base_weapons:
+    siege_cannon: [1, null]
+    chaingun_turret: [2, null]
+  radius: 48.0
+  price: 215000
+  sprite_path: sprites/ships/atlas/iron_dreadnought.png
+  personality: Fighter
+  fuel_capacity: 6
+  faction: Bastion
+  required_unlocks: [bastion_license]
+
+# ── Artifact Order (reliquaries) ─────────────────────────────────────────────────
+order_acolyte:
+  thrust: 142.0
+  max_speed: 232.0
+  torque: 32.0
+  max_health: 42
+  cargo_space: 2
+  item_space: 6
+  base_weapons:
+    relic_lance: [1, null]
+  radius: 12.0
+  price: 17000
+  sprite_path: sprites/ships/atlas/order_acolyte.png
+  personality: Fighter
+  fuel_capacity: 3
+  faction: Order
+  required_unlocks: [artifact_order_license]
+order_censer:
+  thrust: 86.0
+  max_speed: 152.0
+  torque: 18.0
+  max_health: 110
+  cargo_space: 4
+  item_space: 12
+  base_weapons:
+    relic_lance: [1, null]
+    censer_charge: [1, 4]
+  radius: 20.0
+  price: 56000
+  sprite_path: sprites/ships/atlas/order_censer.png
+  personality: Fighter
+  fuel_capacity: 4
+  faction: Order
+  required_unlocks: [artifact_order_license]
+order_reliquary:
+  thrust: 60.0
+  max_speed: 100.0
+  torque: 12.0
+  max_health: 240
+  cargo_space: 6
+  item_space: 20
+  base_weapons:
+    relic_lance: [2, null]
+    censer_charge: [1, 4]
+  radius: 30.0
+  price: 132000
+  sprite_path: sprites/ships/atlas/order_reliquary.png
+  personality: Fighter
+  fuel_capacity: 5
+  faction: Order
+  required_unlocks: [artifact_order_license]
+order_cathedral:
+  thrust: 45.0
+  max_speed: 78.0
+  torque: 7.0
+  max_health: 380
+  cargo_space: 8
+  item_space: 34
+  base_weapons:
+    relic_turret: [1, null]
+    relic_lance: [2, null]
+  radius: 48.0
+  price: 205000
+  sprite_path: sprites/ships/atlas/order_cathedral.png
+  personality: Fighter
+  fuel_capacity: 6
+  faction: Order
+  required_unlocks: [artifact_order_license]
+
+# ── Precursors (enemy/boss — never sold) ─────────────────────────────────────────
+precursor_seeker:
+  thrust: 150.0
+  max_speed: 250.0
+  torque: 40.0
+  max_health: 45
+  cargo_space: 0
+  item_space: 4
+  base_weapons:
+    precursor_beam: [1, null]
+  radius: 10.0
+  price: 999999
+  sprite_path: sprites/ships/atlas/precursor_seeker.png
+  personality: Fighter
+  fuel_capacity: 9
+  faction: Precursor
+precursor_sentinel:
+  thrust: 90.0
+  max_speed: 150.0
+  torque: 24.0
+  max_health: 220
+  cargo_space: 0
+  item_space: 8
+  base_weapons:
+    precursor_beam: [2, null]
+  radius: 18.0
+  price: 999999
+  sprite_path: sprites/ships/atlas/precursor_sentinel.png
+  personality: Fighter
+  fuel_capacity: 9
+  faction: Precursor
+precursor_harbinger:
+  thrust: 82.0
+  max_speed: 142.0
+  torque: 16.0
+  max_health: 380
+  cargo_space: 0
+  item_space: 14
+  base_weapons:
+    precursor_beam: [3, null]
+  radius: 30.0
+  price: 999999
+  sprite_path: sprites/ships/atlas/precursor_harbinger.png
+  personality: Fighter
+  fuel_capacity: 9
+  faction: Precursor
+precursor_sleeper:
+  thrust: 40.0
+  max_speed: 70.0
+  torque: 6.0
+  max_health: 1600
+  cargo_space: 0
+  item_space: 24
+  base_weapons:
+    precursor_beam: [4, null]
+  radius: 60.0
+  price: 999999
+  sprite_path: sprites/ships/atlas/precursor_sleeper.png
+  personality: Fighter
+  fuel_capacity: 9
+  faction: Precursor

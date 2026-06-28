@@ -185,3 +185,17 @@ relic_turret:
     space: 12
     weapon_type: relic_turret
     required_unlocks: [artifact_order_license]
+drone_bay:
+  !SecondaryWeapon
+    price: 7000
+    space: 8
+    weapon_type: drone_bay
+    ammo_price: 700
+    ammo_space: 6
+    required_unlocks: [helios_license]
+precursor_beam:
+  !PrimaryWeapon
+    price: 999999
+    space: 3
+    weapon_type: precursor_beam
+    required_unlocks: [precursor_innate]

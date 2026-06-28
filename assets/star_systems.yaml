@@ -967,7 +967,7 @@ halcyon:
         weapons_parts: 27
         robotics: 36
       outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine]
-      shipyard: [shuttle, prospector, courier, cargo_transport]
+      shipyard: [shuttle, prospector, courier, cargo_transport, frontier_skiff, frontier_harvester, frontier_sailtender]
     halcyon_ice:
       planet_type: icy_dwarf
       faction: FreeFrontier
@@ -989,6 +989,8 @@ halcyon:
     min: 2
     max: 5
     types:
+      frontier_skiff: 1.5
+      frontier_harvester: 1.0
       cargo_transport: 2.0
       prospector: 1.5
       shuttle: 1.5
@@ -1012,7 +1014,7 @@ ceres_freehold:
         food: 5
         electronics: 23
       outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine, flak_turret]
-      shipyard: [shuttle, prospector, asteroid_miner, cargo_transport]
+      shipyard: [shuttle, prospector, asteroid_miner, cargo_transport, frontier_skiff, frontier_harvester, frontier_sailtender, frontier_monitor]
     pallas:
       planet_type: icy_dwarf
       faction: FreeFrontier
@@ -1033,6 +1035,8 @@ ceres_freehold:
     min: 2
     max: 5
     types:
+      frontier_skiff: 1.5
+      frontier_harvester: 1.0
       asteroid_miner: 1.5
       prospector: 2.0
       cargo_transport: 1.5
@@ -1076,6 +1080,7 @@ the_verge:
     min: 2
     max: 5
     types:
+      frontier_skiff: 1.5
       cargo_transport: 1.5
       prospector: 1.5
       shuttle: 1.0
@@ -1122,6 +1127,7 @@ kuiper_reach:
     min: 1
     max: 4
     types:
+      frontier_skiff: 1.0
       cargo_transport: 1.5
       prospector: 1.5
       pirate_corvette: 0.5
@@ -1153,7 +1159,7 @@ tycho_yards:
         electronics: 22
         uranium: 34
       outfitter: [laser, proton_beam, helios_lance, seeker]
-      shipyard: [shuttle, cargo_transport, freighter]
+      shipyard: [shuttle, cargo_transport, freighter, helios_drone, helios_enforcer]
     tycho_refinery:
       planet_type: cloud
       faction: Helios
@@ -1180,6 +1186,8 @@ tycho_yards:
     min: 2
     max: 5
     types:
+      helios_drone: 2.0
+      helios_enforcer: 1.0
       freighter: 2.0
       cargo_transport: 2.0
       courier: 1.0
@@ -1215,7 +1223,7 @@ helios_prime:
         weapons_parts: 31
         robotics: 42
       outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker]
-      shipyard: [shuttle, courier, cargo_transport, freighter, hauler]
+      shipyard: [shuttle, courier, cargo_transport, freighter, hauler, helios_drone, helios_enforcer, helios_overseer, helios_titan]
     helios_orbital:
       planet_type: rocky
       faction: Helios
@@ -1238,6 +1246,9 @@ helios_prime:
     min: 2
     max: 6
     types:
+      helios_drone: 2.0
+      helios_enforcer: 1.5
+      helios_overseer: 0.5
       freighter: 2.0
       hauler: 1.5
       cargo_transport: 1.5
@@ -1283,6 +1294,8 @@ the_foundry:
     min: 2
     max: 5
     types:
+      helios_drone: 1.5
+      helios_enforcer: 1.0
       freighter: 1.5
       cargo_transport: 1.5
       courier: 1.0
@@ -1308,7 +1321,7 @@ iron_march:
         food: 6
         uranium: 8
       outfitter: [laser, proton_beam, chaingun, siege_cannon, space_mine]
-      shipyard: [corvette, fighter, frigate]
+      shipyard: [corvette, fighter, frigate, bastion_guard, bastion_lance]
     march_keep:
       planet_type: desert
       faction: Bastion
@@ -1327,6 +1340,8 @@ iron_march:
     min: 2
     max: 5
     types:
+      bastion_guard: 2.0
+      bastion_lance: 1.0
       fed_patrol: 2.0
       corvette: 1.5
       frigate: 1.0
@@ -1349,7 +1364,7 @@ bastion:
         food: 10
         uranium: 8
       outfitter: [proton_beam, chaingun, siege_cannon, chaingun_turret, space_mine, siege_turret]
-      shipyard: [fed_patrol, corvette, frigate, fed_destroyer]
+      shipyard: [fed_patrol, corvette, frigate, fed_destroyer, bastion_guard, bastion_lance, siege_monitor, iron_dreadnought]
     bastion_yard:
       planet_type: rocky
       faction: Bastion
@@ -1373,6 +1388,9 @@ bastion:
     min: 3
     max: 6
     types:
+      bastion_guard: 2.0
+      bastion_lance: 1.5
+      siege_monitor: 0.5
       fed_patrol: 2.0
       fed_destroyer: 1.0
       frigate: 1.5
@@ -1409,7 +1427,7 @@ sanctum:
         weapons_parts: 19
         robotics: 83
       outfitter: [laser, proton_beam, relic_lance, censer_charge, exotic_lance, relic_turret]
-      shipyard: [shuttle, courier, frigate]
+      shipyard: [shuttle, courier, frigate, order_acolyte, order_censer, order_reliquary, order_cathedral]
     reliquary_moon:
       planet_type: icy_dwarf
       faction: Order
@@ -1428,6 +1446,8 @@ sanctum:
     min: 2
     max: 5
     types:
+      order_acolyte: 2.0
+      order_censer: 1.0
       frigate: 1.5
       courier: 1.5
       shuttle: 1.0
@@ -1459,6 +1479,8 @@ the_threshold:
     min: 1
     max: 4
     types:
+      order_acolyte: 1.5
+      order_censer: 1.0
       frigate: 1.5
       courier: 1.0
 
@@ -1485,6 +1507,8 @@ the_rift:
     min: 1
     max: 3
     types:
+      precursor_sentinel: 1.5
+      precursor_seeker: 2.0
       pirate_corvette: 1.0
 
 # ── Bastion — third system (forge) ───────────────────────────────────────────────
@@ -1530,6 +1554,8 @@ the_anvil:
     min: 2
     max: 5
     types:
+      bastion_guard: 2.0
+      bastion_lance: 1.0
       fed_patrol: 2.0
       corvette: 1.5
       frigate: 1.0
@@ -1567,6 +1593,7 @@ the_cloister:
     min: 1
     max: 4
     types:
+      order_acolyte: 1.5
       frigate: 1.5
       courier: 1.0
 
@@ -1586,6 +1613,8 @@ the_silence:
     min: 1
     max: 3
     types:
+      precursor_sentinel: 1.0
+      precursor_seeker: 1.5
       pirate_corvette: 0.8
 
 the_monolith:
@@ -1602,6 +1631,8 @@ the_monolith:
     min: 1
     max: 3
     types:
+      precursor_seeker: 1.5
+      precursor_sentinel: 1.0
       pirate_corvette: 0.6
 
 the_seedbed:
