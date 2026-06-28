@@ -680,6 +680,61 @@ The player's allegiance should carry a **light reputation cost**: siding with on
 pole cools contracts at the opposite pole, so choices have weight and the map has
 replay value.
 
+### 6.1 The live relations table (as implemented)
+
+The matrix above is the narrative intent (with nuance the engine doesn't model);
+the one below is the concrete state the game reads from `assets/enemies.yaml` and
+`assets/allies.yaml`. Hostility is **bidirectional** (two factions are at war if
+*either* lists the other); alliances are softer — they share reward signal, so
+allied fighters protect each other's traders.
+
+Legend: ⚔ at war · 🤝 allied · · neutral
+
+| | Fed | Reb | FF | Hel | Bas | Ord | Mer | Pir | Pre |
+|---|---|---|---|---|---|---|---|---|---|
+| **Fed** | ▪ | ⚔ | · | · | ⚔ | · | 🤝 | ⚔ | ⚔ |
+| **Reb** | ⚔ | ▪ | 🤝 | · | ⚔ | · | 🤝 | ⚔ | ⚔ |
+| **FF** | · | 🤝 | ▪ | ⚔ | ⚔ | · | 🤝 | ⚔ | ⚔ |
+| **Hel** | · | · | ⚔ | ▪ | · | ⚔ | 🤝 | ⚔ | ⚔ |
+| **Bas** | ⚔ | ⚔ | ⚔ | · | ▪ | · | · | ⚔ | ⚔ |
+| **Ord** | · | · | · | ⚔ | · | ▪ | · | ⚔ | ⚔ |
+| **Mer** | 🤝 | 🤝 | 🤝 | 🤝 | · | · | ▪ | ⚔ | ⚔ |
+| **Pir** | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ▪ | ⚔ |
+| **Pre** | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ⚔ | ▪ |
+
+*(Fed = Federation, Reb = Rebel, FF = Free Frontier, Hel = Helios, Bas = Bastion,
+Ord = Order, Mer = Merchant Guild, Pir = Pirate, Pre = Precursor.)*
+
+### Where the wars are fought
+
+Most animosities play out as live NPC battles — systems where both sides keep ships
+(faction borders bleed each other's patrols into the spawn tables, and pirates raid
+everywhere). A few rivalries are between factions whose territories simply don't
+touch; those stay *cold fronts*, fought through proxies and the player rather than
+with ambient skirmishes, and that's by design.
+
+| War | Battleground systems |
+|---|---|
+| Fed ⚔ Reb | alpha_centauri, drift |
+| Fed ⚔ Bas | iron_march, kepler_22, tycho_drift |
+| Fed ⚔ Pir | alpha_centauri, barnard, ceres_freehold, drift, epsilon_eridani … |
+| Reb ⚔ Bas | *cold front — distant territories* |
+| Reb ⚔ Pir | alpha_centauri, altair, deneb, dim_haven, drift … |
+| FF ⚔ Hel | *cold front — distant territories* |
+| FF ⚔ Bas | drumlin, iron_march, kepler_22 |
+| FF ⚔ Pir | altair, barnard, ceres_freehold, dim_haven, drift … |
+| Hel ⚔ Ord | rigel |
+| Hel ⚔ Pir | alpha_centauri, coldforge, epsilon_eridani, helios_prime, rigel … |
+| Bas ⚔ Pir | bastion, coldforge, drumlin, iron_march, kepler_22 … |
+| Ord ⚔ Pir | deneb, dim_haven, rigel, saints_rest, sanctum … |
+| Mer ⚔ Pir | alpha_centauri, altair, barnard, bastion, ceres_freehold … |
+
+**Precursor** is hostile to *everyone*, but its systems are sealed beyond the Rift
+(only Precursor ships spawn there). That war is the **player's**, fought in the
+endgame Rift arc — no ambient Precursor-vs-faction skirmishes, by design. The
+**Merchant Guild** fields no warships, so its "war" with the Pirates is simply the
+pirates preying on Guild convoys wherever the two meet.
+
 ## 7. Ship-aesthetic assignments
 
 The visual + mechanical signature locked per faction (each new faction gets a
