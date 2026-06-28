@@ -678,7 +678,7 @@ fn spawn_building_3d(
             DespawnOnExit(PlayState::Exploring),
             Sprite::from_image(frames[0].clone()),
             bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift + 0.1)
+            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift - 0.1)
                 .with_scale(Vec3::splat(scale)),
             BuildingDoor {
                 frames,
