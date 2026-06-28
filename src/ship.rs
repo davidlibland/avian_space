@@ -3,7 +3,7 @@ use crate::carrier::DockingEscort;
 use crate::item_universe::{ItemUniverse, OutfitterItem};
 use crate::rl_collection::{RLAgent, RLReward, RLShipDied, build_rl_ship_died};
 use crate::weapons::{WeaponSystem, WeaponSystems};
-use crate::{GameLayer, PlayState, Player};
+use crate::{GameLayer, PlayState, Player, TravelContext, TravelPhase};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -924,12 +924,20 @@ fn ship_movement(
 /// and torque — see [`Ship::handling_factor`]. Ships mid-jump or mid-dock have
 /// their caps driven by those animations, so they are skipped.
 fn apply_damage_handicap(
+    travel: Res<TravelContext>,
     mut query: Query<
-        (&Ship, &mut MaxLinearSpeed, &mut MaxAngularSpeed),
+        (&Ship, &mut MaxLinearSpeed, &mut MaxAngularSpeed, Has<Player>),
         (Without<JumpingIn>, Without<JumpingOut>, Without<DockingEscort>),
     >,
 ) {
-    for (ship, mut max_lin, mut max_ang) in &mut query {
+    // The player's jump (accelerate_for_jump) drives the player's speed cap up to
+    // JUMP_SPEED; don't reset it back to the normal cap while a jump is underway,
+    // or the player can never reach jump speed and gets stuck mid-jump.
+    let player_jumping = travel.phase != TravelPhase::Idle;
+    for (ship, mut max_lin, mut max_ang, is_player) in &mut query {
+        if is_player && player_jumping {
+            continue;
+        }
         let hf = ship.handling_factor();
         max_lin.0 = ship.data.max_speed * hf;
         max_ang.0 = MAX_ANG_SPEED * hf;
