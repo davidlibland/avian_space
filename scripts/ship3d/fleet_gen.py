@@ -765,13 +765,13 @@ def _boom(name, x0, x1, y, z, r, mat):
 _FSAIL = lambda tag: toon_material(tag, C(250, 242, 205), spec=1.7, spec_sharp=0.8, glass=True)
 
 
-def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.06, rake=0.7):
-    """Rigid HEXAGONAL solar sail, RAKED forward so its face points AHEAD (front
-    edge dips, back edge lifts) — catching the sun ahead, not lying flat-up."""
+def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.06, rake=2.1):
+    """Rigid HEXAGONAL solar sail, RAKED STEEPLY forward: pivoted at its front
+    edge, the sail leans up-and-back so its broad face points AHEAD toward the
+    sun (a near-upright sail seen from the front; foreshortened from the top)."""
     def zr(y):
-        return rake * (cy - y)                       # front (y>cy) down, back up
-    verts = [(cx, cy, cz + billow)]
-    vy_ = []
+        return rake * (cy + r - y)                   # front edge -> 0, rises aft
+    verts = [(cx, cy, cz + billow + zr(cy))]
     for k in range(6):
         a = k * math.pi / 3
         vx, vy = cx + r * math.cos(a), cy + r * math.sin(a)
@@ -784,21 +784,22 @@ def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.06, rake=0.7):
         dx, dy = math.cos(a), math.sin(a)
         vx, vy = cx + r * dx, cy + r * dy
         px, py = -dy * 0.014, dx * 0.014
+        zc = cz + billow + zr(cy)
         b = len(sv)
-        sv += [(cx + px, cy + py, cz + billow + 0.006), (cx - px, cy - py, cz + billow + 0.006),
+        sv += [(cx + px, cy + py, zc + 0.006), (cx - px, cy - py, zc + 0.006),
                (vx - px, vy - py, cz + zr(vy) + 0.008), (vx + px, vy + py, cz + zr(vy) + 0.008)]
         sf.append((b, b + 1, b + 2, b + 3))
     _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
-    add_cylinder(name + "_hub", (cx, cy, cz + billow), 0.045, 0.045, spar, axis="z")
+    add_cylinder(name + "_hub", (cx, cy, cz + billow + zr(cy)), 0.045, 0.045, spar, axis="z")
 
 
-def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar, rake=0.7):
-    """Concave PARABOLIC dish sail, RAKED forward so the bowl faces ahead toward
-    the sun. Radial support struts + rim hub."""
+def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar, rake=2.1):
+    """Concave PARABOLIC dish sail, RAKED STEEPLY forward (front-edge pivot) so
+    the bowl faces ahead toward the sun. Radial support struts + rim hub."""
     def zr(y):
-        return rake * (cy - y)
+        return rake * (cy + r - y)
     rings, seg = 4, 22
-    verts = [(cx, cy, cz)]
+    verts = [(cx, cy, cz + zr(cy))]
     for i in range(1, rings + 1):
         rr = r * i / rings
         bowl = depth * (i / rings) ** 2
@@ -820,25 +821,28 @@ def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar, rake=0.7):
         vx, vy = cx + r * dx, cy + r * dy
         px, py = -dy * 0.013, dx * 0.013
         b = len(sv)
-        sv += [(cx + px, cy + py, cz + 0.008), (cx - px, cy - py, cz + 0.008),
+        sv += [(cx + px, cy + py, cz + zr(cy) + 0.008), (cx - px, cy - py, cz + zr(cy) + 0.008),
                (vx - px, vy - py, cz + depth + zr(vy) + 0.008),
                (vx + px, vy + py, cz + depth + zr(vy) + 0.008)]
         sf.append((b, b + 1, b + 2, b + 3))
     _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
-    add_cylinder(name + "_hub", (cx, cy, cz - 0.02), 0.06, 0.06, spar, axis="z")
+    add_cylinder(name + "_hub", (cx, cy, cz + zr(cy) - 0.02), 0.06, 0.06, spar, axis="z")
 
 
-def _canopy(name, cx, cy, w, l, cz, amp, sail, spar, rake=0.8):
-    """A big BILLOWING parachute-canopy sail, RAKED forward so it leans ahead like
-    a kite catching the sun — front edge dips toward the tethers, back edge lifts."""
+def _canopy(name, cx, cy, w, l, cz, amp, sail, spar, rake=1.9):
+    """A big BILLOWING parachute-canopy sail, RAKED STEEPLY forward (front-edge
+    pivot) so it stands up and leans ahead like a kite hauling the ship — its
+    face toward the sun, hull trailing below on the tethers."""
     nx, ny = 10, 7
+    def zr(fy):
+        return rake * l * (0.5 - fy)                 # front (fy=0.5) -> 0, rises aft
     verts = []
     for j in range(ny + 1):
         fy = j / ny - 0.5
         for i in range(nx + 1):
             fx = i / nx - 0.5
             dome = amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * fy) ** 2)
-            verts.append((cx + fx * w, cy + fy * l, cz + max(0.0, dome) - rake * fy * l))
+            verts.append((cx + fx * w, cy + fy * l, cz + max(0.0, dome) + zr(fy)))
     faces = []
     for j in range(ny):
         for i in range(nx):
@@ -847,9 +851,9 @@ def _canopy(name, cx, cy, w, l, cz, amp, sail, spar, rake=0.8):
     _obj_from_pydata(name, verts, faces, sail, smooth=True)
     for fx in (-0.32, 0.0, 0.32):                    # raked fore-aft ribs
         xx = cx + fx * w
-        base = amp * (1 - (2 * fx) ** 2)
-        zf = cz + base * (1 - (1.3 * 0.5) ** 2) - rake * 0.5 * l
-        zb = cz + base * (1 - (1.3 * 0.5) ** 2) + rake * 0.5 * l
+        base = amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * 0.5) ** 2)
+        zf = cz + base + zr(0.5)
+        zb = cz + base + zr(-0.5)
         _obj_from_pydata(name + "_rib",
                          [(xx - 0.008, cy + l / 2, zf + 0.006), (xx + 0.008, cy + l / 2, zf + 0.006),
                           (xx + 0.008, cy - l / 2, zb + 0.006), (xx - 0.008, cy - l / 2, zb + 0.006)],
