@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10,<3.13"
+# dependencies = [
+#     "noise",
+#     "numpy",
+#     "pillow",
+#     "pyrender",
+#     "pyyaml",
+#     "trimesh",
+# ]
+# ///
 """
 generate_planet_sprites.py — Procedural planet sprite generator for avian_space.
 

@@ -574,7 +574,58 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_reachability(iu, &mut p);
     check_mission_coherence(iu, &mut p);
     check_unlock_obtainability(iu, &mut p);
+    check_mission_graph(iu, &mut p);
     p
+}
+
+/// The mission dependency graph must be a DAG whose `completed`/`failed`
+/// preconditions all reference defined missions — otherwise a mission can never
+/// be started (a dangling prerequisite, or a cycle that never resolves).
+fn check_mission_graph(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (id, def) in &iu.missions {
+        for pc in &def.preconditions {
+            if let Precondition::Completed { mission } | Precondition::Failed { mission } = pc {
+                if !iu.missions.contains_key(mission) {
+                    p.push(format!(
+                        "mission '{id}': precondition references unknown mission '{mission}'"
+                    ));
+                }
+            }
+        }
+    }
+    let mut color: std::collections::HashMap<&str, u8> = std::collections::HashMap::new();
+    for id in iu.missions.keys() {
+        if color.get(id.as_str()).copied().unwrap_or(0) == 0 {
+            mission_cycle_dfs(id.as_str(), iu, &mut color, p);
+        }
+    }
+}
+
+fn mission_cycle_dfs<'a>(
+    id: &'a str,
+    iu: &'a ItemUniverse,
+    color: &mut std::collections::HashMap<&'a str, u8>,
+    p: &mut Vec<String>,
+) {
+    color.insert(id, 1); // grey = on the current DFS stack
+    if let Some(def) = iu.missions.get(id) {
+        for pc in &def.preconditions {
+            if let Precondition::Completed { mission } = pc {
+                if !iu.missions.contains_key(mission.as_str()) {
+                    continue;
+                }
+                match color.get(mission.as_str()).copied().unwrap_or(0) {
+                    1 => p.push(format!(
+                        "mission precondition cycle: '{id}' depends on '{mission}', \
+                         which loops back — neither can ever be started"
+                    )),
+                    0 => mission_cycle_dfs(mission.as_str(), iu, color, p),
+                    _ => {}
+                }
+            }
+        }
+    }
+    color.insert(id, 2); // black = fully explored
 }
 
 /// Every ship/weapon actually SOLD in a shipyard or outfitter that is gated by a

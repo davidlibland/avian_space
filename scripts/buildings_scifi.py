@@ -1,3 +1,11 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "opensimplex",
+#     "pillow",
+# ]
+# ///
 """
 buildings_scifi.py  —  Sci-fi building styles for each planet biome
 ====================================================================

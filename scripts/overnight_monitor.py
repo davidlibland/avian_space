@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "tbparse",
+# ]
+# ///
 """Hourly overnight monitor — appends snapshots to a markdown log file.
 
 Usage:

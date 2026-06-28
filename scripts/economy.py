@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "pyyaml",
+# ]
+# ///
 """Procedural commodity-price economy for avian_space.
 
 The idea (see design discussion): instead of hand-authoring ~200 per-planet

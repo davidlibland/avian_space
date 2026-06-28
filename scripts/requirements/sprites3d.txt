@@ -1,0 +1,18 @@
+# 3-D planet-sprite render environment for scripts/generate_planet_sprites.py
+# (and generate_app_icon.py). Renders spheres headlessly with pyrender, which
+# needs a GPU and EGL libs (libEGL present on this machine). `noise` is a C
+# extension that builds cleanly on Python 3.10-3.12, so pin the interpreter.
+#
+# Create the venv with uv:
+#   uv venv .venv-sprites --python 3.10
+#   uv pip install --python .venv-sprites -r scripts/requirements/sprites3d.txt
+#   PYOPENGL_PLATFORM=egl .venv-sprites/bin/python scripts/generate_planet_sprites.py
+#
+# Or just:  uv run scripts/generate_planet_sprites.py
+numpy
+pillow>=10
+pyyaml
+trimesh>=4.0
+pyrender>=0.1.45
+noise>=1.2.2
+opensimplex

@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10,<3.13"
+# dependencies = [
+#     "noise",
+#     "numpy",
+#     "pillow",
+#     "pyrender",
+#     "pyyaml",
+#     "trimesh",
+# ]
+# ///
 """
 generate_app_icon.py — Build scripts/AppIcon.icns for the macOS bundle.
 

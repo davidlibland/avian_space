@@ -6,3 +6,5 @@ bc_policy.bin
 assets/sounds/kenney_sci-fi-sounds/
 assets/sounds/kenney_impact-sounds/
 dev_catalog/.venv-sprites/
+__pycache__/
+scripts/ship3d/out/

@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pillow",
+# ]
+# ///
 """
 Ship sprite generator for avian_space.
 

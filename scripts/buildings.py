@@ -1,3 +1,11 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "opensimplex",
+#     "pillow",
+# ]
+# ///
 """
 buildings.py  —  Building tile atlas + template generator
 ==========================================================

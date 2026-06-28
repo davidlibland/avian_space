@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pillow",
+#     "pyyaml",
+# ]
+# ///
 """Render a flow chart of the mission graph in assets/missions.yaml.
 
 * Node COLOUR  = the faction the mission is associated with (its employer).

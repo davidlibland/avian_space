@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pillow",
+# ]
+# ///
 """
 objects.py  —  Animated landscape object sprite generator
 ==========================================================

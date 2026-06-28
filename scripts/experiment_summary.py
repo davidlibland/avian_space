@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "tbparse",
+# ]
+# ///
 """Distilled status summary for the SFT->RL handoff experiment (run_4+).
 
 Focuses on the three questions that matter for this experiment, rather than the

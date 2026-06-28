@@ -1,0 +1,15 @@
+# Common environment for the avian_space asset & analysis scripts (no GPU needed).
+# Covers everything in scripts/ EXCEPT the 3-D planet-sprite renderer
+# (see sprites3d.txt) and the Blender pipeline in scripts/ship3d/ (runs in Blender).
+#
+# Create / refresh the shared venv with uv:
+#   uv venv .venv
+#   uv pip install --python .venv -r scripts/requirements/common.txt
+#
+# Or skip the venv entirely and let uv read each script's inline metadata:
+#   uv run scripts/mission_flowchart.py
+numpy
+pillow>=10
+pyyaml
+opensimplex
+tbparse

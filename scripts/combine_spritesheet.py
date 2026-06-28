@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pillow",
+# ]
+# ///
 """Combine individual character sprites into RPG Maker-style sprite sheets.
 
 Standard layout (3 columns x 4 rows):

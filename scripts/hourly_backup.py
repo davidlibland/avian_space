@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "tbparse",
+# ]
+# ///
 """Hourly backup + monitoring script.
 
 Creates a timestamped backup of the checkpoint files and appends a training

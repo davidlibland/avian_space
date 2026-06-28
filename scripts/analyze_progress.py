@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "tbparse",
+# ]
+# ///
 """Per-personality × reward-type progress and cooperation analysis.
 
 Unlike `analyze_rewards.py`, which averages over the entire training run,

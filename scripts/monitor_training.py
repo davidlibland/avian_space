@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "tbparse",
+# ]
+# ///
 """Real-time training monitor — prints a comprehensive dashboard.
 
 Usage:

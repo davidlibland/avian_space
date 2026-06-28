@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pyyaml",
+# ]
+# ///
 """
 Tests for Blob-47 auto-tile bitmask logic.
 

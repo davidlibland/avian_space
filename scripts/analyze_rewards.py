@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "numpy",
+#     "tbparse",
+# ]
+# ///
 """Analyze per-personality × reward-type breakdowns from TensorBoard logs.
 
 Reads the event files produced by the PPO training thread and prints

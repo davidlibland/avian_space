@@ -1172,7 +1172,7 @@ bastion_2:
     - kind: pay
       credits: 30000
 bastion_3:
-  briefing: "The officer's jaw is set. 'The lawful Federation calls us traitors. So be it. A Federation patrol is pushing into the border to 'contain' us — two hulls. Break them. We do not negotiate with the soft. 40,000.'"
+  briefing: "The officer's jaw is set. 'The lawful Federation calls us traitors. So be it. A Federation patrol is pushing into Barnard to 'contain' us — two hulls. Break them. We do not negotiate with the soft. 40,000.'"
   success_text: "The Federation patrol is wreckage. 'The old Federation is dying,' the officer says. 'We are what replaces it.' 40,000 credits."
   failure_text: "The patrol held. The lawful fleet grows bolder."
   preconditions:
@@ -1295,7 +1295,7 @@ order_3:
     - kind: pay
       credits: 42000
 order_4:
-  briefing: "'A relic must reach Sanctum's vaults — the most sacred we have recovered. The road past the Threshold is watched by everything that wants it. Carry it. Guard it with your life. 45,000.'"
+  briefing: "'A relic must reach the vaults at the Cloister — the most sacred we have recovered. The road past the Threshold is watched by everything that wants it. Carry it to the Cloister and guard it with your life. 45,000.'"
   success_text: "The relic is sealed in Sanctum's deepest vault. The proctor blesses your hull. 'You have carried the divine and not faltered.' 45,000 credits."
   failure_text: "The relic was taken on the road. A wound that will not close."
   preconditions:
