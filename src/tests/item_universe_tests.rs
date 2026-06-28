@@ -211,3 +211,21 @@ fn test_asteroid_field_expected_value() {
         "asteroid field EV={ev}, expected ~200.0"
     );
 }
+
+/// Loads the ENTIRE assets/ directory into an ItemUniverse exactly as the game
+/// does (`item_universe_plugin`). The other asset test only parses ships.yaml, so
+/// it never catches missing required fields in star_systems.yaml etc.
+#[test]
+fn test_full_assets_parse_like_the_game() {
+    use std::path::Path;
+    let iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
+        .expect("assets/ must parse into ItemUniverse (check every .yaml is valid)");
+    assert!(!iu.ships.is_empty(), "no ships parsed from assets/");
+    assert!(!iu.star_systems.is_empty(), "no star systems parsed from assets/");
+    assert!(!iu.missions.is_empty(), "no missions parsed from assets/");
+    // touching required Vec/HashMap fields proves they deserialized for every system
+    for (name, sys) in &iu.star_systems {
+        let _ = (sys.planets.len(), sys.astroid_fields.len());
+        assert!(!name.is_empty());
+    }
+}

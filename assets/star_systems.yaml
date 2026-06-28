@@ -18,11 +18,13 @@ sol:
         iron: 2
         silicates: 3
         food: 5
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         gold: 30
         helium3: 24
-        electronics: 16
-        uranium: 34
+        electronics: 17
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
     venus:
       planet_type: cloud
@@ -42,7 +44,7 @@ sol:
         fuel_cells: 8
         helium3: 46
         uranium: 67
-        exotic_matter: 238
+        exotic_matter: 246
       outfitter: []
     earth:
       planet_type: habitable
@@ -58,16 +60,18 @@ sol:
         silicates: 7
         food: 4
         chemicals: 10
-        titanium: 38
-        polymers: 31
-        fuel_cells: 17
+        titanium: 39
+        polymers: 30
+        cooling_gel: 16
+        fuel_cells: 16
         medical_supplies: 13
         gold: 40
         helium3: 24
         electronics: 21
-        uranium: 34
-        weapons_parts: 32
+        uranium: 35
+        weapons_parts: 31
         robotics: 45
+        exotic_matter: 127
       outfitter: [laser, proton_beam, ir_missile, space_mine, javelin]
       shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, prospector, hauler, cargo_transport, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
     moon:
@@ -82,11 +86,13 @@ sol:
         iron: 2
         silicates: 3
         food: 5
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         gold: 30
         helium3: 24
         electronics: 17
-        uranium: 34
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
       shipyard: [shuttle, cargo_transport, courier, prospector]
     mars:
@@ -101,9 +107,11 @@ sol:
         iron: 2
         silicates: 3
         food: 5
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         helium3: 24
         uranium: 16
+        exotic_matter: 127
       outfitter: []
     jupiter:
       planet_type: gas_giant
@@ -127,11 +135,13 @@ sol:
         iron: 2
         silicates: 3
         food: 5
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         gold: 30
         helium3: 24
         electronics: 16
-        uranium: 34
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
     europa:
       planet_type: icy_dwarf
@@ -143,9 +153,11 @@ sol:
       commodities:
         water: 1
         food: 4
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         helium3: 24
-        uranium: 34
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
     saturn:
       planet_type: gas_giant
@@ -179,7 +191,7 @@ sol:
         fuel_cells: 8
         helium3: 46
         uranium: 67
-        exotic_matter: 238
+        exotic_matter: 246
       outfitter: []
     enceladus:
       planet_type: icy_dwarf
@@ -191,9 +203,11 @@ sol:
       commodities:
         water: 1
         food: 4
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         helium3: 24
-        uranium: 34
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
     uranus:
       planet_type: ice_giant
@@ -222,11 +236,13 @@ sol:
         iron: 2
         silicates: 3
         food: 5
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         gold: 30
         helium3: 24
         electronics: 16
-        uranium: 34
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
     neptune:
       planet_type: ice_giant
@@ -248,9 +264,11 @@ sol:
       commodities:
         water: 1
         food: 4
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         helium3: 24
-        uranium: 34
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
     pluto:
       planet_type: icy_dwarf
@@ -262,9 +280,11 @@ sol:
       commodities:
         water: 1
         food: 4
-        fuel_cells: 17
+        cooling_gel: 16
+        fuel_cells: 16
         helium3: 24
-        uranium: 34
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
     charon:
       planet_type: rocky
@@ -277,12 +297,14 @@ sol:
         water: 2
         iron: 2
         silicates: 3
-        food: 4
-        fuel_cells: 17
+        food: 5
+        cooling_gel: 16
+        fuel_cells: 16
         gold: 30
         helium3: 24
-        electronics: 15
-        uranium: 34
+        electronics: 16
+        uranium: 35
+        exotic_matter: 127
       outfitter: []
   astroid_fields:
     -
@@ -326,10 +348,10 @@ kepler_22:
         silicates: 6
         food: 5
         chemicals: 7
-        polymers: 32
+        polymers: 33
         medical_supplies: 21
-        electronics: 42
-        robotics: 93
+        electronics: 43
+        robotics: 94
       outfitter: [proton_beam, ir_missile, space_mine]
       shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, cargo_transport, courier, hauler]
     kepler_22_station:
@@ -433,7 +455,7 @@ epsilon_eridani:
         silicates: 7
         food: 4
         chemicals: 7
-        polymers: 31
+        polymers: 32
         medical_supplies: 17
         gold: 16
         electronics: 36
@@ -450,7 +472,7 @@ epsilon_eridani:
       commodities:
         water: 1
         food: 4
-        gold: 13
+        gold: 12
       outfitter: []
   astroid_fields:
     -
@@ -512,7 +534,7 @@ vega:
         fuel_cells: 17
         gold: 16
         helium3: 25
-        electronics: 21
+        electronics: 22
         uranium: 29
       outfitter: []
   astroid_fields:
@@ -568,7 +590,7 @@ barnard:
         silicates: 3
         food: 5
         gold: 36
-        electronics: 18
+        electronics: 19
       outfitter: [ir_missile, space_mine]
       shipyard: [courier, cargo_transport, freighter, bulk_carrier, prospector]
   astroid_fields:
@@ -662,16 +684,17 @@ procyon:
         tilt_deg: 75.0
         style: thin
       commodities:
-        water: 5
+        water: 4
         oxygen: 5
         iron: 8
-        food: 6
-        chemicals: 9
+        silicates: 6
+        food: 5
+        chemicals: 7
         titanium: 20
-        polymers: 38
-        medical_supplies: 23
+        polymers: 39
+        medical_supplies: 22
         gold: 84
-        electronics: 34
+        electronics: 35
         weapons_parts: 14
         robotics: 31
       outfitter: [laser, ir_missile, javelin, space_mine]
@@ -684,14 +707,14 @@ procyon:
       radius: 28.0
       color: [0.15, 0.35, 0.45]
       commodities:
-        water: 4
+        water: 3
         oxygen: 3
         iron: 4
-        silicates: 2
-        food: 6
+        silicates: 3
+        food: 5
         titanium: 13
-        medical_supplies: 26
-        electronics: 30
+        medical_supplies: 25
+        electronics: 31
         weapons_parts: 22
         robotics: 37
       outfitter: []
@@ -731,7 +754,7 @@ sirius:
         water: 4
         iron: 3
         silicates: 2
-        food: 7
+        food: 6
         titanium: 8
         uranium: 8
         weapons_parts: 26
@@ -750,8 +773,8 @@ sirius:
         silicates: 2
         food: 6
         titanium: 9
-        gold: 68
-        electronics: 22
+        gold: 67
+        electronics: 23
         weapons_parts: 26
       outfitter: []
   astroid_fields:
@@ -792,8 +815,9 @@ rigel:
         water: 5
         iron: 3
         silicates: 2
-        food: 7
+        food: 6
         titanium: 9
+        weapons_parts: 27
       outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
@@ -809,6 +833,7 @@ rigel:
         silicates: 2
         food: 6
         titanium: 9
+        weapons_parts: 27
       outfitter: []
   astroid_fields:
     -
@@ -844,13 +869,14 @@ altair:
         water: 6
         oxygen: 8
         iron: 7
-        food: 7
+        food: 6
         chemicals: 6
-        titanium: 25
-        medical_supplies: 33
-        electronics: 44
+        titanium: 26
+        polymers: 44
+        medical_supplies: 32
+        electronics: 46
         weapons_parts: 15
-        robotics: 46
+        robotics: 45
       outfitter: [laser, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, cargo_transport, courier, asteroid_miner, prospector]
     altair_rock:
@@ -864,12 +890,12 @@ altair:
         water: 5
         oxygen: 6
         iron: 4
-        silicates: 2
+        silicates: 3
         food: 6
         titanium: 19
-        medical_supplies: 31
-        electronics: 38
-        weapons_parts: 21
+        medical_supplies: 30
+        electronics: 39
+        weapons_parts: 20
         robotics: 43
       outfitter: []
   astroid_fields:
@@ -916,9 +942,9 @@ deneb:
         chemicals: 4
         titanium: 19
         medical_supplies: 42
-        electronics: 41
-        weapons_parts: 15
-        robotics: 58
+        electronics: 42
+        weapons_parts: 14
+        robotics: 59
       outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, cargo_transport, freighter]
     deneb_station:
@@ -935,8 +961,8 @@ deneb:
         silicates: 3
         food: 5
         titanium: 12
-        medical_supplies: 41
-        electronics: 35
+        medical_supplies: 40
+        electronics: 36
         weapons_parts: 23
         robotics: 58
       outfitter: []
@@ -979,12 +1005,12 @@ halcyon:
         silicates: 7
         food: 3
         chemicals: 8
-        titanium: 34
-        polymers: 33
+        titanium: 35
+        polymers: 34
         medical_supplies: 18
         gold: 84
-        electronics: 29
-        weapons_parts: 27
+        electronics: 30
+        weapons_parts: 26
         robotics: 36
       outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine]
       shipyard: [shuttle, prospector, courier, cargo_transport, frontier_skiff, frontier_harvester, frontier_sailtender, frontier_prospector]
@@ -998,7 +1024,7 @@ halcyon:
       commodities:
         water: 1
         food: 4
-        robotics: 37
+        robotics: 38
       outfitter: []
   astroid_fields:
     -
@@ -1068,6 +1094,18 @@ the_verge:
   map_position: [330.0, 410.0]
   connections: [halcyon, kuiper_reach, procyon]
   planets:
+    verge_outpost:
+      planet_type: icy_dwarf
+      faction: FreeFrontier
+      location: [200.0, 230.0]
+      description: "A freeholder ice-outpost across the Verge from the mining station; the two trade ore and water between them."
+      radius: 16.0
+      color: [0.72, 0.85, 0.9]
+      commodities:
+        water: 1
+        food: 4
+        robotics: 37
+      outfitter: []
     verge_station:
       planet_type: rocky
       faction: FreeFrontier
@@ -1080,8 +1118,7 @@ the_verge:
         iron: 3
         silicates: 3
         food: 5
-        helium3: 9
-        robotics: 39
+        robotics: 40
       outfitter: [flak_gun, mass_driver, prox_mine]
     verge_giant:
       planet_type: gas_giant
@@ -1112,6 +1149,14 @@ the_verge:
 kuiper_reach:
   map_position: [180.0, 580.0]
   connections: [ceres_freehold, the_verge]
+  astroid_fields:
+    -
+      location: [240.0, -160.0]
+      number: 7
+      radius: 350.0
+      commodities:
+        iron: 1.0
+        silicates: 0.6
   planets:
     kuiper_haven:
       planet_type: icy_dwarf
@@ -1123,10 +1168,9 @@ kuiper_reach:
       commodities:
         water: 1
         food: 5
-        chemicals: 10
         polymers: 7
-        cooling_gel: 13
-        exotic_matter: 153
+        cooling_gel: 14
+        exotic_matter: 148
       outfitter: [flak_gun, space_mine, prox_mine]
     kuiper_clouds:
       planet_type: cloud
@@ -1141,10 +1185,10 @@ kuiper_reach:
         silicates: 8
         food: 6
         chemicals: 10
-        polymers: 5
-        cooling_gel: 8
-        fuel_cells: 21
-        exotic_matter: 238
+        polymers: 4
+        cooling_gel: 9
+        fuel_cells: 22
+        exotic_matter: 245
       outfitter: []
   ships:
     min: 1
@@ -1162,6 +1206,7 @@ kuiper_reach:
 tycho_yards:
   map_position: [-120.0, -380.0]
   connections: [vega, helios_prime]
+  astroid_fields: []
   planets:
     tycho:
       planet_type: rocky
@@ -1174,11 +1219,11 @@ tycho_yards:
         water: 3
         iron: 2
         silicates: 3
-        food: 7
+        food: 8
         chemicals: 11
         polymers: 8
-        fuel_cells: 15
-        gold: 17
+        fuel_cells: 14
+        gold: 16
         helium3: 38
         electronics: 22
         uranium: 34
@@ -1196,15 +1241,17 @@ tycho_yards:
         oxygen: 2
         silicates: 5
         food: 8
-        chemicals: 11
+        chemicals: 12
         polymers: 5
         cooling_gel: 11
         fuel_cells: 10
-        gold: 16
+        medical_supplies: 29
+        gold: 15
         helium3: 56
         electronics: 24
         uranium: 51
-        exotic_matter: 240
+        robotics: 57
+        exotic_matter: 248
       outfitter: []
   ships:
     min: 2
@@ -1220,6 +1267,7 @@ tycho_yards:
 helios_prime:
   map_position: [60.0, -470.0]
   connections: [tycho_yards, the_foundry]
+  astroid_fields: []
   planets:
     helios_prime:
       planet_type: habitable
@@ -1240,13 +1288,13 @@ helios_prime:
         silicates: 5
         food: 8
         chemicals: 10
-        titanium: 39
+        titanium: 40
         polymers: 16
-        medical_supplies: 27
+        medical_supplies: 29
         gold: 45
-        electronics: 19
-        weapons_parts: 31
-        robotics: 42
+        electronics: 20
+        weapons_parts: 30
+        robotics: 43
       outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker, drone_bay]
       shipyard: [shuttle, courier, cargo_transport, freighter, hauler, helios_drone, helios_enforcer, helios_overseer, helios_titan, helios_courier, helios_freighter, helios_hauler]
     helios_orbital:
@@ -1261,11 +1309,11 @@ helios_prime:
         oxygen: 3
         iron: 3
         silicates: 3
-        food: 8
-        medical_supplies: 29
+        food: 9
+        medical_supplies: 31
         gold: 37
         electronics: 17
-        robotics: 46
+        robotics: 47
       outfitter: []
   ships:
     min: 2
@@ -1283,6 +1331,22 @@ the_foundry:
   map_position: [290.0, -360.0]
   connections: [helios_prime, alpha_centauri]
   planets:
+    foundry_skimmer:
+      planet_type: rocky
+      faction: Helios
+      location: [180.0, 210.0]
+      description: "A Helios skimming platform tethered above the gas giant, refining helium-3 day and night - the system's second market."
+      radius: 22.0
+      color: [0.8, 0.82, 0.86]
+      commodities:
+        water: 4
+        iron: 3
+        silicates: 3
+        food: 8
+        gold: 70
+        helium3: 13
+        electronics: 13
+      outfitter: []
     foundry_station:
       planet_type: rocky
       faction: Helios
@@ -1291,14 +1355,13 @@ the_foundry:
       radius: 28.0
       color: [0.8, 0.82, 0.86]
       commodities:
-        water: 3
-        oxygen: 2
+        water: 4
         iron: 3
         silicates: 3
-        food: 8
-        gold: 68
+        food: 9
+        gold: 70
         helium3: 13
-        electronics: 13
+        electronics: 14
       outfitter: [laser, helios_lance]
     foundry_giant:
       planet_type: gas_giant
@@ -1332,6 +1395,14 @@ the_foundry:
 iron_march:
   map_position: [-700.0, -10.0]
   connections: [kepler_22, bastion, the_anvil]
+  astroid_fields:
+    -
+      location: [240.0, 180.0]
+      number: 8
+      radius: 360.0
+      commodities:
+        iron: 1.3
+        silicates: 0.5
   planets:
     iron_march:
       planet_type: rocky
@@ -1341,7 +1412,7 @@ iron_march:
       radius: 30.0
       color: [0.5, 0.48, 0.5]
       commodities:
-        water: 4
+        water: 5
         iron: 1
         silicates: 2
         food: 6
@@ -1428,6 +1499,14 @@ bastion:
 sanctum:
   map_position: [790.0, -120.0]
   connections: [deneb, the_threshold, the_cloister]
+  astroid_fields:
+    -
+      location: [-220.0, -180.0]
+      number: 6
+      radius: 330.0
+      commodities:
+        silicates: 0.9
+        exotic_matter: 0.3
   planets:
     sanctum:
       planet_type: habitable
@@ -1449,10 +1528,10 @@ sanctum:
         food: 3
         chemicals: 3
         titanium: 23
-        medical_supplies: 60
-        electronics: 57
-        weapons_parts: 19
-        robotics: 83
+        medical_supplies: 64
+        electronics: 64
+        weapons_parts: 20
+        robotics: 91
       outfitter: [laser, proton_beam, relic_lance, censer_charge, exotic_lance, relic_turret, precursor_beam]
       shipyard: [shuttle, courier, frigate, order_acolyte, order_censer, order_reliquary, order_cathedral, order_almoner, order_quarryman, precursor_seeker, precursor_gleaner, precursor_sentinel, precursor_harbinger, precursor_sleeper]
     reliquary_moon:
@@ -1464,10 +1543,7 @@ sanctum:
       color: [0.8, 0.82, 0.86]
       commodities:
         water: 1
-        iron: 5
         food: 4
-        titanium: 17
-        weapons_parts: 25
       outfitter: []
   ships:
     min: 2
@@ -1484,6 +1560,18 @@ the_threshold:
   map_position: [930.0, -250.0]
   connections: [sanctum, the_rift]
   planets:
+    threshold_chapel:
+      planet_type: icy_dwarf
+      faction: Order
+      location: [200.0, 180.0]
+      description: "A chapel-moon beside the watch station where pilgrims resupply on the way to the Rift; the two settlements trade between them."
+      radius: 15.0
+      color: [0.8, 0.82, 0.86]
+      commodities:
+        water: 1
+        food: 4
+        exotic_matter: 21
+      outfitter: []
     threshold_watch:
       planet_type: rocky
       faction: Order
@@ -1493,7 +1581,7 @@ the_threshold:
       color: [0.7, 0.66, 0.6]
       commodities:
         water: 2
-        iron: 3
+        iron: 2
         silicates: 3
         food: 4
         exotic_matter: 21
@@ -1518,6 +1606,7 @@ the_threshold:
 the_rift:
   map_position: [1090.0, -350.0]
   connections: [the_threshold, the_silence, the_monolith, the_seedbed]
+  planets: {}
   astroid_fields:
     -
       location: [0.0, 0.0]
@@ -1592,6 +1681,14 @@ the_anvil:
 the_cloister:
   map_position: [850.0, 10.0]
   connections: [sanctum]
+  astroid_fields:
+    -
+      location: [220.0, -160.0]
+      number: 6
+      radius: 330.0
+      commodities:
+        silicates: 0.8
+        exotic_matter: 0.4
   planets:
     cloister:
       planet_type: rocky
@@ -1632,6 +1729,7 @@ the_cloister:
 the_silence:
   map_position: [1240.0, -260.0]
   connections: [the_rift, the_seedbed]
+  planets: {}
   astroid_fields:
     -
       location: [0.0, 0.0]
@@ -1650,6 +1748,7 @@ the_silence:
 the_monolith:
   map_position: [1190.0, -500.0]
   connections: [the_rift]
+  planets: {}
   astroid_fields:
     -
       location: [0.0, 0.0]
@@ -1668,6 +1767,7 @@ the_monolith:
 the_seedbed:
   map_position: [1390.0, -370.0]
   connections: [the_silence, the_rift]
+  planets: {}
   astroid_fields:
     -
       location: [0.0, 0.0]
