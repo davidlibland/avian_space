@@ -1489,7 +1489,7 @@ the_threshold:
 # is the "unstable jump" — the only way in (see design bible: a new edge type).
 the_rift:
   map_position: [1090.0, -350.0]
-  connections: [the_threshold, the_silence, the_monolith]
+  connections: [the_threshold, the_silence, the_monolith, the_seedbed]
   astroid_fields:
     -
       location: [0.0, 0.0]
@@ -1637,7 +1637,7 @@ the_monolith:
 
 the_seedbed:
   map_position: [1390.0, -370.0]
-  connections: [the_silence]
+  connections: [the_silence, the_rift]
   astroid_fields:
     -
       location: [0.0, 0.0]
