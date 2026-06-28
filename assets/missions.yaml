@@ -900,3 +900,529 @@ espionage_final:
       credits: 100000
     - kind: grant_unlock
       name: rebel_ship_license
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Free Frontier — "The Reaches"  (grants free_frontier_license at stage 1, so the
+# player can buy the cheap militia hulls for the later defensive fights).
+# Reached via the borderlands; gated on having a real combat ship.
+# ══════════════════════════════════════════════════════════════════════════════
+frontier_1:
+  briefing: "A weather-beaten harbormaster corners you in the Halcyon free port. 'You fly like you can fight. Pirates are gutting our ice convoys — two corvettes, working the Halcyon lanes. Run them off and the Reaches won't forget it. 22,000, and I'll get you Coalition papers — our yards'll sell to you after that.'"
+  success_text: "The harbormaster grips your hand. 'You're one of us now. Ceres yard's open to you. Come find me — there's more.'"
+  failure_text: "The convoys burn. The harbormaster won't look at you."
+  preconditions:
+    - kind: completed
+      mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: halcyon_port
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: halcyon
+    ship_type: pirate_corvette
+    count: 2
+    target_name: Reach Raiders
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 22000
+    - kind: grant_unlock
+      name: free_frontier_license
+frontier_2:
+  briefing: "The harbormaster slides a manifest over. 'Ceres colony's hungry — a Federation cutter impounded their grain over a tariff. We loaded a quiet 15 units. Get it down to Ceres before anyone counts heads. 26,000.'"
+  success_text: "Ceres eats tonight. 26,000 credits, and no questions."
+  failure_text: "The grain never made it. Ceres tightens its belt again."
+  preconditions:
+    - kind: completed
+      mission: frontier_1
+  offer:
+    kind: npc_offer
+    planet: halcyon_port
+    weight: 1.0
+    building: market
+    approach: seek
+  start_effects:
+    - kind: load_cargo
+      commodity: food
+      quantity: 15
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: ceres
+  requires:
+    - kind: has_cargo
+      commodity: food
+      quantity: 15
+  completion_effects:
+    - kind: remove_cargo
+      commodity: food
+      quantity: 15
+    - kind: pay
+      credits: 26000
+frontier_3:
+  briefing: "'The Reaches won't hold unless the holdouts band together. There's a harbormaster on Kuiper Reach who won't answer my calls — but she'll meet a pilot who proved themselves. Find her in the Kuiper Haven bar. Codeword: open lanes.'"
+  success_text: "The Kuiper harbormaster hears you out, then nods slowly. 'Alright. The Coalition stands. Tell them Kuiper's in.' 24,000 credits."
+  failure_text: "She slipped offworld before you arrived. The Coalition fractures."
+  preconditions:
+    - kind: completed
+      mission: frontier_2
+  offer:
+    kind: npc_offer
+    planet: halcyon_port
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: meet_npc
+    planet: kuiper_haven
+    npc_name: "the Kuiper harbormaster"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 24000
+frontier_4:
+  briefing: "The harbormaster's voice is tight over comms. 'A Bastion raiding column is bearing down on Ceres Freehold — three iron hulls, no mercy in them. The whole Coalition is watching. Hold the line. 50,000, and you'll have earned every credit.'"
+  success_text: "The Bastion column breaks against the Freehold's guns — and your own. Ceres holds. 'The Reaches are free another day, Captain,' the harbormaster says. 'Because of you.' 50,000 credits."
+  failure_text: "Ceres Freehold burns. The Coalition will not forget who failed them."
+  preconditions:
+    - kind: completed
+      mission: frontier_3
+  offer:
+    kind: npc_offer
+    planet: ceres
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: ceres_freehold
+    ship_type: bastion_guard
+    count: 3
+    target_name: Bastion Raiders
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 50000
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Helios Combine — "Quarterly Returns"  (grants helios_license at stage 1).
+# ══════════════════════════════════════════════════════════════════════════════
+helios_1:
+  briefing: "A Helios recruiter in a spotless suit finds you at Helios Prime. 'We headhunt talent. Pirates are circling an automated ore convoy near the Foundry — two of them. Clear them; the shareholders thank you. 22,000, plus a Combine clearance — our drone hulls become available to you.'"
+  success_text: "'Efficient. The Combine likes efficient.' 22,000 credits, and your Helios clearance is live."
+  failure_text: "The convoy is lost. The recruiter has already moved on to the next candidate."
+  preconditions:
+    - kind: completed
+      mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: helios_prime
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_foundry
+    ship_type: pirate_corvette
+    count: 2
+    target_name: Convoy Raiders
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 22000
+    - kind: grant_unlock
+      name: helios_license
+helios_2:
+  briefing: "The recruiter is unbothered. 'A delivery. 12 units of weapons-parts to Procyon Prime — yes, the Rebels. We sell to everyone; that's the whole point. 28,000, and don't ask what they do with it.'"
+  success_text: "The Rebels take delivery without comment. 28,000 credits. The Combine arms both sides and bills both sides."
+  failure_text: "The shipment was lost. The Combine notes the inefficiency."
+  preconditions:
+    - kind: completed
+      mission: helios_1
+  offer:
+    kind: npc_offer
+    planet: helios_prime
+    weight: 1.0
+    building: market
+    approach: seek
+  start_effects:
+    - kind: load_cargo
+      commodity: weapons_parts
+      quantity: 12
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: procyon_prime
+  requires:
+    - kind: has_cargo
+      commodity: weapons_parts
+      quantity: 12
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_parts
+      quantity: 12
+    - kind: pay
+      credits: 28000
+helios_3:
+  briefing: "The recruiter's smile thins. 'A problem. Free Frontier organizers seized one of our Foundry refineries over wages. Their ringleader is hiding in the Foundry station. Bring him in — quietly — before the next shareholder call. 32,000.'"
+  success_text: "You pin the organizer in a Foundry stairwell. He spits at your boots. The Combine's credits — 32,000 — hit your account before he's even processed."
+  failure_text: "The organizer rallied the workers and vanished. The strike spreads."
+  preconditions:
+    - kind: completed
+      mission: helios_2
+  offer:
+    kind: npc_offer
+    planet: helios_prime
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: catch_npc
+    planet: foundry_station
+    npc_name: "the co-op organizer"
+    building: market
+  completion_effects:
+    - kind: pay
+      credits: 32000
+helios_4:
+  briefing: "'A rival cartel is undercutting us in the Drift. Their flagship coordinates the whole operation. Cripple it and they'll sell to us by morning. 46,000. This is how the Combine wins — not with flags, with leverage.'"
+  success_text: "The rival flagship drifts dead. By dawn the cartel has accepted the Combine's terms. 46,000 credits. 'You have a future here, Director,' the recruiter says."
+  failure_text: "The rival escaped. The Combine's margin slips a point."
+  preconditions:
+    - kind: completed
+      mission: helios_3
+  offer:
+    kind: npc_offer
+    planet: helios_prime
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: freighter
+    count: 1
+    target_name: Rival Cartel Flagship
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 46000
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Fed Bastion — "Schism" (hardliner path; grants bastion_license at stage 1).
+# Gated deeper — you need a real warship to reach the deep-west fortress.
+# ══════════════════════════════════════════════════════════════════════════════
+bastion_1:
+  briefing: "An iron-faced officer meets you at Iron March. 'The Federation has gone soft. We have not. Prove you understand: there are Rebel ships in the Drift, fat and unpunished. Two of them. End them. 25,000 — and the Bastion will arm you as one of our own.'"
+  success_text: "'Order is a thing you enforce.' The officer uploads Bastion clearance — our hulls and our guns are yours. 25,000 credits."
+  failure_text: "'Weakness.' The officer turns away."
+  preconditions:
+    - kind: completed
+      mission: bounty_story_2_catch
+  offer:
+    kind: npc_offer
+    planet: iron_march
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: rebel_fighter
+    count: 2
+    target_name: Rebel Interlopers
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 25000
+    - kind: grant_unlock
+      name: bastion_license
+bastion_2:
+  briefing: "'The forge at the Anvil runs day and night, but the front needs shells. Run 14 units of weapons-parts to Bastion itself. The cause does not wait. 30,000.'"
+  success_text: "The Bastion quartermaster signs for the munitions without a word. 30,000 credits."
+  failure_text: "The shipment never arrived. Somewhere, a siege line goes quiet."
+  preconditions:
+    - kind: completed
+      mission: bastion_1
+  offer:
+    kind: npc_offer
+    planet: iron_march
+    weight: 1.0
+    building: market
+    approach: seek
+  start_effects:
+    - kind: load_cargo
+      commodity: weapons_parts
+      quantity: 14
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: bastion
+  requires:
+    - kind: has_cargo
+      commodity: weapons_parts
+      quantity: 14
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_parts
+      quantity: 14
+    - kind: pay
+      credits: 30000
+bastion_3:
+  briefing: "The officer's jaw is set. 'The lawful Federation calls us traitors. So be it. A Federation patrol is pushing into the border to 'contain' us — two hulls. Break them. We do not negotiate with the soft. 40,000.'"
+  success_text: "The Federation patrol is wreckage. 'The old Federation is dying,' the officer says. 'We are what replaces it.' 40,000 credits."
+  failure_text: "The patrol held. The lawful fleet grows bolder."
+  preconditions:
+    - kind: completed
+      mission: bastion_2
+  offer:
+    kind: npc_offer
+    planet: bastion
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: barnard
+    ship_type: fed_patrol
+    count: 2
+    target_name: Federation Containment Patrol
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 40000
+bastion_4:
+  briefing: "'The endgame, Captain. We move on a frontier world that shelters Rebel sympathizers. Three defenders stand in the way. Break them and the Bastion's reach extends another system. 55,000. This is the order we will build, whatever the cost.'"
+  success_text: "The defenders fall. The Bastion's iron writ spreads. The officer salutes you as kin. 55,000 credits — and a reputation soaked in it."
+  failure_text: "The defenders held the line. The splinter's advance stalls."
+  preconditions:
+    - kind: completed
+      mission: bastion_3
+  offer:
+    kind: npc_offer
+    planet: bastion
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_anvil
+    ship_type: frontier_harvester
+    count: 3
+    target_name: Frontier Defenders
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 55000
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Artifact Order — "The Reliquary" (grants artifact_order_license at stage 1,
+# precursor_tech_license at the finale). The road into the deep — gated late.
+# ══════════════════════════════════════════════════════════════════════════════
+order_1:
+  briefing: "A robed proctor watches you in the Tau Ceti ruins — and approaches only because you did not loot. 'Smugglers strip the sacred sites for trinkets. Three of them defile a ruin now. Stop them, and recover what they have taken — the relics are not yours, nor theirs. 25,000. The Order will know you then.'"
+  success_text: "The looters are scattered; the relics recovered, unspoiled. The proctor inclines his head. 'You may walk in the Order now. Our reliquary-hulls and our relic-arms are open to the faithful.' 25,000 credits."
+  failure_text: "The relics are gone, sold for scrap-price. The proctor mourns."
+  preconditions:
+    - kind: completed
+      mission: bounty_story_4_catch
+  offer:
+    kind: npc_offer
+    planet: tau_ceti_4
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: tau_ceti
+    ship_type: pirate_corvette
+    count: 3
+    target_name: Relic Looters
+    hostile: true
+    collect:
+      commodity: artifacts
+      quantity: 3
+  completion_effects:
+    - kind: pay
+      credits: 25000
+    - kind: grant_unlock
+      name: artifact_order_license
+order_2:
+  briefing: "The proctor speaks softly. 'A Federation scholar on Kepler-22b has lost faith in the museum-vaults. He wishes to bring his knowledge to us. Meet him; assure him of safe passage. He will be in the Kepler market, afraid. 28,000.'"
+  success_text: "The scholar weeps with relief and presses his life's work into your hands. 'The Order will keep it holy.' 28,000 credits."
+  failure_text: "The scholar's nerve broke; he fled back to his vaults."
+  preconditions:
+    - kind: completed
+      mission: order_1
+  offer:
+    kind: npc_offer
+    planet: sanctum
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: meet_npc
+    planet: kepler_22b
+    npc_name: "the defecting scholar"
+    building: market
+  completion_effects:
+    - kind: pay
+      credits: 28000
+order_3:
+  briefing: "The proctor's calm cracks. 'The Helios Combine excavates a sacred site at the Foundry to PATENT what they find. Blasphemy beyond words. Drive off their security and seize their lead engineer before the relics are crated north. 42,000. They would make a product of the divine.'"
+  success_text: "The Helios dig is shattered; their engineer in your hold. The proctor's voice shakes with fury and gratitude both. 'The relics are safe. The Combine will pay for this — and you helped see it done.' 42,000 credits."
+  failure_text: "The relics went north in Helios crates. Somewhere a patent is filed on a god."
+  preconditions:
+    - kind: completed
+      mission: order_2
+  offer:
+    kind: npc_offer
+    planet: sanctum
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_foundry
+    ship_type: helios_enforcer
+    count: 2
+    target_name: Helios Security
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 42000
+order_4:
+  briefing: "'A relic must reach Sanctum's vaults — the most sacred we have recovered. The road past the Threshold is watched by everything that wants it. Carry it. Guard it with your life. 45,000.'"
+  success_text: "The relic is sealed in Sanctum's deepest vault. The proctor blesses your hull. 'You have carried the divine and not faltered.' 45,000 credits."
+  failure_text: "The relic was taken on the road. A wound that will not close."
+  preconditions:
+    - kind: completed
+      mission: order_3
+  offer:
+    kind: npc_offer
+    planet: sanctum
+    weight: 1.0
+    building: bar
+    approach: seek
+  start_effects:
+    - kind: load_cargo
+      commodity: artifacts
+      quantity: 4
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: cloister
+  requires:
+    - kind: has_cargo
+      commodity: artifacts
+      quantity: 4
+  completion_effects:
+    - kind: remove_cargo
+      commodity: artifacts
+      quantity: 4
+    - kind: pay
+      credits: 45000
+order_5:
+  briefing: "The proctor is pale. 'Something in the Rift has STIRRED. Probes emerge from the dark — the heralds of the sleeper. They come for Sanctum. We hold the line at the Threshold, or we lose everything. Three of them, for now. And Captain — the Order will entrust you with a relic-weapon stable enough to wield. 60,000.'"
+  success_text: "The probes are dust. The proctor presses a humming relic-core into your hands: 'Exotic-lance clearance — the first stable Precursor weapon in mortal hands. You will need it for what comes.' 60,000 credits, and precursor-tech clearance."
+  failure_text: "The probes reached Sanctum. The vigil is broken; the sleeper stirs unopposed."
+  preconditions:
+    - kind: completed
+      mission: order_4
+  offer:
+    kind: npc_offer
+    planet: sanctum
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_threshold
+    ship_type: precursor_seeker
+    count: 3
+    target_name: Precursor Heralds
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 60000
+    - kind: grant_unlock
+      name: precursor_tech_license
+
+# ══════════════════════════════════════════════════════════════════════════════
+# "The Rift Awakens" — cross-faction endgame (needs the Order's exotic-lance + a
+# capital-class hull). The hardest content in the game.
+# ══════════════════════════════════════════════════════════════════════════════
+rift_1:
+  briefing: "Federation Intelligence, the Order, and the Free Frontier speak as one for the first time in history: the Rift is waking. Two Sentinels guard the way into the deep. Break them. There is no precedent for what you are about to do. 75,000."
+  success_text: "The Sentinels shatter into drifting violet light. The way into the Rift is open. 75,000 credits — and silence on every comm channel."
+  failure_text: "The Sentinels held. The deep stays sealed — for now."
+  preconditions:
+    - kind: completed
+      mission: order_5
+  offer:
+    kind: npc_offer
+    planet: threshold_watch
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_rift
+    ship_type: precursor_sentinel
+    count: 2
+    target_name: Rift Sentinels
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 75000
+rift_2:
+  briefing: "A Harbinger — a roused hunter-form — has crossed into the Silence, burning toward the inhabited galaxy along the exotic-matter veins. If it passes, nothing the factions have will stop it. End it here. 95,000."
+  success_text: "The Harbinger is unmade. The veins fall quiet. Only the sleeper remains. 95,000 credits."
+  failure_text: "The Harbinger slipped past you into the dark, toward home."
+  preconditions:
+    - kind: completed
+      mission: rift_1
+  offer:
+    kind: npc_offer
+    planet: threshold_watch
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_silence
+    ship_type: precursor_harbinger
+    count: 1
+    target_name: The Harbinger
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 95000
+rift_final:
+  briefing: "It is in the Seedbed, at the bottom of the deep: the Sleeper. The thing that built the ruins, that seeded the exotic matter, that the Order calls a god. It is awake now, and it is vast. Every faction you have ever flown for stands behind you. End it. 250,000 — though credits will mean little if you fail."
+  success_text: "The Sleeper folds in on itself and is gone, a wound in space closing behind it. The Rift falls silent — truly silent — for the first time in millions of years. Across the galaxy, a Federation officer, a Rebel commander, a frontier harbormaster, and a robed proctor all exhale at once. You did this. 250,000 credits, and a name that outlives you."
+  failure_text: "The Sleeper endures. The deep breathes out, and the veins begin to glow toward home."
+  preconditions:
+    - kind: completed
+      mission: rift_2
+  offer:
+    kind: npc_offer
+    planet: threshold_watch
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_seedbed
+    ship_type: precursor_sleeper
+    count: 1
+    target_name: The Sleeper
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 250000
+    - kind: grant_unlock
+      name: carrier_license

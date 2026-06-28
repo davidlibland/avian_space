@@ -739,7 +739,7 @@ precursor_sleeper:
   thrust: 40.0
   max_speed: 70.0
   torque: 6.0
-  max_health: 1600
+  max_health: 1200
   cargo_space: 0
   item_space: 24
   base_weapons:

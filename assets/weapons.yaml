@@ -300,9 +300,9 @@ precursor_beam:
     name: precursor_beam
     lifetime: 1.5
     speed: 700.0
-    cooldown: 3.0
+    cooldown: 3.5
     color: [0.8, 0.2, 1.0]
-    damage: 40
+    damage: 30
     aimable_arc: 180
     display_name: "Precursor Beam"
     sound_path: sounds/weapons/proton_beam.ogg
