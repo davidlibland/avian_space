@@ -6,7 +6,7 @@ pirate_laser:
     color: [1.0, 0.3, 0.0]
     damage: 3
     display_name: "Pirate Laser"
-    sound_path: sounds/weapons/laser.ogg
+    sound_path: sounds/weapons/pirate_laser.ogg
 goose:
     name: goose
     lifetime: 5.0
@@ -17,7 +17,7 @@ goose:
     guided: true
     turn_rate: 2.0
     sprite_path: sprites/weapons/goose.png
-    sound_path: sounds/weapons/ir_missile.ogg
+    sound_path: sounds/weapons/goose.ogg
     display_name: "Goose Missile"
     ammo:
         !Ammo:
@@ -175,7 +175,7 @@ flak_gun:
     damage: 3
     aimable_arc: 28
     display_name: "Flak Gun"
-    sound_path: sounds/weapons/laser.ogg
+    sound_path: sounds/weapons/flak.ogg
 mass_driver:
     name: mass_driver
     lifetime: 1.2
@@ -185,7 +185,7 @@ mass_driver:
     damage: 18
     aimable_arc: 8
     display_name: "Mass Driver"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/mass_driver.ogg
 prox_mine:
     name: prox_mine
     lifetime: 14.0
@@ -197,7 +197,7 @@ prox_mine:
     turn_rate: 1.0
     aimable_arc: 180
     sprite_path: sprites/weapons/prox_mine.png
-    sound_path: sounds/weapons/space_mine.ogg
+    sound_path: sounds/weapons/prox_mine.ogg
     display_name: "Proximity Mine"
     ammo:
         !Ammo:
@@ -212,7 +212,7 @@ helios_lance:
     damage: 12
     aimable_arc: 4
     display_name: "Helios Lance"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/helios_lance.ogg
 seeker:
     name: seeker
     lifetime: 3.0
@@ -223,7 +223,7 @@ seeker:
     guided: true
     turn_rate: 3.0
     sprite_path: sprites/weapons/seeker.png
-    sound_path: sounds/weapons/javelin.ogg
+    sound_path: sounds/weapons/seeker.ogg
     display_name: "Seeker Drone-Missile"
     ammo:
         !Ammo:
@@ -238,7 +238,7 @@ chaingun:
     damage: 4
     aimable_arc: 6
     display_name: "Chaingun"
-    sound_path: sounds/weapons/laser.ogg
+    sound_path: sounds/weapons/chaingun.ogg
 siege_cannon:
     name: siege_cannon
     sprite_path: sprites/weapons/siege_shell.png
@@ -249,7 +249,7 @@ siege_cannon:
     damage: 30
     aimable_arc: 4
     display_name: "Siege Cannon"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/siege_cannon.ogg
 chaingun_turret:
     name: chaingun_turret
     lifetime: 0.8
@@ -259,7 +259,7 @@ chaingun_turret:
     damage: 4
     aimable_arc: 180
     display_name: "Chaingun Turret"
-    sound_path: sounds/weapons/laser.ogg
+    sound_path: sounds/weapons/chaingun.ogg
 # ── Artifact Order — unstable relic energy + the endgame Precursor lance ──────────
 relic_lance:
     name: relic_lance
@@ -270,7 +270,7 @@ relic_lance:
     damage: 22
     aimable_arc: 6
     display_name: "Relic Lance"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/relic_lance.ogg
 censer_charge:
     name: censer_charge
     lifetime: 5.0
@@ -281,7 +281,7 @@ censer_charge:
     guided: true
     turn_rate: 1.5
     sprite_path: sprites/weapons/censer_charge.png
-    sound_path: sounds/weapons/ir_missile.ogg
+    sound_path: sounds/weapons/censer_charge.ogg
     display_name: "Censer Charge"
     ammo:
         !Ammo:
@@ -295,7 +295,7 @@ exotic_lance:
     damage: 35
     aimable_arc: 5
     display_name: "Exotic Lance"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/exotic_beam.ogg
 # ── Precursors — enemy-only (Sentinel beam; not sold) ────────────────────────────
 precursor_beam:
     name: precursor_beam
@@ -306,7 +306,7 @@ precursor_beam:
     damage: 30
     aimable_arc: 180
     display_name: "Precursor Beam"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/exotic_beam.ogg
 flak_turret:
     name: flak_turret
     lifetime: 0.32
@@ -316,7 +316,7 @@ flak_turret:
     damage: 3
     aimable_arc: 180
     display_name: "Flak Turret"
-    sound_path: sounds/weapons/laser.ogg
+    sound_path: sounds/weapons/flak.ogg
 siege_turret:
     name: siege_turret
     sprite_path: sprites/weapons/siege_shell.png
@@ -327,7 +327,7 @@ siege_turret:
     damage: 30
     aimable_arc: 180
     display_name: "Siege Turret"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/siege_cannon.ogg
 relic_turret:
     name: relic_turret
     lifetime: 1.4
@@ -337,7 +337,7 @@ relic_turret:
     damage: 22
     aimable_arc: 180
     display_name: "Relic Turret"
-    sound_path: sounds/weapons/proton_beam.ogg
+    sound_path: sounds/weapons/relic_lance.ogg
 drone_bay:
     name: drone_bay
     lifetime: 0.0
