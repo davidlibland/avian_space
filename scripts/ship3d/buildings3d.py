@@ -282,7 +282,7 @@ def wall_skin(s, m, w, d, h, z0, top, win=(3, 2), front=True):
                 B.add_box("win", (sx, fz - 0.03, z0 + h * 0.62), (0.42, 0.06, 0.42), m["glow"], bevel=0.0)
 
 
-def cut_doorway(m, targets, cx, fy, dw, dh, zc, cut_depth):
+def cut_doorway(m, targets, cx, fy, dw, dh, zc, cut_depth, solver="EXACT"):
     """Carve a REAL doorway opening through the wall(s) named in `targets` with a
     boolean, so the facade renders transparent there once the roll-up `doorpanel`
     is hidden (frame/lintel/roof untouched) — instead of deleting a rectangle from
@@ -299,7 +299,7 @@ def cut_doorway(m, targets, cx, fy, dw, dh, zc, cut_depth):
         if obj is not None:
             mod = obj.modifiers.new("doorcut", "BOOLEAN")
             mod.operation = "DIFFERENCE"
-            mod.solver = "EXACT"
+            mod.solver = solver
             mod.object = cutter
 
 
@@ -412,12 +412,18 @@ def build_mechanic(s, m):
     dw = 1.8                       # garage door ≈ the 2-tile collision doorway
     # roll-up garage door (centred, cut transparent in _front) + drum + jambs
     B.add_box("doorpanel", (0, fz - 0.07, z0 + 1.1), (dw, 0.1, 2.1), m["wall_d"], bevel=0.02)
+    # cut the garage doorway ALL the way through (open bay) — no back wall behind
+    # the door, so the floor shows through instead of a solid interior face. (FAST
+    # solver: the deep through-cut leaves an uncut lower half under EXACT.)
     cut_doorway(m, ["body"], 0, fz, dw, 2.15, z0 + 1.1, d / 2 + 0.3)
     B.add_box("lintel", (0, fz - 0.05, z0 + 2.2), (dw + 0.3, 0.16, 0.18), m["glow"], bevel=0.0)
-    B.add_cylinder("drum", (0, fz - 0.05, z0 + 2.28), 0.24, dw + 0.25, m["metal"], axis="x")
     for sx in (-dw / 2 - 0.16, dw / 2 + 0.16):
         B.add_box("jamb", (sx, fz - 0.05, z0 + 1.15), (0.16, 0.18, 2.2), m["wall_d"], bevel=0.03)
-    B.add_box("hazard", (0, fz - 0.12, z0 + 0.08), (dw, 0.06, 0.16), m["glow"], bevel=0.0)
+    # exhaust chimney/smokestack, set to the RIGHT of the door (clear of it)
+    B.add_cylinder("chimney", (1.7, fz - 0.05, z0 + 1.75), 0.2, 3.5, m["metal"], axis="z")
+    B.add_cylinder("chimcap", (1.7, fz - 0.05, z0 + 3.55), 0.27, 0.22, m["dark"], axis="z")
+    # door threshold stripe — part of the FLOOR (drawn below the player in-game)
+    B.add_box("fl_hazard", (0, fz - 0.12, z0 + 0.04), (dw, 0.06, 0.12), m["glow"], bevel=0.0)
     # a ship engine pulled out front on a stand, opened up for repair — to the
     # far LEFT, clear of the centred door (a solid impassable tile in-game)
     repair_engine(-2.0, -d / 2 - 1.5, m)
