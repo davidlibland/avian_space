@@ -335,21 +335,33 @@ fn spawn_hud(mut commands: Commands) {
             });
 
             // ── Target wireframe ─────────────────────────────────────────
+            // Full-width display box (same fixed width as the other HUD panels)
+            // with the square wireframe centred inside it.
             root.spawn((
                 SpaceOnlyHud,
-                TargetWireframe,
-                ImageNode::default(),
                 Node {
-                    width: Val::Px(92.0),
-                    height: Val::Px(92.0),
-                    align_self: AlignSelf::FlexEnd,
+                    width: Val::Percent(100.0),
+                    height: Val::Px(96.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
                 BorderColor::all(Color::srgba(0.3, 0.9, 0.6, 0.5)),
                 BackgroundColor(Color::srgba(0.0, 0.06, 0.04, 0.55)),
                 Visibility::Hidden,
-            ));
+            ))
+            .with_children(|w| {
+                w.spawn((
+                    TargetWireframe,
+                    ImageNode::default(),
+                    Node {
+                        width: Val::Px(92.0),
+                        height: Val::Px(92.0),
+                        ..default()
+                    },
+                ));
+            });
 
             // ── Target ───────────────────────────────────────────────────
             root.spawn((

@@ -32,7 +32,7 @@ os.makedirs(OUT, exist_ok=True)
 
 SIZE = 96
 GREEN = (90, 255, 180)
-LINE = GREEN + (255,)
+LINE = GREEN + (210,)   # slightly translucent for a lighter, less-bold line
 FILL = GREEN + (42,)
 
 
@@ -42,7 +42,7 @@ def blank():
     return im, ImageDraw.Draw(im)
 
 
-def poly(d, pts, closed=True, w=2):
+def poly(d, pts, closed=True, w=1):
     p = list(pts) + ([pts[0]] if closed else [])
     d.line(p, fill=LINE, width=w, joint="curve")
 
@@ -83,7 +83,7 @@ def ship_wireframe(atlas_path):
     er = np.array(am.filter(ImageFilter.MinFilter(3))) == 0
     boundary = mask & er
     line = Image.fromarray(((edge_line | boundary) * 255).astype("uint8"))
-    line = np.array(line.filter(ImageFilter.MaxFilter(3))) > 0   # thicken
+    line = np.array(line) > 0   # crisp 1px lines (no thickening — lighter)
     out = np.zeros((SIZE, SIZE, 4), dtype="uint8")
     out[mask] = [GREEN[0], GREEN[1], GREEN[2], FILL[3]]
     out[line] = LINE
@@ -99,10 +99,10 @@ def asteroid_wireframe():
               cy + r * math.sin(i / len(rs) * 2 * math.pi + 0.3)) for i, r in enumerate(rs)]
     faint_fill(im, verts)
     poly(d, verts)
-    d.line([verts[0], verts[4]], fill=LINE, width=2)       # facet creases
-    d.line([verts[2], verts[6]], fill=LINE, width=2)
-    d.ellipse([40, 30, 52, 42], outline=LINE, width=2)     # craters
-    d.ellipse([54, 54, 62, 62], outline=LINE, width=2)
+    d.line([verts[0], verts[4]], fill=LINE, width=1)       # facet creases
+    d.line([verts[2], verts[6]], fill=LINE, width=1)
+    d.ellipse([40, 30, 52, 42], outline=LINE, width=1)     # craters
+    d.ellipse([54, 54, 62, 62], outline=LINE, width=1)
     return im
 
 
@@ -113,9 +113,9 @@ def pickup_wireframe():
     faint_fill(im, [(26, 34), (70, 34), (70, 64), (26, 64)])
     poly(d, top)                                            # lid (diamond)
     for sx in (26, 48, 70):
-        d.line([(sx, 34 if sx != 48 else 46), (sx, 64 if sx != 48 else 74)], fill=LINE, width=2)
-    d.line([(26, 64), (48, 74), (70, 64)], fill=LINE, width=2)   # bottom edges
-    d.ellipse([44, 30, 52, 38], outline=LINE, width=2)     # hazard hatch on lid
+        d.line([(sx, 34 if sx != 48 else 46), (sx, 64 if sx != 48 else 74)], fill=LINE, width=1)
+    d.line([(26, 64), (48, 74), (70, 64)], fill=LINE, width=1)   # bottom edges
+    d.ellipse([44, 30, 52, 38], outline=LINE, width=1)     # hazard hatch on lid
     return im
 
 
@@ -128,7 +128,7 @@ def planet_wireframe(ptype):
     circle = [(cx + r * math.cos(2 * math.pi * i / n), cy + r * math.sin(2 * math.pi * i / n))
               for i in range(n)]
     faint_fill(im, circle)
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=LINE, width=2)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=LINE, width=1)
 
     def band(yoff, squash=0.32):
         # a latitude arc clipped to the disk
@@ -139,7 +139,7 @@ def planet_wireframe(ptype):
         ys = [cy + yoff - 0.18 * yoff * (1 - (x / r) ** 2) for x in xs]
         seg = [(cx + x, y) for x, y in zip(xs, ys) if (x ** 2 + (y - cy) ** 2) <= r * r]
         if len(seg) > 1:
-            d.line(seg, fill=LINE, width=2)
+            d.line(seg, fill=LINE, width=1)
 
     if ptype in ("gas_giant", "ice_giant", "cloud"):
         for yoff in (-20, -7, 7, 20):
@@ -147,13 +147,13 @@ def planet_wireframe(ptype):
     elif ptype == "habitable":
         band(0)                                            # equator
         for cxy, rr in [((40, 38), 8), ((58, 52), 9), ((44, 60), 6)]:
-            d.ellipse([cxy[0] - rr, cxy[1] - rr, cxy[0] + rr, cxy[1] + rr], outline=LINE, width=2)
+            d.ellipse([cxy[0] - rr, cxy[1] - rr, cxy[0] + rr, cxy[1] + rr], outline=LINE, width=1)
     elif ptype == "desert":
         for yoff in (-14, 2, 16):
             band(yoff)
     else:  # rocky, icy_dwarf → cratered
         for cxy, rr in [((40, 36), 7), ((60, 44), 9), ((46, 58), 6), ((58, 62), 5)]:
-            d.ellipse([cxy[0] - rr, cxy[1] - rr, cxy[0] + rr, cxy[1] + rr], outline=LINE, width=2)
+            d.ellipse([cxy[0] - rr, cxy[1] - rr, cxy[0] + rr, cxy[1] + rr], outline=LINE, width=1)
     return im
 
 
