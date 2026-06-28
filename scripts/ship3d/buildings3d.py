@@ -282,19 +282,42 @@ def wall_skin(s, m, w, d, h, z0, top, win=(3, 2), front=True):
                 B.add_box("win", (sx, fz - 0.03, z0 + h * 0.62), (0.42, 0.06, 0.42), m["glow"], bevel=0.0)
 
 
+def cut_doorway(m, targets, cx, fy, dw, dh, zc, cut_depth):
+    """Carve a REAL doorway opening through the wall(s) named in `targets` with a
+    boolean, so the facade renders transparent there once the roll-up `doorpanel`
+    is hidden (frame/lintel/roof untouched) — instead of deleting a rectangle from
+    the rendered image. `fy` is the wall's outer front-face Y; the cut tunnels
+    `cut_depth` inward. The cutter never renders (excluded from the bake passes)."""
+    cy = fy + (cut_depth - 0.25) / 2
+    B.add_box("doorcut", (cx, cy, zc), (dw, cut_depth + 0.25, dh), m["dark"], bevel=0.0)
+    cutter = bpy.data.objects.get("doorcut")
+    if cutter is None:
+        return
+    cutter.hide_render = True
+    for name in targets:
+        obj = bpy.data.objects.get(name)
+        if obj is not None:
+            mod = obj.modifiers.new("doorcut", "BOOLEAN")
+            mod.operation = "DIFFERENCE"
+            mod.solver = "EXACT"
+            mod.object = cutter
+
+
 def entry(s, m, w, d, z0):
-    # The doorway is cut transparent in _front (so the floor shows through when
-    # open); only the roll-up `doorpanel` is drawn over it, baked separately and
-    # animated open in-game. No dark recess.
+    # The doorway is a REAL opening carved through the wall (cut_doorway), so the
+    # facade is transparent there when the roll-up `doorpanel` is hidden — the
+    # floor shows through the open door, with the frame/lintel/roof intact.
     b = s["biome"]; fz = -d / 2
     if b == "ice":                         # storm-porch airlock vestibule
         B.add_box("vest", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.12)
         B.add_box("vroof", (0, fz - 0.7, z0 + 1.78), (2.1, 1.62, 0.18), m["roof"], bevel=0.04)
         B.add_box("doorpanel", (0, fz - 1.44, z0 + 0.68), (0.96, 0.08, 1.3), m["wall_d"], bevel=0.03)
         B.add_box("vglow", (0, fz - 1.46, z0 + 1.42), (1.1, 0.1, 0.13), m["glow"], bevel=0.0)
+        cut_doorway(m, ["vest", "body"], 0, fz - 1.4, 0.96, 1.32, z0 + 0.68, 1.4 + d / 2 + 0.3)
     else:
         B.add_box("doorpanel", (0, fz - 0.06, z0 + 0.65), (1.0, 0.08, 1.3), m["wall_d"], bevel=0.02)
         B.add_box("lintel", (0, fz - 0.06, z0 + 1.34), (1.3, 0.16, 0.16), m["glow"], bevel=0.0)
+        cut_doorway(m, ["body"], 0, fz, 1.0, 1.34, z0 + 0.64, d / 2 + 0.3)
 
 
 def ivy_climb(w, d, z0, top, m):
@@ -387,6 +410,7 @@ def build_mechanic(s, m):
     dw = 1.8                       # garage door ≈ the 2-tile collision doorway
     # roll-up garage door (centred, cut transparent in _front) + drum + jambs
     B.add_box("doorpanel", (0, fz - 0.07, z0 + 1.1), (dw, 0.1, 2.1), m["wall_d"], bevel=0.02)
+    cut_doorway(m, ["body"], 0, fz, dw, 2.15, z0 + 1.1, d / 2 + 0.3)
     B.add_box("lintel", (0, fz - 0.05, z0 + 2.2), (dw + 0.3, 0.16, 0.18), m["glow"], bevel=0.0)
     B.add_cylinder("drum", (0, fz - 0.05, z0 + 2.28), 0.24, dw + 0.25, m["metal"], axis="x")
     for sx in (-dw / 2 - 0.16, dw / 2 + 0.16):
@@ -596,7 +620,9 @@ def bake():
             B.add_box("floor", (0, 0, 0.03), (w_t - 0.12, d_t - 0.12, 0.06), m["wall_d"], bevel=0.0)
             B.setup_scene(ORTHO, RES, freestyle_thick=1.5); setup_iso()
             cam = bpy.context.scene.camera
-            meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+            # exclude boolean cutters (they carve the doorway but never render)
+            meshes = [o for o in bpy.context.scene.objects
+                      if o.type == "MESH" and not o.name.startswith("doorcut")]
             pp = (0.0, -d_t / 2 + 0.5, 0.0)                     # player door-plane point
             depth = sum((pp[i] - cam_loc[i]) * view[i] for i in range(3))
             # FLOOR pass: floor slab only
@@ -626,12 +652,11 @@ def bake():
             ay = (RES / 2 + (d_t / 2 * math.sin(E) + tgt) * ppt) - y0
             fx, fy = ax / cw - 0.5, 0.5 - ay / ch
             # ── DOOR pass: animated roll-up panel, N frames (closed → open) ──
-            # Runs BEFORE saving _front so the closed-door footprint (door0) can be
-            # used to cut the doorway transparent. The panel scales down in height
-            # (top pinned to the lintel) so it rolls up; the LAST frame is empty (no
-            # door visible when fully open).
+            # The panel scales down in height (top pinned to the lintel) so it rolls
+            # up; the LAST frame is empty (no door when fully open). The doorway is a
+            # REAL opening carved in the wall geometry (see cut_doorway), so _front is
+            # already transparent there with the frame/roof intact — no image cutting.
             panels = [o for o in meshes if o.name.startswith("doorpanel")]
-            door0_alpha = None
             if panels:
                 info = [(p, p.location.z + p.dimensions.z / 2, p.dimensions.z) for p in panels]
                 for o in meshes:
@@ -649,16 +674,7 @@ def bake():
                         p.scale.z = sc
                         p.location.z = top - h * sc / 2
                     B.render_to(tmp("door"))
-                    dimg = Image.open(tmp("door")).convert("RGBA").crop(box)
-                    dimg.save(dpath)
-                    if k == 0:
-                        door0_alpha = dimg.split()[3]      # closed-door footprint
-            # ── Cut the doorway transparent in _front (+ full) so the floor shows
-            # through the open door, using the closed-door footprint (dilated) ──
-            if door0_alpha is not None:
-                hole = np.array(door0_alpha.filter(ImageFilter.MaxFilter(7))) > 8
-                fr[hole, 3] = 0
-                fc = np.array(full_c); fc[hole, 3] = 0; full_c = Image.fromarray(fc)
+                    Image.open(tmp("door")).convert("RGBA").crop(box).save(dpath)
             full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
             Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
             bk.save(os.path.join(out_dir, f"{st}_{fn}_back.png"))
