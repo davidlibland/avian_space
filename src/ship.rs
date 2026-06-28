@@ -659,7 +659,9 @@ impl Ship {
     pub fn handling_factor(&self) -> f32 {
         let hp_frac =
             (self.health.max(0) as f32 / self.data.max_health.max(1) as f32).clamp(0.0, 1.0);
-        0.5 + 0.5 * hp_frac
+        // Sub-linear roll-off: handling barely sags from light damage and falls off
+        // faster as the hull nears destruction. 1.0 at full health -> 0.5 at 0.
+        0.5 + 0.5 * hp_frac.sqrt()
     }
 }
 
