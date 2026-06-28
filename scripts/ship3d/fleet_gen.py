@@ -765,48 +765,40 @@ def _boom(name, x0, x1, y, z, r, mat):
 _FSAIL = lambda tag: toon_material(tag, C(250, 242, 205), spec=1.7, spec_sharp=0.8, glass=True)
 
 
-def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.06, rake=2.1):
-    """Rigid HEXAGONAL solar sail, RAKED STEEPLY forward: pivoted at its front
-    edge, the sail leans up-and-back so its broad face points AHEAD toward the
-    sun (a near-upright sail seen from the front; foreshortened from the top)."""
-    def zr(y):
-        return rake * (cy + r - y)                   # front edge -> 0, rises aft
-    verts = [(cx, cy, cz + billow + zr(cy))]
+def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.08):
+    """VERTICAL hexagonal solar sail: a six-sided membrane standing UPRIGHT in the
+    X-Z plane at Y=cy, its face pointing FORWARD (+Y). Upright line from the side,
+    full hexagon from the front. cz is the sail centre height; centre bulges sunward."""
+    verts = [(cx, cy + billow, cz)]
     for k in range(6):
         a = k * math.pi / 3
-        vx, vy = cx + r * math.cos(a), cy + r * math.sin(a)
-        verts.append((vx, vy, cz + zr(vy)))
+        verts.append((cx + r * math.cos(a), cy, cz + r * math.sin(a)))
     faces = [(0, 1 + k, 1 + (k + 1) % 6) for k in range(6)]
     _obj_from_pydata(name, verts, faces, sail, smooth=True)
     sv, sf = [], []
     for k in range(6):
         a = k * math.pi / 3
-        dx, dy = math.cos(a), math.sin(a)
-        vx, vy = cx + r * dx, cy + r * dy
-        px, py = -dy * 0.014, dx * 0.014
-        zc = cz + billow + zr(cy)
+        dx, dz = math.cos(a), math.sin(a)
+        px, pz = -dz * 0.014, dx * 0.014
         b = len(sv)
-        sv += [(cx + px, cy + py, zc + 0.006), (cx - px, cy - py, zc + 0.006),
-               (vx - px, vy - py, cz + zr(vy) + 0.008), (vx + px, vy + py, cz + zr(vy) + 0.008)]
+        sv += [(cx + px, cy + billow, cz + pz), (cx - px, cy + billow, cz - pz),
+               (cx + r * dx - px, cy, cz + r * dz - pz), (cx + r * dx + px, cy, cz + r * dz + pz)]
         sf.append((b, b + 1, b + 2, b + 3))
     _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
-    add_cylinder(name + "_hub", (cx, cy, cz + billow + zr(cy)), 0.045, 0.045, spar, axis="z")
+    add_cylinder(name + "_hub", (cx, cy, cz), 0.045, 0.07, spar, axis="y")
 
 
-def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar, rake=2.1):
-    """Concave PARABOLIC dish sail, RAKED STEEPLY forward (front-edge pivot) so
-    the bowl faces ahead toward the sun. Radial support struts + rim hub."""
-    def zr(y):
-        return rake * (cy + r - y)
+def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar):
+    """VERTICAL parabolic dish standing in the X-Z plane at Y=cy, bulging FORWARD
+    (+Y) toward the sun (convex face ahead, like the hex sails). Radial struts + hub."""
     rings, seg = 4, 22
-    verts = [(cx, cy, cz + zr(cy))]
+    verts = [(cx, cy + depth, cz)]                    # centre bulges forward toward the sun
     for i in range(1, rings + 1):
         rr = r * i / rings
-        bowl = depth * (i / rings) ** 2
+        yy = cy + depth * (1 - (i / rings) ** 2)
         for k in range(seg):
             a = 2 * math.pi * k / seg
-            vx, vy = cx + rr * math.cos(a), cy + rr * math.sin(a)
-            verts.append((vx, vy, cz + bowl + zr(vy)))
+            verts.append((cx + rr * math.cos(a), yy, cz + rr * math.sin(a)))
     faces = [(0, 1 + k, 1 + (k + 1) % seg) for k in range(seg)]
     for i in range(rings - 1):
         b0, b1 = 1 + i * seg, 1 + (i + 1) * seg
@@ -817,47 +809,48 @@ def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar, rake=2.1):
     sv, sf = [], []
     for k in range(8):
         a = 2 * math.pi * k / 8
-        dx, dy = math.cos(a), math.sin(a)
-        vx, vy = cx + r * dx, cy + r * dy
-        px, py = -dy * 0.013, dx * 0.013
+        dx, dz = math.cos(a), math.sin(a)
+        px, pz = -dz * 0.013, dx * 0.013
         b = len(sv)
-        sv += [(cx + px, cy + py, cz + zr(cy) + 0.008), (cx - px, cy - py, cz + zr(cy) + 0.008),
-               (vx - px, vy - py, cz + depth + zr(vy) + 0.008),
-               (vx + px, vy + py, cz + depth + zr(vy) + 0.008)]
+        sv += [(cx + px, cy + depth, cz + pz), (cx - px, cy + depth, cz - pz),
+               (cx + r * dx - px, cy, cz + r * dz - pz), (cx + r * dx + px, cy, cz + r * dz + pz)]
         sf.append((b, b + 1, b + 2, b + 3))
     _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
-    add_cylinder(name + "_hub", (cx, cy, cz + zr(cy) - 0.02), 0.06, 0.06, spar, axis="z")
+    add_cylinder(name + "_hub", (cx, cy + depth, cz), 0.06, 0.08, spar, axis="y")
 
 
-def _canopy(name, cx, cy, w, l, cz, amp, sail, spar, rake=1.9):
-    """A big BILLOWING parachute-canopy sail, RAKED STEEPLY forward (front-edge
-    pivot) so it stands up and leans ahead like a kite hauling the ship — its
-    face toward the sun, hull trailing below on the tethers."""
-    nx, ny = 10, 7
-    def zr(fy):
-        return rake * l * (0.5 - fy)                 # front (fy=0.5) -> 0, rises aft
+def _canopy(name, cx, cy, w, l, cz, amp, sail, spar):
+    """VERTICAL billowing canopy standing at Y=cy: spans width w in X and height l
+    in Z, its face FORWARD and bulging forward (toward the sun) like a sail
+    reaching ahead. cz is the sail centre height."""
+    nx, nz = 10, 7
     verts = []
-    for j in range(ny + 1):
-        fy = j / ny - 0.5
+    for j in range(nz + 1):
+        fz = j / nz - 0.5
         for i in range(nx + 1):
             fx = i / nx - 0.5
-            dome = amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * fy) ** 2)
-            verts.append((cx + fx * w, cy + fy * l, cz + max(0.0, dome) + zr(fy)))
+            dome = amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * fz) ** 2)
+            verts.append((cx + fx * w, cy + max(0.0, dome), cz + fz * l))
     faces = []
-    for j in range(ny):
+    for j in range(nz):
         for i in range(nx):
             a = j * (nx + 1) + i
             faces.append((a, a + 1, a + nx + 2, a + nx + 1))
     _obj_from_pydata(name, verts, faces, sail, smooth=True)
-    for fx in (-0.32, 0.0, 0.32):                    # raked fore-aft ribs
+    for fx in (-0.34, -0.11, 0.11, 0.34):            # vertical battens
         xx = cx + fx * w
-        base = amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * 0.5) ** 2)
-        zf = cz + base + zr(0.5)
-        zb = cz + base + zr(-0.5)
-        _obj_from_pydata(name + "_rib",
-                         [(xx - 0.008, cy + l / 2, zf + 0.006), (xx + 0.008, cy + l / 2, zf + 0.006),
-                          (xx + 0.008, cy - l / 2, zb + 0.006), (xx - 0.008, cy - l / 2, zb + 0.006)],
-                         [(0, 1, 2, 3)], spar, smooth=False)
+        yb = cy + amp * (1 - (2 * fx) ** 2) * 0.5
+        add_box(name + "_rib", (xx, yb, cz), (0.018, 0.018, l * 0.96), spar)
+
+
+def _tether3(name, p0, p1, mat, wdt=0.008):
+    """A thin rigging line between two 3-D points (sail edge -> hull)."""
+    dx, dy, dz = p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]
+    L = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
+    px, py = -dy / L * wdt, dx / L * wdt
+    _obj_from_pydata(name, [(p0[0] + px, p0[1] + py, p0[2]), (p0[0] - px, p0[1] - py, p0[2]),
+                            (p1[0] - px, p1[1] - py, p1[2]), (p1[0] + px, p1[1] + py, p1[2])],
+                     [(0, 1, 2, 3)], mat, smooth=False)
 
 
 def _tether(name, x0, y0, x1, y1, z, mat, wdt=0.009):
@@ -885,10 +878,11 @@ def build_frontier_skiff():
     ], hull, m=14, n=2.4, flatten=0.65, subsurf=2)
     add_sphere("fk_can", (0, 0.18, 0.13), (0.075, 0.1, 0.08), glass, zclip=0.13)
     add_box("fk_chev", (0, 0.0, 0.14), (0.12, 0.06, 0.04), chev, bevel=0.01)
-    # leading HEXAGONAL solar sail, offset to starboard on a mast (asymmetric)
-    add_cylinder("fk_mast", (0.0, 0.5, 0.05), 0.028, 0.5, spar, axis="y")
-    _hex_sail("fk_sail", 0.3, 0.84, 0.07, 0.38, sail, spar)
-    add_cylinder("fk_gun", (-0.05, 0.5, 0.0), 0.022, 0.2, dark, r2=0.015)
+    # VERTICAL hexagonal sail standing directly in FRONT (offset to starboard)
+    add_cylinder("fk_bsprit", (0.08, 0.62, 0.08), 0.024, 0.34, spar, axis="y")
+    add_cylinder("fk_mast", (0.16, 0.8, 0.2), 0.022, 0.4, spar, axis="z")
+    _hex_sail("fk_sail", 0.16, 0.82, 0.38, 0.36, sail, spar)
+    add_cylinder("fk_gun", (-0.06, 0.5, 0.0), 0.022, 0.2, dark, r2=0.015)
     add_cylinder("fk_nz", (0, -0.52, 0.0), 0.05, 0.08, dark, r2=0.06)
     plume("fk_pl", 0, -0.56, 0, 0.04, 0.22, 0.8, glow)
 
@@ -914,11 +908,13 @@ def build_frontier_harvester():
         add_box("fh_arm", (sx, 0.5, 0.05), (0.09, 0.66, 0.16), dark, taper=0.8)
         add_cylinder("fh_drum", (sx, 0.78, 0.05), 0.06, 0.12, green, r2=0.04)
         add_cylinder("fh_muz", (sx, 0.9, 0.05), 0.022, 0.1, dark, r2=0.016)
-    # asymmetric HEXAGONAL outrigger sails on booms (port bigger)
-    _boom("fh_bl", -0.15, -0.66, 0.05, 0.07, 0.03, spar)
-    _hex_sail("fh_sail_l", -0.78, 0.05, 0.07, 0.33, sail, spar)
-    _boom("fh_br", 0.15, 0.56, -0.08, 0.07, 0.026, spar)
-    _hex_sail("fh_sail_r", 0.7, -0.08, 0.07, 0.23, sail, spar)
+    # asymmetric VERTICAL hex sails standing in FRONT, flanking the guns (port bigger)
+    add_cylinder("fh_bsl", (-0.34, 0.42, 0.1), 0.024, 0.4, spar, axis="y")
+    add_cylinder("fh_msl", (-0.34, 0.62, 0.22), 0.022, 0.44, spar, axis="z")
+    _hex_sail("fh_sail_l", -0.34, 0.64, 0.42, 0.3, sail, spar)
+    add_cylinder("fh_bsr", (0.34, 0.28, 0.1), 0.02, 0.34, spar, axis="y")
+    add_cylinder("fh_msr", (0.34, 0.44, 0.16), 0.02, 0.32, spar, axis="z")
+    _hex_sail("fh_sail_r", 0.34, 0.46, 0.3, 0.22, sail, spar)
     for sx in (-0.12, 0.12):
         add_cylinder("fh_nz", (sx, -0.84, 0.0), 0.06, 0.1, dark, r2=0.072)
         plume("fh_pl", sx, -0.9, 0, 0.05, 0.3, 0.8, glow)
@@ -940,12 +936,12 @@ def build_frontier_sailtender():
         dict(y=-1.05, w=0.08, h=0.09, cz=0.01),
     ], hull, m=14, n=2.4, flatten=0.6, subsurf=2)
     add_sphere("ft_can", (0, -0.3, 0.13), (0.075, 0.1, 0.08), glass, zclip=0.13)
-    # the huge leading billowing canopy
-    _canopy("ft_sail", 0.0, 0.64, 1.4, 0.82, 0.1, 0.28, sail, spar)
-    # rigging tethers from the canopy's trailing edge to the hull nose
-    for sx in (-0.58, -0.3, -0.05, 0.2, 0.48):
-        _tether("ft_t", sx, 0.26, 0.0, 0.04, 0.09, spar)
-    add_cylinder("ft_yoke", (0, 0.06, 0.06), 0.05, 0.04, dark, axis="z")
+    # huge VERTICAL billowing canopy standing in FRONT; hull trails on 3-D tethers
+    add_cylinder("ft_mast", (0, 0.6, 0.14), 0.024, 0.66, spar, axis="z")
+    _canopy("ft_sail", 0.0, 0.6, 1.05, 0.66, 0.46, 0.2, sail, spar)
+    for sx in (-0.46, -0.16, 0.16, 0.46):
+        _tether3("ft_t", (sx, 0.58, 0.16), (0.0, -0.04, 0.13), spar)
+    add_cylinder("ft_yoke", (0, 0.0, 0.06), 0.05, 0.04, dark, axis="z")
     for sx in (-0.09, 0.09):
         add_cylinder("ft_nz", (sx, -1.07, 0.0), 0.05, 0.1, dark, r2=0.06)
         plume("ft_pl", sx, -1.13, 0, 0.045, 0.28, 0.8, glow)
@@ -971,9 +967,10 @@ def build_frontier_monitor():
     add_box("fm_chev", (0, -0.05, 0.26), (0.3, 0.08, 0.04), chev, bevel=0.01)
     add_box("fm_brg", (0, 0.32, 0.26), (0.2, 0.26, 0.16), dark, taper=0.7, bevel=0.02)
     add_sphere("fm_g", (0, 0.38, 0.34), (0.07, 0.08, 0.05), glass)
-    # huge leading PARABOLIC dish sun-shield on a thick mast
-    add_cylinder("fm_mast", (0.0, 0.7, 0.06), 0.04, 0.6, spar, axis="y")
-    _parabolic_sail("fm_sail", 0.0, 1.16, 0.06, 0.54, 0.28, sail, spar)
+    # huge VERTICAL parabolic dish sun-shield standing directly in FRONT
+    add_cylinder("fm_bsprit", (0.0, 0.9, 0.12), 0.04, 0.4, spar, axis="y")
+    add_cylinder("fm_mast", (0.0, 1.08, 0.3), 0.035, 0.6, spar, axis="z")
+    _parabolic_sail("fm_sail", 0.0, 1.12, 0.5, 0.5, 0.18, sail, spar)
     # flak-turret blisters on the flanks (visible barrels)
     for sx in (-0.36, 0.36):
         add_cylinder("fm_turr", (sx, 0.0, 0.28), 0.085, 0.1, dark, axis="z")
