@@ -50,9 +50,9 @@ STAR_SYSTEMS = os.path.join(HERE, "..", "assets", "star_systems.yaml")
 # ALPHA, BETA and PRICE_SCALE are AUTOTUNED by `--tune` (see the AUTOTUNER
 # section below); the values here are the last tuned result. W_SYS / W_JUMP /
 # PRICE_CLAMP are hand-set and left alone by the tuner.
-ALPHA = 0.4977      # trade efficiency: higher = goods spread further, flatter prices
-BETA = 0.3079       # price sensitivity to the demand/supply ratio
-PRICE_SCALE = 0.0970 # global multiplier on commodity base prices (sets progression pace)
+ALPHA = 0.4500      # trade efficiency: higher = goods spread further, flatter prices
+BETA = 0.2531       # price sensitivity to the demand/supply ratio
+PRICE_SCALE = 0.1109 # global multiplier on commodity base prices (sets progression pace)
 W_SYS = 1.0       # edge weight between nodes in the same system
 W_JUMP = 0.30     # edge weight across a jump connection (costlier than in-system)
 PRICE_CLAMP = (0.30, 4.0)   # price as a multiple of (scaled) base, clamped to this band
