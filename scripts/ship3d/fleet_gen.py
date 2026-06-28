@@ -765,6 +765,92 @@ def _boom(name, x0, x1, y, z, r, mat):
 _FSAIL = lambda tag: toon_material(tag, C(250, 242, 205), spec=1.7, spec_sharp=0.8, glass=True)
 
 
+def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.07):
+    """Rigid HEXAGONAL solar sail: a six-sided membrane (gently domed) with
+    radial rigging spars to each vertex and a central hub."""
+    verts = [(cx, cy, cz + billow)]
+    for k in range(6):
+        a = k * math.pi / 3
+        verts.append((cx + r * math.cos(a), cy + r * math.sin(a), cz))
+    faces = [(0, 1 + k, 1 + (k + 1) % 6) for k in range(6)]
+    _obj_from_pydata(name, verts, faces, sail, smooth=True)
+    sv, sf = [], []
+    for k in range(6):
+        a = k * math.pi / 3
+        dx, dy = math.cos(a), math.sin(a)
+        px, py = -dy * 0.014, dx * 0.014
+        b = len(sv)
+        sv += [(cx + px, cy + py, cz + billow + 0.006), (cx - px, cy - py, cz + billow + 0.006),
+               (cx + r * dx - px, cy + r * dy - py, cz + 0.01), (cx + r * dx + px, cy + r * dy + py, cz + 0.01)]
+        sf.append((b, b + 1, b + 2, b + 3))
+    _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
+    add_cylinder(name + "_hub", (cx, cy, cz + billow), 0.045, 0.045, spar, axis="z")
+
+
+def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar):
+    """Concave PARABOLIC dish sail — edges raised toward the sun so the cel light
+    pools into a bowl gradient. Radial support struts + rim hub."""
+    rings, seg = 4, 22
+    verts = [(cx, cy, cz)]
+    for i in range(1, rings + 1):
+        rr = r * i / rings
+        zz = cz + depth * (i / rings) ** 2
+        for k in range(seg):
+            a = 2 * math.pi * k / seg
+            verts.append((cx + rr * math.cos(a), cy + rr * math.sin(a), zz))
+    faces = [(0, 1 + k, 1 + (k + 1) % seg) for k in range(seg)]
+    for i in range(rings - 1):
+        b0, b1 = 1 + i * seg, 1 + (i + 1) * seg
+        for k in range(seg):
+            kn = (k + 1) % seg
+            faces.append((b0 + k, b1 + k, b1 + kn, b0 + kn))
+    _obj_from_pydata(name, verts, faces, sail, smooth=True)
+    sv, sf = [], []
+    for k in range(8):
+        a = 2 * math.pi * k / 8
+        dx, dy = math.cos(a), math.sin(a)
+        px, py = -dy * 0.013, dx * 0.013
+        b = len(sv)
+        sv += [(cx + px, cy + py, cz + 0.008), (cx - px, cy - py, cz + 0.008),
+               (cx + r * dx - px, cy + r * dy - py, cz + depth + 0.008),
+               (cx + r * dx + px, cy + r * dy + py, cz + depth + 0.008)]
+        sf.append((b, b + 1, b + 2, b + 3))
+    _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
+    add_cylinder(name + "_hub", (cx, cy, cz - 0.02), 0.06, 0.06, spar, axis="z")
+
+
+def _canopy(name, cx, cy, w, l, cz, amp, sail, spar):
+    """A big BILLOWING parachute-canopy sail (domed both ways) for a leading
+    solar-kite rig, with fore-aft ribs."""
+    nx, ny = 10, 7
+    verts = []
+    for j in range(ny + 1):
+        fy = j / ny - 0.5
+        for i in range(nx + 1):
+            fx = i / nx - 0.5
+            z = cz + amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * fy) ** 2)
+            verts.append((cx + fx * w, cy + fy * l, max(cz, z)))
+    faces = []
+    for j in range(ny):
+        for i in range(nx):
+            a = j * (nx + 1) + i
+            faces.append((a, a + 1, a + nx + 2, a + nx + 1))
+    _obj_from_pydata(name, verts, faces, sail, smooth=True)
+    for fx in (-0.36, -0.12, 0.12, 0.36):
+        add_box(name + "_rib", (cx + fx * w, cy, cz + amp * (1 - (2 * fx) ** 2) + 0.01),
+                (0.014, l * 0.96, 0.02), spar)
+
+
+def _tether(name, x0, y0, x1, y1, z, mat, wdt=0.009):
+    """A taut rigging line from a sail edge to the hull (any direction)."""
+    dx, dy = x1 - x0, y1 - y0
+    L = math.hypot(dx, dy) or 1.0
+    px, py = -dy / L * wdt, dx / L * wdt
+    _obj_from_pydata(name, [(x0 + px, y0 + py, z), (x0 - px, y0 - py, z),
+                            (x1 - px, y1 - py, z), (x1 + px, y1 + py, z)],
+                     [(0, 1, 2, 3)], mat, smooth=False)
+
+
 def build_frontier_skiff():
     hull = toon_material("fk", C(228, 205, 128), spec=0.9)    # sun-bleached yellow
     dark = toon_material("fk_d", C(165, 142, 86))
@@ -780,17 +866,16 @@ def build_frontier_skiff():
     ], hull, m=14, n=2.4, flatten=0.65, subsurf=2)
     add_sphere("fk_can", (0, 0.18, 0.13), (0.075, 0.1, 0.08), glass, zclip=0.13)
     add_box("fk_chev", (0, 0.0, 0.14), (0.12, 0.06, 0.04), chev, bevel=0.01)
-    # leading sail clearly OFFSET to starboard on a thick mast (asymmetric)
-    add_cylinder("fk_mast", (0.0, 0.55, 0.05), 0.03, 0.5, spar, axis="y")
-    _boom("fk_arm", 0.0, 0.34, 0.78, 0.07, 0.024, spar)
-    _sail("fk_sail", 0.34, 0.86, 0.07, 0.46, 0.5, sail, spar, spars=2)
+    # leading HEXAGONAL solar sail, offset to starboard on a mast (asymmetric)
+    add_cylinder("fk_mast", (0.0, 0.5, 0.05), 0.028, 0.5, spar, axis="y")
+    _hex_sail("fk_sail", 0.3, 0.84, 0.07, 0.38, sail, spar)
     add_cylinder("fk_gun", (-0.05, 0.5, 0.0), 0.022, 0.2, dark, r2=0.015)
     add_cylinder("fk_nz", (0, -0.52, 0.0), 0.05, 0.08, dark, r2=0.06)
     plume("fk_pl", 0, -0.56, 0, 0.04, 0.22, 0.8, glow)
 
 
 def build_frontier_harvester():
-    # GUN-forward gunboat: prominent reaper-boom arms, modest sails.
+    # GUN-forward gunboat: prominent reaper-boom arms + hexagonal outrigger sails.
     hull = toon_material("fh", C(222, 198, 120), spec=0.8)
     dark = toon_material("fh_d", C(158, 136, 82))
     green = toon_material("fh_gr", C(120, 165, 80))
@@ -806,46 +891,45 @@ def build_frontier_harvester():
     ], hull, m=14, n=2.6, flatten=0.6, subsurf=2)
     add_sphere("fh_can", (0, 0.26, 0.18), (0.1, 0.13, 0.1), glass, zclip=0.18)
     add_box("fh_str", (0, 0.42, 0.16), (0.3, 0.04, 0.05), green, bevel=0.01)
-    # twin BIG forward reaper-boom gun arms (the signature) projecting ahead
     for sx in (-0.22, 0.22):
         add_box("fh_arm", (sx, 0.5, 0.05), (0.09, 0.66, 0.16), dark, taper=0.8)
         add_cylinder("fh_drum", (sx, 0.78, 0.05), 0.06, 0.12, green, r2=0.04)
         add_cylinder("fh_muz", (sx, 0.9, 0.05), 0.022, 0.1, dark, r2=0.016)
-    # modest asymmetric outrigger sails on visible booms (port bigger)
-    _boom("fh_bl", -0.15, -0.72, 0.05, 0.07, 0.03, spar)
-    _sail("fh_sail_l", -0.82, 0.05, 0.07, 0.3, 0.6, sail, spar, spars=2)
-    _boom("fh_br", 0.15, 0.6, -0.08, 0.07, 0.026, spar)
-    _sail("fh_sail_r", 0.66, -0.08, 0.07, 0.22, 0.42, sail, spar, spars=1)
+    # asymmetric HEXAGONAL outrigger sails on booms (port bigger)
+    _boom("fh_bl", -0.15, -0.66, 0.05, 0.07, 0.03, spar)
+    _hex_sail("fh_sail_l", -0.78, 0.05, 0.07, 0.33, sail, spar)
+    _boom("fh_br", 0.15, 0.56, -0.08, 0.07, 0.026, spar)
+    _hex_sail("fh_sail_r", 0.7, -0.08, 0.07, 0.23, sail, spar)
     for sx in (-0.12, 0.12):
         add_cylinder("fh_nz", (sx, -0.84, 0.0), 0.06, 0.1, dark, r2=0.072)
         plume("fh_pl", sx, -0.9, 0, 0.05, 0.3, 0.8, glow)
 
 
 def build_frontier_sailtender():
-    # SAIL-dominant showcase: a slim hull dwarfed by huge asymmetric sails.
+    # SOLAR-KITE: a huge billowing canopy LEADS, the slim hull TRAILS behind on
+    # rigging tethers — the most dramatic sail rig in the fleet.
     hull = toon_material("ft", C(225, 202, 124), spec=0.8)
     dark = toon_material("ft_d", C(160, 138, 84))
     sail = _FSAIL("ft_sl"); spar = toon_material("ft_sp", C(116, 104, 72))
     glass = toon_material("ft_g", C(150, 205, 195), spec=1.4, glass=True)
     glow = glow_material("ft_e", C(255, 238, 190), 5)
+    # slim hull set well AFT (it trails the sail)
     loft_hull("ft_h", [
-        dict(y=0.78, w=0.055, h=0.07, cz=0.02),
-        dict(y=0.4, w=0.13, h=0.13, cz=0.03),
-        dict(y=0.0, w=0.14, h=0.13, cz=0.02),
-        dict(y=-0.45, w=0.11, h=0.11, cz=0.02),
-        dict(y=-0.85, w=0.08, h=0.09, cz=0.01),
+        dict(y=-0.05, w=0.05, h=0.06, cz=0.02),
+        dict(y=-0.34, w=0.12, h=0.12, cz=0.03),
+        dict(y=-0.7, w=0.11, h=0.11, cz=0.02),
+        dict(y=-1.05, w=0.08, h=0.09, cz=0.01),
     ], hull, m=14, n=2.4, flatten=0.6, subsurf=2)
-    add_sphere("ft_can", (0, 0.34, 0.14), (0.08, 0.11, 0.08), glass, zclip=0.14)
-    # huge port sail on a long visible boom; medium starboard sail set aft —
-    # strongly asymmetric outrigger rig
-    _boom("ft_bl", -0.1, -0.86, 0.18, 0.08, 0.034, spar)
-    _sail("ft_sail_big", -1.02, 0.2, 0.08, 0.5, 1.15, sail, spar, spars=3)
-    _boom("ft_br", 0.1, 0.7, -0.2, 0.075, 0.028, spar)
-    _sail("ft_sail_mid", 0.82, -0.2, 0.075, 0.34, 0.7, sail, spar, spars=2)
-    add_box("ft_grap", (0.0, -0.66, 0.04), (0.1, 0.2, 0.1), dark, taper=0.7)
+    add_sphere("ft_can", (0, -0.3, 0.13), (0.075, 0.1, 0.08), glass, zclip=0.13)
+    # the huge leading billowing canopy
+    _canopy("ft_sail", 0.0, 0.64, 1.4, 0.82, 0.1, 0.28, sail, spar)
+    # rigging tethers from the canopy's trailing edge to the hull nose
+    for sx in (-0.58, -0.3, -0.05, 0.2, 0.48):
+        _tether("ft_t", sx, 0.26, 0.0, 0.04, 0.09, spar)
+    add_cylinder("ft_yoke", (0, 0.06, 0.06), 0.05, 0.04, dark, axis="z")
     for sx in (-0.09, 0.09):
-        add_cylinder("ft_nz", (sx, -0.87, 0.0), 0.05, 0.1, dark, r2=0.06)
-        plume("ft_pl", sx, -0.93, 0, 0.045, 0.28, 0.8, glow)
+        add_cylinder("ft_nz", (sx, -1.07, 0.0), 0.05, 0.1, dark, r2=0.06)
+        plume("ft_pl", sx, -1.13, 0, 0.045, 0.28, 0.8, glow)
 
 
 def build_frontier_monitor():
@@ -868,10 +952,9 @@ def build_frontier_monitor():
     add_box("fm_chev", (0, -0.05, 0.26), (0.3, 0.08, 0.04), chev, bevel=0.01)
     add_box("fm_brg", (0, 0.32, 0.26), (0.2, 0.26, 0.16), dark, taper=0.7, bevel=0.02)
     add_sphere("fm_g", (0, 0.38, 0.34), (0.07, 0.08, 0.05), glass)
-    # huge leading sun-shield sail, offset to port (asymmetric) on a thick mast
-    add_cylinder("fm_mast", (-0.05, 0.72, 0.06), 0.035, 0.7, spar, axis="y")
-    _boom("fm_arm", -0.05, -0.32, 1.05, 0.08, 0.03, spar)
-    _sail("fm_sail", -0.2, 1.18, 0.09, 0.95, 0.62, sail, spar, spars=4)
+    # huge leading PARABOLIC dish sun-shield on a thick mast
+    add_cylinder("fm_mast", (0.0, 0.7, 0.06), 0.04, 0.6, spar, axis="y")
+    _parabolic_sail("fm_sail", 0.0, 1.16, 0.06, 0.54, 0.28, sail, spar)
     # flak-turret blisters on the flanks (visible barrels)
     for sx in (-0.36, 0.36):
         add_cylinder("fm_turr", (sx, 0.0, 0.28), 0.085, 0.1, dark, axis="z")
