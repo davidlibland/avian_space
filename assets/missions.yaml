@@ -1426,3 +1426,5 @@ rift_final:
       credits: 250000
     - kind: grant_unlock
       name: carrier_license
+    - kind: grant_unlock
+      name: precursor_ship_license

@@ -700,11 +700,12 @@ precursor_seeker:
   base_weapons:
     precursor_beam: [1, null]
   radius: 10.0
-  price: 999999
+  price: 35000
   sprite_path: sprites/ships/atlas/precursor_seeker.png
   personality: Fighter
   fuel_capacity: 9
   faction: Precursor
+  required_unlocks: [precursor_ship_license]
 precursor_sentinel:
   thrust: 90.0
   max_speed: 150.0
@@ -715,11 +716,12 @@ precursor_sentinel:
   base_weapons:
     precursor_beam: [2, null]
   radius: 18.0
-  price: 999999
+  price: 120000
   sprite_path: sprites/ships/atlas/precursor_sentinel.png
   personality: Fighter
   fuel_capacity: 9
   faction: Precursor
+  required_unlocks: [precursor_ship_license]
 precursor_harbinger:
   thrust: 82.0
   max_speed: 142.0
@@ -730,11 +732,12 @@ precursor_harbinger:
   base_weapons:
     precursor_beam: [3, null]
   radius: 30.0
-  price: 999999
+  price: 280000
   sprite_path: sprites/ships/atlas/precursor_harbinger.png
   personality: Fighter
   fuel_capacity: 9
   faction: Precursor
+  required_unlocks: [precursor_ship_license]
 precursor_sleeper:
   thrust: 40.0
   max_speed: 70.0
@@ -745,8 +748,168 @@ precursor_sleeper:
   base_weapons:
     precursor_beam: [4, null]
   radius: 60.0
-  price: 999999
+  price: 650000
   sprite_path: sprites/ships/atlas/precursor_sleeper.png
   personality: Fighter
   fuel_capacity: 9
   faction: Precursor
+  required_unlocks: [precursor_ship_license]
+
+# ── Faction economy ships (traders & miners) ─────────────────────────────────────
+frontier_prospector:
+  thrust: 95.0
+  max_speed: 155.0
+  torque: 22.0
+  max_health: 60
+  cargo_space: 10
+  item_space: 4
+  base_weapons:
+    flak_gun: [1, null]
+  radius: 13.0
+  price: 22000
+  sprite_path: sprites/ships/atlas/frontier_prospector.png
+  personality: Miner
+  fuel_capacity: 4
+  faction: FreeFrontier
+  required_unlocks: [free_frontier_license]
+frontier_dredger:
+  thrust: 60.0
+  max_speed: 100.0
+  torque: 12.0
+  max_health: 180
+  cargo_space: 24
+  item_space: 6
+  base_weapons:
+    flak_gun: [1, null]
+  radius: 26.0
+  price: 60000
+  sprite_path: sprites/ships/atlas/frontier_dredger.png
+  personality: Miner
+  fuel_capacity: 4
+  faction: FreeFrontier
+  required_unlocks: [free_frontier_license]
+helios_courier:
+  thrust: 120.0
+  max_speed: 200.0
+  torque: 30.0
+  max_health: 50
+  cargo_space: 12
+  item_space: 3
+  base_weapons: {}
+  radius: 12.0
+  price: 24000
+  sprite_path: sprites/ships/atlas/helios_courier.png
+  personality: Trader
+  fuel_capacity: 4
+  faction: Helios
+  required_unlocks: [helios_license]
+helios_freighter:
+  thrust: 70.0
+  max_speed: 120.0
+  torque: 14.0
+  max_health: 120
+  cargo_space: 40
+  item_space: 6
+  base_weapons:
+    helios_lance: [1, null]
+  radius: 30.0
+  price: 70000
+  sprite_path: sprites/ships/atlas/helios_freighter.png
+  personality: Trader
+  fuel_capacity: 5
+  faction: Helios
+  required_unlocks: [helios_license]
+helios_hauler:
+  thrust: 55.0
+  max_speed: 95.0
+  torque: 9.0
+  max_health: 200
+  cargo_space: 70
+  item_space: 4
+  base_weapons: {}
+  radius: 45.0
+  price: 140000
+  sprite_path: sprites/ships/atlas/helios_hauler.png
+  personality: Trader
+  fuel_capacity: 6
+  faction: Helios
+  required_unlocks: [helios_license]
+bastion_collier:
+  thrust: 65.0
+  max_speed: 105.0
+  torque: 12.0
+  max_health: 220
+  cargo_space: 36
+  item_space: 6
+  base_weapons:
+    chaingun: [1, null]
+  radius: 30.0
+  price: 65000
+  sprite_path: sprites/ships/atlas/bastion_collier.png
+  personality: Trader
+  fuel_capacity: 5
+  faction: Bastion
+  required_unlocks: [bastion_license]
+bastion_dredger:
+  thrust: 60.0
+  max_speed: 95.0
+  torque: 12.0
+  max_health: 200
+  cargo_space: 24
+  item_space: 6
+  base_weapons:
+    chaingun: [1, null]
+  radius: 28.0
+  price: 58000
+  sprite_path: sprites/ships/atlas/bastion_dredger.png
+  personality: Miner
+  fuel_capacity: 4
+  faction: Bastion
+  required_unlocks: [bastion_license]
+order_almoner:
+  thrust: 75.0
+  max_speed: 130.0
+  torque: 16.0
+  max_health: 130
+  cargo_space: 34
+  item_space: 6
+  base_weapons:
+    relic_lance: [1, null]
+  radius: 28.0
+  price: 62000
+  sprite_path: sprites/ships/atlas/order_almoner.png
+  personality: Trader
+  fuel_capacity: 5
+  faction: Order
+  required_unlocks: [artifact_order_license]
+order_quarryman:
+  thrust: 70.0
+  max_speed: 115.0
+  torque: 14.0
+  max_health: 150
+  cargo_space: 20
+  item_space: 4
+  base_weapons: {}
+  radius: 24.0
+  price: 50000
+  sprite_path: sprites/ships/atlas/order_quarryman.png
+  personality: Miner
+  fuel_capacity: 4
+  faction: Order
+  required_unlocks: [artifact_order_license]
+precursor_gleaner:
+  thrust: 160.0
+  max_speed: 270.0
+  torque: 42.0
+  max_health: 35
+  cargo_space: 8
+  item_space: 4
+  base_weapons:
+    precursor_beam: [1, null]
+  radius: 9.0
+  price: 40000
+  sprite_path: sprites/ships/atlas/precursor_gleaner.png
+  personality: Miner
+  fuel_capacity: 9
+  faction: Precursor
+  required_unlocks: [precursor_ship_license]

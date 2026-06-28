@@ -195,7 +195,7 @@ drone_bay:
     required_unlocks: [helios_license]
 precursor_beam:
   !PrimaryWeapon
-    price: 999999
+    price: 2200
     space: 3
     weapon_type: precursor_beam
-    required_unlocks: [precursor_innate]
+    required_unlocks: [precursor_ship_license]

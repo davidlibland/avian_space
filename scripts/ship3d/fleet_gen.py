@@ -967,10 +967,14 @@ def build_frontier_monitor():
     add_box("fm_chev", (0, -0.05, 0.26), (0.3, 0.08, 0.04), chev, bevel=0.01)
     add_box("fm_brg", (0, 0.32, 0.26), (0.2, 0.26, 0.16), dark, taper=0.7, bevel=0.02)
     add_sphere("fm_g", (0, 0.38, 0.34), (0.07, 0.08, 0.05), glass)
-    # huge VERTICAL parabolic dish sun-shield standing directly in FRONT
+    # twin VERTICAL parabolic dishes in FRONT: a primary, then a much LARGER
+    # second dish further ahead (both bulging forward toward the sun)
     add_cylinder("fm_bsprit", (0.0, 0.9, 0.12), 0.04, 0.4, spar, axis="y")
     add_cylinder("fm_mast", (0.0, 1.08, 0.3), 0.035, 0.6, spar, axis="z")
     _parabolic_sail("fm_sail", 0.0, 1.12, 0.5, 0.5, 0.18, sail, spar)
+    add_cylinder("fm_bsprit2", (0.0, 1.5, 0.18), 0.045, 0.66, spar, axis="y")
+    add_cylinder("fm_mast2", (0.0, 1.82, 0.62), 0.045, 1.15, spar, axis="z")
+    _parabolic_sail("fm_sail2", 0.0, 1.85, 0.62, 0.82, 0.3, sail, spar)
     # flak-turret blisters on the flanks (visible barrels)
     for sx in (-0.36, 0.36):
         add_cylinder("fm_turr", (sx, 0.0, 0.28), 0.085, 0.1, dark, axis="z")
@@ -1439,6 +1443,176 @@ def build_precursor_sleeper():
                  0.13, 0.24, 0.22, m["black"])
 
 
+# ════════════════ Faction economy ships (traders & miners) ═════════════════
+# Faction space needs commerce, not just warships: frontier mining barges, Helios
+# cargo liners, a Bastion collier + dredger, Order almoner + quarryman, and a
+# small Precursor gleaner. These carry Trader/Miner AI personalities.
+def _drill(name, x, y, z, r, length, mat, dark):
+    add_cylinder(name + "c", (x, y - 0.06, z), r * 1.3, 0.08, dark)
+    add_cylinder(name, (x, y + length / 2, z), r, length, mat, r2=0.004)
+
+
+def build_frontier_prospector():           # FreeFrontier · small sail-miner
+    hull = toon_material("fp", C(226, 203, 126), spec=0.9)
+    dark = toon_material("fp_d", C(162, 140, 84))
+    steel = toon_material("fp_s", C(150, 152, 158), spec=1.1)
+    sail = _FSAIL("fp_sl"); spar = toon_material("fp_sp", C(120, 108, 76))
+    glass = toon_material("fp_g", C(150, 210, 200), spec=1.5, glass=True)
+    glow = glow_material("fp_e", C(255, 240, 195), 5)
+    loft_hull("fp_h", [
+        dict(y=0.42, w=0.09, h=0.1, cz=0.02), dict(y=0.12, w=0.16, h=0.15, cz=0.03),
+        dict(y=-0.2, w=0.15, h=0.14, cz=0.02), dict(y=-0.55, w=0.09, h=0.09, cz=0.01),
+    ], hull, m=14, n=2.6, flatten=0.6, subsurf=2)
+    add_sphere("fp_can", (0, 0.05, 0.15), (0.08, 0.1, 0.08), glass, zclip=0.15)
+    _drill("fp_dr", 0, 0.5, 0.03, 0.05, 0.34, steel, dark)
+    add_box("fp_pod", (0.0, -0.28, 0.05), (0.26, 0.22, 0.16), dark, taper=0.9)
+    add_cylinder("fp_mast", (0.16, 0.04, 0.18), 0.02, 0.34, spar, axis="z")
+    _hex_sail("fp_sail", 0.16, 0.06, 0.32, 0.24, sail, spar)
+    add_cylinder("fp_nz", (0, -0.55, 0.0), 0.05, 0.08, dark, r2=0.06)
+    plume("fp_pl", 0, -0.59, 0, 0.04, 0.22, 0.8, glow)
+
+
+def build_frontier_dredger():              # FreeFrontier · heavy mining barge
+    hull = toon_material("fd", C(220, 197, 120), spec=0.8)
+    dark = toon_material("fd_d", C(158, 136, 82))
+    steel = toon_material("fd_s", C(150, 152, 158), spec=1.1)
+    sail = _FSAIL("fd_sl"); spar = toon_material("fd_sp", C(118, 106, 74))
+    glass = toon_material("fd_g", C(150, 205, 195), spec=1.4, glass=True)
+    glow = glow_material("fd_e", C(255, 238, 190), 5)
+    loft_hull("fd_h", [
+        dict(y=0.55, w=0.14, h=0.14, cz=0.02), dict(y=0.2, w=0.28, h=0.2, cz=0.03),
+        dict(y=-0.2, w=0.3, h=0.21, cz=0.03), dict(y=-0.65, w=0.2, h=0.16, cz=0.01),
+    ], hull, m=14, n=2.7, flatten=0.55, subsurf=2)
+    add_sphere("fd_can", (0, 0.18, 0.2), (0.1, 0.12, 0.1), glass, zclip=0.2)
+    for sx in (-1, 1):
+        _drill("fd_dr%d" % sx, sx * 0.2, 0.5, 0.04, 0.05, 0.34, steel, dark)
+        add_box("fd_ore", (sx * 0.32, -0.2, 0.06), (0.16, 0.5, 0.22), dark, taper=0.9)
+    add_box("fd_hop", (0, -0.25, 0.2), (0.3, 0.34, 0.14), dark, taper=0.85, bevel=0.02)
+    add_cylinder("fd_mast", (0.0, 0.0, 0.24), 0.024, 0.42, spar, axis="z")
+    _hex_sail("fd_sail", 0.0, 0.02, 0.42, 0.3, sail, spar)
+    for sx in (-0.12, 0.12):
+        add_cylinder("fd_nz", (sx, -0.67, 0.0), 0.06, 0.1, dark, r2=0.072)
+        plume("fd_pl", sx, -0.73, 0, 0.05, 0.28, 0.8, glow)
+
+
+def build_helios_courier():                # Helios · fast cargo courier
+    m = _helios_mats("hcu")
+    loft_hull("hcu_h", [
+        dict(y=0.7, w=0.05, h=0.06, cz=0), dict(y=0.3, w=0.16, h=0.12, cz=0),
+        dict(y=-0.2, w=0.18, h=0.13, cz=0), dict(y=-0.62, w=0.06, h=0.07, cz=0),
+    ], m["white"], m=16, n=2.9, flatten=0.55, subsurf=2)
+    add_box("hcu_seam", (0, 0.0, 0.13), (0.035, 1.05, 0.012), m["gold"], bevel=0.004)
+    add_sphere("hcu_eye", (0, 0.38, 0.08), (0.06, 0.1, 0.04), m["cyan"])
+    add_box("hcu_cargo", (0, -0.18, 0.13), (0.22, 0.34, 0.16), m["wd"], taper=0.92, bevel=0.02)
+    add_box("hcu_lt", (0, -0.18, 0.22), (0.16, 0.28, 0.02), m["cyan"])
+    _hnz("hcu_", 0, -0.62, 0.06, m)
+
+
+def build_helios_freighter():              # Helios · container freighter
+    m = _helios_mats("hfr")
+    loft_hull("hfr_h", [
+        dict(y=0.85, w=0.07, h=0.09, cz=0), dict(y=0.4, w=0.22, h=0.16, cz=0),
+        dict(y=-0.3, w=0.26, h=0.18, cz=0), dict(y=-0.85, w=0.09, h=0.1, cz=0),
+    ], m["white"], m=16, n=2.9, flatten=0.5, subsurf=2)
+    add_box("hfr_seam", (0, 0.0, 0.18), (0.035, 1.5, 0.012), m["gold"], bevel=0.004)
+    add_sphere("hfr_eye", (0, 0.5, 0.12), (0.07, 0.12, 0.05), m["cyan"])
+    for yc in (0.1, -0.25, -0.55):           # branded white containers
+        for sx in (-0.18, 0.18):
+            add_box("hfr_c", (sx, yc, 0.16), (0.16, 0.26, 0.16), m["wd"], taper=0.95, bevel=0.02)
+            add_box("hfr_cl", (sx, yc, 0.25), (0.04, 0.2, 0.02), m["cyan"])
+    add_box("hfr_lance", (0, 0.6, 0.1), (0.03, 0.2, 0.04), m["dark"])
+    for sx in (-0.13, 0.13):
+        _hnz("hfr%d_" % int(sx * 10), sx, -0.86, 0.07, m)
+
+
+def build_helios_hauler():                 # Helios · bulk liner
+    m = _helios_mats("hha")
+    add_box("hha_spine", (0, 0.0, 0.0), (0.16, 1.9, 0.2), m["white"], taper=0.9)
+    add_box("hha_seam", (0, 0.0, 0.12), (0.05, 1.9, 0.014), m["gold"], bevel=0.004)
+    add_box("hha_brg", (0, 0.92, 0.12), (0.2, 0.26, 0.16), m["white"], taper=0.7, bevel=0.02)
+    add_sphere("hha_eye", (0, 1.02, 0.18), (0.06, 0.08, 0.04), m["cyan"])
+    for yc in (0.5, 0.1, -0.3, -0.7):        # stacked container pods
+        for sx in (-0.26, 0.26):
+            add_box("hha_p", (sx, yc, 0.06), (0.24, 0.34, 0.3), m["wd"], taper=0.95, bevel=0.02)
+            add_box("hha_pl", (sx, yc, 0.22), (0.04, 0.28, 0.02), m["cyan"])
+    for sx in (-0.18, 0.0, 0.18):
+        _hnz("hha%d_" % int(sx * 10 + 5), sx, -1.0, 0.08, m)
+
+
+def build_bastion_collier():               # Bastion · armoured supply collier
+    m = _bastion_mats("bc")
+    add_box("bc_body", (0, 0.0, 0.0), (0.4, 1.5, 0.28), m["iron"], taper=0.72)
+    _wedge("bc_prow", 0, 0.92, 0.0, 0.4, 0.5, 0.28, m["iron"])
+    add_box("bc_str", (0, 0.0, 0.16), (0.12, 0.9, 0.04), m["red"], bevel=0.004)
+    add_box("bc_slit", (0, 0.45, 0.17), (0.08, 0.16, 0.04), m["slit"])
+    for yc in (0.2, -0.15, -0.5):            # armoured cargo pallets
+        for sx in (-0.26, 0.26):
+            add_box("bc_p", (sx, yc, 0.06), (0.16, 0.28, 0.3), m["dark"], taper=0.9)
+            add_box("bc_pl", (sx, yc, 0.22), (0.13, 0.24, 0.03), m["steel"], bevel=0.01)
+    add_cylinder("bc_gun", (0, 0.6, 0.06), 0.026, 0.34, m["steel"], r2=0.02)
+    for sx in (-0.13, 0.13):
+        _slug_drive("bc%d" % int(sx * 10), sx, -0.78, 0.07, m)
+
+
+def build_bastion_dredger():               # Bastion · iron mining rig
+    m = _bastion_mats("bd")
+    add_box("bd_body", (0, -0.05, 0.0), (0.42, 1.2, 0.3), m["iron"], taper=0.7)
+    _wedge("bd_prow", 0, 0.7, 0.0, 0.42, 0.4, 0.3, m["iron"])
+    add_box("bd_str", (0, -0.05, 0.17), (0.12, 0.7, 0.04), m["red"], bevel=0.004)
+    add_box("bd_slit", (0, 0.3, 0.18), (0.08, 0.14, 0.04), m["slit"])
+    for sx in (-1, 1):
+        _drill("bd_dr%d" % sx, sx * 0.22, 0.55, 0.05, 0.05, 0.36, m["steel"], m["dark"])
+        add_box("bd_ore", (sx * 0.34, -0.25, 0.06), (0.16, 0.5, 0.26), m["dark"], taper=0.9)
+    for sx in (-0.14, 0.14):
+        _slug_drive("bd%d" % int(sx * 10), sx, -0.7, 0.07, m)
+
+
+def build_order_almoner():                 # Order · reliquary almoner (trader)
+    m = _order_mats("om")
+    loft_hull("om_h", [
+        dict(y=0.8, w=0.07, h=0.09, cz=0), dict(y=0.4, w=0.2, h=0.16, cz=0.02),
+        dict(y=-0.3, w=0.24, h=0.18, cz=0.02), dict(y=-0.8, w=0.09, h=0.1, cz=0),
+    ], m["cream"], m=16, n=2.6, flatten=0.55, subsurf=2)
+    add_sphere("om_can", (0, 0.45, 0.16), (0.07, 0.1, 0.06), m["vglass"], zclip=0.16)
+    _relic("om_core", 0, 0.1, 0.16, 0.07, m)
+    for yc in (-0.1, -0.45):                 # brass reliquary cargo caskets
+        for sx in (-0.2, 0.2):
+            add_box("om_cask", (sx, yc, 0.12), (0.16, 0.26, 0.16), m["bronze"], taper=0.92, bevel=0.02)
+            add_box("om_au", (sx, yc, 0.21), (0.13, 0.04, 0.02), m["gold"])
+    _pipes("om", -0.2, 0.7, m, xs=(-0.16, 0.16), z=0.1)
+    for sx in (-0.12, 0.12):
+        add_cylinder("om_nz", (sx, -0.82, 0.0), 0.06, 0.1, m["bronze"], r2=0.072)
+        plume("om_pl", sx, -0.88, 0, 0.05, 0.28, 0.8, m["drive"])
+
+
+def build_order_quarryman():               # Order · relic-quarry miner
+    m = _order_mats("oq")
+    loft_hull("oq_h", [
+        dict(y=0.5, w=0.1, h=0.11, cz=0), dict(y=0.15, w=0.2, h=0.17, cz=0.02),
+        dict(y=-0.25, w=0.18, h=0.15, cz=0.02), dict(y=-0.62, w=0.1, h=0.1, cz=0),
+    ], m["cream"], m=14, n=2.6, flatten=0.6, subsurf=2)
+    add_sphere("oq_can", (0, 0.1, 0.17), (0.08, 0.1, 0.08), m["vglass"], zclip=0.17)
+    add_cylinder("oq_collar", (0, 0.45, 0.03), 0.08, 0.06, m["brass"])
+    add_cylinder("oq_drill", (0, 0.62, 0.03), 0.05, 0.34, m["bronze"], r2=0.004)
+    add_sphere("oq_tip", (0, 0.8, 0.03), (0.04, 0.06, 0.04), m["violet"])
+    for sx in (-0.3, 0.3):
+        add_box("oq_ore", (sx, -0.22, 0.05), (0.14, 0.4, 0.2), m["bronze"], taper=0.9)
+    _relic("oq_core", 0, -0.15, 0.14, 0.06, m, ribs=6)
+    add_cylinder("oq_nz", (0, -0.63, 0.0), 0.06, 0.1, m["bronze"], r2=0.072)
+    plume("oq_pl", 0, -0.69, 0, 0.05, 0.26, 0.8, m["drive"])
+
+
+def build_precursor_gleaner():             # Precursor · small fast crystal miner
+    m = _prec_mats("pg")
+    add_sphere("pg_core", (0, 0, 0.0), (0.07, 0.07, 0.06), m["core"])
+    _halo("pg_h", 0, 0, 0.0, 0.16, m["halo"], seg=16)
+    _crystal("pg_lance", 0, 0.36, 0.0, 0.08, 0.34, 0.08, m["crystal"])   # mining shard
+    for a in range(2):
+        ang = math.pi / 2 + a * math.pi
+        _crystal("pg_s%d" % a, 0.26 * math.cos(ang), 0.26 * math.sin(ang), 0.0,
+                 0.08, 0.2, 0.08, m["crystal"])
+
+
 # ════════════════════════════════ registry ═════════════════════════════════
 REGISTRY = {
     # name: (builder, ortho, group, label)
@@ -1468,7 +1642,7 @@ REGISTRY = {
     "frontier_skiff": (build_frontier_skiff, 2.1, "frontier", "r11 · sail interceptor"),
     "frontier_harvester": (build_frontier_harvester, 2.6, "frontier", "r24 · boom gunboat"),
     "frontier_sailtender": (build_frontier_sailtender, 2.7, "frontier", "r20 · outrigger sails"),
-    "frontier_monitor": (build_frontier_monitor, 2.9, "frontier", "r40 · sun-shield fort"),
+    "frontier_monitor": (build_frontier_monitor, 4.7, "frontier", "r40 · twin-dish fort"),
     "helios_drone": (build_helios_drone, 1.5, "helios", "r7 · swarm wedge"),
     "helios_enforcer": (build_helios_enforcer, 2.5, "helios", "r16 · security gunship"),
     "helios_overseer": (build_helios_overseer, 2.8, "helios", "r28 · drone command"),
@@ -1485,6 +1659,16 @@ REGISTRY = {
     "precursor_sentinel": (build_precursor_sentinel, 2.4, "precursor", "r18 · radial guardian"),
     "precursor_harbinger": (build_precursor_harbinger, 2.8, "precursor", "r30 · hunter-form"),
     "precursor_sleeper": (build_precursor_sleeper, 3.2, "precursor", "r60 · leviathan boss"),
+    "frontier_prospector": (build_frontier_prospector, 2.2, "frontier", "r13 · sail-miner"),
+    "frontier_dredger": (build_frontier_dredger, 2.5, "frontier", "r26 · mining barge"),
+    "helios_courier": (build_helios_courier, 2.3, "helios", "r12 · cargo courier"),
+    "helios_freighter": (build_helios_freighter, 2.6, "helios", "r30 · container freighter"),
+    "helios_hauler": (build_helios_hauler, 2.7, "helios", "r45 · bulk liner"),
+    "bastion_collier": (build_bastion_collier, 2.6, "bastion", "r30 · supply collier"),
+    "bastion_dredger": (build_bastion_dredger, 2.5, "bastion", "r28 · iron dredger"),
+    "order_almoner": (build_order_almoner, 2.6, "order", "r28 · reliquary almoner"),
+    "order_quarryman": (build_order_quarryman, 2.4, "order", "r24 · relic quarryman"),
+    "precursor_gleaner": (build_precursor_gleaner, 1.7, "precursor", "r9 · crystal gleaner"),
 }
 
 
