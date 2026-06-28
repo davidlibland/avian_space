@@ -985,6 +985,123 @@ def build_helios_titan():
         _hnz("ht%d_" % int(sx * 10), sx, -1.2, 0.08, m)
 
 
+# ═══════════════════ Fed Bastion (all-angle iron siege) ════════════════════
+# Hardliner splinter: ALL ANGLES, nothing smooth — faceted iron built from boxes
+# and wedges (no subsurf lofts). Iron-grey + black + heavy red, ram prows, banner
+# masts, LONG kinetic slug/chaingun barrels (no missiles), red-orange ion drives.
+def _wedge(name, cx, cy, cz, w, l, h, mat, flat=1.0):
+    """Faceted ram-wedge: rectangular base tapering to a point forward (y+)."""
+    hw, hh = w / 2, h / 2
+    v = [(cx - hw, cy - l / 2, cz - hh * flat), (cx + hw, cy - l / 2, cz - hh * flat),
+         (cx + hw, cy - l / 2, cz + hh), (cx - hw, cy - l / 2, cz + hh),
+         (cx, cy + l / 2, cz)]
+    f = [(0, 3, 2, 1), (0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4)]
+    _obj_from_pydata(name, v, f, mat, smooth=False)
+
+
+def _bastion_mats(tag):
+    return dict(
+        iron=toon_material(tag + "i", C(92, 95, 102), spec=0.5),
+        dark=toon_material(tag + "k", C(44, 47, 54)),
+        steel=toon_material(tag + "s", C(126, 128, 134), spec=0.7),
+        red=toon_material(tag + "r", C(176, 44, 36)),
+        slit=glow_material(tag + "sl", C(220, 70, 40), 3),
+        glow=glow_material(tag + "e", C(255, 95, 32), 5),    # red-orange ion
+    )
+
+
+def _slug_drive(tag, sx, y, r, m):
+    add_box(tag + "nz", (sx, y, 0.0), (r * 2.2, r * 1.6, r * 2.0), m["dark"], bevel=0.01)
+    plume(tag + "pl", sx, y - r * 0.9, 0, r * 0.9, r * 4.0, 0.85, m["glow"])
+
+
+def _iron_plates(tag, ys, w, pl, ztop, m):
+    """Raised faceted armour plates with a dark bolt-seam — breaks up the slab."""
+    for i, yy in enumerate(ys):
+        add_box(tag + "ap%d" % i, (0, yy, ztop), (w, pl, 0.03), m["steel"], bevel=0.01)
+        add_box(tag + "bs%d" % i, (0, yy, ztop + 0.014), (w * 0.86, 0.012, 0.02), m["dark"])
+
+
+def build_bastion_guard():
+    m = _bastion_mats("bg")
+    add_box("bg_body", (0, -0.12, 0.0), (0.34, 1.0, 0.22), m["iron"], taper=0.7)
+    _wedge("bg_prow", 0, 0.62, 0.0, 0.34, 0.5, 0.22, m["iron"])
+    for sx in (-1, 1):
+        add_box("bg_plate", (sx * 0.21, -0.1, 0.02), (0.08, 0.72, 0.28), m["dark"], taper=0.85)
+    add_box("bg_str", (0, -0.1, 0.13), (0.1, 0.66, 0.04), m["red"], bevel=0.004)
+    add_box("bg_slit", (0, 0.16, 0.14), (0.07, 0.16, 0.04), m["slit"])
+    _iron_plates("bg", (0.3, 0.02, -0.26), 0.2, 0.16, 0.12, m)
+    for sx in (-0.08, 0.08):                                  # twin forward chaingun
+        add_cylinder("bg_gun", (sx, 0.5, 0.06), 0.028, 0.42, m["steel"], r2=0.022)
+    for sx in (-0.1, 0.1):
+        _slug_drive("bg%d" % int(sx * 10), sx, -0.62, 0.06, m)
+
+
+def build_bastion_lance():
+    m = _bastion_mats("bl")
+    add_box("bl_body", (0, -0.1, 0.0), (0.4, 1.3, 0.26), m["iron"], taper=0.72)
+    _wedge("bl_prow", 0, 0.82, 0.0, 0.4, 0.6, 0.26, m["iron"])
+    for sx in (-1, 1):                                        # stepped angular armour
+        add_box("bl_p1", (sx * 0.25, 0.0, 0.0), (0.1, 0.9, 0.3), m["dark"], taper=0.8)
+        add_box("bl_p2", (sx * 0.3, -0.2, 0.04), (0.07, 0.5, 0.24), m["steel"], taper=0.85)
+    add_box("bl_str", (0, -0.1, 0.15), (0.12, 0.8, 0.04), m["red"], bevel=0.004)
+    add_box("bl_slit", (0, 0.28, 0.16), (0.08, 0.18, 0.04), m["slit"])
+    _iron_plates("bl", (0.34, 0.04, -0.3), 0.24, 0.18, 0.15, m)
+    # long forward chainguns + a dorsal chaingun turret
+    for sx in (-0.12, 0.12):
+        add_cylinder("bl_gun", (sx, 0.7, 0.07), 0.032, 0.6, m["steel"], r2=0.026)
+    add_box("bl_turr", (0, -0.3, 0.18), (0.18, 0.2, 0.12), m["dark"], bevel=0.01)
+    for sx in (-0.05, 0.05):
+        add_cylinder("bl_tg", (sx, -0.12, 0.2), 0.022, 0.34, m["steel"], r2=0.018)
+    for sx in (-0.12, 0.12):
+        _slug_drive("bl%d" % int(sx * 10), sx, -0.78, 0.07, m)
+
+
+def build_siege_monitor():
+    m = _bastion_mats("sm")
+    # a hull built AROUND one enormous forward siege cannon
+    add_box("sm_body", (0, -0.3, 0.0), (0.42, 1.0, 0.3), m["iron"], taper=0.7)
+    for sx in (-1, 1):
+        add_box("sm_sponson", (sx * 0.3, -0.2, 0.0), (0.16, 0.6, 0.34), m["dark"], taper=0.8)
+        add_cylinder("sm_sg", (sx * 0.3, 0.2, 0.06), 0.03, 0.5, m["steel"], r2=0.024)
+    add_box("sm_str", (0, -0.3, 0.17), (0.14, 0.5, 0.04), m["red"], bevel=0.004)
+    add_box("sm_slit", (0, -0.05, 0.18), (0.09, 0.16, 0.04), m["slit"])
+    _iron_plates("sm", (-0.12, -0.42), 0.26, 0.18, 0.16, m)
+    # the giant siege cannon: a long heavy barrel down the spine, outranging all
+    add_box("sm_mount", (0, 0.25, 0.1), (0.18, 0.5, 0.2), m["dark"], taper=0.85)
+    add_cylinder("sm_cannon", (0, 0.85, 0.12), 0.06, 1.0, m["steel"], r2=0.05)
+    add_cylinder("sm_muzzle", (0, 1.3, 0.12), 0.07, 0.12, m["dark"], r2=0.065)
+    for sx in (-0.14, 0.14):
+        _slug_drive("sm%d" % int(sx * 10), sx, -0.82, 0.08, m)
+
+
+def build_iron_dreadnought():
+    m = _bastion_mats("id")
+    # broad faceted battlewagon, ram prow, dorsal siege turrets, banner masts
+    add_box("id_body", (0, -0.1, 0.0), (0.62, 1.5, 0.36), m["iron"], taper=0.66)
+    _wedge("id_prow", 0, 0.95, 0.0, 0.62, 0.7, 0.36, m["iron"])
+    for sx in (-1, 1):                                        # layered belt armour
+        add_box("id_belt", (sx * 0.36, -0.1, 0.0), (0.12, 1.1, 0.42), m["dark"], taper=0.8)
+        add_box("id_belt2", (sx * 0.42, -0.15, 0.05), (0.08, 0.7, 0.3), m["steel"], taper=0.85)
+    for yc in (0.35, -0.05, -0.45):
+        add_box("id_str", (0, yc, 0.2), (0.4, 0.05, 0.05), m["red"], bevel=0.005)
+    # red imperial heraldry emblem amidships
+    _wedge("id_herald", 0, 0.18, 0.24, 0.2, 0.26, 0.08, m["red"])
+    add_box("id_cit", (0, -0.05, 0.24), (0.26, 0.4, 0.16), m["dark"], taper=0.7)
+    add_box("id_slit", (0, 0.1, 0.34), (0.1, 0.16, 0.04), m["slit"])
+    # dorsal siege turrets (boxy) with twin long barrels
+    for yc in (0.45, -0.35):
+        add_box("id_turr", (0, yc, 0.3), (0.24, 0.22, 0.14), m["dark"], bevel=0.012)
+        for sx in (-0.06, 0.06):
+            add_cylinder("id_tg", (sx, yc + 0.34, 0.32), 0.028, 0.5, m["steel"], r2=0.022)
+    # banner masts on the flanks
+    for sx in (-0.42, 0.42):
+        add_box("id_mast", (sx, -0.5, 0.34), (0.03, 0.04, 0.4), m["steel"])
+        add_box("id_banner", (sx, -0.5, 0.5), (0.02, 0.16, 0.18), m["red"])
+    for sx in (-0.3, 0.0, 0.3):
+        _slug_drive("id%d" % int(sx * 10 + 5), sx, -1.0, 0.09, m)
+
+
 # ════════════════════════════════ registry ═════════════════════════════════
 REGISTRY = {
     # name: (builder, ortho, group, label)
@@ -1019,6 +1136,10 @@ REGISTRY = {
     "helios_enforcer": (build_helios_enforcer, 2.5, "helios", "r16 · security gunship"),
     "helios_overseer": (build_helios_overseer, 2.8, "helios", "r28 · drone command"),
     "helios_titan": (build_helios_titan, 3.0, "helios", "r50 · factory carrier"),
+    "bastion_guard": (build_bastion_guard, 2.3, "bastion", "r15 · iron patrol"),
+    "bastion_lance": (build_bastion_lance, 2.6, "bastion", "r24 · chaingun frigate"),
+    "siege_monitor": (build_siege_monitor, 2.7, "bastion", "r34 · spinal siege cannon"),
+    "iron_dreadnought": (build_iron_dreadnought, 3.0, "bastion", "r48 · battlewagon"),
 }
 
 
