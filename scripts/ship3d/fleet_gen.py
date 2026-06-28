@@ -1246,6 +1246,100 @@ def build_order_cathedral():
         plume("ot_pl", sx, -1.24, 0, 0.07, 0.32, 0.8, m["drive"])
 
 
+# ════════════════════════ Precursors (alien geometry) ══════════════════════
+# Not human: NO cockpit, NO drive plume, NO bilateral nose-tail. Radial
+# crystalline forms grown from exotic matter — glowing violet cores, faceted
+# shards that HOVER apart with gaps, a gravitic HALO ring instead of exhaust.
+# Iridescent black + violet. Enemy/boss ships only (never sold). "Wrong & beautiful."
+def _prec_mats(tag):
+    return dict(
+        black=toon_material(tag + "k", C(36, 30, 54), spec=1.6, spec_sharp=0.7),
+        crystal=toon_material(tag + "cr", C(120, 86, 210), spec=1.9, spec_sharp=0.7, glass=True),
+        core=glow_material(tag + "co", C(160, 55, 250), 7),
+        halo=glow_material(tag + "ha", C(150, 75, 245), 7),
+    )
+
+
+def _crystal(name, cx, cy, cz, w, l, h, mat):
+    """A faceted crystal shard (octahedron) — angular, non-human."""
+    hw, hl, hh = w / 2, l / 2, h / 2
+    v = [(cx, cy + hl, cz), (cx, cy - hl, cz), (cx + hw, cy, cz), (cx - hw, cy, cz),
+         (cx, cy, cz + hh), (cx, cy, cz - hh)]
+    f = [(4, 0, 2), (4, 2, 1), (4, 1, 3), (4, 3, 0),
+         (5, 2, 0), (5, 1, 2), (5, 3, 1), (5, 0, 3)]
+    _obj_from_pydata(name, v, f, mat, smooth=False)
+
+
+def _halo(name, cx, cy, cz, r, mat, seg=28):
+    """A gravitic halo ring of glowing segments (no exhaust)."""
+    for a in range(seg):
+        ang = 2 * math.pi * a / seg
+        add_box(name + "%d" % a, (cx + r * math.cos(ang), cy + r * math.sin(ang), cz),
+                (0.028, 0.028, 0.02), mat)
+
+
+def build_precursor_seeker():
+    m = _prec_mats("pk")
+    add_sphere("pk_core", (0, 0, 0.0), (0.08, 0.08, 0.07), m["core"])
+    _halo("pk_h", 0, 0, 0.0, 0.2, m["halo"], seg=18)
+    for a in range(3):                       # three hovering shards (radial)
+        ang = 2 * math.pi * a / 3
+        _crystal("pk_s%d" % a, 0.3 * math.cos(ang), 0.3 * math.sin(ang), 0.0,
+                 0.1, 0.26, 0.1, m["crystal"])
+
+
+def build_precursor_sentinel():
+    m = _prec_mats("ps")
+    add_sphere("ps_core", (0, 0, 0.0), (0.13, 0.13, 0.1), m["core"])
+    _halo("ps_h", 0, 0, 0.0, 0.34, m["halo"], seg=26)
+    for a in range(6):                       # outer ring of radial shards (gaps)
+        ang = 2 * math.pi * a / 6
+        _crystal("ps_s%d" % a, 0.52 * math.cos(ang), 0.52 * math.sin(ang), 0.0,
+                 0.11, 0.28, 0.11, m["crystal"])
+    for a in range(3):                       # inner floating monolith segments
+        ang = 2 * math.pi * a / 3 + 0.52
+        _crystal("ps_m%d" % a, 0.24 * math.cos(ang), 0.24 * math.sin(ang), 0.04,
+                 0.09, 0.16, 0.16, m["black"])
+
+
+def build_precursor_harbinger():
+    m = _prec_mats("ph")
+    add_sphere("ph_core", (0, 0.0, 0.0), (0.16, 0.18, 0.12), m["core"])
+    _halo("ph_h1", 0, 0, 0.0, 0.4, m["halo"], seg=30)
+    _halo("ph_h2", 0, 0, 0.06, 0.26, m["halo"], seg=20)
+    # a hunter-form: longer fore shard (the "lance") + radial shards
+    _crystal("ph_lance", 0, 0.7, 0.02, 0.12, 0.6, 0.12, m["crystal"])
+    for a in range(5):
+        ang = 2 * math.pi * a / 5 + math.pi / 2
+        _crystal("ph_s%d" % a, 0.58 * math.cos(ang), 0.58 * math.sin(ang), 0.0,
+                 0.12, 0.3, 0.12, m["crystal"])
+    for a in range(4):
+        ang = 2 * math.pi * a / 4 + 0.4
+        _crystal("ph_m%d" % a, 0.3 * math.cos(ang), 0.3 * math.sin(ang), 0.05,
+                 0.1, 0.2, 0.18, m["black"])
+
+
+def build_precursor_sleeper():
+    m = _prec_mats("pz")
+    # the leviathan boss: concentric halos, many cores, a vast shard mandala
+    add_sphere("pz_core", (0, 0, 0.0), (0.24, 0.26, 0.16), m["core"])
+    _halo("pz_h1", 0, 0, 0.0, 0.95, m["halo"], seg=44)
+    _halo("pz_h2", 0, 0, 0.05, 0.62, m["halo"], seg=34)
+    _halo("pz_h3", 0, 0, 0.1, 0.34, m["halo"], seg=22)
+    for a in range(8):                       # outer mandala of great shards
+        ang = 2 * math.pi * a / 8
+        _crystal("pz_o%d" % a, 0.85 * math.cos(ang), 0.85 * math.sin(ang), 0.0,
+                 0.16, 0.42, 0.16, m["crystal"])
+    for a in range(6):                       # mid satellite cores
+        ang = 2 * math.pi * a / 6 + 0.3
+        add_sphere("pz_sc%d" % a, (0.5 * math.cos(ang), 0.5 * math.sin(ang), 0.02),
+                   (0.07, 0.07, 0.06), m["core"])
+    for a in range(5):                       # inner black monoliths
+        ang = 2 * math.pi * a / 5 + 0.6
+        _crystal("pz_m%d" % a, 0.3 * math.cos(ang), 0.3 * math.sin(ang), 0.08,
+                 0.13, 0.24, 0.22, m["black"])
+
+
 # ════════════════════════════════ registry ═════════════════════════════════
 REGISTRY = {
     # name: (builder, ortho, group, label)
@@ -1288,6 +1382,10 @@ REGISTRY = {
     "order_censer": (build_order_censer, 2.5, "order", "r20 · censer gunship"),
     "order_reliquary": (build_order_reliquary, 2.7, "order", "r30 · relic-core cruiser"),
     "order_cathedral": (build_order_cathedral, 3.0, "order", "r48 · temple flagship"),
+    "precursor_seeker": (build_precursor_seeker, 1.8, "precursor", "r10 · shard drone"),
+    "precursor_sentinel": (build_precursor_sentinel, 2.4, "precursor", "r18 · radial guardian"),
+    "precursor_harbinger": (build_precursor_harbinger, 2.8, "precursor", "r30 · hunter-form"),
+    "precursor_sleeper": (build_precursor_sleeper, 3.2, "precursor", "r60 · leviathan boss"),
 }
 
 
