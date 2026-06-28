@@ -17,7 +17,7 @@ import os
 
 import bpy  # noqa
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 import blender_gen as B
 
@@ -178,9 +178,10 @@ def roof_for(style, cx, cy, z0, w, d, m):
             for _s in (-1, 1):
                 xx = _s * (w + 0.9) / 2 * (1 - _t)
                 B.add_box("course", (xx + _s * 0.03, cy, zz + 0.03), (0.05, d + 0.82, 0.06), m["roof_d"], bevel=0.0)
-        # stone chimney + cap poking above the ridge
-        B.add_box("chimney", (cx - w * 0.32, cy + d * 0.18, z0 + 1.55), (0.42, 0.42, 1.5), m["stone"], bevel=0.04)
-        B.add_box("chimcap", (cx - w * 0.32, cy + d * 0.18, z0 + 2.34), (0.54, 0.54, 0.14), m["beam"], bevel=0.02)
+        # stone chimney + cap — on the FRONT slope and tall enough to clear the
+        # roof in the 3/4 view (a back-slope chimney gets occluded by the ridge)
+        B.add_box("chimney", (cx - w * 0.24, cy - d * 0.16, z0 + 1.7), (0.42, 0.42, 2.0), m["stone"], bevel=0.04)
+        B.add_box("chimcap", (cx - w * 0.24, cy - d * 0.16, z0 + 2.72), (0.54, 0.54, 0.14), m["beam"], bevel=0.02)
         if style["biome"] == "garden":                  # a couple of small moss clumps low on the front slope
             for _mx, _mt in ((-w * 0.33, 0.14), (w * 0.26, 0.2)):
                 yy = (d + 0.9) / 2 * (1 - _mt); zz = z0 - 0.05 + _mt * 1.9
@@ -282,17 +283,16 @@ def wall_skin(s, m, w, d, h, z0, top, win=(3, 2), front=True):
 
 
 def entry(s, m, w, d, z0):
-    # door = dark recess (open doorway, stays in the facade) + a roll-up
-    # `doorpanel` (baked separately, animated open in-game when the player nears).
+    # The doorway is cut transparent in _front (so the floor shows through when
+    # open); only the roll-up `doorpanel` is drawn over it, baked separately and
+    # animated open in-game. No dark recess.
     b = s["biome"]; fz = -d / 2
     if b == "ice":                         # storm-porch airlock vestibule
         B.add_box("vest", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.12)
         B.add_box("vroof", (0, fz - 0.7, z0 + 1.78), (2.1, 1.62, 0.18), m["roof"], bevel=0.04)
-        B.add_box("vrecess", (0, fz - 1.36, z0 + 0.68), (1.05, 0.1, 1.32), m["dark"], bevel=0.0)
         B.add_box("doorpanel", (0, fz - 1.44, z0 + 0.68), (0.96, 0.08, 1.3), m["wall_d"], bevel=0.03)
         B.add_box("vglow", (0, fz - 1.46, z0 + 1.42), (1.1, 0.1, 0.13), m["glow"], bevel=0.0)
     else:
-        B.add_box("doorrecess", (0, fz + 0.02, z0 + 0.65), (1.05, 0.1, 1.3), m["dark"], bevel=0.0)
         B.add_box("doorpanel", (0, fz - 0.06, z0 + 0.65), (1.0, 0.08, 1.3), m["wall_d"], bevel=0.02)
         B.add_box("lintel", (0, fz - 0.06, z0 + 1.34), (1.3, 0.16, 0.16), m["glow"], bevel=0.0)
 
@@ -383,18 +383,18 @@ def build_shipyard(s, m):
 def build_mechanic(s, m):
     w, d, h = 6, 4, 3.2        # mechanic → 6×4 garage
     z0, top = shell(s, m, w, d, h, front=False, door=False)
-    bw = w * 0.6
-    # roll-up garage door: dark `bay` recess behind + animated `doorpanel` that
-    # rolls up into the drum when the player nears.
-    B.add_box("bay", (0, -d / 2 + 0.25, z0 + 1.1), (bw, 0.1, 2.2), m["dark"], bevel=0.0)
-    B.add_box("doorpanel", (0, -d / 2 - 0.07, z0 + 1.2), (bw, 0.1, 2.35), m["wall_d"], bevel=0.02)
-    B.add_cylinder("drum", (0, -d / 2 - 0.05, top - 0.35), 0.32, bw + 0.3, m["metal"], axis="x")
-    for sx in (-bw / 2 - 0.18, bw / 2 + 0.18):
-        B.add_box("jamb", (sx, -d / 2 - 0.05, z0 + 1.2), (0.18, 0.2, 2.5), m["wall_d"], bevel=0.03)
-    B.add_box("hazard", (0, -d / 2 - 0.12, z0 + 0.08), (bw, 0.06, 0.18), m["glow"], bevel=0.0)
+    fz = -d / 2
+    dw = 1.8                       # garage door ≈ the 2-tile collision doorway
+    # roll-up garage door (centred, cut transparent in _front) + drum + jambs
+    B.add_box("doorpanel", (0, fz - 0.07, z0 + 1.1), (dw, 0.1, 2.1), m["wall_d"], bevel=0.02)
+    B.add_box("lintel", (0, fz - 0.05, z0 + 2.2), (dw + 0.3, 0.16, 0.18), m["glow"], bevel=0.0)
+    B.add_cylinder("drum", (0, fz - 0.05, z0 + 2.28), 0.24, dw + 0.25, m["metal"], axis="x")
+    for sx in (-dw / 2 - 0.16, dw / 2 + 0.16):
+        B.add_box("jamb", (sx, fz - 0.05, z0 + 1.15), (0.16, 0.18, 2.2), m["wall_d"], bevel=0.03)
+    B.add_box("hazard", (0, fz - 0.12, z0 + 0.08), (dw, 0.06, 0.16), m["glow"], bevel=0.0)
     # a ship engine pulled out front on a stand, opened up for repair — to the
-    # LEFT of the door approach, so it can be a solid (impassable) tile in-game
-    repair_engine(-1.5, -d / 2 - 1.5, m)
+    # far LEFT, clear of the centred door (a solid impassable tile in-game)
+    repair_engine(-2.0, -d / 2 - 1.5, m)
     B.add_box("plate", (w / 2 - 0.5, -d / 2 - 1.1, 1.1), (1.4, 0.14, 2.0), m["wall_d"], bevel=0.05)
     B.add_box("toolbox", (w / 2 - 1.5, -d / 2 - 1.4, 0.35), (0.9, 0.6, 0.5), m["roof"], bevel=0.05)
     B.add_cylinder("jib_p", (w / 2 - 0.3, d / 2 - 0.3, top + 0.8), 0.14, 2.0, m["metal"], axis="z")
@@ -625,18 +625,13 @@ def bake():
             ax = RES / 2 - x0
             ay = (RES / 2 + (d_t / 2 * math.sin(E) + tgt) * ppt) - y0
             fx, fy = ax / cw - 0.5, 0.5 - ay / ch
-            # The doorway is NOT cut out — the full facade (door included) stays in
-            # _front. The player steps behind the door (it's z-sorted over them),
-            # rather than showing through a hole. `door_funcs` kept for reference.
-            full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
-            Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
-            bk.save(os.path.join(out_dir, f"{st}_{fn}_back.png"))
-            floor_c.save(os.path.join(out_dir, f"{st}_{fn}_floor.png"))
             # ── DOOR pass: animated roll-up panel, N frames (closed → open) ──
-            # The panel scales down in height (top pinned to the lintel) so it
-            # rolls up into the doorway; the dark recess behind it (in _front) is
-            # revealed. Cropped to the same box → overlays _front exactly.
+            # Runs BEFORE saving _front so the closed-door footprint (door0) can be
+            # used to cut the doorway transparent. The panel scales down in height
+            # (top pinned to the lintel) so it rolls up; the LAST frame is empty (no
+            # door visible when fully open).
             panels = [o for o in meshes if o.name.startswith("doorpanel")]
+            door0_alpha = None
             if panels:
                 info = [(p, p.location.z + p.dimensions.z / 2, p.dimensions.z) for p in panels]
                 for o in meshes:
@@ -644,14 +639,30 @@ def bake():
                 cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
                 n_door = 4
                 for k in range(n_door):
+                    dpath = os.path.join(out_dir, f"{st}_{fn}_door{k}.png")
+                    if k == n_door - 1:                    # fully open → empty frame
+                        Image.new("RGBA", (cw, ch), (0, 0, 0, 0)).save(dpath)
+                        continue
                     o_amt = k / (n_door - 1)
                     for (p, top, h) in info:
-                        sc = max(1.0 - o_amt, 0.03)
+                        sc = 1.0 - o_amt
                         p.scale.z = sc
                         p.location.z = top - h * sc / 2
                     B.render_to(tmp("door"))
-                    Image.open(tmp("door")).convert("RGBA").crop(box).save(
-                        os.path.join(out_dir, f"{st}_{fn}_door{k}.png"))
+                    dimg = Image.open(tmp("door")).convert("RGBA").crop(box)
+                    dimg.save(dpath)
+                    if k == 0:
+                        door0_alpha = dimg.split()[3]      # closed-door footprint
+            # ── Cut the doorway transparent in _front (+ full) so the floor shows
+            # through the open door, using the closed-door footprint (dilated) ──
+            if door0_alpha is not None:
+                hole = np.array(door0_alpha.filter(ImageFilter.MaxFilter(7))) > 8
+                fr[hole, 3] = 0
+                fc = np.array(full_c); fc[hole, 3] = 0; full_c = Image.fromarray(fc)
+            full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
+            Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
+            bk.save(os.path.join(out_dir, f"{st}_{fn}_back.png"))
+            floor_c.save(os.path.join(out_dir, f"{st}_{fn}_floor.png"))
             entries.append((st, fn, w_t, d_t, round(fx, 4), round(fy, 4)))
     lines = ["// buildings3d_manifest.ron — auto-generated by buildings3d.py bake",
              "// anchor = footprint front-centre on the ground, as Bevy Anchor::Custom fraction",
