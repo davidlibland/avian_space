@@ -1102,6 +1102,150 @@ def build_iron_dreadnought():
         _slug_drive("id%d" % int(sx * 10 + 5), sx, -1.0, 0.09, m)
 
 
+# ═══════════════════ Artifact Order (steampunk-gothic) ═════════════════════
+# Reliquary ships: cream liturgical hulls built around an exposed, venerated
+# violet Precursor relic-core. Brass/bronze pipes, gears & buttress ribs
+# (steampunk); symmetric, ornate, banner masts & stained glass (gothic). Drives
+# bleed gold->violet (toward the Precursor palette). Relic lances + martyr rams.
+def _order_mats(tag):
+    return dict(
+        cream=toon_material(tag + "c", C(236, 229, 211), spec=0.8),
+        brass=toon_material(tag + "br", C(194, 152, 80), spec=1.3, spec_sharp=0.8),
+        bronze=toon_material(tag + "bz", C(138, 100, 52)),
+        gold=toon_material(tag + "au", C(222, 186, 96), spec=1.3),
+        violet=glow_material(tag + "v", C(150, 75, 228), 8),     # relic core
+        vglass=toon_material(tag + "g", C(160, 110, 214), spec=1.6, glass=True),
+        drive=glow_material(tag + "e", C(200, 120, 210), 6),     # gold-violet
+    )
+
+
+def _relic(name, cx, cy, cz, r, m, ribs=8):
+    """Exposed violet relic-core haloed by a brass disc + gold-studded rose-window
+    ribs — the venerated heart of every Order hull."""
+    add_cylinder(name + "halo", (cx, cy, cz - 0.05), r * 1.7, 0.035, m["brass"], axis="z", seg=24)
+    add_cylinder(name + "ring", (cx, cy, cz - 0.02), r * 1.25, 0.05, m["bronze"], axis="z", seg=24)
+    add_sphere(name, (cx, cy, cz), (r, r * 1.15, r * 0.85), m["violet"])
+    for a in range(ribs):
+        ang = 2 * math.pi * a / ribs
+        rx, ry = cx + r * 1.45 * math.cos(ang), cy + r * 1.45 * math.sin(ang)
+        add_box(name + "rib%d" % a, (rx, ry, cz - 0.01), (0.04, 0.04, 0.1), m["brass"], bevel=0.006)
+        add_sphere(name + "st%d" % a, (rx, ry, cz + 0.05), (0.024, 0.024, 0.02), m["gold"])
+
+
+def _pipes(tag, cy, l, m, xs=(-0.09, 0.09), z=0.08, r=0.024):
+    for i, sx in enumerate(xs):
+        add_cylinder(tag + "pp%d" % i, (sx, cy, z), r, l, m["brass"], axis="y", seg=10)
+
+
+def _gear(name, cx, cy, cz, r, m, teeth=8):
+    add_cylinder(name, (cx, cy, cz), r, 0.04, m["brass"], axis="z", seg=20)
+    add_cylinder(name + "h", (cx, cy, cz + 0.01), r * 0.4, 0.05, m["bronze"], axis="z", seg=12)
+    for a in range(teeth):
+        ang = 2 * math.pi * a / teeth
+        add_box(name + "t%d" % a, (cx + r * 1.1 * math.cos(ang), cy + r * 1.1 * math.sin(ang), cz),
+                (0.02, 0.02, 0.03), m["brass"])
+
+
+def build_order_acolyte():
+    m = _order_mats("oa")
+    loft_hull("oa_h", [
+        dict(y=0.95, w=0.03, h=0.04, cz=0),
+        dict(y=0.55, w=0.1, h=0.11, cz=0.02),
+        dict(y=0.1, w=0.13, h=0.13, cz=0.02),
+        dict(y=-0.45, w=0.1, h=0.1, cz=0.01),
+        dict(y=-0.85, w=0.06, h=0.07, cz=0),
+    ], m["cream"], m=14, n=2.4, flatten=0.6, subsurf=2)
+    add_sphere("oa_tip", (0, 0.82, 0.03), (0.05, 0.11, 0.05), m["violet"])   # ram relic-tip
+    add_cylinder("oa_collar", (0, 0.64, 0.03), 0.065, 0.06, m["brass"])
+    add_sphere("oa_can", (0, 0.3, 0.13), (0.07, 0.09, 0.07), m["vglass"], zclip=0.13)
+    _pipes("oa", 0.0, 0.6, m)
+    _relic("oa_core", 0, -0.12, 0.11, 0.06, m, ribs=6)
+    add_box("oa_fil", (0, 0.05, 0.14), (0.02, 0.5, 0.02), m["gold"])
+    add_cylinder("oa_nz", (0, -0.85, 0.0), 0.05, 0.08, m["bronze"], r2=0.06)
+    plume("oa_pl", 0, -0.9, 0, 0.045, 0.28, 0.8, m["drive"])
+
+
+def build_order_censer():
+    m = _order_mats("oc")
+    loft_hull("oc_h", [
+        dict(y=0.85, w=0.06, h=0.08, cz=0),
+        dict(y=0.4, w=0.18, h=0.15, cz=0.02),
+        dict(y=-0.05, w=0.2, h=0.16, cz=0.02),
+        dict(y=-0.5, w=0.15, h=0.13, cz=0.01),
+        dict(y=-0.85, w=0.08, h=0.08, cz=0),
+    ], m["cream"], m=16, n=2.5, flatten=0.55, subsurf=2)
+    add_sphere("oc_can", (0, 0.34, 0.16), (0.09, 0.12, 0.08), m["vglass"], zclip=0.16)
+    add_box("oc_filig", (0, 0.5, 0.15), (0.16, 0.04, 0.04), m["gold"], bevel=0.01)
+    _relic("oc_core", 0, 0.0, 0.16, 0.07, m)
+    # swinging brass censer-pods on side arms (the guided-bomb ordnance)
+    for sx in (-1, 1):
+        add_box("oc_arm", (sx * 0.26, 0.18, 0.05), (0.18, 0.05, 0.05), m["bronze"], bevel=0.01)
+        add_sphere("oc_censer", (sx * 0.36, 0.16, 0.02), (0.07, 0.08, 0.07), m["brass"])
+        add_sphere("oc_cglow", (sx * 0.36, 0.16, 0.06), (0.03, 0.03, 0.03), m["violet"])
+    _pipes("oc", -0.1, 0.7, m, xs=(-0.13, 0.13))
+    add_box("oc_fil", (0, -0.2, 0.16), (0.02, 0.5, 0.02), m["gold"])
+    _gear("oc_g", 0, -0.5, 0.14, 0.05, m)
+    for sx in (-0.1, 0.1):
+        add_cylinder("oc_nz", (sx, -0.86, 0.0), 0.055, 0.1, m["bronze"], r2=0.066)
+        plume("oc_pl", sx, -0.92, 0, 0.05, 0.28, 0.8, m["drive"])
+
+
+def build_order_reliquary():
+    m = _order_mats("or")
+    loft_hull("or_h", [
+        dict(y=0.95, w=0.08, h=0.1, cz=0),
+        dict(y=0.45, w=0.24, h=0.17, cz=0.02),
+        dict(y=-0.05, w=0.28, h=0.18, cz=0.02),
+        dict(y=-0.55, w=0.22, h=0.15, cz=0.01),
+        dict(y=-0.95, w=0.1, h=0.1, cz=0),
+    ], m["cream"], m=16, n=2.6, flatten=0.55, subsurf=2)
+    add_sphere("or_can", (0, 0.5, 0.18), (0.08, 0.1, 0.07), m["vglass"], zclip=0.18)
+    # BIG exposed relic-core amidships, brass rose-window frame (the showcase)
+    _relic("or_core", 0, 0.0, 0.18, 0.13, m, ribs=8)
+    for sx in (-1, 1):
+        for yc in (0.3, -0.05, -0.4):
+            add_box("or_butt", (sx * 0.26, yc, 0.12), (0.06, 0.14, 0.16), m["brass"], bevel=0.01)
+    _pipes("or", -0.1, 0.9, m, xs=(-0.17, 0.17), z=0.1)
+    add_box("or_fil", (0, -0.45, 0.2), (0.025, 0.4, 0.025), m["gold"])
+    for _sx in (-0.18, 0.18):
+        _gear("or_g%d" % int(_sx*10), _sx, 0.45, 0.16, 0.05, m)
+    for sx in (-0.26, 0.26):
+        add_box("or_mast", (sx, -0.6, 0.2), (0.02, 0.03, 0.24), m["bronze"])
+        add_box("or_banner", (sx, -0.6, 0.32), (0.015, 0.12, 0.14), m["violet"])
+    for sx in (-0.13, 0.13):
+        add_cylinder("or_nz", (sx, -0.96, 0.0), 0.07, 0.12, m["bronze"], r2=0.085)
+        plume("or_pl", sx, -1.02, 0, 0.06, 0.3, 0.8, m["drive"])
+
+
+def build_order_cathedral():
+    m = _order_mats("ot")
+    loft_hull("ot_h", [
+        dict(y=1.15, w=0.08, h=0.1, cz=0),
+        dict(y=0.6, w=0.3, h=0.2, cz=0.02),
+        dict(y=0.0, w=0.36, h=0.22, cz=0.02),
+        dict(y=-0.6, w=0.3, h=0.19, cz=0.01),
+        dict(y=-1.15, w=0.12, h=0.11, cz=0),
+    ], m["cream"], m=18, n=2.7, flatten=0.5, subsurf=2)
+    # three relic-cores down the nave (the temple-ship)
+    _relic("ot_c0", 0, 0.45, 0.2, 0.1, m)
+    _relic("ot_c1", 0, 0.0, 0.22, 0.14, m, ribs=8)
+    _relic("ot_c2", 0, -0.5, 0.2, 0.1, m)
+    add_sphere("ot_can", (0, 0.78, 0.2), (0.08, 0.11, 0.07), m["vglass"], zclip=0.2)
+    add_box("ot_spine", (0, 0.0, 0.26), (0.05, 1.7, 0.03), m["gold"])
+    for sx in (-1, 1):
+        for yc in (0.5, 0.1, -0.3, -0.7):
+            add_box("ot_col", (sx * 0.32, yc, 0.14), (0.07, 0.1, 0.2), m["brass"], bevel=0.01)
+    _pipes("ot", 0.0, 1.1, m, xs=(-0.22, 0.22), z=0.12)
+    for _sx in (-0.22, 0.22):
+        _gear("ot_g%d" % int(_sx*10), _sx, -0.85, 0.16, 0.055, m)
+    for sx in (-0.34, 0.34):
+        add_box("ot_mast", (sx, -0.2, 0.26), (0.025, 0.035, 0.34), m["bronze"])
+        add_box("ot_banner", (sx, -0.2, 0.44), (0.018, 0.18, 0.2), m["violet"])
+    for sx in (-0.26, 0.0, 0.26):
+        add_cylinder("ot_nz", (sx, -1.16, 0.0), 0.08, 0.14, m["bronze"], r2=0.1)
+        plume("ot_pl", sx, -1.24, 0, 0.07, 0.32, 0.8, m["drive"])
+
+
 # ════════════════════════════════ registry ═════════════════════════════════
 REGISTRY = {
     # name: (builder, ortho, group, label)
@@ -1140,6 +1284,10 @@ REGISTRY = {
     "bastion_lance": (build_bastion_lance, 2.6, "bastion", "r24 · chaingun frigate"),
     "siege_monitor": (build_siege_monitor, 2.7, "bastion", "r34 · spinal siege cannon"),
     "iron_dreadnought": (build_iron_dreadnought, 3.0, "bastion", "r48 · battlewagon"),
+    "order_acolyte": (build_order_acolyte, 2.3, "order", "r12 · martyr ram-dart"),
+    "order_censer": (build_order_censer, 2.5, "order", "r20 · censer gunship"),
+    "order_reliquary": (build_order_reliquary, 2.7, "order", "r30 · relic-core cruiser"),
+    "order_cathedral": (build_order_cathedral, 3.0, "order", "r48 · temple flagship"),
 }
 
 
