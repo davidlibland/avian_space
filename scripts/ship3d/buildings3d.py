@@ -411,6 +411,11 @@ def build_mechanic(s, m):
     fz = -d / 2
     dw = 1.8                       # garage door ≈ the 2-tile collision doorway
     cut_doorway(m, ["body"], 0, fz, dw, 2.15, z0 + 0.64, d / 2 + 0.3)
+    # Roll-up garage door — matches the carved opening's z-extent exactly (same
+    # centre z0+0.64 and height 2.15 as the cut), so the closed door fills the bay
+    # down past the floor line. The bake's door pass pins the top and scales the
+    # height down to animate it rolling open as the player approaches.
+    B.add_box("doorpanel", (0, fz - 0.07, z0 + 0.64), (dw, 0.1, 2.15), m["wall_d"], bevel=0.02)
     B.add_box("lintel", (0, fz - 0.05, z0 + 2.2), (dw + 0.3, 0.16, 0.18), m["glow"], bevel=0.0)
     for sx in (-dw / 2 - 0.16, dw / 2 + 0.16):
         B.add_box("jamb", (sx, fz - 0.05, z0 + 1.15), (0.16, 0.18, 2.2), m["wall_d"], bevel=0.03)
