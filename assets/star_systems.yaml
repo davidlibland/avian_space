@@ -966,7 +966,7 @@ halcyon:
         electronics: 29
         weapons_parts: 27
         robotics: 36
-      outfitter: [laser, space_mine]
+      outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine]
       shipyard: [shuttle, prospector, courier, cargo_transport]
     halcyon_ice:
       planet_type: icy_dwarf
@@ -1011,7 +1011,7 @@ ceres_freehold:
         silicates: 3
         food: 5
         electronics: 23
-      outfitter: [laser, space_mine]
+      outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine, flak_turret]
       shipyard: [shuttle, prospector, asteroid_miner, cargo_transport]
     pallas:
       planet_type: icy_dwarf
@@ -1056,7 +1056,7 @@ the_verge:
         food: 5
         helium3: 9
         robotics: 39
-      outfitter: [space_mine]
+      outfitter: [flak_gun, mass_driver, prox_mine]
     verge_giant:
       planet_type: gas_giant
       faction: FreeFrontier
@@ -1099,7 +1099,7 @@ kuiper_reach:
         polymers: 7
         cooling_gel: 13
         exotic_matter: 153
-      outfitter: [space_mine]
+      outfitter: [flak_gun, space_mine, prox_mine]
     kuiper_clouds:
       planet_type: cloud
       faction: FreeFrontier
@@ -1152,7 +1152,7 @@ tycho_yards:
         helium3: 38
         electronics: 22
         uranium: 34
-      outfitter: [laser, proton_beam]
+      outfitter: [laser, proton_beam, helios_lance, seeker]
       shipyard: [shuttle, cargo_transport, freighter]
     tycho_refinery:
       planet_type: cloud
@@ -1214,7 +1214,7 @@ helios_prime:
         electronics: 19
         weapons_parts: 31
         robotics: 42
-      outfitter: [laser, proton_beam, ir_missile]
+      outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker]
       shipyard: [shuttle, courier, cargo_transport, freighter, hauler]
     helios_orbital:
       planet_type: rocky
@@ -1263,7 +1263,7 @@ the_foundry:
         gold: 68
         helium3: 13
         electronics: 13
-      outfitter: [laser]
+      outfitter: [laser, helios_lance]
     foundry_giant:
       planet_type: gas_giant
       faction: Helios
@@ -1307,7 +1307,7 @@ iron_march:
         silicates: 2
         food: 6
         uranium: 8
-      outfitter: [laser, proton_beam, space_mine]
+      outfitter: [laser, proton_beam, chaingun, siege_cannon, space_mine]
       shipyard: [corvette, fighter, frigate]
     march_keep:
       planet_type: desert
@@ -1348,7 +1348,7 @@ bastion:
         silicates: 1
         food: 10
         uranium: 8
-      outfitter: [proton_beam, ir_missile, space_mine]
+      outfitter: [proton_beam, chaingun, siege_cannon, chaingun_turret, space_mine, siege_turret]
       shipyard: [fed_patrol, corvette, frigate, fed_destroyer]
     bastion_yard:
       planet_type: rocky
@@ -1408,7 +1408,7 @@ sanctum:
         electronics: 57
         weapons_parts: 19
         robotics: 83
-      outfitter: [laser, proton_beam]
+      outfitter: [laser, proton_beam, relic_lance, censer_charge, exotic_lance, relic_turret]
       shipyard: [shuttle, courier, frigate]
     reliquary_moon:
       planet_type: icy_dwarf
@@ -1449,7 +1449,7 @@ the_threshold:
         silicates: 3
         food: 4
         exotic_matter: 21
-      outfitter: [proton_beam]
+      outfitter: [proton_beam, relic_lance]
   astroid_fields:
     -
       location: [200.0, 160.0]
@@ -1505,7 +1505,7 @@ the_anvil:
         silicates: 1
         food: 9
         uranium: 8
-      outfitter: [laser, proton_beam, space_mine]
+      outfitter: [laser, proton_beam, chaingun, siege_cannon, space_mine]
       shipyard: [corvette, fighter]
     anvil_pit:
       planet_type: desert
@@ -1551,7 +1551,7 @@ the_cloister:
         iron: 3
         silicates: 3
         food: 4
-      outfitter: [proton_beam]
+      outfitter: [proton_beam, relic_lance, censer_charge]
     cloister_spire:
       planet_type: icy_dwarf
       faction: Order

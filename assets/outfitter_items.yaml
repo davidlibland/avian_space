@@ -95,3 +95,93 @@ pirate_corvette_bay:
     weapon_type: pirate_corvette_bay
     ammo_price: 1500
     ammo_space: 3
+flak_gun:
+  !PrimaryWeapon
+    price: 220
+    space: 2
+    weapon_type: flak_gun
+    required_unlocks: [free_frontier_license]
+mass_driver:
+  !PrimaryWeapon
+    price: 650
+    space: 4
+    weapon_type: mass_driver
+    required_unlocks: [free_frontier_license]
+prox_mine:
+  !SecondaryWeapon
+    price: 420
+    space: 3
+    weapon_type: prox_mine
+    ammo_price: 22
+    ammo_space: 2
+    required_unlocks: [free_frontier_license]
+helios_lance:
+  !PrimaryWeapon
+    price: 750
+    space: 3
+    weapon_type: helios_lance
+    required_unlocks: [helios_license]
+seeker:
+  !SecondaryWeapon
+    price: 900
+    space: 2
+    weapon_type: seeker
+    ammo_price: 45
+    ammo_space: 1
+    required_unlocks: [helios_license]
+chaingun:
+  !PrimaryWeapon
+    price: 450
+    space: 3
+    weapon_type: chaingun
+    required_unlocks: [bastion_license]
+siege_cannon:
+  !PrimaryWeapon
+    price: 1600
+    space: 6
+    weapon_type: siege_cannon
+    required_unlocks: [bastion_license]
+chaingun_turret:
+  !PrimaryWeapon
+    price: 2800
+    space: 10
+    weapon_type: chaingun_turret
+    required_unlocks: [bastion_license]
+relic_lance:
+  !PrimaryWeapon
+    price: 1200
+    space: 4
+    weapon_type: relic_lance
+    required_unlocks: [artifact_order_license]
+censer_charge:
+  !SecondaryWeapon
+    price: 1400
+    space: 4
+    weapon_type: censer_charge
+    ammo_price: 80
+    ammo_space: 2
+    required_unlocks: [artifact_order_license]
+exotic_lance:
+  !PrimaryWeapon
+    price: 3200
+    space: 5
+    weapon_type: exotic_lance
+    required_unlocks: [precursor_tech_license]
+flak_turret:
+  !PrimaryWeapon
+    price: 1800
+    space: 8
+    weapon_type: flak_turret
+    required_unlocks: [free_frontier_license]
+siege_turret:
+  !PrimaryWeapon
+    price: 6000
+    space: 16
+    weapon_type: siege_turret
+    required_unlocks: [bastion_license]
+relic_turret:
+  !PrimaryWeapon
+    price: 4000
+    space: 12
+    weapon_type: relic_turret
+    required_unlocks: [artifact_order_license]

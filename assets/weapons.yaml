@@ -165,3 +165,174 @@ pirate_corvette_bay:
     ammo:
         !Ammo:
             space: 3
+# ── Free Frontier — area-denial militia (rapid flak, kinetic mass-driver, mines) ──
+flak_gun:
+    name: flak_gun
+    lifetime: 0.3
+    speed: 380.0
+    cooldown: 1.0
+    color: [1.0, 0.85, 0.4]
+    damage: 3
+    aimable_arc: 28
+    display_name: "Flak Gun"
+    sound_path: sounds/weapons/laser.ogg
+mass_driver:
+    name: mass_driver
+    lifetime: 1.2
+    speed: 320.0
+    cooldown: 4.5
+    color: [0.85, 0.82, 0.6]
+    damage: 18
+    aimable_arc: 8
+    display_name: "Mass Driver"
+    sound_path: sounds/weapons/proton_beam.ogg
+prox_mine:
+    name: prox_mine
+    lifetime: 14.0
+    speed: 30.0
+    cooldown: 10.0
+    color: [0.9, 0.8, 0.4]
+    damage: 60
+    guided: true
+    turn_rate: 1.0
+    aimable_arc: 180
+    sprite_path: sprites/weapons/space_mine.png
+    sound_path: sounds/weapons/space_mine.ogg
+    display_name: "Proximity Mine"
+    ammo:
+        !Ammo:
+            space: 2
+# ── Helios Combine — precise corporate energy (drone_bay added with the drone ship) ──
+helios_lance:
+    name: helios_lance
+    lifetime: 0.7
+    speed: 600.0
+    cooldown: 3.5
+    color: [0.3, 0.9, 1.0]
+    damage: 12
+    aimable_arc: 4
+    display_name: "Helios Lance"
+    sound_path: sounds/weapons/proton_beam.ogg
+seeker:
+    name: seeker
+    lifetime: 3.0
+    speed: 380.0
+    cooldown: 5.0
+    color: [0.4, 0.9, 1.0]
+    damage: 18
+    guided: true
+    turn_rate: 3.0
+    sprite_path: sprites/weapons/javelin.png
+    sound_path: sounds/weapons/javelin.ogg
+    display_name: "Seeker Drone-Missile"
+    ammo:
+        !Ammo:
+            space: 1
+# ── Fed Bastion — long-range kinetic siege (real slugs = colour bolts, no sprites) ──
+chaingun:
+    name: chaingun
+    lifetime: 0.8
+    speed: 700.0
+    cooldown: 0.8
+    color: [0.85, 0.85, 0.8]
+    damage: 4
+    aimable_arc: 6
+    display_name: "Chaingun"
+    sound_path: sounds/weapons/laser.ogg
+siege_cannon:
+    name: siege_cannon
+    lifetime: 1.6
+    speed: 800.0
+    cooldown: 5.0
+    color: [0.9, 0.7, 0.4]
+    damage: 30
+    aimable_arc: 4
+    display_name: "Siege Cannon"
+    sound_path: sounds/weapons/proton_beam.ogg
+chaingun_turret:
+    name: chaingun_turret
+    lifetime: 0.8
+    speed: 700.0
+    cooldown: 0.9
+    color: [0.85, 0.85, 0.8]
+    damage: 4
+    aimable_arc: 180
+    display_name: "Chaingun Turret"
+    sound_path: sounds/weapons/laser.ogg
+# ── Artifact Order — unstable relic energy + the endgame Precursor lance ──────────
+relic_lance:
+    name: relic_lance
+    lifetime: 1.4
+    speed: 520.0
+    cooldown: 5.5
+    color: [0.7, 0.45, 1.0]
+    damage: 22
+    aimable_arc: 6
+    display_name: "Relic Lance"
+    sound_path: sounds/weapons/proton_beam.ogg
+censer_charge:
+    name: censer_charge
+    lifetime: 5.0
+    speed: 200.0
+    cooldown: 11.0
+    color: [0.6, 0.3, 0.9]
+    damage: 70
+    guided: true
+    turn_rate: 1.5
+    sprite_path: sprites/weapons/ir_missile.png
+    sound_path: sounds/weapons/ir_missile.ogg
+    display_name: "Censer Charge"
+    ammo:
+        !Ammo:
+            space: 2
+exotic_lance:
+    name: exotic_lance
+    lifetime: 1.2
+    speed: 650.0
+    cooldown: 4.5
+    color: [0.85, 0.3, 1.0]
+    damage: 35
+    aimable_arc: 5
+    display_name: "Exotic Lance"
+    sound_path: sounds/weapons/proton_beam.ogg
+# ── Precursors — enemy-only (Sentinel beam; not sold) ────────────────────────────
+precursor_beam:
+    name: precursor_beam
+    lifetime: 1.5
+    speed: 700.0
+    cooldown: 3.0
+    color: [0.8, 0.2, 1.0]
+    damage: 40
+    aimable_arc: 180
+    display_name: "Precursor Beam"
+    sound_path: sounds/weapons/proton_beam.ogg
+flak_turret:
+    name: flak_turret
+    lifetime: 0.32
+    speed: 380.0
+    cooldown: 1.0
+    color: [1.0, 0.85, 0.4]
+    damage: 3
+    aimable_arc: 180
+    display_name: "Flak Turret"
+    sound_path: sounds/weapons/laser.ogg
+siege_turret:
+    name: siege_turret
+    lifetime: 1.6
+    speed: 800.0
+    cooldown: 5.2
+    color: [0.9, 0.7, 0.4]
+    damage: 30
+    aimable_arc: 180
+    display_name: "Siege Turret"
+    sound_path: sounds/weapons/proton_beam.ogg
+relic_turret:
+    name: relic_turret
+    lifetime: 1.4
+    speed: 520.0
+    cooldown: 5.5
+    color: [0.7, 0.45, 1.0]
+    damage: 22
+    aimable_arc: 180
+    display_name: "Relic Turret"
+    sound_path: sounds/weapons/proton_beam.ogg
