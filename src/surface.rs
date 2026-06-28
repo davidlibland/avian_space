@@ -928,8 +928,19 @@ fn setup_surface(
         // Place the landing pad at the map center.
         let pad_cx = map_w / 2;
         let pad_cy = map_h / 2;
-        // Mechanic shop: random cardinal direction, 3-6 tiles from pad.
-        let (mech_x, mech_y) = {
+        // Fuel station shares the mechanic's "fixed beside the pad" placement,
+        // mirrored to the opposite side of the pad. Resolve its footprint up front.
+        let fuel_ti = templates
+            .iter()
+            .position(|t| t.name == kind_template(BuildingKind::FuelStation))
+            .unwrap_or(0);
+        let (fuel_bw, fuel_bh) = templates
+            .get(fuel_ti)
+            .map(|t| (t.width, t.height))
+            .unwrap_or((4, 4));
+        // Mechanic shop: random cardinal direction, 3-6 tiles from pad. The fuel
+        // station is placed on the opposite side of the pad from the mechanic.
+        let (mech_x, mech_y, fuel_x, fuel_y) = {
             use rand::{Rng, SeedableRng};
             let mech_seed = planet_name
                 .bytes()
@@ -940,14 +951,23 @@ fn setup_surface(
             // tall roof extends north over the pad, hiding the ship. Only
             // right / left / north (where the pad stays in front, unobscured).
             let dir = rng.gen_range(0u8..3);
-            let (dx, dy) = match dir {
+            let (mdx, mdy) = match dir {
                 0 => (dist + 2, 0),  // right
                 1 => (-dist - 5, 0), // left (offset by the 6-wide mechanic)
                 _ => (0, dist + 2),  // up / north
             };
+            // Fuel station: opposite side of the pad. The fuel booth is short, so
+            // the south case doesn't hide the ship the way the tall mechanic would.
+            let (fdx, fdy) = match dir {
+                0 => (-dist - fuel_bw as i32 - 1, 0), // mech right -> fuel left
+                1 => (dist + 2, 0),                   // mech left  -> fuel right
+                _ => (0, -dist - fuel_bh as i32 - 1), // mech north -> fuel south
+            };
             (
-                (pad_cx as i32 + dx).max(2) as u32,
-                (pad_cy as i32 + dy).max(2) as u32,
+                (pad_cx as i32 + mdx).max(2) as u32,
+                (pad_cy as i32 + mdy).max(2) as u32,
+                (pad_cx as i32 + fdx).max(2) as u32,
+                (pad_cy as i32 + fdy).max(2) as u32,
             )
         };
 
@@ -958,8 +978,17 @@ fn setup_surface(
         // Reserve the mechanic area (6×4 — matches the 3/4 sprite footprint).
         placed_buildings.push((mech_x.saturating_sub(1), mech_y, 6, 4));
         let mut building_assignments: Vec<(BuildingKind, u32, u32, usize)> = Vec::new(); // (kind, x, y, template_idx)
+        // Fuel station: fixed beside the pad opposite the mechanic, rather than
+        // scattered with the other buildings (skipped in the loop below). Reusing
+        // building_assignments/placed_buildings means the existing door, solid-tile,
+        // terrain, minimap and interaction code all handle it like any other building.
+        placed_buildings.push((fuel_x, fuel_y, fuel_bw, fuel_bh));
+        building_assignments.push((BuildingKind::FuelStation, fuel_x, fuel_y, fuel_ti));
 
         for kind in &building_kinds {
+            if *kind == BuildingKind::FuelStation {
+                continue; // placed beside the pad opposite the mechanic, above.
+            }
             // Semantic: each kind gets the template its 3/4 sprite was built for.
             let ti_opt = templates
                 .iter()
