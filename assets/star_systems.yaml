@@ -296,14 +296,14 @@ sol:
       fed_patrol: 2.0
       fed_destroyer: 0.25
       fed_missile_cruiser: 0.125
-      shuttle: 1.5
-      cargo_transport: 1.5
-      hauler: 2.0
-      freighter: 1.0
-      courier: 0.5
-      asteroid_miner: 1.5
-      prospector: 1.5
-      rebel_fighter: 1.5        # occasional Rebel scout near the border
+      shuttle: 1.65
+      cargo_transport: 1.65
+      hauler: 2.2
+      freighter: 1.1
+      courier: 0.55
+      asteroid_miner: 1.65
+      prospector: 1.65
+      rebel_fighter: 1.5
       rebel_gunboat: 0.25
       rebel_frigate: 0.25
       pirate_corvette: 3.25
@@ -356,11 +356,13 @@ kepler_22:
     types:
       fed_patrol: 3.0
       fed_destroyer: 1.0
-      cargo_transport: 1.5
-      hauler: 2.0
-      courier: 1.0
-      asteroid_miner: 1.0
-      prospector: 1.0
+      cargo_transport: 1.53
+      hauler: 2.04
+      courier: 1.02
+      asteroid_miner: 1.02
+      prospector: 1.02
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 tau_ceti:
   map_position: [-280.0, 60.0]
@@ -411,6 +413,8 @@ tau_ceti:
       courier: 1.0
       asteroid_miner: 1.5
       prospector: 1.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 epsilon_eridani:
   map_position: [-350.0, -100.0]
@@ -464,6 +468,8 @@ epsilon_eridani:
       bulk_carrier: 1.0
       asteroid_miner: 2.0
       prospector: 2.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 vega:
   map_position: [-160.0, -220.0]
@@ -526,6 +532,8 @@ vega:
       freighter: 1.0
       asteroid_miner: 2.0
       prospector: 2.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 barnard:
   map_position: [-130.0, 180.0]
@@ -579,7 +587,9 @@ barnard:
       freighter: 1.0
       asteroid_miner: 2.0
       prospector: 2.0
-      rebel_fighter: 1.0        # occasional Rebel border probe
+      rebel_fighter: 1.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 # ── Uninhabited border systems ──────────────────────────────────────────────────
 # No planets. Dense asteroid fields. Pirates and miners. Both factions send
@@ -606,8 +616,8 @@ alpha_centauri:
       pirate_missile_boat: 2.0
       asteroid_miner: 1.5
       prospector: 1.5
-      fed_patrol: 1.0           # Federation border sweep
-      rebel_fighter: 1.0        # Rebel forward scout
+      fed_patrol: 1.0
+      rebel_fighter: 1.0
 
 drift:
   map_position: [100.0, 150.0]
@@ -628,8 +638,8 @@ drift:
       pirate_missile_boat: 2.0
       asteroid_miner: 2.0
       prospector: 2.0
-      fed_patrol: 1.0           # Federation sweep from barnard
-      rebel_gunboat: 1.0        # Rebel probe from procyon
+      fed_patrol: 1.0
+      rebel_gunboat: 1.0
 
 # ── Rebel systems (right side) ─────────────────────────────────────────────────
 # Rebels are faster and more aggressive. Border systems (procyon, sirius)
@@ -698,7 +708,9 @@ procyon:
       bulk_carrier: 1.0
       courier: 2.0
       frigate: 1.0
-      fed_patrol: 1.0           # occasional Federation border probe
+      fed_patrol: 1.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 sirius:
   map_position: [420.0, 60.0]
@@ -761,7 +773,9 @@ sirius:
       freighter: 2.0
       asteroid_miner: 1.5
       prospector: 1.5
-      fed_patrol: 1.0           # Federation border probe from alpha_centauri
+      fed_patrol: 1.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 rigel:
   map_position: [580.0, -120.0]
@@ -808,10 +822,12 @@ rigel:
       rebel_gunboat: 2.0
       rebel_frigate: 2.0
       rebel_fighter: 2.0
-      cargo_transport: 2.55
-      hauler: 1.7
-      asteroid_miner: 1.7
-      prospector: 1.7
+      cargo_transport: 3.11
+      hauler: 2.07
+      asteroid_miner: 2.07
+      prospector: 2.07
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 altair:
   map_position: [500.0, 220.0]
@@ -872,6 +888,8 @@ altair:
       courier: 2.0
       asteroid_miner: 1.0
       prospector: 1.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 deneb:
   map_position: [680.0, 80.0]
@@ -934,9 +952,11 @@ deneb:
       rebel_frigate: 2.0
       rebel_gunboat: 2.0
       rebel_fighter: 2.0
-      cargo_transport: 2.55
-      hauler: 3.4
-      freighter: 1.7
+      cargo_transport: 3.11
+      hauler: 4.14
+      freighter: 2.07
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 # ── Free Frontier — The Reaches (south wing) ─────────────────────────────────────
 # The Independent worlds given a flag. Frontier extraction + free ports, gatewayed
@@ -994,6 +1014,8 @@ halcyon:
       cargo_transport: 1.5
       frontier_skiff: 1.0
       frontier_harvester: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 ceres_freehold:
   map_position: [20.0, 470.0]
@@ -1039,6 +1061,8 @@ ceres_freehold:
       prospector: 1.0
       frontier_skiff: 1.0
       frontier_harvester: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 the_verge:
   map_position: [330.0, 410.0]
@@ -1082,6 +1106,8 @@ the_verge:
       frontier_dredger: 1.5
       cargo_transport: 1.0
       frontier_skiff: 1.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 kuiper_reach:
   map_position: [180.0, 580.0]
@@ -1128,6 +1154,7 @@ kuiper_reach:
       frontier_dredger: 1.0
       cargo_transport: 0.5
       pirate_corvette: 0.5
+      frontier_skiff: 0.7
 
 # ── Helios Combine (north wing) ──────────────────────────────────────────────────
 # Megacorp industry above the core: refineries, robotics, automated yards. Gatewayed
@@ -1187,6 +1214,8 @@ tycho_yards:
       helios_freighter: 1.5
       helios_drone: 1.0
       helios_enforcer: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 helios_prime:
   map_position: [60.0, -470.0]
@@ -1247,6 +1276,8 @@ helios_prime:
       helios_hauler: 1.0
       helios_drone: 1.0
       helios_enforcer: 1.0
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 the_foundry:
   map_position: [290.0, -360.0]
@@ -1288,10 +1319,12 @@ the_foundry:
     min: 2
     max: 5
     types:
-      helios_freighter: 1.5
-      helios_courier: 1.5
+      helios_freighter: 1.62
+      helios_courier: 1.62
       helios_drone: 1.0
       helios_enforcer: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 # ── The Bastion — Federation hardliner splinter (far west) ───────────────────────
 # The deep Federation rear, seized by a militarist splinter. Reached only through
@@ -1333,10 +1366,12 @@ iron_march:
     min: 2
     max: 5
     types:
-      bastion_collier: 1.5
-      bastion_dredger: 2.0
+      bastion_collier: 1.68
+      bastion_dredger: 2.24
       bastion_guard: 1.5
       bastion_lance: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 bastion:
   map_position: [-860.0, 70.0]
@@ -1380,11 +1415,13 @@ bastion:
     min: 3
     max: 6
     types:
-      bastion_collier: 2.0
-      bastion_dredger: 1.5
+      bastion_collier: 3.01
+      bastion_dredger: 2.26
       bastion_guard: 1.5
       bastion_lance: 1.0
       siege_monitor: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 # ── Sanctum & the road to the Rift — Artifact Order (east) ───────────────────────
 # The Order's holy ground, guarding the road from Rebel space (Deneb) to the Deep.
@@ -1440,6 +1477,8 @@ sanctum:
       order_quarryman: 1.5
       order_acolyte: 1.0
       order_censer: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 the_threshold:
   map_position: [930.0, -250.0]
@@ -1471,6 +1510,7 @@ the_threshold:
       order_quarryman: 1.5
       order_almoner: 1.0
       order_acolyte: 1.0
+      pirate_corvette: 0.6
 
 # ── The Rift — Precursor deep (endgame, gated) ───────────────────────────────────
 # Uninhabited, derelict-choked, exotic-matter rich. The connection from the_threshold
@@ -1545,6 +1585,8 @@ the_anvil:
       bastion_dredger: 2.0
       bastion_collier: 1.5
       bastion_guard: 1.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 # ── Artifact Order — third system (vaults) ───────────────────────────────────────
 the_cloister:
@@ -1582,6 +1624,8 @@ the_cloister:
       order_almoner: 1.5
       order_quarryman: 1.0
       order_acolyte: 0.5
+      pirate_corvette: 0.6
+      pirate_missile_boat: 0.3
 
 # ── Precursor Deep — three more (uninhabited, exotic-matter, derelict) ────────────
 # Reached by the unstable jumps beyond the Rift. No markets, no fuel, no mercy.
