@@ -12,12 +12,10 @@ use crate::{
     missions::types::{MissionStatus, Objective},
 };
 
-// Canvas is larger than the visible viewport — the ScrollArea lets the user pan around.
-const CANVAS_W: f32 = 1400.0;
-const CANVAS_H: f32 = 900.0;
-// Map origin (0,0) is placed at this pixel in the canvas.
-const CANVAS_CENTER_X: f32 = 700.0;
-const CANVAS_CENTER_Y: f32 = 450.0;
+// The scrollable canvas is sized at runtime to the galaxy's actual extent (see
+// the map-bounds computation below), so every system is reachable by panning no
+// matter how far the map expands. This padding rings the outermost systems.
+const MAP_PAD: f32 = 120.0;
 const NODE_R: f32 = 3.5;   // visual dot radius
 const CLICK_R: f32 = 12.0; // invisible click hit radius
 
@@ -191,6 +189,22 @@ fn jump_ui(
     let map_w = (win_w * 0.85).max(400.0);
     let map_h = (win_h * 0.70).max(250.0);
 
+    // Bounds of every system in map-space, so the scrollable canvas is exactly
+    // large enough to hold the whole galaxy (the expanded map ran off the old
+    // fixed canvas, leaving far systems unreachable by scrolling).
+    let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for sys in item_universe.star_systems.values() {
+        min_x = min_x.min(sys.map_position.x);
+        min_y = min_y.min(sys.map_position.y);
+        max_x = max_x.max(sys.map_position.x);
+        max_y = max_y.max(sys.map_position.y);
+    }
+    if !min_x.is_finite() {
+        (min_x, min_y, max_x, max_y) = (0.0, 0.0, 0.0, 0.0);
+    }
+    let canvas_w = (max_x - min_x) + MAP_PAD * 2.0;
+    let canvas_h = (max_y - min_y) + MAP_PAD * 2.0;
+
     let mut jump_target: Option<String> = None;
     let mut close = false;
 
@@ -208,21 +222,22 @@ fn jump_ui(
                     .get(&current_system.0)
                     .map(|s| s.map_position)
                     .unwrap_or_default();
-                let offset_x = CANVAS_CENTER_X + map_pos.x - map_w * 0.5;
-                let offset_y = CANVAS_CENTER_Y + map_pos.y - map_h * 0.5;
-                scroll = scroll.scroll_offset(egui::Vec2::new(offset_x, offset_y));
+                let offset_x = (map_pos.x - min_x) + MAP_PAD - map_w * 0.5;
+                let offset_y = (map_pos.y - min_y) + MAP_PAD - map_h * 0.5;
+                scroll = scroll
+                    .scroll_offset(egui::Vec2::new(offset_x.max(0.0), offset_y.max(0.0)));
                 ui_state.scroll_initialized = true;
             }
 
             scroll.show(ui, |ui| {
                 let (response, painter) =
-                    ui.allocate_painter(egui::Vec2::new(CANVAS_W, CANVAS_H), Sense::click());
+                    ui.allocate_painter(egui::Vec2::new(canvas_w, canvas_h), Sense::click());
 
                 let origin = response.rect.min;
                 let to_screen = |mp: bevy::math::Vec2| -> Pos2 {
                     Pos2::new(
-                        origin.x + CANVAS_CENTER_X + mp.x,
-                        origin.y + CANVAS_CENTER_Y + mp.y,
+                        origin.x + (mp.x - min_x) + MAP_PAD,
+                        origin.y + (mp.y - min_y) + MAP_PAD,
                     )
                 };
 
