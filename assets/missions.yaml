@@ -441,8 +441,6 @@ bounty_story_4_catch:
       name: federation_weapons_license
     - kind: grant_unlock
       name: bounty_hunter_license
-    - kind: grant_unlock
-      name: federation_ship_license
 
 # Phase 3: Carrier tier (2 missions — pirate carriers in border systems)
 # These are endgame-difficulty missions targeting the heavily armed pirate
@@ -517,10 +515,6 @@ bounty_story_6_catch:
       name: carrier_license
     - kind: grant_unlock
       name: turret_license
-    - kind: grant_unlock
-      name: federation_capital_license
-    - kind: grant_unlock
-      name: fed_carrier_license
 
 # ── Espionage storyline ────────────────────────────────────────────────────
 # A 15-mission arc offered by Federation Intelligence operating out of the
@@ -906,8 +900,6 @@ espionage_final:
       credits: 100000
     - kind: grant_unlock
       name: rebel_ship_license
-    - kind: grant_unlock
-      name: rebel_capital_license
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Free Frontier — "The Reaches"  (grants free_frontier_license at stage 1, so the
@@ -1436,3 +1428,510 @@ rift_final:
       name: carrier_license
     - kind: grant_unlock
       name: precursor_ship_license
+
+# ══════════════════════════════════════════════════════════════════════════════
+# THE WEIGHT OF ORDER — Federation governance arc (Director Sato, Earth)
+# A third Federation face beside the navy and intelligence: the cost of imposing
+# order. Opens with mercy, tightens into the grey, ends commanding the Drift
+# pacification. Grants the Federation capital hardware no other arc unlocks:
+# federation_ship_license, federation_capital_license, fed_carrier_license.
+# Gated behind bounty_story_2_catch (an established Federation contractor).
+# ══════════════════════════════════════════════════════════════════════════════
+
+weight_of_order_1:
+  briefing: "Director Sato of the Earth governance office finds you at the market. 'Pilot. Europa is under plague quarantine and the relief convoys won't cross the cordon. I have ten units of medical supplies and no one willing to run them. The Federation does not abandon its own. 12,000 credits — go.'"
+  success_text: "Europa's med-techs swarm the crates before your ramp is down. Sato's voice, later: 'You did a good thing today. Remember that it was the Federation that sent you. Come back — there is harder work.'"
+  failure_text: "The supplies never reached Europa. Sato does not call again for a while."
+  preconditions:
+    - kind: completed
+      mission: bounty_story_2_catch
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: market
+    approach: seek
+  start_effects:
+    - kind: load_cargo
+      commodity: medical_supplies
+      quantity: 10
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: europa
+  requires:
+    - kind: has_cargo
+      commodity: medical_supplies
+      quantity: 10
+  completion_effects:
+    - kind: remove_cargo
+      commodity: medical_supplies
+      quantity: 10
+    - kind: pay
+      credits: 12000
+
+weight_of_order_2:
+  briefing: "Sato's tone is harder now. 'Barnard reports armed ships running unlicensed cargo past the customs cordon — smugglers, undercutting every taxpaying hauler in the system. Some say they're just hungry Independents. The law does not have a clause for hungry, Pilot. Clear them. 18,000 credits, and a Federation warship certification when it's done.'"
+  success_text: "The last 'smuggler' breaks apart against your guns. One of them was barely armed. Sato uploads your federation ship license without comment. 'Order is not always comfortable. It is always necessary.'"
+  failure_text: "The smuggler ring still runs the Barnard cordon, and your certification stays locked."
+  preconditions:
+    - kind: completed
+      mission: weight_of_order_1
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: barnard
+    ship_type: pirate_corvette
+    count: 3
+    target_name: "Cordon Runner"
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 18000
+    - kind: grant_unlock
+      name: federation_ship_license
+
+weight_of_order_3:
+  briefing: "'Tau Ceti 2 sold a vault of pre-colonial artifacts on the black market to buy food during the blockade,' Sato says. 'They were Federation heritage. The administrator who authorized the sale is still on-world. Go to the market and make her account for it — recover what you can. 20,000 credits.'"
+  success_text: "The administrator hands over a manifest, her jaw tight. 'We were starving.' You log it anyway. Sato: 'You begin to see the weight of it. Good.'"
+  failure_text: "The administrator and the manifest both vanish into Tau Ceti's under-levels."
+  preconditions:
+    - kind: completed
+      mission: weight_of_order_2
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: tau_ceti_2
+    npc_name: "Administrator Reyes"
+    building: market
+  completion_effects:
+    - kind: pay
+      credits: 20000
+
+weight_of_order_4:
+  briefing: "'A tax-revolt is brewing on Pluto, and its ringleader is hiding in the shipyard district,' Sato says. 'Catch him. What happens after is your call — turn him in, or let him slip. The Federation only requires that the revolt ends. 25,000 credits.'"
+  success_text: "You corner the ringleader by the mechanic's bay. He doesn't run. 'You really think order is the same as justice?' Whatever you decide, the revolt loses its head. Sato: 'There is one last thing, and it is the largest.'"
+  failure_text: "The ringleader makes orbit and the revolt spreads to three more moons."
+  preconditions:
+    - kind: completed
+      mission: weight_of_order_3
+  offer:
+    kind: auto
+  objective:
+    kind: catch_npc
+    planet: pluto
+    npc_name: "the revolt's ringleader"
+    building: mechanicshop
+  completion_effects:
+    - kind: pay
+      credits: 25000
+
+weight_of_order_5:
+  briefing: "Sato meets you at the Earth shipyard, and an admiral stands beside her. 'Pilot — the pacification of the Drift is authorized, and you will lead it. Two pirate carriers anchor the borderland havens. Break them and Federation writ runs to the frontier at last. 120,000 credits, and a capital-class commission: the destroyer and the carrier yards open to you.'"
+  success_text: "The second carrier goes dark and the Drift is, for now, Federation space. Sato watches the wreck fields. 'We won. I keep waiting to feel it.' Your capital and carrier certifications come through: the fed_destroyer and fed_carrier are yours to command."
+  failure_text: "The pacification fleet falls back from the Drift, and the havens hold."
+  preconditions:
+    - kind: completed
+      mission: weight_of_order_4
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: shipyard
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: pirate_carrier
+    count: 2
+    target_name: "Haven Carrier"
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 120000
+    - kind: grant_unlock
+      name: federation_capital_license
+    - kind: grant_unlock
+      name: fed_carrier_license
+
+# ══════════════════════════════════════════════════════════════════════════════
+# THE EAST WIND — Rebel arc (the mirror of the espionage arc, from the other
+# trench). Recruited on Titan, run relief into rebel Procyon, fire the first
+# shots at the Federation, reach Deneb, then turn captured Federation tech to the
+# Alliance. Grants the rebel hardware and a captured-Fed path: rebel_ship_license,
+# rebel_capital_license, federation_ship_license. Gated behind pirate_bounty_sol.
+# ══════════════════════════════════════════════════════════════════════════════
+
+east_wind_1:
+  briefing: "A woman in a worn flight jacket slides into the seat across from you in the Titan bar. 'You fly like someone who's tired of being told where. There's a wind blowing in from the frontier, friend, and it's blowing east. If you want in, there's a cell leader waiting on Barnard Station. Codeword's the same as the wind. 8,000 to make the introduction.'"
+  success_text: "The cell leader hears the codeword and relaxes a fraction. 'East wind. Good. We can use a pilot who isn't on anyone's payroll. Stay close — the work gets realer from here.'"
+  failure_text: "The contact on Barnard waits, decides you aren't coming, and is gone."
+  preconditions:
+    - kind: completed
+      mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: titan
+    weight: 1.0
+    building: bar
+    approach: seek
+  objective:
+    kind: meet_npc
+    planet: barnard_station
+    npc_name: "the cell leader"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 8000
+
+east_wind_2:
+  briefing: "'Procyon's outer camps are out of medicine and the Federation cordon is 'inspecting' every relief ship into the ground,' the cell leader says. 'Run twelve units across the Drift to Procyon Prime. Don't stop for patrols. 18,000, and you'll have earned the next conversation.'"
+  success_text: "The Procyon med-camp unloads the crates in the dark. A medic grips your arm. 'You don't know what this means.' The cell leader is waiting at Deneb's door."
+  failure_text: "The relief run failed, and the Procyon camps went without."
+  preconditions:
+    - kind: completed
+      mission: east_wind_1
+  offer:
+    kind: auto
+  start_effects:
+    - kind: load_cargo
+      commodity: medical_supplies
+      quantity: 12
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: procyon_prime
+  requires:
+    - kind: has_cargo
+      commodity: medical_supplies
+      quantity: 12
+  completion_effects:
+    - kind: remove_cargo
+      commodity: medical_supplies
+      quantity: 12
+    - kind: pay
+      credits: 18000
+
+east_wind_3:
+  briefing: "'A Federation patrol is herding a refugee convoy out of Procyon space — they'll strip it for 'contraband' and leave the families drifting,' the cell leader says, jaw tight. 'This is the line, pilot. Cross it and there's no going back to the Federation's good graces. Break that patrol. 22,000, and the Alliance opens its hangars to you.'"
+  success_text: "The patrol scatters and the convoy slips free. You've fired on the Federation now — there's no unfiring it. The Alliance uploads rebel ship clearance to your hull: their fighters and gunboats are yours."
+  failure_text: "The patrol drives the refugee convoy into custody, and the Alliance keeps its distance."
+  preconditions:
+    - kind: completed
+      mission: east_wind_2
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: procyon
+    ship_type: fed_patrol
+    count: 3
+    target_name: "Federation Patrol"
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 22000
+    - kind: grant_unlock
+      name: rebel_ship_license
+
+east_wind_4:
+  briefing: "At Deneb Prime the cell leader brings you before Alliance command. 'There's a hardliner faction here that wants to hit Kepler-22b — a civilian world — to 'send a message.' Some of us want it stopped. Meet our contact in the Deneb bar and decide which way the wind blows. 25,000 either way.'"
+  success_text: "Whatever you chose at Deneb, the Alliance now counts you as one of its own — and grants you a capital berth. The converted-hull frigates of the rebel fleet are yours to command."
+  failure_text: "You leave Deneb without the Alliance's trust, and the capital berth with it."
+  preconditions:
+    - kind: completed
+      mission: east_wind_3
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: deneb_prime
+    npc_name: "the Alliance contact"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 25000
+    - kind: grant_unlock
+      name: rebel_capital_license
+
+east_wind_5:
+  briefing: "'The Federation builds its ships off ours, and it's time we returned the favor,' the cell leader says. 'A Federation supply element is moving schematics-cores through Kepler-22. Take them down and salvage the cores — our engineers will reverse them into a license we can actually use. 30,000.'"
+  success_text: "The cores are aboard and the Alliance's engineers go to work. Within a week your hull carries a reverse-engineered Federation ship license — their own designs, flying under the east wind."
+  failure_text: "The schematics-cores jump out of Kepler-22 intact, and the chance is gone."
+  preconditions:
+    - kind: completed
+      mission: east_wind_4
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: kepler_22
+    ship_type: fed_patrol
+    count: 2
+    target_name: "Federation Supply Element"
+    hostile: true
+    collect:
+      commodity: weapons_tech
+      quantity: 4
+  completion_effects:
+    - kind: pay
+      credits: 30000
+    - kind: grant_unlock
+      name: federation_ship_license
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NO FLAG — Pirate arc (the freest, darkest road). A Pluto fixer, a Drift raid,
+# an ambush on the very rebel convoy the espionage arc protects, service under
+# the Pirate King forging a Free Fleet, and a last stand defending the haven
+# against the Federation pacification fleet — the same battle Weight of Order
+# lets you lead, from the other side. Grants carrier_license (the Free Fleet).
+# Gated behind pirate_bounty_sol.
+# ══════════════════════════════════════════════════════════════════════════════
+
+no_flag_1:
+  briefing: "A fixer in the Pluto bar doesn't give a name. 'Got eight units of exotic matter that never officially existed, and a Federation sweep between here and Triton. Run it to my man on Triton without getting scanned and there's 14,000 in it. No flags, no records, no questions.'"
+  success_text: "The Triton contact weighs the crates and grins. 'Clean run. The fixer was right about you.' Out here, a reputation for not getting caught is worth more than the cargo."
+  failure_text: "The Federation sweep tags your hold, and the fixer writes you off as a liability."
+  preconditions:
+    - kind: completed
+      mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: pluto
+    weight: 1.0
+    building: bar
+    approach: seek
+  start_effects:
+    - kind: load_cargo
+      commodity: exotic_matter
+      quantity: 8
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: triton
+  requires:
+    - kind: has_cargo
+      commodity: exotic_matter
+      quantity: 8
+  completion_effects:
+    - kind: remove_cargo
+      commodity: exotic_matter
+      quantity: 8
+    - kind: pay
+      credits: 14000
+
+no_flag_2:
+  briefing: "The fixer has bigger work. 'A fat merchant convoy is cutting through the Drift thinking the borderland's empty. It isn't — it's ours. Hit the freighters, take what's in their holds, and we both eat well. 20,000 plus whatever you can carry off.'"
+  success_text: "The freighters' holds come open like cracked safes. The fixer counts the exotic matter you bring back and nods. 'The King's going to want to meet you.'"
+  failure_text: "The convoy's escorts drive you off, and the fixer keeps his distance."
+  preconditions:
+    - kind: completed
+      mission: no_flag_1
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: freighter
+    count: 2
+    target_name: "Merchant Convoy"
+    hostile: true
+    collect:
+      commodity: exotic_matter
+      quantity: 4
+  completion_effects:
+    - kind: pay
+      credits: 20000
+
+no_flag_3:
+  briefing: "'Rebels are running a weapons convoy through the Drift — the same shipments Federation intelligence bleeds itself protecting,' the fixer says. 'Neither side owns us. Take the convoy, strip the weapons parts, and let the Federation and the Alliance both wonder where their war went. 24,000.'"
+  success_text: "The rebel gunboats burn and their cargo is yours. You've now robbed both halves of the war in a single month. The fixer laughs. 'No flag, no master. The King will see you at the haven.'"
+  failure_text: "The rebel escorts hold the convoy together and you limp away empty-handed."
+  preconditions:
+    - kind: completed
+      mission: no_flag_2
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: rebel_gunboat
+    count: 3
+    target_name: "Rebel Weapons Convoy"
+    hostile: true
+    collect:
+      commodity: weapons_parts
+      quantity: 4
+  completion_effects:
+    - kind: pay
+      credits: 24000
+
+no_flag_4:
+  briefing: "The fixer sends coordinates to the haven at Kuiper. 'The King wants to look you in the eye. He's building something out here — a Free Fleet, ships that answer to no nation. Meet him in the haven bar. Don't be late, and don't be armed when you walk in.'"
+  success_text: "The Pirate King is older than the legends and twice as sharp. 'A free Drift, captain — no tariffs, no conscription, no flag. I need pilots who understand that.' He marks you as one of his own. 'There's one more fight, and it's the only one that matters.'"
+  failure_text: "You miss the meeting, and the King's invitation does not come twice."
+  preconditions:
+    - kind: completed
+      mission: no_flag_3
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: kuiper_haven
+    npc_name: "the Pirate King"
+    building: bar
+  completion_effects:
+    - kind: pay
+      credits: 28000
+
+no_flag_5:
+  briefing: "The King's voice is flat over the comm. 'The Federation pacification fleet has come for the haven — the same fleet that thinks it's bringing order. Out here we call it what it is: an eviction. Hold the line over Kuiper. Break their patrols and the Free Fleet is born. 90,000 credits, captain, and a carrier of your own.'"
+  success_text: "The last Federation patrol breaks and runs, and the haven still flies no flag. The King grips your shoulder. 'The Free Fleet is real now, and you helped make it. Take a carrier — you've earned the deck.' Your carrier certification comes through."
+  failure_text: "The pacification fleet takes the haven, and the Free Fleet dies before it was ever born."
+  preconditions:
+    - kind: completed
+      mission: no_flag_4
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: kuiper_reach
+    ship_type: fed_patrol
+    count: 4
+    target_name: "Pacification Patrol"
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 90000
+    - kind: grant_unlock
+      name: carrier_license
+
+# ══════════════════════════════════════════════════════════════════════════════
+# THE INVISIBLE HAND — Merchant Guild arc (private work after the merchant
+# ladder). Corner a market, arm both sides, break a rival cartel, defend Guild
+# independence, and take a seat on the board. The Guild wins quietly no matter
+# who else does. Caps with carrier_license (the board's surplus carrier).
+# Gated behind merchant_story_3.
+# ══════════════════════════════════════════════════════════════════════════════
+
+invisible_hand_1:
+  briefing: "A Guild broker buys you a drink you didn't order. 'You've run the ladder. Now the real work. We've fronted you twelve units of Mars medical supply — every unit off the market is a unit the price climbs. Sit on it, then sell it back to us on Earth at the new rate. 25,000 on delivery. The shortage is the product.'"
+  success_text: "Earth pays the inflated rate without blinking, and the broker toasts you. 'Scarcity is just inventory you haven't sold yet. You have the instinct.'"
+  failure_text: "The stock never reaches Earth, and the broker quietly closes your line of credit."
+  preconditions:
+    - kind: completed
+      mission: merchant_story_3
+  offer:
+    kind: npc_offer
+    planet: mars
+    weight: 1.0
+    building: market
+    approach: seek
+  start_effects:
+    - kind: load_cargo
+      commodity: medical_supplies
+      quantity: 12
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: earth
+  requires:
+    - kind: has_cargo
+      commodity: medical_supplies
+      quantity: 12
+  completion_effects:
+    - kind: remove_cargo
+      commodity: medical_supplies
+      quantity: 12
+    - kind: pay
+      credits: 25000
+
+invisible_hand_2:
+  briefing: "'War is the Guild's best customer, and a managed war buys forever,' the broker says. 'We're selling weapons parts to the Federation at Barnard and the Alliance at Procyon — both, deliberately. Run this consignment to Procyon Prime. Don't develop a conscience about it; the cargo doesn't. 22,000.'"
+  success_text: "Procyon's quartermaster signs for the parts that will be shot back at Barnard's parts next season. The broker is pleased. 'Balance, you see. We don't pick sides. We supply them.'"
+  failure_text: "The consignment doesn't reach Procyon, and the Guild's careful balance tips."
+  preconditions:
+    - kind: completed
+      mission: invisible_hand_1
+  offer:
+    kind: auto
+  start_effects:
+    - kind: load_cargo
+      commodity: weapons_parts
+      quantity: 10
+      reserved: true
+  objective:
+    kind: land_on_planet
+    planet: procyon_prime
+  requires:
+    - kind: has_cargo
+      commodity: weapons_parts
+      quantity: 10
+  completion_effects:
+    - kind: remove_cargo
+      commodity: weapons_parts
+      quantity: 10
+    - kind: pay
+      credits: 22000
+
+invisible_hand_3:
+  briefing: "'A rival cartel is undercutting us out of the Drift, and the board would like them to stop,' the broker says lightly. 'We don't soil our hands with this sort of thing — which is why we contract it to you. Their convoy runs the Drift unescorted. Break it. 26,000, and you were never here.'"
+  success_text: "The rival cartel's convoy scatters across the Drift and their prices climb back into line with ours. The broker never mentions it again, which is how you know it mattered."
+  failure_text: "The rival convoy gets through, and the cartel keeps bleeding the Guild's margins."
+  preconditions:
+    - kind: completed
+      mission: invisible_hand_2
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: cargo_transport
+    count: 3
+    target_name: "Rival Cartel Convoy"
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 26000
+
+invisible_hand_4:
+  briefing: "The broker is, for once, not smiling. 'The Alliance is moving to seize a Guild depot at Barnard — nationalize our stock 'for the cause.' If they take it, the Federation will take the next one. Independence is the whole product, pilot. Defend the depot. 30,000.'"
+  success_text: "The Alliance raiders pull back from Barnard and the depot stays Guild property. The broker exhales. 'Neither flag owns us. That is the only principle we have, and it is worth defending.'"
+  failure_text: "The depot falls, and every faction takes note of how little it cost them."
+  preconditions:
+    - kind: completed
+      mission: invisible_hand_3
+  offer:
+    kind: auto
+  objective:
+    kind: destroy_ships
+    system: barnard
+    ship_type: rebel_gunboat
+    count: 2
+    target_name: "Alliance Requisition Force"
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 30000
+
+invisible_hand_5:
+  briefing: "The broker brings you to the Guild board floor on Earth. 'They've watched you corner a market, balance a war, and defend our independence without ever once asking whose side you were on. That's a board seat, pilot. Come take it. Wealth, a surplus carrier, and a hand on the prices that move worlds.'"
+  success_text: "You take the seat and the carrier certification that comes with it. The broker leans in. 'Welcome to the only faction that wins every war. We didn't fire a shot — we just sent the invoice.' The surplus carrier yards are open to you."
+  failure_text: "You leave the board floor without a seat, and the Guild's quiet door closes."
+  preconditions:
+    - kind: completed
+      mission: invisible_hand_4
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: earth
+    npc_name: "the Guild board"
+    building: market
+  completion_effects:
+    - kind: pay
+      credits: 80000
+    - kind: grant_unlock
+      name: carrier_license

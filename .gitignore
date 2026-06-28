@@ -5,4 +5,4 @@ bc_policy.bin
 /experiments
 assets/sounds/kenney_sci-fi-sounds/
 assets/sounds/kenney_impact-sounds/
-dev_catalog/
+dev_catalog/.venv-sprites/

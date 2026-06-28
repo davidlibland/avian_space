@@ -685,7 +685,12 @@ fn check_sprites_exist(iu: &ItemUniverse, p: &mut Vec<String>) {
     }
     let mut planet_types = HashSet::new();
     for sys in iu.star_systems.values() {
-        for pd in sys.planets.values() {
+        for (pname, pd) in &sys.planets {
+            // in-game sprite (planets load sprites/planets/<name>.png at startup)
+            let sprite = format!("assets/sprites/planets/{pname}.png");
+            if !Path::new(&sprite).exists() {
+                p.push(format!("planet '{pname}': missing in-game sprite {sprite}"));
+            }
             if !pd.planet_type.is_empty() {
                 planet_types.insert(pd.planet_type.clone());
             }

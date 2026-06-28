@@ -30,7 +30,11 @@ FACTIONS = {
     "merchant":  ("Merchant Guild", (214, 170, 70)),
     "pirate":    ("Federation",     (78, 120, 196)),
     "bounty":    ("Federation",     (78, 120, 196)),
+    "weight":    ("Federation",     (78, 120, 196)),
     "espionage": ("Fed Intel",      (70, 150, 165)),
+    "east":      ("Rebel Alliance", (90, 190, 110)),
+    "no":        ("Pirate Clans",   (224, 150, 70)),
+    "invisible": ("Merchant Guild", (214, 170, 70)),
     "frontier":  ("Free Frontier",  (228, 198, 92)),
     "helios":    ("Helios Combine", (84, 200, 230)),
     "bastion":   ("Fed Bastion",    (188, 64, 56)),
@@ -38,7 +42,8 @@ FACTIONS = {
     "rift":      ("Precursor Rift", (196, 84, 206)),
 }
 FACTION_ORDER = ["Intro", "Mining Guild", "Merchant Guild", "Federation", "Fed Intel",
-                 "Free Frontier", "Helios Combine", "Fed Bastion", "Artifact Order", "Precursor Rift"]
+                 "Rebel Alliance", "Pirate Clans", "Free Frontier", "Helios Combine",
+                 "Fed Bastion", "Artifact Order", "Precursor Rift"]
 
 # ── objective kind → stage shape + label ─────────────────────────────────────
 STAGES = {

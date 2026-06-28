@@ -145,7 +145,7 @@ cargo_transport:
   torque: 15.0
   max_health: 60
   cargo_space: 20
-  item_space: 10
+  item_space: 14
   base_weapons:
     space_mine: [1, 4]
   radius: 20.0
@@ -453,7 +453,7 @@ frontier_sailtender:
   torque: 16.0
   max_health: 120
   cargo_space: 12
-  item_space: 12
+  item_space: 22
   base_weapons:
     flak_gun: [1, null]
     prox_mine: [1, 6]
@@ -522,7 +522,7 @@ helios_overseer:
   torque: 14.0
   max_health: 150
   cargo_space: 6
-  item_space: 18
+  item_space: 54
   base_weapons:
     drone_bay: [1, 6]
     helios_lance: [1, null]
@@ -539,7 +539,7 @@ helios_titan:
   torque: 8.0
   max_health: 280
   cargo_space: 8
-  item_space: 30
+  item_space: 60
   base_weapons:
     drone_bay: [1, 6]
     helios_lance: [2, null]
@@ -643,7 +643,7 @@ order_censer:
   torque: 18.0
   max_health: 110
   cargo_space: 4
-  item_space: 12
+  item_space: 20
   base_weapons:
     relic_lance: [1, null]
     censer_charge: [1, 4]
