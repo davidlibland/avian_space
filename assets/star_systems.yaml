@@ -15,15 +15,14 @@ sol:
       color: [0.55, 0.5, 0.45]
       commodities:
         water: 1
-        oxygen: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
+        iron: 2
+        silicates: 3
+        food: 4
+        fuel_cells: 14
+        gold: 26
+        helium3: 21
         electronics: 14
-        uranium: 24
-        exotic_matter: 48
+        uranium: 30
       outfitter: []
     venus:
       planet_type: cloud
@@ -33,15 +32,17 @@ sol:
       radius: 35.0
       color: [0.75, 0.65, 0.3]
       commodities:
-        water: 1
+        water: 2
         oxygen: 1
-        silicates: 5
-        food: 3
-        chemicals: 6
-        cooling_gel: 5
-        fuel_cells: 6
-        uranium: 45
-        exotic_matter: 90
+        silicates: 7
+        food: 5
+        chemicals: 8
+        polymers: 5
+        cooling_gel: 7
+        fuel_cells: 7
+        helium3: 45
+        uranium: 63
+        exotic_matter: 193
       outfitter: []
     earth:
       planet_type: habitable
@@ -51,19 +52,22 @@ sol:
       radius: 60.0
       color: [0.2, 0.6, 0.3]
       commodities:
-        water: 2
-        oxygen: 2
-        silicates: 4
-        food: 2
-        chemicals: 7
-        cooling_gel: 10
-        fuel_cells: 11
-        medical_supplies: 10
-        gold: 19
-        electronics: 18
-        uranium: 24
-        weapons_parts: 34
-        exotic_matter: 48
+        water: 3
+        oxygen: 3
+        iron: 4
+        silicates: 7
+        food: 3
+        chemicals: 9
+        titanium: 39
+        polymers: 30
+        fuel_cells: 14
+        medical_supplies: 11
+        gold: 37
+        helium3: 21
+        electronics: 19
+        uranium: 30
+        weapons_parts: 30
+        robotics: 40
       outfitter: [laser, proton_beam, ir_missile, space_mine, javelin]
       shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, prospector, hauler, cargo_transport, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
     moon:
@@ -75,15 +79,14 @@ sol:
       color: [0.6, 0.6, 0.65]
       commodities:
         water: 1
-        oxygen: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
+        iron: 2
+        silicates: 3
+        food: 4
+        fuel_cells: 14
+        gold: 26
+        helium3: 21
         electronics: 14
-        uranium: 24
-        exotic_matter: 48
+        uranium: 30
       outfitter: []
       shipyard: [shuttle, cargo_transport, courier, prospector]
     mars:
@@ -95,14 +98,12 @@ sol:
       color: [0.7, 0.35, 0.2]
       commodities:
         water: 1
-        oxygen: 1
         iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        uranium: 11
-        exotic_matter: 48
+        silicates: 3
+        food: 4
+        fuel_cells: 14
+        helium3: 21
+        uranium: 12
       outfitter: []
     jupiter:
       planet_type: gas_giant
@@ -123,15 +124,14 @@ sol:
       color: [0.8, 0.7, 0.3]
       commodities:
         water: 1
-        oxygen: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        electronics: 14
-        uranium: 24
-        exotic_matter: 48
+        iron: 2
+        silicates: 3
+        food: 4
+        fuel_cells: 14
+        gold: 26
+        helium3: 21
+        electronics: 13
+        uranium: 30
       outfitter: []
     europa:
       planet_type: icy_dwarf
@@ -142,12 +142,10 @@ sol:
       color: [0.7, 0.7, 0.75]
       commodities:
         water: 1
-        oxygen: 1
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        uranium: 24
-        exotic_matter: 48
+        food: 4
+        fuel_cells: 14
+        helium3: 21
+        uranium: 30
       outfitter: []
     saturn:
       planet_type: gas_giant
@@ -171,15 +169,17 @@ sol:
       radius: 25.0
       color: [0.7, 0.55, 0.25]
       commodities:
-        water: 1
+        water: 2
         oxygen: 1
-        silicates: 5
-        food: 3
-        chemicals: 6
-        cooling_gel: 5
-        fuel_cells: 6
-        uranium: 45
-        exotic_matter: 90
+        silicates: 7
+        food: 4
+        chemicals: 8
+        polymers: 5
+        cooling_gel: 7
+        fuel_cells: 7
+        helium3: 45
+        uranium: 63
+        exotic_matter: 193
       outfitter: []
     enceladus:
       planet_type: icy_dwarf
@@ -190,12 +190,10 @@ sol:
       color: [0.85, 0.85, 0.9]
       commodities:
         water: 1
-        oxygen: 1
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        uranium: 24
-        exotic_matter: 48
+        food: 4
+        fuel_cells: 14
+        helium3: 21
+        uranium: 30
       outfitter: []
     uranus:
       planet_type: ice_giant
@@ -221,15 +219,14 @@ sol:
       color: [0.5, 0.48, 0.45]
       commodities:
         water: 1
-        oxygen: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        electronics: 14
-        uranium: 24
-        exotic_matter: 48
+        iron: 2
+        silicates: 3
+        food: 4
+        fuel_cells: 14
+        gold: 26
+        helium3: 21
+        electronics: 13
+        uranium: 30
       outfitter: []
     neptune:
       planet_type: ice_giant
@@ -250,12 +247,10 @@ sol:
       color: [0.55, 0.5, 0.55]
       commodities:
         water: 1
-        oxygen: 1
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        uranium: 24
-        exotic_matter: 48
+        food: 4
+        fuel_cells: 14
+        helium3: 21
+        uranium: 30
       outfitter: []
     pluto:
       planet_type: icy_dwarf
@@ -266,12 +261,10 @@ sol:
       color: [0.55, 0.45, 0.4]
       commodities:
         water: 1
-        oxygen: 1
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        uranium: 24
-        exotic_matter: 48
+        food: 4
+        fuel_cells: 14
+        helium3: 21
+        uranium: 30
       outfitter: []
     charon:
       planet_type: rocky
@@ -282,15 +275,14 @@ sol:
       color: [0.45, 0.42, 0.4]
       commodities:
         water: 1
-        oxygen: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        electronics: 14
-        uranium: 24
-        exotic_matter: 48
+        iron: 2
+        silicates: 3
+        food: 4
+        fuel_cells: 14
+        gold: 26
+        helium3: 21
+        electronics: 13
+        uranium: 30
       outfitter: []
   astroid_fields:
     -
@@ -319,7 +311,7 @@ sol:
 
 kepler_22:
   map_position: [-520.0, 60.0]
-  connections: [epsilon_eridani, tau_ceti]
+  connections: [epsilon_eridani, tau_ceti, iron_march]
   planets:
     kepler_22b:
       planet_type: habitable
@@ -329,14 +321,15 @@ kepler_22:
       radius: 50.0
       color: [0.35, 0.35, 0.45]
       commodities:
-        water: 2
-        oxygen: 3
-        silicates: 4
-        food: 2
-        chemicals: 7
-        medical_supplies: 10
-        electronics: 24
-        weapons_parts: 45
+        water: 4
+        oxygen: 6
+        silicates: 5
+        food: 4
+        chemicals: 6
+        polymers: 31
+        medical_supplies: 18
+        electronics: 39
+        robotics: 89
       outfitter: [proton_beam, ir_missile, space_mine]
       shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, cargo_transport, courier, hauler]
     kepler_22_station:
@@ -349,11 +342,8 @@ kepler_22:
       commodities:
         water: 2
         iron: 1
-        silicates: 3
-        food: 2
-        chemicals: 7
-        medical_supplies: 10
-        electronics: 20
+        silicates: 2
+        food: 4
       outfitter: []
   astroid_fields:
     -
@@ -384,11 +374,11 @@ tau_ceti:
       radius: 52.0
       color: [0.5, 0.4, 0.6]
       commodities:
-        water: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        electronics: 17
+        water: 2
+        iron: 2
+        silicates: 3
+        food: 5
+        electronics: 21
       outfitter: []
       shipyard: [shuttle, courier, hauler, cargo_transport, freighter]
     tau_ceti_2:
@@ -399,11 +389,11 @@ tau_ceti:
       radius: 38.0
       color: [0.45, 0.35, 0.55]
       commodities:
-        water: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        electronics: 17
+        water: 2
+        iron: 2
+        silicates: 3
+        food: 4
+        electronics: 20
       outfitter: []
   astroid_fields:
     -
@@ -434,15 +424,16 @@ epsilon_eridani:
       radius: 40.0
       color: [0.3, 0.6, 0.5]
       commodities:
-        water: 2
-        oxygen: 3
-        silicates: 4
-        food: 2
-        chemicals: 7
-        medical_supplies: 8
-        gold: 11
-        electronics: 21
-        weapons_parts: 45
+        water: 3
+        oxygen: 5
+        silicates: 6
+        food: 3
+        chemicals: 6
+        polymers: 30
+        medical_supplies: 15
+        gold: 14
+        electronics: 32
+        robotics: 74
       outfitter: [laser, space_mine]
       shipyard: [shuttle, courier, hauler, cargo_transport, freighter, bulk_carrier]
     eridani_moon:
@@ -454,10 +445,8 @@ epsilon_eridani:
       color: [0.25, 0.5, 0.45]
       commodities:
         water: 1
-        food: 2
-        chemicals: 7
-        medical_supplies: 10
-        gold: 9
+        food: 3
+        gold: 10
       outfitter: []
   astroid_fields:
     -
@@ -478,7 +467,7 @@ epsilon_eridani:
 
 vega:
   map_position: [-160.0, -220.0]
-  connections: [sol, epsilon_eridani]
+  connections: [sol, epsilon_eridani, tycho_yards]
   planets:
     vega_1:
       planet_type: desert
@@ -492,16 +481,12 @@ vega:
         outer_radius: 3.80
         tilt_deg: 22.0
       commodities:
-        water: 1
-        oxygen: 1
+        water: 2
         iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 11
-        fuel_cells: 11
-        gold: 7
-        uranium: 11
-        exotic_matter: 48
+        silicates: 3
+        food: 4
+        gold: 11
+        uranium: 12
       outfitter: [laser, ir_missile, space_mine]
       shipyard: [corvette, courier, hauler, asteroid_miner, prospector, cargo_transport, freighter]
     vega_2:
@@ -512,17 +497,12 @@ vega:
       radius: 30.0
       color: [0.65, 0.65, 0.35]
       commodities:
-        water: 1
-        oxygen: 1
-        iron: 1
-        silicates: 2
-        food: 3
-        cooling_gel: 11
-        fuel_cells: 11
-        gold: 9
-        electronics: 16
-        uranium: 20
-        exotic_matter: 48
+        water: 2
+        iron: 2
+        silicates: 3
+        food: 4
+        gold: 13
+        electronics: 18
       outfitter: []
   astroid_fields:
     -
@@ -544,7 +524,7 @@ vega:
 
 barnard:
   map_position: [-130.0, 180.0]
-  connections: [sol, tau_ceti, drift]
+  connections: [sol, tau_ceti, drift, ceres_freehold]
   planets:
     barnard_rock:
       planet_type: rocky
@@ -554,16 +534,12 @@ barnard:
       radius: 35.0
       color: [0.45, 0.4, 0.35]
       commodities:
-        water: 1
-        oxygen: 1
-        iron: 1
+        water: 2
+        iron: 2
         silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        electronics: 15
-        uranium: 24
-        exotic_matter: 48
+        food: 5
+        gold: 33
+        electronics: 17
       outfitter: [space_mine]
       shipyard: [shuttle, cargo_transport, courier, asteroid_miner, prospector]
     barnard_station:
@@ -574,16 +550,12 @@ barnard:
       radius: 20.0
       color: [0.5, 0.45, 0.5]
       commodities:
-        water: 1
-        oxygen: 1
-        iron: 1
+        water: 2
+        iron: 2
         silicates: 2
-        food: 3
-        cooling_gel: 10
-        fuel_cells: 11
-        electronics: 14
-        uranium: 24
-        exotic_matter: 48
+        food: 4
+        gold: 33
+        electronics: 15
       outfitter: [ir_missile, space_mine]
       shipyard: [courier, cargo_transport, freighter, bulk_carrier, prospector]
   astroid_fields:
@@ -610,7 +582,7 @@ barnard:
 
 alpha_centauri:
   map_position: [220.0, -90.0]
-  connections: [sol, drift, sirius]
+  connections: [sol, drift, sirius, the_foundry]
   planets: {}
   astroid_fields:
     -
@@ -634,7 +606,7 @@ alpha_centauri:
 
 drift:
   map_position: [100.0, 150.0]
-  connections: [barnard, alpha_centauri, procyon]
+  connections: [barnard, alpha_centauri, procyon, halcyon]
   planets: {}
   astroid_fields:
     -
@@ -660,7 +632,7 @@ drift:
 
 procyon:
   map_position: [270.0, 160.0]
-  connections: [drift, sirius, altair]
+  connections: [drift, sirius, altair, the_verge]
   planets:
     procyon_prime:
       planet_type: habitable
@@ -676,15 +648,17 @@ procyon:
         style: thin
       commodities:
         water: 5
-        oxygen: 6
-        iron: 5
-        food: 5
-        chemicals: 6
-        titanium: 12
-        medical_supplies: 22
-        gold: 59
-        electronics: 17
-        weapons_parts: 8
+        oxygen: 5
+        iron: 7
+        food: 6
+        chemicals: 7
+        titanium: 18
+        polymers: 38
+        medical_supplies: 20
+        gold: 74
+        electronics: 31
+        weapons_parts: 11
+        robotics: 26
       outfitter: [laser, ir_missile, javelin, space_mine]
       shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, cargo_transport, freighter, bulk_carrier, asteroid_miner, prospector]
     procyon_ii:
@@ -696,15 +670,15 @@ procyon:
       color: [0.15, 0.35, 0.45]
       commodities:
         water: 4
-        oxygen: 5
-        iron: 4
+        oxygen: 3
+        iron: 3
         silicates: 2
-        food: 5
-        titanium: 9
+        food: 6
+        titanium: 11
         medical_supplies: 24
-        gold: 59
-        electronics: 16
-        weapons_parts: 11
+        electronics: 27
+        weapons_parts: 19
+        robotics: 31
       outfitter: []
   astroid_fields: []
   ships:
@@ -737,14 +711,13 @@ sirius:
         outer_radius: 3.90
         tilt_deg: 15.0
       commodities:
-        water: 3
+        water: 4
         iron: 3
         silicates: 2
         food: 6
-        titanium: 6
-        electronics: 17
-        uranium: 6
-        weapons_parts: 14
+        titanium: 7
+        uranium: 7
+        weapons_parts: 23
       outfitter: [laser, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, cargo_transport, freighter]
     sirius_c:
@@ -755,15 +728,15 @@ sirius:
       radius: 32.0
       color: [0.15, 0.4, 0.3]
       commodities:
-        water: 3
+        water: 4
         iron: 3
         silicates: 2
-        food: 5
-        titanium: 6
-        gold: 51
-        electronics: 15
-        uranium: 8
-        weapons_parts: 14
+        food: 6
+        titanium: 7
+        gold: 68
+        electronics: 20
+        uranium: 10
+        weapons_parts: 23
       outfitter: []
   astroid_fields:
     -
@@ -798,14 +771,11 @@ rigel:
       radius: 42.0
       color: [0.15, 0.3, 0.5]
       commodities:
-        water: 4
+        water: 5
         iron: 3
         silicates: 2
         food: 6
-        titanium: 6
-        gold: 59
-        electronics: 16
-        weapons_parts: 14
+        titanium: 7
       outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
@@ -820,10 +790,7 @@ rigel:
         iron: 3
         silicates: 2
         food: 6
-        titanium: 6
-        gold: 59
-        electronics: 16
-        weapons_parts: 14
+        titanium: 7
       outfitter: []
   astroid_fields:
     -
@@ -854,16 +821,16 @@ altair:
       radius: 38.0
       color: [0.2, 0.45, 0.4]
       commodities:
-        water: 6
-        oxygen: 7
-        iron: 6
+        water: 7
+        oxygen: 8
+        iron: 7
         food: 6
-        chemicals: 6
-        titanium: 14
-        medical_supplies: 25
-        gold: 59
-        electronics: 18
-        weapons_parts: 8
+        chemicals: 5
+        titanium: 24
+        medical_supplies: 31
+        electronics: 41
+        weapons_parts: 12
+        robotics: 39
       outfitter: [laser, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, cargo_transport, courier, asteroid_miner, prospector]
     altair_rock:
@@ -874,16 +841,16 @@ altair:
       radius: 20.0
       color: [0.25, 0.4, 0.35]
       commodities:
-        water: 6
-        oxygen: 7
+        water: 5
+        oxygen: 6
         iron: 4
         silicates: 2
         food: 6
-        titanium: 11
-        medical_supplies: 25
-        gold: 59
-        electronics: 17
-        weapons_parts: 10
+        titanium: 17
+        medical_supplies: 29
+        electronics: 35
+        weapons_parts: 17
+        robotics: 37
       outfitter: []
   astroid_fields:
     -
@@ -904,7 +871,7 @@ altair:
 
 deneb:
   map_position: [680.0, 80.0]
-  connections: [sirius, rigel, altair]
+  connections: [sirius, rigel, altair, sanctum]
   planets:
     deneb_prime:
       planet_type: habitable
@@ -919,16 +886,17 @@ deneb:
         tilt_deg: 62.0
         style: thin
       commodities:
-        water: 6
-        oxygen: 7
-        iron: 5
-        food: 6
-        chemicals: 6
-        titanium: 11
-        medical_supplies: 27
-        gold: 59
-        electronics: 19
-        weapons_parts: 8
+        water: 5
+        oxygen: 9
+        iron: 7
+        silicates: 4
+        food: 5
+        chemicals: 3
+        titanium: 17
+        medical_supplies: 40
+        electronics: 38
+        weapons_parts: 12
+        robotics: 52
       outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, cargo_transport, freighter]
     deneb_station:
@@ -939,16 +907,15 @@ deneb:
       radius: 25.0
       color: [0.1, 0.3, 0.5]
       commodities:
-        water: 5
-        oxygen: 6
+        water: 3
         iron: 3
         silicates: 2
-        food: 6
-        titanium: 8
-        medical_supplies: 27
-        gold: 59
-        electronics: 17
-        weapons_parts: 12
+        food: 5
+        titanium: 10
+        medical_supplies: 39
+        electronics: 32
+        weapons_parts: 19
+        robotics: 51
       outfitter: []
   astroid_fields:
     -
@@ -965,3 +932,554 @@ deneb:
       cargo_transport: 1.5
       hauler: 2.0
       freighter: 1.0
+
+# ── Free Frontier — The Reaches (south wing) ─────────────────────────────────────
+# The Independent worlds given a flag. Frontier extraction + free ports, gatewayed
+# through the borderlands (Drift) and bordering both Fed (Barnard) and Rebel (Procyon).
+halcyon:
+  map_position: [160.0, 360.0]
+  connections: [drift, ceres_freehold, the_verge]
+  planets:
+    halcyon_port:
+      planet_type: habitable
+      faction: FreeFrontier
+      location: [120.0, 80.0]
+      description: "A free port that asks no questions. The unofficial capital of the Reaches; cheap fuel, open berths, a smuggler's welcome."
+      radius: 44.0
+      color: [0.85, 0.8, 0.45]
+      commodities:
+        water: 3
+        oxygen: 4
+        iron: 4
+        silicates: 6
+        food: 3
+        chemicals: 7
+        titanium: 34
+        polymers: 32
+        medical_supplies: 15
+        gold: 74
+        electronics: 25
+        weapons_parts: 23
+        robotics: 29
+      outfitter: [laser, space_mine]
+      shipyard: [shuttle, prospector, courier, cargo_transport]
+    halcyon_ice:
+      planet_type: icy_dwarf
+      faction: FreeFrontier
+      location: [-200.0, -160.0]
+      description: "A captured ice moon the freeholders tap for water and air. Frozen, quiet, and fiercely independent."
+      radius: 16.0
+      color: [0.7, 0.85, 0.9]
+      commodities:
+        water: 1
+        food: 3
+        robotics: 31
+      outfitter: []
+  astroid_fields:
+    -
+      location: [240.0, -120.0]
+      number: 6
+      radius: 340.0
+  ships:
+    min: 2
+    max: 5
+    types:
+      cargo_transport: 2.0
+      prospector: 1.5
+      shuttle: 1.5
+      courier: 1.0
+
+ceres_freehold:
+  map_position: [20.0, 470.0]
+  connections: [halcyon, kuiper_reach, barnard]
+  planets:
+    ceres:
+      planet_type: rocky
+      faction: FreeFrontier
+      location: [80.0, 60.0]
+      description: "The Freehold capital: a cooperative of miners and farmers who answer to no empire. Cheap ore, dear everything else."
+      radius: 38.0
+      color: [0.75, 0.7, 0.5]
+      commodities:
+        water: 2
+        iron: 2
+        silicates: 2
+        food: 4
+        electronics: 19
+      outfitter: [laser, space_mine]
+      shipyard: [shuttle, prospector, asteroid_miner, cargo_transport]
+    pallas:
+      planet_type: icy_dwarf
+      faction: FreeFrontier
+      location: [-260.0, 180.0]
+      description: "A freeholder water-mine, geysers and tents. Half the Reaches drinks from Pallas."
+      radius: 14.0
+      color: [0.72, 0.86, 0.92]
+      commodities:
+        water: 1
+        food: 3
+      outfitter: []
+  astroid_fields:
+    -
+      location: [-120.0, -200.0]
+      number: 8
+      radius: 360.0
+  ships:
+    min: 2
+    max: 5
+    types:
+      asteroid_miner: 1.5
+      prospector: 2.0
+      cargo_transport: 1.5
+      shuttle: 1.0
+
+the_verge:
+  map_position: [330.0, 410.0]
+  connections: [halcyon, kuiper_reach, procyon]
+  planets:
+    verge_station:
+      planet_type: rocky
+      faction: FreeFrontier
+      location: [100.0, 80.0]
+      description: "A frontier mining post on the Rebel border. The freeholders here trade with both sides and trust neither."
+      radius: 26.0
+      color: [0.7, 0.66, 0.5]
+      commodities:
+        water: 2
+        iron: 3
+        silicates: 2
+        food: 4
+        helium3: 7
+        robotics: 33
+      outfitter: [space_mine]
+    verge_giant:
+      planet_type: gas_giant
+      faction: FreeFrontier
+      uncolonized: true
+      location: [-220.0, -160.0]
+      description: "A banded gas giant the freeholders skim for helium-3. No colony — just tethered scoops and sail-tenders."
+      radius: 60.0
+      color: [0.8, 0.75, 0.55]
+      commodities: {}
+      outfitter: []
+  astroid_fields:
+    -
+      location: [260.0, -140.0]
+      number: 7
+      radius: 350.0
+  ships:
+    min: 2
+    max: 5
+    types:
+      cargo_transport: 1.5
+      prospector: 1.5
+      shuttle: 1.0
+      courier: 1.0
+
+kuiper_reach:
+  map_position: [180.0, 580.0]
+  connections: [ceres_freehold, the_verge]
+  planets:
+    kuiper_haven:
+      planet_type: icy_dwarf
+      faction: FreeFrontier
+      location: [60.0, 40.0]
+      description: "The deepest free port in the Reaches — a smuggler's haven where contraband from every faction changes hands."
+      radius: 28.0
+      color: [0.66, 0.8, 0.86]
+      commodities:
+        water: 1
+        food: 5
+        chemicals: 9
+        polymers: 6
+        cooling_gel: 11
+        exotic_matter: 117
+      outfitter: [space_mine]
+    kuiper_clouds:
+      planet_type: cloud
+      faction: FreeFrontier
+      location: [-220.0, -120.0]
+      description: "A hazy hydrocarbon world the freeholders crack for chemicals and fuel. Smells of tar and freedom."
+      radius: 40.0
+      color: [0.78, 0.7, 0.5]
+      commodities:
+        water: 2
+        oxygen: 1
+        silicates: 7
+        food: 5
+        chemicals: 9
+        polymers: 3
+        cooling_gel: 7
+        fuel_cells: 18
+        exotic_matter: 193
+      outfitter: []
+  ships:
+    min: 1
+    max: 4
+    types:
+      cargo_transport: 1.5
+      prospector: 1.5
+      pirate_corvette: 0.5
+
+# ── Helios Combine (north wing) ──────────────────────────────────────────────────
+# Megacorp industry above the core: refineries, robotics, automated yards. Gatewayed
+# through Vega (Fed lanes) and Alpha Centauri (the borderlands it overhangs).
+tycho_yards:
+  map_position: [-120.0, -380.0]
+  connections: [vega, helios_prime]
+  planets:
+    tycho:
+      planet_type: rocky
+      faction: Helios
+      location: [80.0, 60.0]
+      description: "A wholly-automated Helios shipyard. Drones build drones; the few humans wear company badges and sign NDAs."
+      radius: 30.0
+      color: [0.82, 0.84, 0.88]
+      commodities:
+        water: 3
+        iron: 2
+        silicates: 3
+        food: 7
+        chemicals: 10
+        polymers: 6
+        fuel_cells: 13
+        gold: 14
+        helium3: 34
+        electronics: 18
+        uranium: 29
+      outfitter: [laser, proton_beam]
+      shipyard: [shuttle, cargo_transport, freighter]
+    tycho_refinery:
+      planet_type: cloud
+      faction: Helios
+      location: [-240.0, 140.0]
+      description: "A Helios polymer refinery floating in the clouds. Spotless, branded, and utterly closed to outsiders."
+      radius: 38.0
+      color: [0.8, 0.82, 0.86]
+      commodities:
+        water: 3
+        oxygen: 2
+        silicates: 5
+        food: 7
+        chemicals: 10
+        polymers: 4
+        cooling_gel: 9
+        fuel_cells: 8
+        gold: 13
+        helium3: 53
+        electronics: 20
+        uranium: 45
+        exotic_matter: 196
+      outfitter: []
+  ships:
+    min: 2
+    max: 5
+    types:
+      freighter: 2.0
+      cargo_transport: 2.0
+      courier: 1.0
+
+helios_prime:
+  map_position: [60.0, -470.0]
+  connections: [tycho_yards, the_foundry]
+  planets:
+    helios_prime:
+      planet_type: habitable
+      faction: Helios
+      location: [100.0, 80.0]
+      description: "The corporate capital of the Helios Combine. A planet run like a balance sheet; robotics and patents are its lifeblood."
+      radius: 50.0
+      color: [0.85, 0.87, 0.9]
+      rings:
+        inner_radius: 2.10
+        outer_radius: 2.70
+        tilt_deg: 30.0
+        style: thin
+      commodities:
+        water: 6
+        oxygen: 3
+        iron: 4
+        silicates: 4
+        food: 7
+        chemicals: 9
+        titanium: 40
+        polymers: 14
+        medical_supplies: 24
+        gold: 43
+        electronics: 16
+        weapons_parts: 28
+        robotics: 36
+      outfitter: [laser, proton_beam, ir_missile]
+      shipyard: [shuttle, courier, cargo_transport, freighter, hauler]
+    helios_orbital:
+      planet_type: rocky
+      faction: Helios
+      location: [-260.0, 160.0]
+      description: "A Helios robotics works in tight orbit. Automated assembly lines stamp out drone frames around the clock."
+      radius: 24.0
+      color: [0.78, 0.8, 0.84]
+      commodities:
+        water: 5
+        oxygen: 2
+        iron: 3
+        silicates: 3
+        food: 7
+        medical_supplies: 26
+        gold: 34
+        electronics: 14
+        robotics: 40
+      outfitter: []
+  ships:
+    min: 2
+    max: 6
+    types:
+      freighter: 2.0
+      hauler: 1.5
+      cargo_transport: 1.5
+      courier: 1.0
+
+the_foundry:
+  map_position: [290.0, -360.0]
+  connections: [helios_prime, alpha_centauri]
+  planets:
+    foundry_station:
+      planet_type: rocky
+      faction: Helios
+      location: [80.0, 60.0]
+      description: "An automated Helios refinery-station overhanging the borderlands. It feeds the war and skims both sides."
+      radius: 28.0
+      color: [0.8, 0.82, 0.86]
+      commodities:
+        water: 3
+        oxygen: 2
+        iron: 3
+        silicates: 3
+        food: 7
+        gold: 68
+        helium3: 11
+        electronics: 10
+      outfitter: [laser]
+    foundry_giant:
+      planet_type: gas_giant
+      faction: Helios
+      uncolonized: true
+      location: [-240.0, -160.0]
+      description: "A Helios fuel-skimming operation on a gas giant. Drone tankers shuttle helium-3 to the foundry day and night."
+      radius: 58.0
+      color: [0.8, 0.8, 0.82]
+      commodities: {}
+      outfitter: []
+  astroid_fields:
+    -
+      location: [240.0, 140.0]
+      number: 8
+      radius: 350.0
+  ships:
+    min: 2
+    max: 5
+    types:
+      freighter: 1.5
+      cargo_transport: 1.5
+      courier: 1.0
+
+# ── The Bastion — Federation hardliner splinter (far west) ───────────────────────
+# The deep Federation rear, seized by a militarist splinter. Reached only through
+# Kepler, behind all of Fed space.
+iron_march:
+  map_position: [-700.0, -10.0]
+  connections: [kepler_22, bastion]
+  planets:
+    iron_march:
+      planet_type: rocky
+      faction: Bastion
+      location: [80.0, 60.0]
+      description: "A grim munitions world under martial law. The Bastion forges its shells and slugs here, around the clock."
+      radius: 30.0
+      color: [0.5, 0.48, 0.5]
+      commodities:
+        water: 4
+        iron: 1
+        silicates: 2
+        food: 5
+        uranium: 7
+      outfitter: [laser, proton_beam, space_mine]
+      shipyard: [corvette, fighter, frigate]
+    march_keep:
+      planet_type: desert
+      faction: Bastion
+      location: [-240.0, 160.0]
+      description: "A fortified mining keep stripping uranium for the Bastion war machine. Few come; fewer leave."
+      radius: 26.0
+      color: [0.55, 0.45, 0.4]
+      commodities:
+        water: 4
+        iron: 1
+        silicates: 2
+        food: 5
+        uranium: 7
+      outfitter: []
+  ships:
+    min: 2
+    max: 5
+    types:
+      fed_patrol: 2.0
+      corvette: 1.5
+      frigate: 1.0
+
+bastion:
+  map_position: [-860.0, 70.0]
+  connections: [iron_march]
+  planets:
+    bastion:
+      planet_type: rocky
+      faction: Bastion
+      location: [100.0, 80.0]
+      description: "The hardliner fortress-capital, and the heart of the splinter that calls itself the true Federation. Iron, banners, and no mercy."
+      radius: 42.0
+      color: [0.48, 0.46, 0.5]
+      commodities:
+        water: 6
+        iron: 1
+        silicates: 1
+        food: 8
+      outfitter: [proton_beam, ir_missile, space_mine]
+      shipyard: [fed_patrol, corvette, frigate, fed_destroyer]
+    bastion_yard:
+      planet_type: rocky
+      faction: Bastion
+      location: [-240.0, 180.0]
+      description: "A Bastion orbital yard refitting old-generation Federation hulls into grimmer, heavier siege ships."
+      radius: 24.0
+      color: [0.46, 0.44, 0.48]
+      commodities:
+        water: 5
+        iron: 1
+        silicates: 1
+        food: 7
+      outfitter: []
+  astroid_fields:
+    -
+      location: [-160.0, -180.0]
+      number: 7
+      radius: 340.0
+  ships:
+    min: 3
+    max: 6
+    types:
+      fed_patrol: 2.0
+      fed_destroyer: 1.0
+      frigate: 1.5
+      corvette: 1.5
+
+# ── Sanctum & the road to the Rift — Artifact Order (east) ───────────────────────
+# The Order's holy ground, guarding the road from Rebel space (Deneb) to the Deep.
+sanctum:
+  map_position: [790.0, -120.0]
+  connections: [deneb, the_threshold]
+  planets:
+    sanctum:
+      planet_type: habitable
+      faction: Order
+      location: [100.0, 80.0]
+      description: "The holy city of the Artifact Order, built around a Precursor reliquary. Pilgrims come; relics never leave."
+      radius: 46.0
+      color: [0.85, 0.8, 0.7]
+      rings:
+        inner_radius: 2.20
+        outer_radius: 2.60
+        tilt_deg: 70.0
+        style: thin
+      commodities:
+        water: 3
+        oxygen: 9
+        iron: 7
+        silicates: 6
+        food: 3
+        chemicals: 2
+        titanium: 21
+        medical_supplies: 56
+        electronics: 51
+        weapons_parts: 14
+        robotics: 71
+      outfitter: [laser, proton_beam]
+      shipyard: [shuttle, courier, frigate]
+    reliquary_moon:
+      planet_type: icy_dwarf
+      faction: Order
+      location: [-240.0, 140.0]
+      description: "A monastic ice-moon where the Order keeps its vaults. Cold, silent, and heavy with incense and dread."
+      radius: 16.0
+      color: [0.8, 0.82, 0.86]
+      commodities:
+        water: 1
+        oxygen: 9
+        iron: 5
+        food: 3
+        titanium: 16
+        medical_supplies: 48
+        electronics: 44
+        weapons_parts: 19
+        robotics: 62
+      outfitter: []
+  ships:
+    min: 2
+    max: 5
+    types:
+      frigate: 1.5
+      courier: 1.5
+      shuttle: 1.0
+
+the_threshold:
+  map_position: [930.0, -250.0]
+  connections: [sanctum, the_rift]
+  planets:
+    threshold_watch:
+      planet_type: rocky
+      faction: Order
+      location: [80.0, 60.0]
+      description: "The Order's last waystation before the Rift. A fortress-chapel watching the dark for what stirs within."
+      radius: 24.0
+      color: [0.7, 0.66, 0.6]
+      commodities:
+        water: 2
+        iron: 3
+        silicates: 2
+        food: 4
+        exotic_matter: 18
+      outfitter: [proton_beam]
+  astroid_fields:
+    -
+      location: [200.0, 160.0]
+      number: 6
+      radius: 340.0
+  ships:
+    min: 1
+    max: 4
+    types:
+      frigate: 1.5
+      courier: 1.0
+
+# ── The Rift — Precursor deep (endgame, gated) ───────────────────────────────────
+# Uninhabited, derelict-choked, exotic-matter rich. The connection from the_threshold
+# is the "unstable jump" — the only way in (see design bible: a new edge type).
+the_rift:
+  map_position: [1090.0, -350.0]
+  connections: [the_threshold]
+  astroid_fields:
+    -
+      location: [0.0, 0.0]
+      number: 10
+      radius: 420.0
+      commodities:
+        exotic_matter: 1.0
+    -
+      location: [300.0, 200.0]
+      number: 6
+      radius: 300.0
+      commodities:
+        exotic_matter: 0.8
+  ships:
+    min: 1
+    max: 3
+    types:
+      pirate_corvette: 1.0

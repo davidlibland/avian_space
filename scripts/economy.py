@@ -50,9 +50,9 @@ STAR_SYSTEMS = os.path.join(HERE, "..", "assets", "star_systems.yaml")
 # ALPHA, BETA and PRICE_SCALE are AUTOTUNED by `--tune` (see the AUTOTUNER
 # section below); the values here are the last tuned result. W_SYS / W_JUMP /
 # PRICE_CLAMP are hand-set and left alone by the tuner.
-ALPHA = 0.8318      # trade efficiency: higher = goods spread further, flatter prices
-BETA = 0.5303       # price sensitivity to the demand/supply ratio
-PRICE_SCALE = 0.0776 # global multiplier on commodity base prices (sets progression pace)
+ALPHA = 0.4977      # trade efficiency: higher = goods spread further, flatter prices
+BETA = 0.3079       # price sensitivity to the demand/supply ratio
+PRICE_SCALE = 0.0970 # global multiplier on commodity base prices (sets progression pace)
 W_SYS = 1.0       # edge weight between nodes in the same system
 W_JUMP = 0.30     # edge weight across a jump connection (costlier than in-system)
 PRICE_CLAMP = (0.30, 4.0)   # price as a multiple of (scaled) base, clamped to this band
@@ -97,18 +97,22 @@ COMMODITIES = {
     "gold":             dict(base=190, cat="raw"),
     "uranium":          dict(base=240, cat="raw"),
     "exotic_matter":    dict(base=620, cat="raw"),
+    "helium3":          dict(base=200, cat="raw"),
     "food":             dict(base=40,  cat="industry", recipe={"water": 0.4}),
     "chemicals":        dict(base=80,  cat="industry", recipe={"water": 0.3, "silicates": 0.3}),
+    "polymers":         dict(base=120, cat="industry", recipe={"chemicals": 0.4, "oxygen": 0.2}),
     "electronics":      dict(base=220, cat="industry", recipe={"silicates": 0.5, "iron": 0.3, "gold": 0.05, "titanium": 0.1}),
-    "medical_supplies": dict(base=180, cat="industry", recipe={"chemicals": 0.5, "water": 0.3}),
+    "robotics":         dict(base=420, cat="industry", recipe={"electronics": 0.5, "polymers": 0.2, "titanium": 0.15}),
+    "medical_supplies": dict(base=180, cat="industry", recipe={"chemicals": 0.5, "water": 0.3, "polymers": 0.1}),
     "cooling_gel":      dict(base=150, cat="industry", recipe={"chemicals": 0.6, "exotic_matter": 0.03}),
-    "fuel_cells":       dict(base=160, cat="industry", recipe={"uranium": 0.2, "chemicals": 0.3}),
+    "fuel_cells":       dict(base=160, cat="industry", recipe={"uranium": 0.2, "chemicals": 0.3, "helium3": 0.2}),
     "weapons_parts":    dict(base=260, cat="industry", recipe={"iron": 0.4, "electronics": 0.3, "titanium": 0.15}),
-    "weapons_tech":     dict(base=520, cat="industry", recipe={"weapons_parts": 0.5, "electronics": 0.3, "exotic_matter": 0.08}),
+    "weapons_tech":     dict(base=520, cat="industry", recipe={"weapons_parts": 0.5, "robotics": 0.2, "exotic_matter": 0.08}),
 }
 # Order industries up the chain so each pass sees fresher inputs.
-INDUSTRY_ORDER = ["food", "chemicals", "electronics", "medical_supplies",
-                  "cooling_gel", "fuel_cells", "weapons_parts", "weapons_tech"]
+INDUSTRY_ORDER = ["food", "chemicals", "polymers", "electronics", "robotics",
+                  "medical_supplies", "cooling_gel", "fuel_cells",
+                  "weapons_parts", "weapons_tech"]
 
 # ── planet-type archetypes ──────────────────────────────────────────────────
 # extract: raw production weights. industry: factory output capacities.
@@ -116,14 +120,14 @@ INDUSTRY_ORDER = ["food", "chemicals", "electronics", "medical_supplies",
 ARCHETYPES = {
     "rocky":     dict(extract={"iron": 1.0, "silicates": 0.7},                       industry={"electronics": 0.25}, pop=0.4),
     "desert":    dict(extract={"iron": 0.8, "silicates": 0.6, "uranium": 0.4},        industry={},                    pop=0.3),
-    "habitable": dict(extract={},                                                     industry={"electronics": 1.0, "medical_supplies": 0.8, "chemicals": 0.6, "weapons_parts": 0.4, "food": 1.2}, pop=2.5),
-    "cloud":     dict(extract={"oxygen": 0.6},                                        industry={"chemicals": 1.0, "cooling_gel": 0.5, "fuel_cells": 0.4}, pop=0.5),
-    "gas_giant": dict(extract={"oxygen": 1.0, "exotic_matter": 0.15},                 industry={"fuel_cells": 0.5},   pop=0.1),
-    "ice_giant": dict(extract={"water": 1.0, "oxygen": 0.5},                          industry={},                    pop=0.1),
+    "habitable": dict(extract={},                                                     industry={"electronics": 1.0, "robotics": 0.5, "medical_supplies": 0.8, "chemicals": 0.6, "weapons_parts": 0.4, "food": 1.2}, pop=2.5),
+    "cloud":     dict(extract={"oxygen": 0.6},                                        industry={"chemicals": 1.0, "polymers": 0.7, "cooling_gel": 0.5, "fuel_cells": 0.4}, pop=0.5),
+    "gas_giant": dict(extract={"oxygen": 1.0, "helium3": 0.7, "exotic_matter": 0.15}, industry={"fuel_cells": 0.5},   pop=0.1),
+    "ice_giant": dict(extract={"water": 1.0, "oxygen": 0.5, "helium3": 0.4},          industry={},                    pop=0.1),
     "icy_dwarf": dict(extract={"water": 1.0},                                         industry={},                    pop=0.15),
 }
 # What a unit of population consumes per turn.
-POP_CONSUME = {"food": 1.0, "water": 0.8, "oxygen": 0.7, "medical_supplies": 0.25, "electronics": 0.15}
+POP_CONSUME = {"food": 1.0, "water": 0.8, "oxygen": 0.7, "medical_supplies": 0.25, "electronics": 0.15, "robotics": 0.05}
 
 
 def load_nodes():
