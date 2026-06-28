@@ -765,39 +765,47 @@ def _boom(name, x0, x1, y, z, r, mat):
 _FSAIL = lambda tag: toon_material(tag, C(250, 242, 205), spec=1.7, spec_sharp=0.8, glass=True)
 
 
-def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.07):
-    """Rigid HEXAGONAL solar sail: a six-sided membrane (gently domed) with
-    radial rigging spars to each vertex and a central hub."""
+def _hex_sail(name, cx, cy, cz, r, sail, spar, billow=0.06, rake=0.7):
+    """Rigid HEXAGONAL solar sail, RAKED forward so its face points AHEAD (front
+    edge dips, back edge lifts) — catching the sun ahead, not lying flat-up."""
+    def zr(y):
+        return rake * (cy - y)                       # front (y>cy) down, back up
     verts = [(cx, cy, cz + billow)]
+    vy_ = []
     for k in range(6):
         a = k * math.pi / 3
-        verts.append((cx + r * math.cos(a), cy + r * math.sin(a), cz))
+        vx, vy = cx + r * math.cos(a), cy + r * math.sin(a)
+        verts.append((vx, vy, cz + zr(vy)))
     faces = [(0, 1 + k, 1 + (k + 1) % 6) for k in range(6)]
     _obj_from_pydata(name, verts, faces, sail, smooth=True)
     sv, sf = [], []
     for k in range(6):
         a = k * math.pi / 3
         dx, dy = math.cos(a), math.sin(a)
+        vx, vy = cx + r * dx, cy + r * dy
         px, py = -dy * 0.014, dx * 0.014
         b = len(sv)
         sv += [(cx + px, cy + py, cz + billow + 0.006), (cx - px, cy - py, cz + billow + 0.006),
-               (cx + r * dx - px, cy + r * dy - py, cz + 0.01), (cx + r * dx + px, cy + r * dy + py, cz + 0.01)]
+               (vx - px, vy - py, cz + zr(vy) + 0.008), (vx + px, vy + py, cz + zr(vy) + 0.008)]
         sf.append((b, b + 1, b + 2, b + 3))
     _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
     add_cylinder(name + "_hub", (cx, cy, cz + billow), 0.045, 0.045, spar, axis="z")
 
 
-def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar):
-    """Concave PARABOLIC dish sail — edges raised toward the sun so the cel light
-    pools into a bowl gradient. Radial support struts + rim hub."""
+def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar, rake=0.7):
+    """Concave PARABOLIC dish sail, RAKED forward so the bowl faces ahead toward
+    the sun. Radial support struts + rim hub."""
+    def zr(y):
+        return rake * (cy - y)
     rings, seg = 4, 22
     verts = [(cx, cy, cz)]
     for i in range(1, rings + 1):
         rr = r * i / rings
-        zz = cz + depth * (i / rings) ** 2
+        bowl = depth * (i / rings) ** 2
         for k in range(seg):
             a = 2 * math.pi * k / seg
-            verts.append((cx + rr * math.cos(a), cy + rr * math.sin(a), zz))
+            vx, vy = cx + rr * math.cos(a), cy + rr * math.sin(a)
+            verts.append((vx, vy, cz + bowl + zr(vy)))
     faces = [(0, 1 + k, 1 + (k + 1) % seg) for k in range(seg)]
     for i in range(rings - 1):
         b0, b1 = 1 + i * seg, 1 + (i + 1) * seg
@@ -809,36 +817,43 @@ def _parabolic_sail(name, cx, cy, cz, r, depth, sail, spar):
     for k in range(8):
         a = 2 * math.pi * k / 8
         dx, dy = math.cos(a), math.sin(a)
+        vx, vy = cx + r * dx, cy + r * dy
         px, py = -dy * 0.013, dx * 0.013
         b = len(sv)
         sv += [(cx + px, cy + py, cz + 0.008), (cx - px, cy - py, cz + 0.008),
-               (cx + r * dx - px, cy + r * dy - py, cz + depth + 0.008),
-               (cx + r * dx + px, cy + r * dy + py, cz + depth + 0.008)]
+               (vx - px, vy - py, cz + depth + zr(vy) + 0.008),
+               (vx + px, vy + py, cz + depth + zr(vy) + 0.008)]
         sf.append((b, b + 1, b + 2, b + 3))
     _obj_from_pydata(name + "_sp", sv, sf, spar, smooth=False)
     add_cylinder(name + "_hub", (cx, cy, cz - 0.02), 0.06, 0.06, spar, axis="z")
 
 
-def _canopy(name, cx, cy, w, l, cz, amp, sail, spar):
-    """A big BILLOWING parachute-canopy sail (domed both ways) for a leading
-    solar-kite rig, with fore-aft ribs."""
+def _canopy(name, cx, cy, w, l, cz, amp, sail, spar, rake=0.8):
+    """A big BILLOWING parachute-canopy sail, RAKED forward so it leans ahead like
+    a kite catching the sun — front edge dips toward the tethers, back edge lifts."""
     nx, ny = 10, 7
     verts = []
     for j in range(ny + 1):
         fy = j / ny - 0.5
         for i in range(nx + 1):
             fx = i / nx - 0.5
-            z = cz + amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * fy) ** 2)
-            verts.append((cx + fx * w, cy + fy * l, max(cz, z)))
+            dome = amp * (1 - (2 * fx) ** 2) * (1 - (1.3 * fy) ** 2)
+            verts.append((cx + fx * w, cy + fy * l, cz + max(0.0, dome) - rake * fy * l))
     faces = []
     for j in range(ny):
         for i in range(nx):
             a = j * (nx + 1) + i
             faces.append((a, a + 1, a + nx + 2, a + nx + 1))
     _obj_from_pydata(name, verts, faces, sail, smooth=True)
-    for fx in (-0.36, -0.12, 0.12, 0.36):
-        add_box(name + "_rib", (cx + fx * w, cy, cz + amp * (1 - (2 * fx) ** 2) + 0.01),
-                (0.014, l * 0.96, 0.02), spar)
+    for fx in (-0.32, 0.0, 0.32):                    # raked fore-aft ribs
+        xx = cx + fx * w
+        base = amp * (1 - (2 * fx) ** 2)
+        zf = cz + base * (1 - (1.3 * 0.5) ** 2) - rake * 0.5 * l
+        zb = cz + base * (1 - (1.3 * 0.5) ** 2) + rake * 0.5 * l
+        _obj_from_pydata(name + "_rib",
+                         [(xx - 0.008, cy + l / 2, zf + 0.006), (xx + 0.008, cy + l / 2, zf + 0.006),
+                          (xx + 0.008, cy - l / 2, zb + 0.006), (xx - 0.008, cy - l / 2, zb + 0.006)],
+                         [(0, 1, 2, 3)], spar, smooth=False)
 
 
 def _tether(name, x0, y0, x1, y1, z, mat, wdt=0.009):
