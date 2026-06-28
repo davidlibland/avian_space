@@ -44,6 +44,7 @@ uv pip install --python .venv-sprites -r scripts/requirements/sprites3d.txt
 | `generate_sprites.py`, `combine_spritesheet.py`, `objects.py` | common | misc sprite tooling |
 | `buildings.py`, `buildings_scifi.py`, `tilegen.py`, `test_blob47.py` | common | terrain / building tile tooling |
 | `analyze_progress.py`, `analyze_rewards.py`, `experiment_summary.py`, `monitor_training.py`, `overnight_monitor.py`, `hourly_backup.py` | common | RL training/log analysis (TensorBoard via `tbparse`) |
+| `synth_weapon_sounds.py` | (uv run) | synthesizes per-weapon-family SFX (needs `imageio-ffmpeg`) |
 | `generate_planet_sprites.py` | **sprites3d** | headless pyrender; auto-sets `PYOPENGL_PLATFORM=egl` on Linux |
 | `generate_app_icon.py` | **sprites3d** | builds on `generate_planet_sprites` |
 
