@@ -724,19 +724,18 @@ fn animate_building_doors(
     }
 }
 
-/// Landing pad: all 9 tiles of the 3×3 atlas.
-/// (dx, dy, atlas_index). Atlas is row-major top-down in the PNG,
-/// but tile placement is bottom-up (dy=+1 = up on screen).
+/// Landing pad: the 9 tiles of the 3×3 pad footprint, as (dx, dy) offsets from
+/// the centre (used to clear/flatten terrain under the pad).
 const PAD_TILES: [(i32, i32, usize); 9] = [
-    (-1, 1, 0),  // TL corner
-    (0, 1, 1),   // T  edge
-    (1, 1, 2),   // TR corner
-    (-1, 0, 3),  // L  edge
-    (0, 0, 4),   // C  center
-    (1, 0, 5),   // R  edge
-    (-1, -1, 6), // BL corner
-    (0, -1, 7),  // B  edge
-    (1, -1, 8),  // BR corner
+    (-1, 1, 0),
+    (0, 1, 1),
+    (1, 1, 2),
+    (-1, 0, 3),
+    (0, 0, 4),
+    (1, 0, 5),
+    (-1, -1, 6),
+    (0, -1, 7),
+    (1, -1, 8),
 ];
 
 /// Find walkable tile positions in the collision data, suitable for placing
@@ -1154,67 +1153,41 @@ fn setup_surface(
             surface_layers,
         );
 
-        // ── Spawn landing pad (plus/cross shape, 3x3 atlas) ──────────
-        let pad_atlas_handle: Option<Handle<Image>> =
-            bldg_style.map(|s| asset_server.load(format!("{WORLDS_DIR}/{}", s.landing_pad_atlas)));
-        let pad_layout: Option<Handle<TextureAtlasLayout>> = pad_atlas_handle.as_ref().map(|_| {
-            atlas_layouts.add(TextureAtlasLayout::from_grid(
-                UVec2::new(tile_px as u32, tile_px as u32),
-                3,
-                3,
-                None,
-                None,
-            ))
-        });
-
-        for &(dx, dy, atlas_idx) in &PAD_TILES {
-            let tx = (pad_cx as i32 + dx) as u32;
-            let ty = (pad_cy as i32 + dy) as u32;
-            let world_pos = tile_to_world(tx, ty, map_w, map_h, tile_px);
-
-            let mut entity = if let (Some(pad_img), Some(pad_lay)) =
-                (pad_atlas_handle.as_ref(), pad_layout.as_ref())
-            {
-                commands.spawn((
-                    DespawnOnExit(PlayState::Exploring),
-                    Sprite::from_atlas_image(
-                        pad_img.clone(),
-                        TextureAtlas {
-                            layout: pad_lay.clone(),
-                            index: atlas_idx,
-                        },
-                    ),
-                    Transform::from_xyz(world_pos.x, world_pos.y, -9.0),
-                ))
-            } else {
-                // Fallback: flat colored sprite if atlas unavailable.
-                commands.spawn((
-                    DespawnOnExit(PlayState::Exploring),
-                    Sprite {
-                        color: Color::srgb(0.35, 0.35, 0.4),
-                        custom_size: Some(Vec2::splat(tile_px)),
-                        ..default()
-                    },
-                    Transform::from_xyz(world_pos.x, world_pos.y, -9.0),
-                ))
-            };
-
-            // Center tile is the interaction sensor.
-            if dx == 0 && dy == 0 {
-                entity.insert((
-                    Building {
-                        kind: BuildingKind::ShipPad,
-                    },
-                    Sensor,
-                    RigidBody::Static,
-                    Collider::rectangle(tile_px, tile_px),
-                    CollisionEventsEnabled,
-                    CollisionLayers::new(
-                        GameLayer::Surface,
-                        [GameLayer::Surface, GameLayer::Character],
-                    ),
-                ));
-            }
+        // ── Spawn landing pad — the baked 3/4 pad sprite, laid flat below the
+        // player (it's walkable: you land on it and walk to the take-off sensor) ──
+        if let Some(spr) = b3d
+            .as_ref()
+            .and_then(|m| m.sprites.iter().find(|s| s.style == style_name && s.func == "pad"))
+        {
+            let fc = footprint_front_center(pad_cx - 1, pad_cy - 1, spr.w, map_w, map_h, tile_px);
+            let scale = tile_px / b3d.as_ref().map(|m| m.px_per_tile).unwrap_or(tile_px);
+            commands.spawn((
+                DespawnOnExit(PlayState::Exploring),
+                Sprite::from_image(
+                    asset_server.load(format!("{WORLDS_DIR}/buildings3d/{}_pad.png", style_name)),
+                ),
+                bevy::sprite::Anchor(Vec2::new(spr.anchor.0, spr.anchor.1)),
+                Transform::from_xyz(fc.x, fc.y, -9.0).with_scale(Vec3::splat(scale)),
+            ));
+        }
+        // Centre tile is the take-off interaction sensor.
+        {
+            let world_pos = tile_to_world(pad_cx, pad_cy, map_w, map_h, tile_px);
+            commands.spawn((
+                DespawnOnExit(PlayState::Exploring),
+                Building {
+                    kind: BuildingKind::ShipPad,
+                },
+                Sensor,
+                RigidBody::Static,
+                Collider::rectangle(tile_px, tile_px),
+                CollisionEventsEnabled,
+                CollisionLayers::new(
+                    GameLayer::Surface,
+                    [GameLayer::Surface, GameLayer::Character],
+                ),
+                Transform::from_xyz(world_pos.x, world_pos.y, -9.0),
+            ));
         }
         // Pad label — just above the center tile.
         {
