@@ -219,7 +219,7 @@ pub struct Weapon {
 /// (Unguided shots inherit it fully, so you can lead targets with ballistic fire.)
 /// Partial inheritance + drag-to-cruise lets a fast ship eventually outrun a homing
 /// missile instead of it riding the launcher's chase velocity forever.
-const MISSILE_LAUNCH_INHERIT: f32 = 0.5;
+const MISSILE_LAUNCH_INHERIT: f32 = 0.7;
 /// The launch-speed excess decays to this fraction of its initial value by the end
 /// of the missile's lifetime — this drives the drag rate (see `missile_guidance`).
 const MISSILE_SETTLE_FRACTION: f32 = 0.05;
@@ -307,7 +307,8 @@ pub fn weapon_fire(
     item_universe: Res<ItemUniverse>,
 ) {
     for cmd in reader.read() {
-        let Ok((ship_transform, ship_pos, mut ship, linear_velocity, tracer_slots)) = ships.get_mut(cmd.ship)
+        let Ok((ship_transform, ship_pos, mut ship, linear_velocity, tracer_slots)) =
+            ships.get_mut(cmd.ship)
         else {
             continue;
         };
@@ -507,8 +508,8 @@ fn missile_guidance(
         // — analytic step of dv/dt = -drag_rate·(v − cruise). Applies whether or not
         // we currently have a target, so a homing missile fired from a chasing ship
         // can be outrun once the boost bleeds off.
-        let dragged = missile.cruise_speed
-            + (speed - missile.cruise_speed) * (-missile.drag_rate * dt).exp();
+        let dragged =
+            missile.cruise_speed + (speed - missile.cruise_speed) * (-missile.drag_rate * dt).exp();
 
         let current_dir = vel.0 / speed;
         // Steer toward the target if we still have one; otherwise keep heading.

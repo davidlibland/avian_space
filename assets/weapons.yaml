@@ -10,7 +10,7 @@ pirate_laser:
 goose:
     name: goose
     lifetime: 5.0
-    speed: 120.0
+    speed: 160.0
     cooldown: 8.0
     color: [0.9, 0.4, 0.1]
     damage: 20
