@@ -1081,6 +1081,20 @@ fn setup_surface(
             }
         }
 
+        // The repair engine sits front-left of the door, over this 2x2 block of
+        // tiles. Mark them impassable just like the building tiles so character
+        // pathfinding routes around it (it used to carry an ad-hoc collider the
+        // pathfinder couldn't see, so NPCs walked into it and got stuck).
+        let engine_tiles = [
+            (mech_x.saturating_sub(1), mech_y.saturating_sub(1)),
+            (mech_x.saturating_sub(1), mech_y.saturating_sub(2)),
+            (mech_x, mech_y.saturating_sub(1)),
+            (mech_x, mech_y.saturating_sub(2)),
+        ];
+        for &t in &engine_tiles {
+            solid_building_tiles.insert(t);
+        }
+
         // Apply terrain constraints + ensure connectivity.
         let generated = crate::surface_terrain::generate_constrained_terrain(
             map_w,
@@ -1313,22 +1327,21 @@ fn setup_surface(
                     tile_px,
                 );
             }
-            // The repair engine sits front-left of the door (sprite-local x=-2.0,
-            // ~2 tiles south). Make it solid so the player can't walk onto or
-            // behind it; it stays well clear of the centre door.
-            {
-                // Solid over the engine + the gap right behind it, but NOT the
-                // empty tile further south (so the player can walk up to it).
-                let base = tile_to_world(mech_x, mech_y, map_w, map_h, tile_px);
+            // The repair engine sits front-left of the door. Its tiles were marked
+            // impassable up front (see `engine_tiles`) so pathfinding routes around
+            // it; drop a matching per-tile collider on each — exactly like a building
+            // tile — so the player is physically blocked where it's solid.
+            for &(tx, ty) in &engine_tiles {
+                let wp = tile_to_world(tx, ty, map_w, map_h, tile_px);
                 commands.spawn((
                     DespawnOnExit(PlayState::Exploring),
                     RigidBody::Static,
-                    Collider::rectangle(tile_px * 1.4, tile_px * 2.0),
+                    Collider::rectangle(tile_px, tile_px),
                     CollisionLayers::new(
                         GameLayer::Surface,
                         [GameLayer::Surface, GameLayer::Character],
                     ),
-                    Transform::from_xyz(base.x - 0.5 * tile_px, base.y - 1.5 * tile_px, 0.0),
+                    Transform::from_xyz(wp.x, wp.y, 0.0),
                 ));
             }
             // Mechanic label above garage door.
