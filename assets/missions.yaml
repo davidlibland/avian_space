@@ -148,7 +148,7 @@ mining_story_3:
 # upgrade path: shuttle → freighter → hauler → bulk_carrier.
 
 merchant_story_1:
-  briefing: "A Merchant Guild rep is haggling with a vendor near the market. He spots you and breaks away. 'You look like you need work. Short run — 8 units of food to Moon colony. Good shakedown for a new pilot. 45,000 on delivery, and we'll get you certified for a real cargo ship. Come find me at Moon's market when it's done.'"
+  briefing: "A Merchant Guild rep is haggling with a vendor near the market. He spots you and breaks away. 'You look like you need work. Short run — 8 units of food to Moon colony. Good shakedown for a new pilot. 20,000 on delivery, and we'll get you certified for a real cargo ship. Come find me at Moon's market when it's done.'"
   success_text: "The rep on Moon hands over the credits and a certification chit. 'Freighter license. Spend wisely. Come find me at the market for the next run.'"
   failure_text: "The rep shrugs. 'The Guild's got other pilots.'"
   preconditions: []
@@ -174,12 +174,12 @@ merchant_story_1:
       commodity: food
       quantity: 8
     - kind: pay
-      credits: 45000
+      credits: 20000
     - kind: grant_unlock
       name: merchant_freighter_license
 
 merchant_story_2:
-  briefing: "The Guild rep is leaning against a stack of crates outside the Moon market. He waves you over with a manifest. 'Bigger run this time — 50 units of food out to tau_ceti_2, one jump from Sol. You'll want a freighter for this one. 50,000 on delivery. When it's done, head to the tau_ceti_2 market — the Guild's regional office is there.'"
+  briefing: "The Guild rep is leaning against a stack of crates outside the Moon market. He waves you over with a manifest. 'Bigger run this time — 50 units of food out to tau_ceti_2, one jump from Sol. You'll want a freighter for this one. 25,000 on delivery. When it's done, head to the tau_ceti_2 market — the Guild's regional office is there.'"
   success_text: "The regional manager signs off the shipment and hands you a hauler license: 'Good run. We've got one more contract for you. Come back when you're ready.'"
   failure_text: "The regional manager's disappointment is palpable."
   preconditions:
@@ -193,7 +193,7 @@ merchant_story_2:
   start_effects:
     - kind: load_cargo
       commodity: food
-      quantity: 50
+      quantity: 40
       reserved: true
   objective:
     kind: land_on_planet
@@ -201,18 +201,18 @@ merchant_story_2:
   requires:
     - kind: has_cargo
       commodity: food
-      quantity: 50
+      quantity: 40
   completion_effects:
     - kind: remove_cargo
       commodity: food
-      quantity: 50
+      quantity: 40
     - kind: pay
-      credits: 50000
+      credits: 25000
     - kind: grant_unlock
       name: merchant_hauler_license
 
 merchant_story_3:
-  briefing: "The regional manager is reviewing shipments outside the tau_ceti_2 market. She unrolls a long-haul contract. '75 units of food to kepler_22b, deep in Federation space. Long jumps. You'll need a hauler for this — anything smaller and the cargo won't fit. 85,000 credits, and we'll certify you for the biggest ships the Guild sells.'"
+  briefing: "The regional manager is reviewing shipments outside the tau_ceti_2 market. She unrolls a long-haul contract. '75 units of food to kepler_22b, deep in Federation space. Long jumps. You'll need a hauler for this — anything smaller and the cargo won't fit. 30,000 credits, and we'll certify you for the biggest ships the Guild sells.'"
   success_text: "The kepler_22b quartermaster confirms receipt. 'You're one of ours now. Bulk carrier license is yours — if you can afford one.'"
   failure_text: "The contract is voided."
   preconditions:
@@ -240,7 +240,7 @@ merchant_story_3:
       commodity: food
       quantity: 75
     - kind: pay
-      credits: 85000
+      credits: 30000
     - kind: grant_unlock
       name: merchant_bulk_license
 
