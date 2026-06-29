@@ -982,15 +982,16 @@ fn keyboard_input(
         }
     }
 
-    // Only send if there's actual input
-    if thrust.abs() > f32::EPSILON || turn.abs() > f32::EPSILON || reverse.abs() > f32::EPSILON {
-        writer.write(ShipCommand {
-            entity: player_entity,
-            thrust,
-            turn,
-            reverse,
-        });
-    }
+    // Send a command every frame, even all-zero. DriveActive (the exhaust plume)
+    // and the thruster SFX latch on from the last command, so if we skipped the
+    // zero-input frame the plume would stay lit after the player let go of the
+    // throttle. The AI emitters already send unconditionally for the same reason.
+    writer.write(ShipCommand {
+        entity: player_entity,
+        thrust,
+        turn,
+        reverse,
+    });
 
     let fire_primary = keyboard_input.any_pressed([KeyCode::Space]);
     if fire_primary {

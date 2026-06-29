@@ -40,6 +40,8 @@ uv pip install --python .venv-sprites -r scripts/requirements/sprites3d.txt
 |-----------|-----|-------|
 | `economy.py` | common | supply/demand price autotuner (`--tune --write`) |
 | `mission_flowchart.py` | common | renders `docs/mission_flowchart.png` |
+| `weapons_overview.py` | (uv run) | renders `docs/weapons_overview.md` (DPS/space + range tables) |
+| `validate_progression.py` | (uv run) | checks buy-ship ⇒ buy-its-weapons across ships/weapons/missions |
 | `gen_wireframes.py` | common | HUD target wireframes from ship atlases |
 | `generate_sprites.py`, `combine_spritesheet.py`, `objects.py` | common | misc sprite tooling |
 | `buildings.py`, `buildings_scifi.py`, `tilegen.py`, `test_blob47.py` | common | terrain / building tile tooling |
