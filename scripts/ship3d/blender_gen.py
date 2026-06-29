@@ -72,6 +72,13 @@ def toon_material(name, rgb, *, bands=((0.0, 0.5), (0.5, 0.82), (0.84, 1.0)),
         gcr.elements[0].color = (0, 0, 0, 1)
         e = gcr.elements.new(spec_sharp)
         e.color = (spec, spec, spec, 1)
+        # Blender seeds every new ColorRamp with a white stop at pos 1.0. We never
+        # recoloured it, so any glossy reflection >=1.0 returned pure white instead
+        # of `spec` — and under the ortho camera a flat forward-facing face catches
+        # the specular lobe uniformly (reflection >=1.0 across the whole face), so
+        # the entire face went white. Recolour that top stop to the spec value so a
+        # saturated highlight is the intended faint (or, for metal, bright) spec.
+        gcr.elements[-1].color = (spec, spec, spec, 1)
         nt.links.new(gs2.outputs[0], gramp.inputs[0])
         add = nt.nodes.new("ShaderNodeMixRGB")
         add.blend_type = "ADD"
