@@ -293,7 +293,6 @@ rebel_frigate:
   base_weapons:
     laser: [3, null]
     javelin: [1, 24]
-    rebel_fighter_bay: [1, 3]
   radius: 28.0
   price: 100000
   sprite_path: sprites/ships/atlas/rebel_frigate.png
