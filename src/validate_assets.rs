@@ -574,8 +574,108 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_reachability(iu, &mut p);
     check_mission_coherence(iu, &mut p);
     check_unlock_obtainability(iu, &mut p);
+    check_ship_weapons_buyable(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
+}
+
+/// Buying a ship must imply being able to buy every weapon it spawns with.
+/// For each ship sold anywhere, each of its base weapons must be sold at the
+/// outfitter, and the unlocks that outfitter entry needs must be guaranteed
+/// owned by the time the ship is buyable — i.e. reachable along the mission
+/// grant graph from the ship's own `required_unlocks`. Mirrors
+/// `scripts/validate_progression.py`.
+fn check_ship_weapons_buyable(iu: &ItemUniverse, p: &mut Vec<String>) {
+    use std::collections::HashMap;
+    // mission -> unlocks it grants ; mission -> prerequisite missions
+    let mut grants: HashMap<&str, HashSet<&str>> = HashMap::new();
+    let mut prereqs: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (mid, def) in &iu.missions {
+        let mut g = HashSet::new();
+        for eff in &def.completion_effects {
+            if let CompletionEffect::GrantUnlock { name } = eff {
+                g.insert(name.as_str());
+            }
+        }
+        let pre = def
+            .preconditions
+            .iter()
+            .filter_map(|pc| match pc {
+                Precondition::Completed { mission } if iu.missions.contains_key(mission) => {
+                    Some(mission.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        grants.insert(mid.as_str(), g);
+        prereqs.insert(mid.as_str(), pre);
+    }
+    // held_after[m] = unlocks guaranteed owned once m is completed (fixpoint).
+    let mut held: HashMap<&str, HashSet<&str>> = grants.clone();
+    let keys: Vec<&str> = held.keys().copied().collect();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for &m in &keys {
+            let mut new = grants[m].clone();
+            for pr in &prereqs[m] {
+                if let Some(h) = held.get(pr) {
+                    new.extend(h.iter().copied());
+                }
+            }
+            if new.len() != held[m].len() {
+                held.insert(m, new);
+                changed = true;
+            }
+        }
+    }
+    // reach(u): unlocks guaranteed already owned whenever u is owned =
+    // intersection over every mission that grants u of held_after[m].
+    let reach = |u: &str| -> HashSet<&str> {
+        let mut acc: Option<HashSet<&str>> = None;
+        for (&m, g) in &grants {
+            if g.contains(u) {
+                acc = Some(match acc {
+                    None => held[m].clone(),
+                    Some(a) => a.intersection(&held[m]).copied().collect(),
+                });
+            }
+        }
+        acc.unwrap_or_default()
+    };
+    let mut sold_ships: HashSet<&str> = HashSet::new();
+    for sys in iu.star_systems.values() {
+        for pd in sys.planets.values() {
+            sold_ships.extend(pd.shipyard.iter().map(String::as_str));
+        }
+    }
+    for s in &sold_ships {
+        let Some(ship) = iu.ships.get(*s) else { continue };
+        // Everything guaranteed owned once this ship is buyable.
+        let mut have: HashSet<&str> = ship.required_unlocks.iter().map(String::as_str).collect();
+        for u in &ship.required_unlocks {
+            have.extend(reach(u));
+        }
+        for w in ship.base_weapons.keys() {
+            match iu.outfitter_items.get(w) {
+                None => p.push(format!(
+                    "ship '{s}' spawns with weapon '{w}' which is not sold at any \
+                     outfitter — a buyer could never replace it"
+                )),
+                Some(item) => {
+                    for u in item.required_unlocks() {
+                        if !have.contains(u.as_str()) {
+                            p.push(format!(
+                                "ship '{s}' spawns with weapon '{w}', but buying that \
+                                 weapon needs unlock '{u}' which owning '{s}' does not \
+                                 guarantee"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The mission dependency graph must be a DAG whose `completed`/`failed`
