@@ -225,6 +225,16 @@ pub struct PpoConfig {
     pub system_swap_segments: usize,
     /// Probability a swap picks the isolated `simulator` system.
     pub simulator_fraction: f32,
+    /// Finalization anneal (0 = off). When `finalize_start_cycle > 0`, at that
+    /// cycle a two-phase decay begins toward a sharp pure-RL final policy:
+    ///  - Phase A: linearly decay `bc_coeff` → 0 over `finalize_bc_decay_cycles`
+    ///    (RL takes the policy off the BC leash), lr/entropy held.
+    ///  - Phase B: then linearly decay `policy_lr` and `entropy_coeff` → 0 over
+    ///    `finalize_lr_decay_cycles` (anneal to a low-noise optimum).
+    /// After both phases policy_lr is 0 (policy effectively frozen).
+    pub finalize_start_cycle: usize,
+    pub finalize_bc_decay_cycles: usize,
+    pub finalize_lr_decay_cycles: usize,
 }
 
 impl Default for PpoConfig {
@@ -251,6 +261,9 @@ impl Default for PpoConfig {
             value_replay_extra_batches: VALUE_REPLAY_EXTRA_BATCHES,
             system_swap_segments: PPO_SYSTEM_SWAP_SEGMENTS,
             simulator_fraction: PPO_SIMULATOR_FRACTION,
+            finalize_start_cycle: 0,
+            finalize_bc_decay_cycles: 0,
+            finalize_lr_decay_cycles: 0,
         }
     }
 }

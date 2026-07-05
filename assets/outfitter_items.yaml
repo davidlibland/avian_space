@@ -106,7 +106,7 @@ mass_driver:
     price: 650
     space: 4
     weapon_type: mass_driver
-    required_unlocks: [free_frontier_license]
+    required_unlocks: [frontier_harvester_license]
 prox_mine:
   !SecondaryWeapon
     price: 420
@@ -114,7 +114,7 @@ prox_mine:
     weapon_type: prox_mine
     ammo_price: 22
     ammo_space: 2
-    required_unlocks: [free_frontier_license]
+    required_unlocks: [frontier_sailtender_license]
 helios_lance:
   !PrimaryWeapon
     price: 750
@@ -128,7 +128,7 @@ seeker:
     weapon_type: seeker
     ammo_price: 45
     ammo_space: 1
-    required_unlocks: [helios_license]
+    required_unlocks: [helios_enforcer_license]
 chaingun:
   !PrimaryWeapon
     price: 450
@@ -140,13 +140,13 @@ siege_cannon:
     price: 1600
     space: 6
     weapon_type: siege_cannon
-    required_unlocks: [bastion_license]
+    required_unlocks: [siege_monitor_license]
 chaingun_turret:
   !PrimaryWeapon
     price: 2800
     space: 10
     weapon_type: chaingun_turret
-    required_unlocks: [bastion_license]
+    required_unlocks: [bastion_lance_license]
 relic_lance:
   !PrimaryWeapon
     price: 1200
@@ -160,7 +160,7 @@ censer_charge:
     weapon_type: censer_charge
     ammo_price: 80
     ammo_space: 2
-    required_unlocks: [artifact_order_license]
+    required_unlocks: [order_censer_license]
 exotic_lance:
   !PrimaryWeapon
     price: 3200
@@ -172,7 +172,7 @@ flak_turret:
     price: 1800
     space: 8
     weapon_type: flak_turret
-    required_unlocks: [free_frontier_license]
+    required_unlocks: [frontier_monitor_license]
 siege_turret:
   !PrimaryWeapon
     price: 6000
@@ -184,7 +184,7 @@ relic_turret:
     price: 4000
     space: 12
     weapon_type: relic_turret
-    required_unlocks: [artifact_order_license]
+    required_unlocks: [order_cathedral_license]
 drone_bay:
   !SecondaryWeapon
     price: 7000
@@ -192,7 +192,7 @@ drone_bay:
     weapon_type: drone_bay
     ammo_price: 700
     ammo_space: 6
-    required_unlocks: [helios_license]
+    required_unlocks: [helios_overseer_license]
 precursor_beam:
   !PrimaryWeapon
     price: 2200

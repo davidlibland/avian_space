@@ -237,7 +237,6 @@ fed_missile_cruiser:
   base_weapons:
     proton_beam: [1, null]
     ir_missile: [3, 12]
-    fighter_bay: [1, 3]
   radius: 35.0
   price: 150000
   sprite_path: sprites/ships/atlas/fed_missile_cruiser.png
@@ -293,7 +292,6 @@ rebel_frigate:
   base_weapons:
     laser: [3, null]
     javelin: [1, 24]
-    rebel_fighter_bay: [1, 3]
   radius: 28.0
   price: 100000
   sprite_path: sprites/ships/atlas/rebel_frigate.png
@@ -413,6 +411,7 @@ pirate_carrier:
   personality: Fighter
   fuel_capacity: 8
   faction: Pirate
+  required_unlocks: [carrier_license]
 # ── Free Frontier (solar-sail militia) ───────────────────────────────────────────
 frontier_skiff:
   thrust: 112.0
@@ -429,7 +428,7 @@ frontier_skiff:
   personality: Fighter
   fuel_capacity: 3
   faction: FreeFrontier
-  required_unlocks: [free_frontier_license]
+  required_unlocks: [frontier_skiff_license]
 frontier_harvester:
   thrust: 72.0
   max_speed: 122.0
@@ -446,7 +445,7 @@ frontier_harvester:
   personality: Fighter
   fuel_capacity: 4
   faction: FreeFrontier
-  required_unlocks: [free_frontier_license]
+  required_unlocks: [frontier_harvester_license]
 frontier_sailtender:
   thrust: 78.0
   max_speed: 132.0
@@ -463,7 +462,7 @@ frontier_sailtender:
   personality: Fighter
   fuel_capacity: 5
   faction: FreeFrontier
-  required_unlocks: [free_frontier_license]
+  required_unlocks: [frontier_sailtender_license]
 frontier_monitor:
   thrust: 50.0
   max_speed: 86.0
@@ -480,7 +479,7 @@ frontier_monitor:
   personality: Fighter
   fuel_capacity: 5
   faction: FreeFrontier
-  required_unlocks: [free_frontier_license]
+  required_unlocks: [frontier_monitor_license]
 
 # ── Helios Combine (drones) ──────────────────────────────────────────────────────
 helios_drone:
@@ -498,7 +497,7 @@ helios_drone:
   personality: Fighter
   fuel_capacity: 2
   faction: Helios
-  required_unlocks: [helios_license]
+  required_unlocks: [helios_drone_license]
 helios_enforcer:
   thrust: 100.0
   max_speed: 178.0
@@ -515,7 +514,7 @@ helios_enforcer:
   personality: Fighter
   fuel_capacity: 4
   faction: Helios
-  required_unlocks: [helios_license]
+  required_unlocks: [helios_enforcer_license]
 helios_overseer:
   thrust: 70.0
   max_speed: 122.0
@@ -532,7 +531,7 @@ helios_overseer:
   personality: Fighter
   fuel_capacity: 5
   faction: Helios
-  required_unlocks: [helios_license]
+  required_unlocks: [helios_overseer_license]
 helios_titan:
   thrust: 50.0
   max_speed: 86.0
@@ -549,7 +548,7 @@ helios_titan:
   personality: Fighter
   fuel_capacity: 6
   faction: Helios
-  required_unlocks: [helios_license]
+  required_unlocks: [helios_titan_license]
 
 # ── Fed Bastion (iron siege) ─────────────────────────────────────────────────────
 bastion_guard:
@@ -567,7 +566,7 @@ bastion_guard:
   personality: Fighter
   fuel_capacity: 4
   faction: Bastion
-  required_unlocks: [bastion_license]
+  required_unlocks: [bastion_guard_license]
 bastion_lance:
   thrust: 65.0
   max_speed: 112.0
@@ -584,7 +583,7 @@ bastion_lance:
   personality: Fighter
   fuel_capacity: 4
   faction: Bastion
-  required_unlocks: [bastion_license]
+  required_unlocks: [bastion_lance_license]
 siege_monitor:
   thrust: 50.0
   max_speed: 82.0
@@ -601,7 +600,7 @@ siege_monitor:
   personality: Fighter
   fuel_capacity: 5
   faction: Bastion
-  required_unlocks: [bastion_license]
+  required_unlocks: [siege_monitor_license]
 iron_dreadnought:
   thrust: 42.0
   max_speed: 70.0
@@ -618,7 +617,7 @@ iron_dreadnought:
   personality: Fighter
   fuel_capacity: 6
   faction: Bastion
-  required_unlocks: [bastion_license]
+  required_unlocks: [iron_dreadnought_license]
 
 # ── Artifact Order (reliquaries) ─────────────────────────────────────────────────
 order_acolyte:
@@ -636,7 +635,7 @@ order_acolyte:
   personality: Fighter
   fuel_capacity: 3
   faction: Order
-  required_unlocks: [artifact_order_license]
+  required_unlocks: [order_acolyte_license]
 order_censer:
   thrust: 86.0
   max_speed: 152.0
@@ -653,7 +652,7 @@ order_censer:
   personality: Fighter
   fuel_capacity: 4
   faction: Order
-  required_unlocks: [artifact_order_license]
+  required_unlocks: [order_censer_license]
 order_reliquary:
   thrust: 60.0
   max_speed: 100.0
@@ -670,7 +669,7 @@ order_reliquary:
   personality: Fighter
   fuel_capacity: 5
   faction: Order
-  required_unlocks: [artifact_order_license]
+  required_unlocks: [order_reliquary_license]
 order_cathedral:
   thrust: 45.0
   max_speed: 78.0
@@ -687,7 +686,7 @@ order_cathedral:
   personality: Fighter
   fuel_capacity: 6
   faction: Order
-  required_unlocks: [artifact_order_license]
+  required_unlocks: [order_cathedral_license]
 
 # ── Precursors (enemy/boss — never sold) ─────────────────────────────────────────
 precursor_seeker:

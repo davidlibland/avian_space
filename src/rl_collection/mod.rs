@@ -1143,11 +1143,19 @@ fn build_all_observations(
             .collect();
         friendly_ships.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        let mut pickups: Vec<(Entity, f32)> = nearby_hits
-            .iter()
-            .filter(|(e, _)| pickup_query.get(*e).is_ok())
-            .cloned()
-            .collect();
+        // Don't present pickups as targets when the ship's cargo is full: a full
+        // ship collects nothing (collect_pickups skips qty == 0), so chasing one is
+        // wasted motion. Emptying the source vec drops pickups from both the policy
+        // observation slots and the BC router's target set.
+        let mut pickups: Vec<(Entity, f32)> = if ship.remaining_cargo_space() == 0 {
+            Vec::new()
+        } else {
+            nearby_hits
+                .iter()
+                .filter(|(e, _)| pickup_query.get(*e).is_ok())
+                .cloned()
+                .collect()
+        };
         pickups.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         // Build EntitySlotData for each bucket.
