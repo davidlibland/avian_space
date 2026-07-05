@@ -397,6 +397,29 @@ pub fn spawn_ppo_training_thread(
                 }
             }
 
+            // ── Finalization anneal ──────────────────────────────────────
+            // Two-phase decay toward a sharp, frozen final policy (off when
+            // finalize_start_cycle == 0). Phase A: bc_coeff → 0 (RL off the BC
+            // leash). Phase B: policy_lr + entropy_coeff → 0 (anneal to a
+            // low-noise optimum). Effective values are held constant per cycle.
+            let (eff_bc_coeff, eff_policy_lr, eff_entropy_coeff) = {
+                let start = ppo.finalize_start_cycle;
+                if start > 0 && update_cycle >= start {
+                    let c = update_cycle - start;
+                    if c < ppo.finalize_bc_decay_cycles {
+                        let p = c as f64 / ppo.finalize_bc_decay_cycles.max(1) as f64;
+                        (ppo.bc_coeff * (1.0 - p as f32), ppo.policy_lr, ppo.entropy_coeff)
+                    } else {
+                        let lr_len = ppo.finalize_lr_decay_cycles.max(1);
+                        let p =
+                            ((c - ppo.finalize_bc_decay_cycles) as f64 / lr_len as f64).min(1.0);
+                        (0.0, ppo.policy_lr * (1.0 - p), ppo.entropy_coeff * (1.0 - p as f32))
+                    }
+                } else {
+                    (ppo.bc_coeff, ppo.policy_lr, ppo.entropy_coeff)
+                }
+            };
+
             // ── Phase 4: PPO epochs ───────────────────────────────────────
             let mut epoch_policy_loss = 0.0_f32;
             let mut epoch_value_loss = 0.0_f32;
@@ -666,8 +689,8 @@ pub fn spawn_ppo_training_thread(
                             );
                             let entropy_bonus = -(entropy.mean());
                             let total_policy_loss = policy_loss.clone()
-                                + entropy_bonus.clone() * ppo.entropy_coeff
-                                + bc_loss.clone() * ppo.bc_coeff;
+                                + entropy_bonus.clone() * eff_entropy_coeff
+                                + bc_loss.clone() * eff_bc_coeff;
 
                             let raw = total_policy_loss.backward();
                             let grads = GradientsParams::from_grads(raw, net);
@@ -684,7 +707,7 @@ pub fn spawn_ppo_training_thread(
                         epoch_bc_batches += 1;
                         let net = inner.policy_net.take().unwrap();
                         inner.policy_net =
-                            Some(inner.policy_optim.step(ppo.policy_lr, net, policy_grads));
+                            Some(inner.policy_optim.step(eff_policy_lr, net, policy_grads));
                     }
 
                     let value_grads = {
@@ -794,6 +817,8 @@ pub fn spawn_ppo_training_thread(
 
             writer.add_scalar("train/policy_loss", avg_ploss, update_cycle);
             writer.add_scalar("train/value_loss", avg_vloss, update_cycle);
+            writer.add_scalar("finalize/eff_policy_lr", eff_policy_lr as f32, update_cycle);
+            writer.add_scalar("finalize/eff_bc_coeff", eff_bc_coeff, update_cycle);
             writer.add_scalar("train/entropy", avg_ent, update_cycle);
             writer.add_scalar("train/frac_clipped", avg_clip, update_cycle);
             writer.add_scalar("train/mean_ratio", avg_ratio, update_cycle);
