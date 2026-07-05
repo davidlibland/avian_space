@@ -20,7 +20,11 @@ pub fn render_active_missions(
 ) {
     ui.heading("Active");
     let mut any_active = false;
-    for (id, status) in &log.statuses {
+    // Sort by id: statuses is a HashMap, and unordered iteration made the
+    // mission list shuffle whenever an entry was inserted.
+    let mut entries: Vec<_> = log.statuses.iter().collect();
+    entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+    for (id, status) in entries {
         if let MissionStatus::Active(progress) = status {
             any_active = true;
             let Some(def) = catalog.defs.get(id) else {
@@ -140,9 +144,24 @@ fn format_objective(obj: &Objective, progress: &ObjectiveProgress) -> String {
     }
 }
 
+/// FIFO queue of mission messages to surface to the player. A queue (not a
+/// single slot) because several can land in the same instant — e.g. a mission
+/// completes on landing and its Auto follow-up starts one frame later; with a
+/// single slot the follow-up's briefing would overwrite the completion text
+/// (or vice versa) and the player would never see one of them.
 #[derive(Resource, Default)]
 pub struct MissionToast {
-    pub text: Option<String>,
+    pub queue: std::collections::VecDeque<String>,
+}
+
+impl MissionToast {
+    pub fn push(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        // Dedup back-to-back identical messages (e.g. re-emitted on load).
+        if self.queue.back().map(String::as_str) != Some(text.as_str()) {
+            self.queue.push_back(text);
+        }
+    }
 }
 
 impl crate::session::SessionResource for MissionToast {
@@ -155,13 +174,14 @@ impl crate::session::SessionResource for MissionToast {
 /// Runs every frame in `EguiPrimaryContextPass`; registered only in
 /// non-headless mode (see `missions_ui_plugin`).
 pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionToast>) {
-    let Some(text) = toast.text.clone() else {
+    let Some(text) = toast.queue.front().cloned() else {
         return;
     };
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
     let mut open = true;
+    let remaining = toast.queue.len() - 1;
     egui::Window::new("Mission Update")
         .collapsible(false)
         .resizable(false)
@@ -169,12 +189,17 @@ pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionTo
         .open(&mut open)
         .show(ctx, |ui| {
             ui.label(text);
-            if ui.button("Dismiss").clicked() {
-                toast.text = None;
+            let label = if remaining > 0 {
+                format!("Next ({remaining} more)")
+            } else {
+                "Dismiss".to_string()
+            };
+            if ui.button(label).clicked() {
+                toast.queue.pop_front();
             }
         });
     if !open {
-        toast.text = None;
+        toast.queue.pop_front();
     }
 }
 
@@ -462,17 +487,28 @@ pub fn missions_ui_plugin(app: &mut App) {
 pub fn drain_completion_toasts(
     mut completed: MessageReader<MissionCompleted>,
     mut failed: MessageReader<MissionFailed>,
+    mut started: MessageReader<MissionStarted>,
     catalog: Res<MissionCatalog>,
     mut toast: ResMut<MissionToast>,
 ) {
     for MissionCompleted(id) in completed.read() {
         if let Some(def) = catalog.defs.get(id) {
-            toast.text = Some(def.success_text.clone());
+            toast.push(def.success_text.clone());
         }
     }
     for MissionFailed(id) in failed.read() {
         if let Some(def) = catalog.defs.get(id) {
-            toast.text = Some(def.failure_text.clone());
+            toast.push(def.failure_text.clone());
+        }
+    }
+    // Auto missions start themselves — there is no offer dialog, so unless we
+    // surface the briefing here the player never sees the opening message
+    // (it was previously only visible in the mission log).
+    for MissionStarted(id) in started.read() {
+        if let Some(def) = catalog.defs.get(id) {
+            if matches!(def.offer, OfferKind::Auto) {
+                toast.push(def.briefing.clone());
+            }
         }
     }
 }

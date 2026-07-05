@@ -118,6 +118,14 @@ impl NpcBehavior {
 #[derive(Component)]
 pub struct Npc;
 
+/// Tags an NPC spawned for a specific mission (offer-giver or objective NPC),
+/// so `spawn_mission_npcs` can tell which missions already have their NPC on
+/// the surface and stay idempotent — it runs every frame while exploring so
+/// follow-up missions that start *after* landing get their NPC immediately
+/// (previously they only spawned on surface entry, forcing a re-land).
+#[derive(Component)]
+pub struct MissionNpc(pub String);
+
 /// Marks the "!" indicator sprite above a mission-giver NPC.
 #[derive(Component)]
 pub struct NpcMarker;
@@ -494,6 +502,7 @@ pub fn spawn_mission_npc(
     let npc_entity = commands.spawn((
         DespawnOnExit(crate::PlayState::Exploring),
         Npc,
+        MissionNpc(mission_id.to_string()),
         behavior,
         crate::surface_character::CharacterAnim::with_interval(0.2),
         RigidBody::Dynamic,
@@ -599,6 +608,7 @@ pub fn spawn_objective_npc(
     let npc_entity = commands.spawn((
         DespawnOnExit(crate::PlayState::Exploring),
         Npc,
+        MissionNpc(mission_id.to_string()),
         behavior,
         crate::surface_character::CharacterAnim::with_interval(0.18),
         RigidBody::Dynamic,

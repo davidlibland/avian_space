@@ -259,7 +259,7 @@ pub fn surface_plugin(app: &mut App) {
         .init_resource::<crate::surface_npc_chat::NpcChatState>()
         .add_systems(
             OnEnter(PlayState::Exploring),
-            (setup_surface, save_on_explore, spawn_mission_npcs).chain(),
+            (setup_surface, save_on_explore).chain(),
         )
         .add_systems(
             OnExit(PlayState::Exploring),
@@ -281,6 +281,7 @@ pub fn surface_plugin(app: &mut App) {
                 track_terrain_speed,
                 building_interact,
                 update_interact_prompt,
+                spawn_mission_npcs,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )
@@ -333,8 +334,13 @@ fn save_on_explore(
     crate::game_save::write_save(&game_state, &session_data);
 }
 
-/// Spawn mission-giver NPCs from NpcOffer missions.  Runs after
-/// `setup_surface` so `CivilianSprites` and `SurfacePaths` are available.
+/// Spawn mission-giver NPCs from NpcOffer missions, plus objective NPCs for
+/// active MeetNpc/CatchNpc missions on this planet.
+///
+/// Idempotent (skips missions whose NPC is already on the surface) and runs
+/// every frame while Exploring: a follow-up mission that auto-starts *after*
+/// the player lands (e.g. its predecessor completed on this very landing) gets
+/// its NPC spawned immediately, instead of only on the next re-land.
 fn spawn_mission_npcs(
     mut commands: Commands,
     sprites: Option<Res<crate::surface_civilians::CivilianSprites>>,
@@ -344,11 +350,15 @@ fn spawn_mission_npcs(
     mission_catalog: Res<crate::missions::MissionCatalog>,
     mission_log: Res<crate::missions::MissionLog>,
     landed_context: Res<crate::planet_ui::LandedContext>,
+    existing: Query<&crate::surface_npc::MissionNpc>,
 ) {
     let (Some(sprites), Some(paths), Some(cost_map)) = (sprites, paths, cost_map) else {
         return;
     };
     let planet_name = landed_context.planet_name.as_deref().unwrap_or("");
+
+    let already_spawned: std::collections::HashSet<&str> =
+        existing.iter().map(|m| m.0.as_str()).collect();
 
     let mission_ids: Vec<String> = mission_offers
         .npc
@@ -388,6 +398,14 @@ fn spawn_mission_npcs(
     let mut rng = rand::thread_rng();
 
     for mission_id in &mission_ids {
+        if already_spawned.contains(mission_id.as_str()) {
+            continue;
+        }
+        // Stale offer (procedural def pruned since the roll): an NPC offering
+        // a mission that no longer exists would silently no-op on Accept.
+        if !mission_catalog.defs.contains_key(mission_id.as_str()) {
+            continue;
+        }
         // Look up the mission def for NpcOffer config.
         let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str()) {
             match &def.offer {
@@ -439,6 +457,9 @@ fn spawn_mission_npcs(
     // ── Spawn NPCs for active MeetNpc / CatchNpc objectives ─────────
 
     for (mission_id, def) in &mission_catalog.defs {
+        if already_spawned.contains(mission_id.as_str()) {
+            continue;
+        }
         let status = mission_log.status(mission_id);
         if !matches!(status, crate::missions::MissionStatus::Active(_)) {
             continue;

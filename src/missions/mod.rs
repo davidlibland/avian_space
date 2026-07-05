@@ -46,6 +46,7 @@ pub fn missions_plugin(app: &mut App) {
                 progress::handle_ui_actions,
                 progress::apply_start_effects,
                 progress::roll_offers_on_land,
+                progress::roll_new_offers_while_landed,
                 progress::advance_travel_objectives,
                 progress::advance_land_objectives,
                 progress::advance_collect_objectives,

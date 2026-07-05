@@ -200,6 +200,14 @@ pub struct MissionOffers {
     pub tab: Vec<String>,
     /// planet → list of mission ids currently available by npc's on the planet.
     pub npc: HashMap<String, Vec<String>>,
+    /// Mission ids whose offer weight has already been rolled during the
+    /// current planet visit (reset on each landing). Missions that become
+    /// Available *mid-visit* — e.g. a follow-up unlocked by a mission that
+    /// completed on this very landing — get exactly one roll immediately via
+    /// `roll_new_offers_while_landed`, instead of waiting for a re-land;
+    /// tracking what's been rolled keeps low-weight offers from being
+    /// re-rolled every frame.
+    pub considered: std::collections::HashSet<String>,
 }
 
 impl SessionResource for MissionOffers {

@@ -847,3 +847,306 @@ fn assets_mission_templates_yaml_parses() {
         "mission_templates.yaml should contain at least one template"
     );
 }
+
+// ── Template instantiation picks fulfillable targets ────────────────────────
+//
+// Regression tests for procedurally-generated missions that could not be
+// completed: destinations on uncolonised (unlandable) planets, and systems /
+// asteroid fields inside the unreachable RL-training systems.
+
+mod template_targets {
+    use super::super::progress::instantiate_template;
+    use super::*;
+    use crate::asteroids::AsteroidFieldData;
+    use crate::item_universe::{ItemUniverse, StarSystem};
+    use crate::planets::PlanetData;
+    use bevy::math::Vec2;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    fn planet(landable: bool) -> PlanetData {
+        PlanetData {
+            display_name: String::new(),
+            planet_type: String::new(),
+            uncolonized: !landable,
+            faction: String::new(),
+            sprite_handle: Default::default(),
+            location: Vec2::ZERO,
+            description: String::new(),
+            commodities: if landable {
+                HashMap::from([("food".to_string(), 10_i128)])
+            } else {
+                HashMap::new()
+            },
+            outfitter: vec![],
+            shipyard: vec![],
+            radius: 50.0,
+            color: [0.0; 3],
+        }
+    }
+
+    fn system(planets: &[(&str, bool)], field_commodity: Option<&str>) -> StarSystem {
+        StarSystem {
+            display_name: String::new(),
+            map_position: Vec2::ZERO,
+            connections: vec![],
+            planets: planets
+                .iter()
+                .map(|(n, landable)| (n.to_string(), planet(*landable)))
+                .collect(),
+            astroid_fields: field_commodity
+                .map(|c| {
+                    vec![AsteroidFieldData {
+                        location: Vec2::ZERO,
+                        radius: 100.0,
+                        number: 5,
+                        commodities: HashMap::from([(c.to_string(), 1.0)]),
+                    }]
+                })
+                .unwrap_or_default(),
+            ships: Default::default(),
+        }
+    }
+
+    /// sol: earth/mars/venus landable + barren unlandable + iron field.
+    /// simulator (a TRAINING system): landable sim_world + a GOLD field —
+    /// gold exists nowhere else, so any "gold" pick means a training leak.
+    fn mini_universe() -> ItemUniverse {
+        ItemUniverse {
+            weapons: HashMap::new(),
+            ships: HashMap::new(),
+            star_systems: HashMap::from([
+                (
+                    "sol".to_string(),
+                    system(
+                        &[
+                            ("earth", true),
+                            ("mars", true),
+                            ("venus", true),
+                            ("barren", false),
+                        ],
+                        Some("iron"),
+                    ),
+                ),
+                (
+                    "simulator".to_string(),
+                    system(&[("sim_world", true)], Some("gold")),
+                ),
+            ]),
+            simulator_system: None,
+            escort_system: None,
+            mining_system: None,
+            outfitter_items: HashMap::new(),
+            commodities: HashMap::new(),
+            missions: HashMap::new(),
+            mission_templates: HashMap::new(),
+            global_average_price: HashMap::new(),
+            global_minimum_price: HashMap::new(),
+            system_commodity_best_planet_to_sell: HashMap::new(),
+            system_planet_best_commodity_to_buy: HashMap::new(),
+            planet_best_margin: HashMap::new(),
+            planet_has_ammo_for: HashMap::new(),
+            asteroid_field_expected_value: HashMap::new(),
+            ship_credit_scale: HashMap::new(),
+            starting_system: "sol".to_string(),
+            starting_ship: "shuttle".to_string(),
+            enemies: HashMap::new(),
+            allies: HashMap::new(),
+        }
+    }
+
+    fn delivery_template() -> MissionTemplate {
+        MissionTemplate::Delivery {
+            briefing: "take {quantity} {commodity} to {planet_display}".into(),
+            success_text: "ok".into(),
+            failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            commodity_pool: vec!["food".into()],
+            quantity_range: (5, 10),
+            pay_range: (100, 200),
+            reserved: true,
+        }
+    }
+
+    #[test]
+    fn delivery_destination_is_landable_and_reachable() {
+        let iu = mini_universe();
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &delivery_template(), "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 1);
+            let Objective::LandOnPlanet { planet } = &chain[0].1.objective else {
+                panic!("delivery must produce a LandOnPlanet objective");
+            };
+            assert!(
+                planet == "mars" || planet == "venus",
+                "seed {seed}: destination '{planet}' must be a landable, reachable \
+                 planet other than the offer planet (not barren/sim_world/earth)"
+            );
+        }
+    }
+
+    #[test]
+    fn delivery_unsatisfiable_returns_empty_not_panic() {
+        // Only landable planet is the offer planet itself.
+        let mut iu = mini_universe();
+        iu.star_systems.insert(
+            "sol".to_string(),
+            system(&[("earth", true), ("barren", false)], None),
+        );
+        iu.star_systems.remove("simulator");
+        let mut rng = StdRng::seed_from_u64(7);
+        let chain = instantiate_template("t", &delivery_template(), "earth", &iu, &mut rng);
+        assert!(chain.is_empty(), "no valid destination → no mission");
+    }
+
+    #[test]
+    fn collect_field_never_in_training_system() {
+        let iu = mini_universe();
+        let template = MissionTemplate::CollectFromAsteroidField {
+            briefing: "mine {quantity} {commodity} in {system_display}".into(),
+            success_text: "ok".into(),
+            failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            quantity_range: (3, 6),
+            pay_range: (100, 200),
+        };
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &template, "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 1);
+            let Objective::CollectPickups {
+                system, commodity, ..
+            } = &chain[0].1.objective
+            else {
+                panic!("collect template must produce CollectPickups");
+            };
+            assert_eq!(system, "sol", "seed {seed}: unreachable training system picked");
+            assert_eq!(commodity, "iron", "seed {seed}: training-only commodity picked");
+        }
+    }
+
+    #[test]
+    fn bounty_system_is_reachable() {
+        let iu = mini_universe();
+        let template = MissionTemplate::BountyHunt {
+            briefing: "kill {count} {target_name} in {system_display}".into(),
+            success_text: "ok".into(),
+            failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            ship_type_pool: vec!["pirate".into()],
+            count_range: (1, 3),
+            pay_range: (100, 200),
+            target_name: "Pirates".into(),
+        };
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &template, "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 1);
+            let Objective::DestroyShips { system, .. } = &chain[0].1.objective else {
+                panic!("bounty template must produce DestroyShips");
+            };
+            assert_eq!(system, "sol", "seed {seed}: bounty sent to training system");
+        }
+    }
+
+    #[test]
+    fn catch_thief_planets_landable_distinct_and_chained() {
+        let iu = mini_universe();
+        let template = MissionTemplate::CatchThief {
+            stage1_briefing: "s1".into(),
+            stage1_success_text: "ok".into(),
+            stage1_failure_text: "fail".into(),
+            stage2_briefing: "s2".into(),
+            stage2_success_text: "ok".into(),
+            stage2_failure_text: "fail".into(),
+            stage3_briefing: "s3".into(),
+            stage3_success_text: "ok".into(),
+            stage3_failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            ship_type_pool: vec!["pirate".into()],
+            target_name: "The Thief".into(),
+            commodity_pool: vec!["food".into()],
+            quantity_range: (2, 4),
+            pay_range: (100, 200),
+        };
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &template, "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 3);
+            let (s1_id, s1) = &chain[0];
+            let (s2_id, s2) = &chain[1];
+            let (_s3_id, s3) = &chain[2];
+
+            let Objective::DestroyShips { system, .. } = &s1.objective else {
+                panic!("stage 1 must be DestroyShips");
+            };
+            assert_eq!(system, "sol");
+
+            let Objective::LandOnPlanet { planet: deliver } = &s2.objective else {
+                panic!("stage 2 must be LandOnPlanet");
+            };
+            let Objective::CatchNpc { planet: chase, .. } = &s3.objective else {
+                panic!("stage 3 must be CatchNpc");
+            };
+            for p in [deliver, chase] {
+                assert!(
+                    p == "mars" || p == "venus",
+                    "seed {seed}: '{p}' must be landable, reachable, != offer planet"
+                );
+            }
+            assert_ne!(deliver, chase, "seed {seed}: deliver/chase must differ");
+
+            // Follow-ups gate on the previous stage's generated id.
+            assert_eq!(
+                s2.preconditions,
+                vec![Precondition::Completed {
+                    mission: s1_id.clone()
+                }]
+            );
+            assert_eq!(
+                s3.preconditions,
+                vec![Precondition::Completed {
+                    mission: s2_id.clone()
+                }]
+            );
+        }
+    }
+}
+
+// ── Toast queue ──────────────────────────────────────────────────────────────
+
+mod toast_queue {
+    use super::super::ui::MissionToast;
+
+    #[test]
+    fn queue_preserves_order_no_overwrite() {
+        // Regression: a single-slot toast dropped one message whenever a
+        // completion and an auto-start briefing landed in the same instant.
+        let mut toast = MissionToast::default();
+        toast.push("mission complete");
+        toast.push("new mission briefing");
+        assert_eq!(toast.queue.len(), 2);
+        assert_eq!(toast.queue.front().map(String::as_str), Some("mission complete"));
+        toast.queue.pop_front();
+        assert_eq!(
+            toast.queue.front().map(String::as_str),
+            Some("new mission briefing")
+        );
+    }
+
+    #[test]
+    fn back_to_back_duplicates_dedup() {
+        let mut toast = MissionToast::default();
+        toast.push("same");
+        toast.push("same");
+        assert_eq!(toast.queue.len(), 1);
+        toast.push("other");
+        toast.push("same");
+        assert_eq!(toast.queue.len(), 3, "only adjacent duplicates dedup");
+    }
+}
