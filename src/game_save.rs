@@ -306,12 +306,18 @@ fn cleanup_on_enter_menu(
     player_query: Query<Entity, With<Player>>,
     mut game_state: ResMut<PlayerGameState>,
     mut session_data: ResMut<SessionSaveData>,
+    mut travel: ResMut<crate::TravelContext>,
 ) {
     for entity in &player_query {
         crate::utils::safe_despawn(&mut commands, entity);
     }
     *game_state = PlayerGameState::default();
     session_data.resources.clear();
+    // A mid-jump escape (or death) would otherwise leak the Accelerating
+    // phase, saved speed cap, and old destination into the next session —
+    // the fresh pilot would spawn already boosting toward the previous
+    // pilot's jump target.
+    *travel = crate::TravelContext::default();
 }
 
 /// Remove the `PendingSessionLoad` resource after session resources have

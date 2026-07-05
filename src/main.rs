@@ -1005,7 +1005,9 @@ fn keyboard_input(
         }
     }
 
-    let select_secondary = keyboard_input.any_pressed([KeyCode::KeyW]);
+    // just_pressed: cycling every held frame (~60×/s) made the selection land
+    // effectively at random when the player released the key.
+    let select_secondary = keyboard_input.any_just_pressed([KeyCode::KeyW]);
     if select_secondary {
         player_ship.weapon_systems.increment_secondary();
     }

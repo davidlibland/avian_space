@@ -514,12 +514,14 @@ fn animate_escort_dock(
 /// by the RL pipeline.
 fn orphan_escorts(
     mut commands: Commands,
-    mut escorts: Query<(Entity, &CarrierEscort, &AIShip, &mut Sprite)>,
+    mut escorts: Query<(Entity, &CarrierEscort, &AIShip, &Ship, &mut Sprite)>,
     mothers: Query<(), With<Ship>>,
 ) {
-    for (entity, escort, ai_ship, mut sprite) in &mut escorts {
+    for (entity, escort, ai_ship, ship, mut sprite) in &mut escorts {
         if mothers.get(escort.mother).is_err() {
-            sprite.custom_size = None;
+            // Atlas tiles are a fixed 128 px — custom_size carries the real
+            // display size, so clearing it ballooned orphans to tile size.
+            sprite.custom_size = Some(crate::ship::ship_display_size(ship.data.radius));
             commands
                 .entity(entity)
                 .remove::<(CarrierEscort, EscortMode, ScalingUp, DockingEscort)>()

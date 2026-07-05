@@ -904,9 +904,13 @@ fn finish_ai_landing(
 
         if let Some(planet_data) = planet_data {
             let credits_before = ship.credits;
-            for (commodity, qty) in ship.clone().cargo.iter() {
-                if let Some(&price) = planet_data.commodities.get(commodity) {
-                    ship.sell_cargo(commodity, *qty, price);
+            // Snapshot just the (commodity, qty) pairs — cloning the whole
+            // Ship (weapon systems, five maps) per landing was wasteful.
+            let holdings: Vec<(String, u16)> =
+                ship.cargo.iter().map(|(c, q)| (c.clone(), *q)).collect();
+            for (commodity, qty) in holdings {
+                if let Some(&price) = planet_data.commodities.get(&commodity) {
+                    ship.sell_cargo(&commodity, qty, price);
                 }
             }
             let credits_earned = (ship.credits - credits_before).max(0) as f32;
@@ -964,10 +968,15 @@ fn finish_ai_landing(
                     }
                 }
             }
-            for weapon_type in ship.clone().weapon_systems.secondary.keys() {
-                if planet_data.outfitter.contains(weapon_type) {
-                    ship.buy_max_ammo(weapon_type, &item_universe);
-                }
+            let restock: Vec<String> = ship
+                .weapon_systems
+                .secondary
+                .keys()
+                .filter(|w| planet_data.outfitter.contains(*w))
+                .cloned()
+                .collect();
+            for weapon_type in &restock {
+                ship.buy_max_ammo(weapon_type, &item_universe);
             }
         }
 

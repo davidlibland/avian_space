@@ -495,7 +495,13 @@ impl Ship {
         true
     }
     pub fn buy_cargo(&mut self, commodity: &str, quantity_desired: u16, price: i128) {
-        let quantity_desired = std::cmp::min(quantity_desired, (self.credits / price) as u16);
+        if price <= 0 {
+            return; // malformed price data — refuse rather than divide by zero
+        }
+        // Clamp before the u16 cast: credits/price can exceed 65 535 (a rich
+        // trader), and a raw `as u16` would wrap and buy almost nothing.
+        let affordable = (self.credits / price).clamp(0, u16::MAX as i128) as u16;
+        let quantity_desired = std::cmp::min(quantity_desired, affordable);
         let quantity_added = self.add_cargo(commodity, quantity_desired);
         self.credits -= (quantity_added as i128) * price;
         if quantity_added > 0 {
@@ -1077,6 +1083,7 @@ fn handle_buy_ship(
     mut reader: MessageReader<BuyShip>,
     mut player_query: Query<(Entity, &mut Ship), With<crate::Player>>,
     item_universe: Res<ItemUniverse>,
+    unlocks: Res<crate::missions::PlayerUnlocks>,
 ) {
     for event in reader.read() {
         let Ok((entity, mut ship)) = player_query.single_mut() else {
@@ -1085,6 +1092,11 @@ fn handle_buy_ship(
         let Some(new_data) = item_universe.ships.get(&event.ship_type) else {
             continue;
         };
+        // Defence in depth: the shipyard UI filters locked ships, but the
+        // licence gate must hold for any programmatic BuyShip sender too.
+        if new_data.required_unlocks.iter().any(|u| !unlocks.has(u)) {
+            continue;
+        }
         let trade_in = ship.trade_in_value(&item_universe);
         let net_cost = new_data.price - trade_in;
         if ship.credits < net_cost {
@@ -1347,11 +1359,22 @@ fn score_hits(
 
 fn sync_hostilites(mut ships: Query<(&mut Ship, &mut ShipHostility)>) {
     for (mut ship, mut hostility) in ships.iter_mut() {
-        // Clear hostility against ship's own faction
-        if let Some(faction) = ship.data.clone().faction {
-            hostility.0.remove(&faction);
+        // Runs every frame over every ship, so avoid deep clones and — just as
+        // important — avoid dirtying change detection when nothing changed
+        // (`&mut` derefs mark the component changed even on no-op writes).
+        if let Some(faction) = ship.data.faction.as_deref() {
+            if hostility.0.contains_key(faction) {
+                let faction = faction.to_string();
+                hostility.0.remove(&faction);
+            }
         }
-        // Copy the hostility onto the ship
-        ship.enemies = hostility.0.clone();
+        // Copy the hostility onto the ship only when it actually differs.
+        if ship.enemies != hostility.0 {
+            ship.enemies = hostility.0.clone();
+        }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/ship_tests.rs"]
+mod tests;

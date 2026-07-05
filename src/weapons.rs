@@ -274,9 +274,21 @@ impl WeaponSystem {
         if number == 0 {
             return None;
         }
+        // Full cooldown as the timer duration: `weapon_system_cooldown` already
+        // ticks the timer `number`× faster, which is the one place copy count
+        // scales fire rate (N copies → rate N/cooldown). Scaling the duration
+        // here as well double-counted (N baked-in copies fired every
+        // cooldown/N²) and diverged from weapons bought one at a time
+        // (`buy_weapon` bumps `number` without rebuilding the timer).
+        let mut cooldown = Timer::from_seconds(weapon.cooldown, TimerMode::Once);
+        // Start ready — a fresh ship / fresh purchase shouldn't wait out a
+        // full cooldown (up to ~9 s for missiles) before its first shot.
+        // (tick(), not set_elapsed(): only tick() updates the finished flag.)
+        let duration = cooldown.duration();
+        cooldown.tick(duration);
         return Some(WeaponSystem {
             weapon: weapon.clone(),
-            cooldown: Timer::from_seconds(weapon.cooldown / number as f32, TimerMode::Once),
+            cooldown,
             number: number,
             space_per_system: outfitter_item.space() as i32,
             ammo_quantity: weapon.ammo.clone().map(|_| ammo_quantity.unwrap_or(0)),
@@ -324,10 +336,12 @@ pub fn weapon_fire(
         if !specific.cooldown.is_finished() {
             continue;
         }
-        specific.cooldown.reset();
+        // Validate the weapon type BEFORE burning the cooldown — a stale or
+        // mistyped key must not silently eat the shot.
         let Some(weapon) = item_universe.weapons.get(&cmd.weapon_type) else {
             continue;
         };
+        specific.cooldown.reset();
 
         // ── Carrier bay: spawn an escort ship instead of a projectile ───
         if let Some(ref escort_type) = weapon.carrier_bay {
@@ -536,3 +550,7 @@ fn missile_guidance(
         transform.rotation = Quat::from_rotation_z(-visual_angle);
     }
 }
+
+#[cfg(test)]
+#[path = "tests/weapons_tests.rs"]
+mod tests;
