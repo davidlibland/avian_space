@@ -144,7 +144,7 @@ pub fn ship_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (apply_damage, sync_hostilites, score_hits, tick_distressed)
+            (apply_damage, sync_hostilites, score_hits, tick_distressed, repair_bot_tick)
                 .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(
@@ -380,14 +380,51 @@ pub struct Ship {
     pub weapons_target: Option<Target>,
     #[serde(skip)]
     pub weapon_systems: WeaponSystems,
+    /// Installed ship mods: outfitter item name → count. Persisted with the
+    /// ship; `mod_stats` is the derived cache.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub mods: HashMap<String, u8>,
+    /// Aggregate effect of `mods`, recomputed on buy/sell/load (never per
+    /// frame) by [`Ship::recompute_mod_stats`].
+    #[serde(skip)]
+    pub mod_stats: ModStats,
+    /// Item space consumed by installed mods (cached alongside `mod_stats`).
+    #[serde(skip)]
+    pub mod_space: i32,
+}
+
+/// Cached aggregate of all installed [`ModEffect`]s. Defaults are the
+/// identity (multipliers 1, bonuses 0), so ships without mods — every AI
+/// ship — behave exactly as their raw `ShipData`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModStats {
+    pub speed_mult: f32,
+    pub thrust_mult: f32,
+    pub torque_mult: f32,
+    pub armor_hp: i32,
+    pub repair_per_sec: f32,
+}
+
+impl Default for ModStats {
+    fn default() -> Self {
+        Self {
+            speed_mult: 1.0,
+            thrust_mult: 1.0,
+            torque_mult: 1.0,
+            armor_hp: 0,
+            repair_per_sec: 0.0,
+        }
+    }
 }
 
 impl Ship {
     pub fn consumed_item_space(&self) -> i32 {
-        self.weapon_systems
+        let weapon_space: i32 = self
+            .weapon_systems
             .iter_all()
             .map(|(_, s)| s.space_consumed())
-            .sum()
+            .sum();
+        weapon_space + self.mod_space
     }
     pub fn from_ship_data(data: &ShipData, ship_type: &str) -> Self {
         Self {
@@ -405,10 +442,113 @@ impl Ship {
             weapons_target: None,
             weapon_systems: WeaponSystems::default(),
             enemies: HashMap::new(),
+            mods: HashMap::new(),
+            mod_stats: ModStats::default(),
+            mod_space: 0,
         }
     }
     pub fn remaining_item_space(&self) -> i32 {
         return (self.data.item_space as i32 - self.consumed_item_space()).max(0);
+    }
+
+    // ── Effective ship stats ────────────────────────────────────────────────
+    // The single choke points combining hull data, installed mods, and battle
+    // damage. Physics and AI for the PLAYER go through these; raw `data.*`
+    // stays the source of truth for unmodded AI ships and the RL observation
+    // code (whose ships never carry mods, so the values coincide).
+
+    /// Effective top speed: hull × engine mods × damage handling.
+    pub fn max_speed(&self) -> f32 {
+        self.data.max_speed * self.mod_stats.speed_mult * self.handling_factor()
+    }
+    /// Effective forward thrust (acceleration).
+    pub fn thrust(&self) -> f32 {
+        self.data.thrust * self.mod_stats.thrust_mult * self.handling_factor()
+    }
+    /// Effective turning torque.
+    pub fn torque(&self) -> f32 {
+        self.data.torque * self.mod_stats.torque_mult * self.handling_factor()
+    }
+    /// Effective maximum hull points (hull + armor mods).
+    pub fn max_health(&self) -> i32 {
+        self.data.max_health + self.mod_stats.armor_hp
+    }
+
+    /// Rebuild the cached [`ModStats`] from `self.mods`. Call after any mod
+    /// purchase/sale and when a saved ship is rehydrated — never per frame.
+    pub fn recompute_mod_stats(&mut self, item_universe: &ItemUniverse) {
+        let mut stats = ModStats::default();
+        let mut space = 0i32;
+        for (name, &count) in &self.mods {
+            let Some(item) = item_universe.outfitter_items.get(name) else {
+                continue;
+            };
+            space += item.space() as i32 * count as i32;
+            let Some(effect) = item.mod_effect() else {
+                continue;
+            };
+            for _ in 0..count {
+                match effect {
+                    crate::item_universe::ModEffect::Engine {
+                        speed,
+                        thrust,
+                        torque,
+                    } => {
+                        stats.speed_mult *= speed;
+                        stats.thrust_mult *= thrust;
+                        stats.torque_mult *= torque;
+                    }
+                    crate::item_universe::ModEffect::Armor { bonus_hp } => {
+                        stats.armor_hp += bonus_hp;
+                    }
+                    crate::item_universe::ModEffect::RepairBot { hp_per_sec } => {
+                        stats.repair_per_sec += hp_per_sec;
+                    }
+                }
+            }
+        }
+        self.mod_stats = stats;
+        self.mod_space = space;
+    }
+
+    /// Buy one copy of a ship mod. Refuses on unknown item / wrong item kind /
+    /// insufficient credits or item space.
+    pub fn buy_mod(&mut self, name: &str, item_universe: &ItemUniverse) {
+        let Some(item) = item_universe.outfitter_items.get(name) else {
+            return;
+        };
+        if item.mod_effect().is_none() {
+            return;
+        }
+        if item.price() > self.credits || (item.space() as i32) > self.remaining_item_space() {
+            return;
+        }
+        self.credits -= item.price();
+        *self.mods.entry(name.to_string()).or_insert(0) += 1;
+        self.recompute_mod_stats(item_universe);
+        // Armor changes effective max health; clamp (selling handled in sell_mod).
+        self.health = self.health.min(self.max_health());
+    }
+
+    /// Sell one copy of a ship mod at full price (consistent with weapons).
+    pub fn sell_mod(&mut self, name: &str, item_universe: &ItemUniverse) {
+        let Some(item) = item_universe.outfitter_items.get(name) else {
+            return;
+        };
+        let Some(count) = self.mods.get_mut(name) else {
+            return;
+        };
+        if *count == 0 {
+            return;
+        }
+        *count -= 1;
+        if *count == 0 {
+            self.mods.remove(name);
+        }
+        self.credits += item.price();
+        self.recompute_mod_stats(item_universe);
+        // Selling armor can drop max health below current health.
+        self.health = self.health.min(self.max_health());
     }
     /// Compute the trade-in value of this ship: 80% of the ship price plus
     /// 80% of all equipped weapons/outfitter items.
@@ -428,7 +568,21 @@ impl Ship {
             .sum::<i128>()
             * 80
             / 100;
-        ship_value + weapon_value
+        let mod_value: i128 = self
+            .mods
+            .iter()
+            .map(|(name, count)| {
+                item_universe
+                    .outfitter_items
+                    .get(name)
+                    .map(|item| item.price())
+                    .unwrap_or(0)
+                    * *count as i128
+            })
+            .sum::<i128>()
+            * 80
+            / 100;
+        ship_value + weapon_value + mod_value
     }
     fn current_cargo(&self) -> u16 {
         self.cargo.values().sum()
@@ -683,7 +837,7 @@ impl Ship {
     /// more sluggishly.
     pub fn handling_factor(&self) -> f32 {
         let hp_frac =
-            (self.health.max(0) as f32 / self.data.max_health.max(1) as f32).clamp(0.0, 1.0);
+            (self.health.max(0) as f32 / self.max_health().max(1) as f32).clamp(0.0, 1.0);
         // Sub-linear roll-off: handling barely sags from light damage and falls off
         // faster as the hull nears destruction. 1.0 at full health -> 0.5 at 0.
         0.5 + 0.5 * hp_frac.sqrt()
@@ -695,6 +849,7 @@ pub struct ShipBundle {
     ship: Ship,
     faction: ShipHostility,
     distressed: Distressed,
+    repair_buffer: RepairBuffer,
     tracer_slots: crate::weapons::TracerSlots,
     pub sprite: Sprite,
     drive: DriveActive,
@@ -823,6 +978,7 @@ pub fn ship_bundle(
         faction: ShipHostility(ship.enemies.clone()),
         ship,
         distressed: Distressed::default(),
+        repair_buffer: RepairBuffer::default(),
         tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
         sprite: ship_sprite(&ship_data),
         drive: DriveActive::default(),
@@ -856,6 +1012,7 @@ pub fn ship_bundle_from_pilot(
     pos: Vec2,
 ) -> ShipBundle {
     ship.weapon_systems = WeaponSystems::build(weapon_loadout, item_universe);
+    ship.recompute_mod_stats(item_universe);
     // Player ships have no faction — prevents faction-level hostility contagion
     // (e.g. hitting one Merchant making ALL Merchants hostile).  The player's
     // per-entity enemies map still drives engagement via ShipHostility.
@@ -863,6 +1020,7 @@ pub fn ship_bundle_from_pilot(
     ShipBundle {
         faction: ShipHostility(ship.enemies.clone()),
         distressed: Distressed::default(),
+        repair_buffer: RepairBuffer::default(),
         tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
         angular_damping: AngularDamping(ship.data.angular_drag),
         max_speed: MaxLinearSpeed(ship.data.max_speed),
@@ -912,8 +1070,9 @@ fn ship_movement(
         let dt = time.delta_secs();
         // Battle damage degrades handling (see Ship::handling_factor): the same
         // factor scales acceleration and torque here, and the physics speed/turn
-        // caps in apply_damage_handicap.
-        let agility = ship.handling_factor();
+        // caps in apply_damage_handicap. Effective stats (max_speed()/thrust()/
+        // torque()) fold hull data × engine mods × damage in one place.
+        let (max_speed, thrust, torque) = (ship.max_speed(), ship.thrust(), ship.torque());
         // Drive flame is shown whenever forward thrust is commanded.
         drive.0 = cmd.thrust.abs() > f32::EPSILON;
 
@@ -922,15 +1081,15 @@ fn ship_movement(
 
         if cmd.thrust.abs() > f32::EPSILON {
             let forward_speed = velocity.dot(forward);
-            let speed_deficit = ship.data.max_speed * agility - forward_speed;
+            let speed_deficit = max_speed - forward_speed;
             let pd_force = (ship.data.thrust_kp * speed_deficit
                 - ship.data.thrust_kd * forward_speed)
-                .clamp(0.0, ship.data.thrust * agility);
+                .clamp(0.0, thrust);
             (*velocity).0 += forward * pd_force * cmd.thrust * dt;
         }
 
         if cmd.turn.abs() > f32::EPSILON {
-            (*ang_vel).0 += -ship.data.torque * agility * cmd.turn * dt;
+            (*ang_vel).0 += -torque * cmd.turn * dt;
         }
 
         let new_ang_vel = ang_vel.0 * (-ship.data.angular_drag * dt).exp();
@@ -940,7 +1099,7 @@ fn ship_movement(
             let retrograde = -velocity.normalize();
             let angle_err = forward.angle_to(retrograde);
             let pd_torque = (ship.data.reverse_kp * angle_err - ship.data.reverse_kd * new_ang_vel)
-                .clamp(-ship.data.torque * agility, ship.data.torque * agility);
+                .clamp(-torque, torque);
             (*ang_vel).0 += pd_torque * cmd.reverse * dt;
         }
     }
@@ -965,11 +1124,34 @@ fn apply_damage_handicap(
         if is_player && player_jumping {
             continue;
         }
-        let hf = ship.handling_factor();
-        max_lin.0 = ship.data.max_speed * hf;
-        max_ang.0 = MAX_ANG_SPEED * hf;
+        max_lin.0 = ship.max_speed();
+        max_ang.0 = MAX_ANG_SPEED * ship.handling_factor();
     }
 }
+
+/// Passive in-flight repair from installed repair-bot mods. Runs on virtual
+/// time, so it (correctly) pauses while a pausing UI is open. Fractional
+/// progress is accumulated in the timer-free `repair_buffer` so slow rates
+/// still add up across frames.
+fn repair_bot_tick(time: Res<Time>, mut ships: Query<(&mut Ship, &mut RepairBuffer)>) {
+    let dt = time.delta_secs();
+    for (mut ship, mut buffer) in &mut ships {
+        let rate = ship.mod_stats.repair_per_sec;
+        if rate <= 0.0 || ship.health <= 0 || ship.health >= ship.max_health() {
+            continue;
+        }
+        buffer.0 += rate * dt;
+        let whole = buffer.0.floor() as i32;
+        if whole > 0 {
+            buffer.0 -= whole as f32;
+            ship.health = (ship.health + whole).min(ship.max_health());
+        }
+    }
+}
+
+/// Fractional hull-repair accumulator for [`repair_bot_tick`].
+#[derive(Component, Default)]
+pub struct RepairBuffer(pub f32);
 
 /// Pick the atlas frame from each ship's heading and drive state.
 ///

@@ -752,7 +752,7 @@ fn compute_intercept_command(
         .primary
         .keys()
         .filter_map(|wt| item_universe.weapons.get(wt))
-        .filter(|w| !w.guided)
+        .filter(|w| !w.is_guided())
         .map(|w| w.speed)
         .next();
 

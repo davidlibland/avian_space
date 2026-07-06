@@ -11,10 +11,12 @@ use std::collections::{HashMap, hash_map::Entry};
 pub fn weapons_plugin(app: &mut App) {
     app.add_message::<FireCommand>()
         .add_message::<WeaponFired>()
+        .add_message::<DecoyDeployed>()
         .add_systems(
             Update,
             (
                 weapon_fire,
+                decoy_missiles.after(weapon_fire),
                 weapon_lifetime,
                 weapon_system_cooldown,
                 missile_guidance,
@@ -178,6 +180,25 @@ pub struct Ammo {
     pub space: u32,
 }
 
+/// What a weapon *does* when fired. One enum instead of independent
+/// `guided`/`turn_rate`/`carrier_bay` flags, so mutually exclusive behaviors
+/// can't be combined into nonsense (a guided carrier bay) and adding a new
+/// behavior is one variant + one `match` arm in `weapon_fire`.
+#[derive(Debug, Deserialize, Serialize, Clone, Default, PartialEq)]
+pub enum WeaponBehavior {
+    /// Plain projectile flying straight until its lifetime expires.
+    #[default]
+    Ballistic,
+    /// Homing missile: launches with partial velocity inheritance, drags back
+    /// to cruise speed, and steers toward its target at `turn_rate` rad/s.
+    Guided { turn_rate: f32 },
+    /// Launches an escort ship of this type instead of a projectile.
+    CarrierBay { ship_type: String },
+    /// Countermeasure: spawns a decoy that each guided missile currently
+    /// homing on the launcher retargets to with probability `strength`.
+    Decoy { strength: f32 },
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Weapon {
     pub name: String,
@@ -188,9 +209,7 @@ pub struct Weapon {
     pub damage: i16,
     pub ammo: Option<Ammo>,
     #[serde(default)]
-    pub guided: bool,
-    #[serde(default)]
-    pub turn_rate: f32,
+    pub behavior: WeaponBehavior,
     /// Half-angle of the weapon's aiming arc, in radians. Zero means a fixed
     /// forward-firing weapon; `PI` represents a full turret. Deserialized
     /// from degrees in asset files.
@@ -209,10 +228,6 @@ pub struct Weapon {
     pub sound_handle: Option<Handle<AudioSource>>,
     #[serde(default)]
     pub display_name: String,
-    /// If set, this weapon spawns an escort ship of this type instead of a
-    /// projectile (carrier bay).
-    #[serde(default)]
-    pub carrier_bay: Option<String>,
 }
 
 /// Fraction of the launching ship's velocity a *guided* missile keeps at launch.
@@ -223,6 +238,45 @@ const MISSILE_LAUNCH_INHERIT: f32 = 0.7;
 /// The launch-speed excess decays to this fraction of its initial value by the end
 /// of the missile's lifetime — this drives the drag rate (see `missile_guidance`).
 const MISSILE_SETTLE_FRACTION: f32 = 0.05;
+
+/// A deployed countermeasure flare (see [`WeaponBehavior::Decoy`]).
+#[derive(Component)]
+pub struct Decoy;
+
+/// Fired when a decoy flare is deployed; `decoy_missiles` rolls each inbound
+/// missile against `strength` and retargets the spoofed ones to the flare.
+#[derive(Event, Message)]
+pub struct DecoyDeployed {
+    pub owner: Entity,
+    pub flare: Entity,
+    pub strength: f32,
+}
+
+/// Each guided missile currently homing on the flare's owner gets ONE roll:
+/// with probability `strength` it retargets to the flare. When the flare
+/// burns out (Projectile lifetime), `missile_guidance`'s dead-target handling
+/// leaves the missile flying ballistic — permanently spoofed. Event-driven:
+/// deploying at the right moment matters, and missiles fired *after* the
+/// flare ignore it.
+fn decoy_missiles(
+    mut reader: MessageReader<DecoyDeployed>,
+    mut missiles: Query<&mut GuidedMissile>,
+) {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    for DecoyDeployed {
+        owner,
+        flare,
+        strength,
+    } in reader.read()
+    {
+        for mut missile in &mut missiles {
+            if missile.target == Some(*owner) && rng.r#gen_range(0.0..1.0) < *strength {
+                missile.target = Some(*flare);
+            }
+        }
+    }
+}
 
 #[derive(Component)]
 pub struct GuidedMissile {
@@ -239,6 +293,16 @@ pub struct GuidedMissile {
 impl Weapon {
     pub fn range(&self) -> f32 {
         self.speed * self.lifetime
+    }
+    pub fn is_guided(&self) -> bool {
+        matches!(self.behavior, WeaponBehavior::Guided { .. })
+    }
+    /// The escort ship type this weapon launches, when it's a carrier bay.
+    pub fn carrier_bay(&self) -> Option<&str> {
+        match &self.behavior {
+            WeaponBehavior::CarrierBay { ship_type } => Some(ship_type),
+            _ => None,
+        }
     }
 }
 
@@ -307,6 +371,7 @@ pub fn weapon_fire(
     mut reader: MessageReader<FireCommand>,
     mut writer: MessageWriter<WeaponFired>,
     mut escort_writer: MessageWriter<SpawnEscort>,
+    mut decoy_writer: MessageWriter<DecoyDeployed>,
     mut commands: Commands,
     mut ships: Query<(
         &Transform,
@@ -344,7 +409,7 @@ pub fn weapon_fire(
         specific.cooldown.reset();
 
         // ── Carrier bay: spawn an escort ship instead of a projectile ───
-        if let Some(ref escort_type) = weapon.carrier_bay {
+        if let WeaponBehavior::CarrierBay { ship_type } = &weapon.behavior {
             specific.ammo_quantity = specific.ammo_quantity.map(|x| x - 1);
             // Use physics Position (not rendering Transform) so the escort
             // spawns at the carrier's actual location, not last frame's visual.
@@ -352,9 +417,60 @@ pub fn weapon_fire(
             let spawn_pos = ship_pos.0 + forward * (ship_radius + 30.0);
             escort_writer.write(SpawnEscort {
                 mother: cmd.ship,
-                ship_type: escort_type.clone(),
+                ship_type: ship_type.clone(),
                 weapon_type: cmd.weapon_type.clone(),
                 position: spawn_pos,
+            });
+            writer.write(WeaponFired {
+                ship: cmd.ship,
+                weapon_type: cmd.weapon_type.clone(),
+            });
+            continue;
+        }
+
+        // ── Decoy flare: drop a countermeasure aft and try to spoof every
+        // missile currently homing on the launcher ───────────────────────
+        if let WeaponBehavior::Decoy { strength } = weapon.behavior {
+            specific.ammo_quantity = specific.ammo_quantity.map(|x| x - 1);
+            let backward = -(ship_transform.rotation * Vec3::Y).xy();
+            // The flare drops behind the ship and mostly sheds its velocity,
+            // so it separates cleanly from the launcher's flight path.
+            let vel = linear_velocity.0 * 0.4 + backward * weapon.speed;
+            let spawn_pos = ship_pos.0 + backward * (ship_radius + 8.0);
+            let [r, g, b] = weapon.color;
+            let sprite = if let Some(handle) = &weapon.sprite_handle {
+                Sprite::from_image(handle.clone())
+            } else {
+                Sprite {
+                    color: Color::srgb(r, g, b),
+                    custom_size: Some(Vec2::splat(6.0)),
+                    ..default()
+                }
+            };
+            let flare = commands
+                .spawn((
+                    DespawnOnExit(PlayState::Flying),
+                    Projectile {
+                        lifetime: weapon.lifetime,
+                        owner: cmd.ship,
+                        weapon_type: cmd.weapon_type.clone(),
+                    },
+                    Decoy,
+                    RigidBody::Dynamic,
+                    // Collides with nothing — missiles chase it (they home on
+                    // its Position) until it burns out.
+                    Collider::circle(3.0),
+                    CollisionLayers::new(GameLayer::Weapon, LayerMask::NONE),
+                    LinearVelocity(vel),
+                    LinearDamping(1.2),
+                    Transform::from_translation(spawn_pos.extend(-0.3)),
+                    sprite,
+                ))
+                .id();
+            decoy_writer.write(DecoyDeployed {
+                owner: cmd.ship,
+                flare,
+                strength,
             });
             writer.write(WeaponFired {
                 ship: cmd.ship,
@@ -395,7 +511,7 @@ pub fn weapon_fire(
         // Guided missiles keep only part of the launcher's velocity (the rest drags
         // off over their lifetime, see GuidedMissile); unguided shots inherit it
         // fully so ballistic fire can lead a moving target.
-        let inherit = if weapon.guided {
+        let inherit = if weapon.is_guided() {
             MISSILE_LAUNCH_INHERIT
         } else {
             1.0
@@ -431,10 +547,10 @@ pub fn weapon_fire(
         ));
         // Decrease the ammo:
         specific.ammo_quantity = specific.ammo_quantity.map(|x| x - 1);
-        if weapon.guided {
+        if let WeaponBehavior::Guided { turn_rate } = weapon.behavior {
             entity_cmd.insert(GuidedMissile {
                 target: cmd.target,
-                turn_rate: weapon.turn_rate,
+                turn_rate,
                 cruise_speed: weapon.speed,
                 // Solve dv/dt = -r·(v − cruise): the excess decays to
                 // MISSILE_SETTLE_FRACTION by t = lifetime, so r = ln(1/ε)/lifetime.

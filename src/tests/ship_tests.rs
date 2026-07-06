@@ -126,3 +126,147 @@ fn thrust_accelerates_forward() {
     assert!(vel.y > 0.0, "forward thrust must accelerate +Y, got {vel:?}");
     assert!(vel.x.abs() < 1e-4);
 }
+
+// ── Ship mods ────────────────────────────────────────────────────────────────
+
+mod mods {
+    use super::*;
+    use std::path::Path;
+
+    fn universe() -> crate::item_universe::ItemUniverse {
+        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse")
+    }
+
+    fn modded_ship() -> Ship {
+        Ship::from_ship_data(
+            &ShipData {
+                max_speed: 200.0,
+                thrust: 100.0,
+                torque: 40.0,
+                max_health: 100,
+                item_space: 30,
+                ..Default::default()
+            },
+            "test_ship",
+        )
+    }
+
+    #[test]
+    fn engine_mod_scales_speed_thrust_torque() {
+        let iu = universe();
+        let mut ship = modded_ship();
+        ship.credits = 100_000;
+        assert_eq!(ship.max_speed(), 200.0);
+        ship.buy_mod("engine_mk2", &iu);
+        assert_eq!(ship.mods.get("engine_mk2"), Some(&1));
+        assert!((ship.max_speed() - 200.0 * 1.2).abs() < 1e-3);
+        assert!((ship.thrust() - 100.0 * 1.25).abs() < 1e-3);
+        assert!((ship.torque() - 40.0 * 1.2).abs() < 1e-3);
+        // Stacks multiplicatively.
+        ship.buy_mod("engine_mk2", &iu);
+        assert!((ship.max_speed() - 200.0 * 1.2 * 1.2).abs() < 1e-3);
+    }
+
+    #[test]
+    fn armor_raises_max_health_and_stabilizes_handling() {
+        let iu = universe();
+        let mut ship = modded_ship();
+        ship.credits = 100_000;
+        ship.buy_mod("armor_plating", &iu);
+        assert_eq!(ship.max_health(), 140);
+        assert_eq!(ship.health, 100, "buying armor must not heal");
+        // After a full repair, the same ABSOLUTE damage is a smaller fraction
+        // of the armored hull, so handling degrades less. (Unrepaired, fresh
+        // armor actually lowers the health fraction — repair to benefit.)
+        ship.health = ship.max_health() - 50; // repaired, then took 50 damage
+        let armored_hf = ship.handling_factor();
+        let mut bare = modded_ship();
+        bare.health = bare.max_health() - 50;
+        let bare_hf = bare.handling_factor();
+        assert!(
+            armored_hf > bare_hf,
+            "armor must stabilize handling after repair: {armored_hf} <= {bare_hf}"
+        );
+    }
+
+    #[test]
+    fn selling_armor_clamps_current_health() {
+        let iu = universe();
+        let mut ship = modded_ship();
+        ship.credits = 100_000;
+        ship.buy_mod("armor_plating", &iu);
+        ship.health = 140; // fully repaired with armor
+        ship.sell_mod("armor_plating", &iu);
+        assert_eq!(ship.health, 100, "health must clamp to the bare hull");
+        assert!(ship.mods.is_empty());
+    }
+
+    #[test]
+    fn buy_mod_respects_credits_and_item_space() {
+        let iu = universe();
+        let mut ship = modded_ship();
+        ship.credits = 10; // can't afford anything
+        ship.buy_mod("engine_mk2", &iu);
+        assert!(ship.mods.is_empty(), "must refuse without credits");
+
+        ship.credits = 1_000_000;
+        // Fill the hold so no item space remains.
+        ship.mod_space = ship.data.item_space as i32;
+        ship.buy_mod("engine_mk2", &iu);
+        assert!(ship.mods.is_empty(), "must refuse without item space");
+    }
+
+    #[test]
+    fn mods_consume_item_space() {
+        let iu = universe();
+        let mut ship = modded_ship();
+        ship.credits = 100_000;
+        let before = ship.remaining_item_space();
+        ship.buy_mod("armor_plating", &iu); // space 6
+        assert_eq!(ship.remaining_item_space(), before - 6);
+        ship.sell_mod("armor_plating", &iu);
+        assert_eq!(ship.remaining_item_space(), before);
+    }
+}
+
+// ── Repair bot ───────────────────────────────────────────────────────────────
+
+#[test]
+fn repair_bot_heals_toward_effective_max() {
+    use bevy::time::TimeUpdateStrategy;
+    use std::time::Duration;
+
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            250,
+        )))
+        .add_systems(Update, repair_bot_tick);
+    let mut ship = Ship::from_ship_data(
+        &ShipData {
+            max_health: 100,
+            ..Default::default()
+        },
+        "test_ship",
+    );
+    ship.health = 90;
+    ship.mod_stats.repair_per_sec = 2.0; // 0.5 hp per 250ms tick
+    let entity = app
+        .world_mut()
+        .spawn((ship, RepairBuffer::default()))
+        .id();
+    app.update(); // time baseline
+    for _ in 0..8 {
+        app.update(); // 2s of repair = +4 hp
+    }
+    let healed = app.world().get::<Ship>(entity).unwrap().health;
+    assert!(
+        (93..=95).contains(&healed),
+        "expected ~94 hp after 2s at 2 hp/s, got {healed}"
+    );
+    // Runs to cap, never beyond.
+    for _ in 0..200 {
+        app.update();
+    }
+    assert_eq!(app.world().get::<Ship>(entity).unwrap().health, 100);
+}

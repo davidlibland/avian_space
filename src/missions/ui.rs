@@ -319,16 +319,16 @@ fn render_info_tab(
             ui.label(&ship.data.display_name);
             ui.end_row();
             ui.label("Hull:");
-            ui.label(format!("{} / {}", ship.health, ship.data.max_health));
+            ui.label(format!("{} / {}", ship.health, ship.max_health()));
             ui.end_row();
             ui.label("Max speed:");
-            ui.label(format!("{} m/s", ship.data.max_speed as i32));
+            ui.label(format!("{} m/s", (ship.data.max_speed * ship.mod_stats.speed_mult) as i32));
             ui.end_row();
             ui.label("Thrust:");
-            ui.label(format!("{} N", ship.data.thrust as i32));
+            ui.label(format!("{} N", (ship.data.thrust * ship.mod_stats.thrust_mult) as i32));
             ui.end_row();
             ui.label("Turning torque:");
-            ui.label(format!("{} N·m", ship.data.torque as i32));
+            ui.label(format!("{} N·m", (ship.data.torque * ship.mod_stats.torque_mult) as i32));
             ui.end_row();
             ui.label("Cargo space:");
             ui.label(format!(

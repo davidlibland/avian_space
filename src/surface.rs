@@ -2155,7 +2155,7 @@ fn surface_building_ui(
                 }
                 BuildingKind::MechanicShop => {
                     if let Ok(mut ship) = player_query.single_mut() {
-                        let max_hp = ship.data.max_health;
+                        let max_hp = ship.max_health();
                         let hp = ship.health;
                         ui.label(format!("Hull: {}/{}", hp, max_hp));
 

@@ -473,7 +473,7 @@ fn update_health_bar(
     let Ok(mut node) = fill_query.single_mut() else {
         return;
     };
-    let pct = (ship.health as f32 / ship.data.max_health as f32 * 100.0).clamp(0.0, 100.0);
+    let pct = (ship.health as f32 / ship.max_health() as f32 * 100.0).clamp(0.0, 100.0);
     node.width = Val::Percent(pct);
 }
 

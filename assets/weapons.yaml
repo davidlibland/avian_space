@@ -14,8 +14,7 @@ goose:
     cooldown: 8.0
     color: [0.9, 0.4, 0.1]
     damage: 20
-    guided: true
-    turn_rate: 2.0
+    behavior: !Guided { turn_rate: 2.0 }
     sprite_path: sprites/weapons/goose.png
     sound_path: sounds/weapons/goose.ogg
     display_name: "Goose Missile"
@@ -69,8 +68,7 @@ ir_missile:
     cooldown: 9.0
     color: [1.0, 0.55, 0.0]
     damage: 40
-    guided: true
-    turn_rate: 2.5
+    behavior: !Guided { turn_rate: 2.5 }
     sprite_path: sprites/weapons/ir_missile.png
     sound_path: sounds/weapons/ir_missile.ogg
     ammo:
@@ -83,8 +81,7 @@ javelin:
     cooldown: 9.0
     color: [0.4, 0.8, 1.0]
     damage: 20
-    guided: true
-    turn_rate: 1.25
+    behavior: !Guided { turn_rate: 1.25 }
     sprite_path: sprites/weapons/javelin.png
     sound_path: sounds/weapons/javelin.ogg
     ammo:
@@ -97,8 +94,7 @@ space_mine:
     cooldown: 15.0
     color: [0.8, 0.2, 0.2]
     damage: 80
-    guided: true
-    turn_rate: 1.0
+    behavior: !Guided { turn_rate: 1.0 }
     aimable_arc: 180
     sprite_path: sprites/weapons/space_mine.png
     sound_path: sounds/weapons/space_mine.ogg
@@ -113,7 +109,7 @@ fighter_bay:
     color: [0.0, 0.8, 0.3]
     damage: 0
     display_name: "Fighter Bay"
-    carrier_bay: fighter
+    behavior: !CarrierBay { ship_type: fighter }
     ammo:
         !Ammo:
             space: 4
@@ -125,7 +121,7 @@ fed_fighter_bay:
     color: [0.0, 0.8, 0.3]
     damage: 0
     display_name: "Patrol Bay"
-    carrier_bay: fed_patrol
+    behavior: !CarrierBay { ship_type: fed_patrol }
     ammo:
         !Ammo:
             space: 4
@@ -137,7 +133,7 @@ shuttle_bay:
     color: [0.3, 0.6, 0.8]
     damage: 0
     display_name: "Shuttle Bay"
-    carrier_bay: shuttle
+    behavior: !CarrierBay { ship_type: shuttle }
     ammo:
         !Ammo:
             space: 3
@@ -149,7 +145,7 @@ rebel_fighter_bay:
     color: [0.8, 0.3, 0.0]
     damage: 0
     display_name: "Rebel Fighter Bay"
-    carrier_bay: rebel_fighter
+    behavior: !CarrierBay { ship_type: rebel_fighter }
     ammo:
         !Ammo:
             space: 4
@@ -161,7 +157,7 @@ pirate_corvette_bay:
     color: [0.6, 0.0, 0.0]
     damage: 0
     display_name: "Pirate Corvette Bay"
-    carrier_bay: pirate_corvette
+    behavior: !CarrierBay { ship_type: pirate_corvette }
     ammo:
         !Ammo:
             space: 3
@@ -193,8 +189,7 @@ prox_mine:
     cooldown: 10.0
     color: [0.9, 0.8, 0.4]
     damage: 60
-    guided: true
-    turn_rate: 1.0
+    behavior: !Guided { turn_rate: 1.0 }
     aimable_arc: 180
     sprite_path: sprites/weapons/prox_mine.png
     sound_path: sounds/weapons/prox_mine.ogg
@@ -220,8 +215,7 @@ seeker:
     cooldown: 5.0
     color: [0.4, 0.9, 1.0]
     damage: 18
-    guided: true
-    turn_rate: 3.0
+    behavior: !Guided { turn_rate: 3.0 }
     sprite_path: sprites/weapons/seeker.png
     sound_path: sounds/weapons/seeker.ogg
     display_name: "Seeker Drone-Missile"
@@ -278,8 +272,7 @@ censer_charge:
     cooldown: 11.0
     color: [0.6, 0.3, 0.9]
     damage: 70
-    guided: true
-    turn_rate: 1.5
+    behavior: !Guided { turn_rate: 1.5 }
     sprite_path: sprites/weapons/censer_charge.png
     sound_path: sounds/weapons/censer_charge.ogg
     display_name: "Censer Charge"
@@ -346,7 +339,20 @@ drone_bay:
     color: [0.4, 0.9, 1.0]
     damage: 0
     display_name: "Drone Bay"
-    carrier_bay: helios_drone
+    behavior: !CarrierBay { ship_type: helios_drone }
     ammo:
         !Ammo:
             space: 6
+flare_pod:
+    name: flare_pod
+    lifetime: 5.0
+    speed: 45.0
+    cooldown: 4.0
+    color: [1.0, 0.9, 0.45]
+    damage: 0
+    display_name: "Decoy Flares"
+    behavior: !Decoy { strength: 0.7 }
+    sound_path: sounds/weapons/goose.ogg
+    ammo:
+        !Ammo:
+            space: 1

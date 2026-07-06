@@ -116,7 +116,7 @@ fn auto_launch_carrier_bays(
             continue;
         }
         for (weapon_type, ws) in ship.weapon_systems.iter_all() {
-            if ws.weapon.carrier_bay.is_none() {
+            if ws.weapon.carrier_bay().is_none() {
                 continue;
             }
             if ws.ammo_quantity.map(|n| n == 0).unwrap_or(false) {

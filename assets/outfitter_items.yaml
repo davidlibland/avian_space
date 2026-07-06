@@ -199,3 +199,29 @@ precursor_beam:
     space: 3
     weapon_type: precursor_beam
     required_unlocks: [precursor_tech_license]
+flare_pod:
+  !SecondaryWeapon
+    price: 900
+    space: 2
+    weapon_type: flare_pod
+    ammo_price: 45
+    ammo_space: 1
+    display_name: "Decoy Flares"
+engine_mk2:
+  !ShipMod
+    price: 15000
+    space: 4
+    display_name: "Vector-Thrust Engine"
+    effect: !Engine { speed: 1.2, thrust: 1.25, torque: 1.2 }
+armor_plating:
+  !ShipMod
+    price: 9000
+    space: 6
+    display_name: "Composite Armor Plating"
+    effect: !Armor { bonus_hp: 40 }
+repair_bot:
+  !ShipMod
+    price: 18000
+    space: 5
+    display_name: "Hull Repair Bot"
+    effect: !RepairBot { hp_per_sec: 0.6 }

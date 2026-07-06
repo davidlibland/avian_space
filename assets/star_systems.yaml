@@ -73,7 +73,7 @@ sol:
         weapons_parts: 28
         robotics: 43
         exotic_matter: 135
-      outfitter: [laser, proton_beam, ir_missile, space_mine, javelin]
+      outfitter: [laser, proton_beam, ir_missile, space_mine, javelin, flare_pod, engine_mk2, armor_plating, repair_bot]
       shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, prospector, hauler, cargo_transport, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
     moon:
       planet_type: rocky
@@ -775,7 +775,7 @@ procyon:
         electronics: 38
         weapons_parts: 13
         robotics: 34
-      outfitter: [laser, ir_missile, javelin, space_mine]
+      outfitter: [laser, ir_missile, javelin, space_mine, flare_pod, engine_mk2, armor_plating]
       shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, cargo_transport, freighter, bulk_carrier, asteroid_miner, prospector]
     procyon_ii:
       planet_type: rocky
@@ -908,7 +908,7 @@ rigel:
         titanium: 10
         gold: 66
         electronics: 19
-      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
+      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine, flare_pod, engine_mk2, armor_plating, repair_bot]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
       planet_type: rocky
@@ -1056,7 +1056,7 @@ deneb:
         electronics: 37
         weapons_parts: 14
         robotics: 61
-      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine]
+      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine, flare_pod, engine_mk2, armor_plating, repair_bot]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, cargo_transport, freighter]
     deneb_station:
       planet_type: rocky
@@ -1193,7 +1193,7 @@ ceres_freehold:
         silicates: 3
         food: 5
         electronics: 29
-      outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine, flak_turret]
+      outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine, flak_turret, flare_pod, engine_mk2, armor_plating, repair_bot]
       shipyard: [shuttle, prospector, asteroid_miner, cargo_transport, frontier_skiff, frontier_harvester, frontier_sailtender, frontier_monitor, frontier_prospector, frontier_dredger]
     pallas:
       planet_type: icy_dwarf
@@ -1481,7 +1481,7 @@ helios_prime:
         electronics: 18
         weapons_parts: 23
         robotics: 34
-      outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker, drone_bay]
+      outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker, drone_bay, flare_pod, engine_mk2, armor_plating, repair_bot]
       shipyard: [shuttle, courier, cargo_transport, freighter, hauler, helios_drone, helios_enforcer, helios_overseer, helios_titan, helios_courier, helios_freighter, helios_hauler]
     helios_orbital:
       planet_type: rocky
@@ -1689,7 +1689,7 @@ bastion:
         silicates: 1
         food: 10
         uranium: 9
-      outfitter: [proton_beam, chaingun, siege_cannon, chaingun_turret, space_mine, siege_turret]
+      outfitter: [proton_beam, chaingun, siege_cannon, chaingun_turret, space_mine, siege_turret, armor_plating, repair_bot]
       shipyard: [fed_patrol, corvette, frigate, fed_destroyer, bastion_guard, bastion_lance, siege_monitor, iron_dreadnought, bastion_collier, bastion_dredger]
     bastion_yard:
       planet_type: rocky

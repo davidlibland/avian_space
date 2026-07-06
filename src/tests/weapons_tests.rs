@@ -60,13 +60,14 @@ fn guided_launch_inherits_partial_velocity_with_settling_drag() {
         .get("javelin")
         .expect("javelin in weapons.yaml")
         .clone();
-    assert!(javelin.guided, "test premise: javelin is guided");
+    assert!(javelin.is_guided(), "test premise: javelin is guided");
 
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .insert_resource(iu)
         .add_message::<FireCommand>()
         .add_message::<WeaponFired>()
+        .add_message::<DecoyDeployed>()
         .add_message::<crate::carrier::SpawnEscort>()
         .add_systems(Update, weapon_fire);
 
@@ -201,4 +202,109 @@ fn sell_all_ammo_empties_rack_and_pays() {
     let before = ship.credits;
     ship.sell_all_ammo("javelin", &iu);
     assert_eq!(ship.credits, before);
+}
+
+// ── Decoy flares ─────────────────────────────────────────────────────────────
+
+/// Firing a flare pod spawns a Decoy and, at strength 1.0, every missile
+/// homing on the launcher retargets to the flare; at 0.0 none do.
+#[test]
+fn decoy_retargets_inbound_missiles() {
+    for (strength, expect_spoofed) in [(1.0_f32, true), (0.0_f32, false)] {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<DecoyDeployed>()
+            .add_systems(Update, decoy_missiles);
+        let owner = app.world_mut().spawn_empty().id();
+        let flare = app.world_mut().spawn(Decoy).id();
+        let missile = app
+            .world_mut()
+            .spawn(GuidedMissile {
+                target: Some(owner),
+                turn_rate: 2.0,
+                cruise_speed: 100.0,
+                drag_rate: 1.0,
+            })
+            .id();
+        // A missile chasing someone ELSE must never be affected.
+        let other = app.world_mut().spawn_empty().id();
+        let bystander = app
+            .world_mut()
+            .spawn(GuidedMissile {
+                target: Some(other),
+                turn_rate: 2.0,
+                cruise_speed: 100.0,
+                drag_rate: 1.0,
+            })
+            .id();
+
+        app.world_mut().write_message(DecoyDeployed {
+            owner,
+            flare,
+            strength,
+        });
+        app.update();
+
+        let target = app.world().get::<GuidedMissile>(missile).unwrap().target;
+        if expect_spoofed {
+            assert_eq!(target, Some(flare), "strength 1.0 must always spoof");
+        } else {
+            assert_eq!(target, Some(owner), "strength 0.0 must never spoof");
+        }
+        assert_eq!(
+            app.world().get::<GuidedMissile>(bystander).unwrap().target,
+            Some(other),
+            "missiles chasing other ships are unaffected"
+        );
+    }
+}
+
+/// Firing the flare_pod weapon (real assets) spawns a Decoy entity.
+#[test]
+fn flare_pod_fires_a_decoy() {
+    let iu = real_universe();
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(iu)
+        .add_message::<FireCommand>()
+        .add_message::<WeaponFired>()
+        .add_message::<DecoyDeployed>()
+        .add_message::<crate::carrier::SpawnEscort>()
+        .add_systems(Update, weapon_fire);
+    let mut ship = crate::ship::Ship::default();
+    ship.weapon_systems = WeaponSystems::build(
+        &HashMap::from([("flare_pod".to_string(), (1u8, Some(4u32)))]),
+        app.world().resource::<ItemUniverse>(),
+    );
+    let shooter = app
+        .world_mut()
+        .spawn((
+            ship,
+            Transform::default(),
+            Position(Vec2::ZERO),
+            LinearVelocity(Vec2::new(100.0, 0.0)),
+        ))
+        .id();
+    app.world_mut().write_message(FireCommand {
+        ship: shooter,
+        weapon_type: "flare_pod".into(),
+        target: None,
+    });
+    app.update();
+
+    let world = app.world_mut();
+    let mut q = world.query::<(&Decoy, &Projectile)>();
+    let (_, proj) = q.single(world).expect("one decoy spawned");
+    assert_eq!(proj.owner, shooter);
+    // Ammo consumed.
+    let ship = world.get::<crate::ship::Ship>(shooter).unwrap();
+    assert_eq!(
+        ship.weapon_systems
+            .iter_all()
+            .next()
+            .unwrap()
+            .1
+            .ammo_quantity,
+        Some(3)
+    );
 }

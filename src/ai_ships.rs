@@ -579,7 +579,7 @@ pub fn compute_ai_action(
                 .weapon_systems
                 .iter_all()
                 .filter_map(|(wt, _)| item_universe.weapons.get(wt))
-                .filter(|w| !w.guided)
+                .filter(|w| !w.is_guided())
                 .collect();
             let median_range =
                 median_sorted(unguided.iter().map(|w| w.range()).collect()).unwrap_or(0.0);
@@ -641,7 +641,7 @@ pub fn compute_ai_action(
                             let wrapped = (a + PI).rem_euclid(2.0 * PI) - PI;
                             wrapped - wrapped.clamp(-weapon.aimable_arc, weapon.aimable_arc)
                         });
-                        if weapon.guided || angle_indicator(residual) > 0.5 {
+                        if weapon.is_guided() || angle_indicator(residual) > 0.5 {
                             weapons_to_fire.push((weapon_type.clone(), Some(*target_e)));
                         }
                     }

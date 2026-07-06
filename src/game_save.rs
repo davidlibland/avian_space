@@ -54,6 +54,9 @@ pub struct PilotSave {
     pub visited_systems: HashSet<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub reserved_cargo: HashMap<String, u16>,
+    /// Installed ship mods: item name → count. Empty for old saves.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub mods: HashMap<String, u8>,
     /// Per-resource save data, keyed by `SessionResource::SAVE_KEY`.
     /// Populated automatically by the session-resource infrastructure.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -147,6 +150,9 @@ impl PlayerGameState {
             cargo: save.cargo.clone(),
             cargo_cost: HashMap::new(),
             reserved_cargo: save.reserved_cargo.clone(),
+            mods: save.mods.clone(),
+            mod_stats: Default::default(),
+            mod_space: 0,
             recent_landings: HashMap::new(),
             credits: save.credits,
             fuel,
@@ -186,6 +192,7 @@ impl PlayerGameState {
             enemies: self.player_ship.enemies.clone(),
             visited_systems: self.visited_systems.clone(),
             reserved_cargo: self.player_ship.reserved_cargo.clone(),
+            mods: self.player_ship.mods.clone(),
             resources: session_data.resources.clone(),
         }
     }

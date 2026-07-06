@@ -16,6 +16,7 @@ fn sample_save() -> PilotSave {
         enemies: HashMap::from([("Trader".to_string(), 1.0)]),
         visited_systems: HashSet::new(),
         reserved_cargo: HashMap::new(),
+        mods: HashMap::new(),
         resources: HashMap::new(),
         fuel: Some(4),
     }

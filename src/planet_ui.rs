@@ -94,7 +94,8 @@ fn ship_pad_ui(
             if let Ok(ship) = player_query.single() {
                 ui.label(format!(
                     "Hull: {}/{}",
-                    ship.health, ship.data.max_health
+                    ship.health,
+                    ship.max_health()
                 ));
                 ui.label(format!("Credits: {}", ship.credits));
             }
@@ -102,7 +103,7 @@ fn ship_pad_ui(
             ui.horizontal(|ui| {
                 if ui.button("Repair").clicked() {
                     if let Ok(mut ship) = player_query.single_mut() {
-                        ship.health = ship.data.max_health;
+                        ship.health = ship.max_health();
                     }
                 }
                 if ui.button("Launch").clicked() {
@@ -349,7 +350,8 @@ pub fn render_outfitter_tab(
                 .filter_map(|k| {
                     item_universe.outfitter_items.get(k).and_then(|item| {
                         let locked = item.required_unlocks().iter().any(|u| !unlocks.has(u));
-                        if locked {
+                        // Ship mods render in their own section below.
+                        if locked || item.mod_effect().is_some() {
                             None
                         } else {
                             Some((k.clone(), item.price(), item.space()))
@@ -408,6 +410,82 @@ pub fn render_outfitter_tab(
                 ui.end_row();
             }
         });
+
+    // ── Ship mods ────────────────────────────────────────────────────────
+    let mods: Vec<String> = planet
+        .outfitter
+        .iter()
+        .filter(|k| {
+            item_universe
+                .outfitter_items
+                .get(*k)
+                .is_some_and(|item| {
+                    item.mod_effect().is_some()
+                        && !item.required_unlocks().iter().any(|u| !unlocks.has(u))
+                })
+        })
+        .cloned()
+        .collect();
+    if !mods.is_empty() {
+        ui.separator();
+        ui.heading("Ship Mods");
+        egui::Grid::new("mods_grid")
+            .num_columns(6)
+            .striped(true)
+            .show(ui, |ui| {
+                ui.strong("Mod");
+                ui.strong("Effect");
+                ui.strong("Price");
+                ui.strong("Space");
+                ui.strong("Installed");
+                ui.label("");
+                ui.end_row();
+                for name in mods {
+                    let Some(item) = item_universe.outfitter_items.get(&name) else {
+                        continue;
+                    };
+                    let Some(effect) = item.mod_effect() else {
+                        continue;
+                    };
+                    ui.label(item.display_name());
+                    ui.label(describe_mod_effect(effect));
+                    ui.label(item.price().to_string());
+                    ui.label(item.space().to_string());
+                    ui.label(ship.mods.get(&name).copied().unwrap_or(0).to_string());
+                    ui.horizontal(|ui| {
+                        if ui.button("Buy").clicked() {
+                            ship.buy_mod(&name, &item_universe);
+                        }
+                        if ui.button("Sell").clicked() {
+                            ship.sell_mod(&name, &item_universe);
+                        }
+                    });
+                    ui.end_row();
+                }
+            });
+    }
+}
+
+/// One-line human description of a mod effect for the outfitter table.
+fn describe_mod_effect(effect: &crate::item_universe::ModEffect) -> String {
+    use crate::item_universe::ModEffect;
+    let pct = |m: &f32| format!("{:+.0}%", (m - 1.0) * 100.0);
+    match effect {
+        ModEffect::Engine {
+            speed,
+            thrust,
+            torque,
+        } => format!(
+            "speed {}, accel {}, turn {}",
+            pct(speed),
+            pct(thrust),
+            pct(torque)
+        ),
+        ModEffect::Armor { bonus_hp } => format!("+{bonus_hp} max hull"),
+        ModEffect::RepairBot { hp_per_sec } => {
+            format!("repairs {hp_per_sec:.1} hull/s in flight")
+        }
+    }
 }
 
 /// Render the Shipyard tab content into an egui Ui.

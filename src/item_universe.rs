@@ -414,6 +414,18 @@ pub enum OutfitterItem {
         #[serde(default)]
         required_unlocks: Vec<String>,
     },
+    /// A passive ship modification (engine tune, armor plating, repair bot).
+    /// Occupies item space like a weapon; its `effect` is folded into the
+    /// ship's cached `ModStats` on buy/sell/load.
+    ShipMod {
+        price: i128,
+        space: u16,
+        effect: ModEffect,
+        #[serde(default)]
+        display_name: String,
+        #[serde(default)]
+        required_unlocks: Vec<String>,
+    },
 }
 
 impl OutfitterItem {
@@ -421,32 +433,68 @@ impl OutfitterItem {
         match self {
             OutfitterItem::PrimaryWeapon { price, .. } => *price,
             OutfitterItem::SecondaryWeapon { price, .. } => *price,
+            OutfitterItem::ShipMod { price, .. } => *price,
         }
     }
     pub fn space(&self) -> u16 {
         match self {
             OutfitterItem::PrimaryWeapon { space, .. } => *space,
             OutfitterItem::SecondaryWeapon { space, .. } => *space,
+            OutfitterItem::ShipMod { space, .. } => *space,
         }
     }
     pub fn display_name(&self) -> &str {
         match self {
             OutfitterItem::PrimaryWeapon { display_name, .. } => display_name,
             OutfitterItem::SecondaryWeapon { display_name, .. } => display_name,
+            OutfitterItem::ShipMod { display_name, .. } => display_name,
         }
     }
     pub fn required_unlocks(&self) -> &[String] {
         match self {
             OutfitterItem::PrimaryWeapon { required_unlocks, .. } => required_unlocks,
             OutfitterItem::SecondaryWeapon { required_unlocks, .. } => required_unlocks,
+            OutfitterItem::ShipMod { required_unlocks, .. } => required_unlocks,
+        }
+    }
+    /// The mod effect, when this item is a ship mod.
+    pub fn mod_effect(&self) -> Option<&ModEffect> {
+        match self {
+            OutfitterItem::ShipMod { effect, .. } => Some(effect),
+            _ => None,
         }
     }
     fn display_name_mut(&mut self) -> &mut String {
         match self {
             OutfitterItem::PrimaryWeapon { display_name, .. } => display_name,
             OutfitterItem::SecondaryWeapon { display_name, .. } => display_name,
+            OutfitterItem::ShipMod { display_name, .. } => display_name,
         }
     }
+}
+
+/// What a ship mod does. One variant per mod family keeps every effect's
+/// parameters together and makes `Ship::recompute_mod_stats` a single match.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub enum ModEffect {
+    /// Multipliers on the drive train: top speed, acceleration (thrust) and
+    /// turn rate. Stacks multiplicatively across copies.
+    Engine {
+        #[serde(default = "one")]
+        speed: f32,
+        #[serde(default = "one")]
+        thrust: f32,
+        #[serde(default = "one")]
+        torque: f32,
+    },
+    /// Flat bonus hull points on top of the hull's max_health. Stacks.
+    Armor { bonus_hp: i32 },
+    /// Passive in-flight repair, hull points per second. Stacks additively.
+    RepairBot { hp_per_sec: f32 },
+}
+
+fn one() -> f32 {
+    1.0
 }
 
 /// Probability distribution + population limits for ships in a star system.

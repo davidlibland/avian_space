@@ -186,6 +186,7 @@ fn validate_outfitter_items_reference_weapons(iu: &ItemUniverse) {
         let wtype = match item {
             OutfitterItem::PrimaryWeapon { weapon_type, .. } => weapon_type,
             OutfitterItem::SecondaryWeapon { weapon_type, .. } => weapon_type,
+            OutfitterItem::ShipMod { .. } => continue, // no projectile weapon
         };
         if !iu.weapons.contains_key(wtype) {
             warn!(
@@ -218,13 +219,13 @@ fn validate_ship_base_weapons(iu: &ItemUniverse) {
     }
 }
 
-/// Weapons with carrier_bay must reference a valid ship type.
+/// Weapons with carrier-bay behavior must reference a valid ship type.
 fn validate_weapon_carrier_bays(iu: &ItemUniverse) {
     for (weapon_name, weapon) in &iu.weapons {
-        if let Some(ref bay_ship) = weapon.carrier_bay {
+        if let Some(bay_ship) = weapon.carrier_bay() {
             if !iu.ships.contains_key(bay_ship) {
                 warn!(
-                    "Weapon \"{weapon_name}\" has carrier_bay \"{bay_ship}\" \
+                    "Weapon \"{weapon_name}\" has carrier bay ship \"{bay_ship}\" \
                      which is not defined in ships.yaml"
                 );
             }
