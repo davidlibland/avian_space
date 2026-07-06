@@ -91,6 +91,9 @@ struct SfxHandles {
     escort_dock_mode: Handle<AudioSource>,
     escort_docked: Handle<AudioSource>,
     escort_neutralized: Handle<AudioSource>,
+    /// surface kind → its 5 footstep variants, preloaded at startup so a
+    /// step never allocates a path string / re-resolves an asset.
+    footsteps: std::collections::HashMap<String, Vec<Handle<AudioSource>>>,
 }
 
 impl SfxHandles {
@@ -131,6 +134,18 @@ fn load_sfx(mut commands: Commands, asset_server: Res<AssetServer>) {
         escort_dock_mode: asset_server.load("sounds/escorts/docking.ogg"),
         escort_docked: asset_server.load("sounds/escorts/docked.ogg"),
         escort_neutralized: asset_server.load("sounds/escorts/neutralized.ogg"),
+        footsteps: ["concrete", "dull", "grass", "sand", "snow"]
+            .into_iter()
+            .map(|surface| {
+                let variants = (0..5)
+                    .map(|v| {
+                        asset_server
+                            .load(format!("sounds/people/walking/footstep_{surface}_{v:03}.ogg"))
+                    })
+                    .collect();
+                (surface.to_string(), variants)
+            })
+            .collect(),
     });
 }
 
@@ -415,7 +430,6 @@ fn play_surface_sfx(
     mut commands: Commands,
     mut reader: MessageReader<SurfaceSfx>,
     sfx: Option<Res<SfxHandles>>,
-    asset_server: Res<AssetServer>,
 ) {
     let Some(sfx) = sfx else { return };
     for event in reader.read() {
@@ -426,12 +440,17 @@ fn play_surface_sfx(
             SurfaceSfx::UiButton => (sfx.ui_button.clone(), 0.5),
             SurfaceSfx::Footstep { surface, volume } => {
                 use rand::Rng;
-                let variant = rand::thread_rng().r#gen_range(0u32..5);
-                let path = format!(
-                    "sounds/people/walking/footstep_{surface}_{variant:03}.ogg"
-                );
-                let h = asset_server.load(path);
-                (h, *volume)
+                // Preloaded per-surface variants; fall back to "dull" for an
+                // unknown surface kind rather than silence.
+                let variants = sfx
+                    .footsteps
+                    .get(surface.as_str())
+                    .or_else(|| sfx.footsteps.get("dull"));
+                let Some(variants) = variants.filter(|v| !v.is_empty()) else {
+                    continue;
+                };
+                let variant = rand::thread_rng().r#gen_range(0..variants.len());
+                (variants[variant].clone(), *volume)
             }
         };
         commands.spawn((

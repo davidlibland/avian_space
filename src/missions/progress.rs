@@ -23,12 +23,8 @@ pub fn update_locked_to_available(
 ) {
     loop {
         let mut changed = false;
-        let ids: Vec<String> = catalog.defs.keys().cloned().collect();
-        for id in ids {
-            let Some(def) = catalog.defs.get(&id) else {
-                continue;
-            };
-            let status = log.status(&id);
+        for (id, def) in &catalog.defs {
+            let status = log.status(id);
             if matches!(
                 status,
                 MissionStatus::Available
@@ -43,12 +39,12 @@ pub fn update_locked_to_available(
             }
             match def.offer {
                 OfferKind::Auto => {
-                    log.set(&id, MissionStatus::Active(initial_progress(&def.objective)));
+                    log.set(id, MissionStatus::Active(initial_progress(&def.objective)));
                     started.write(MissionStarted(id.clone()));
                     changed = true;
                 }
                 _ => {
-                    log.set(&id, MissionStatus::Available);
+                    log.set(id, MissionStatus::Available);
                     changed = true;
                 }
             }
@@ -603,11 +599,7 @@ pub fn advance_destroy_collect(
 ) {
     let ship = player_q.single().ok();
     for event in reader.read() {
-        let ids: Vec<String> = catalog.defs.keys().cloned().collect();
-        for id in ids {
-            let Some(def) = catalog.defs.get(&id) else {
-                continue;
-            };
+        for (id, def) in &catalog.defs {
             let Objective::DestroyShips {
                 system,
                 count,
@@ -620,7 +612,7 @@ pub fn advance_destroy_collect(
             if &event.commodity != &req.commodity || &event.system != system {
                 continue;
             }
-            let MissionStatus::Active(progress) = log.status(&id) else {
+            let MissionStatus::Active(progress) = log.status(id) else {
                 continue;
             };
             let new_collected = progress.collected.saturating_add(event.quantity);
@@ -628,7 +620,7 @@ pub fn advance_destroy_collect(
             let collect_done = new_collected >= req.quantity;
             if kills_done && collect_done {
                 resolve_active_mission(
-                    &id,
+                    id,
                     def,
                     ship,
                     &unlocks,
@@ -638,7 +630,7 @@ pub fn advance_destroy_collect(
                 );
             } else {
                 log.set(
-                    &id,
+                    id,
                     MissionStatus::Active(ObjectiveProgress {
                         collected: new_collected,
                         ..progress

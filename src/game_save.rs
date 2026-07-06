@@ -255,9 +255,11 @@ pub fn load_save(pilot_name: &str) -> Option<PilotSave> {
 
 // ── Systems ──────────────────────────────────────────────────────────────────
 
-/// Syncs the live ECS Ship component → PlayerGameState each frame.
+/// Syncs the live ECS Ship component → PlayerGameState. `Changed<Ship>` gates
+/// the deep clone (five maps + weapon systems): saves only read this snapshot
+/// on land/take-off, so re-cloning on frames where nothing changed was waste.
 fn sync_player_state(
-    player_query: Query<&Ship, With<Player>>,
+    player_query: Query<&Ship, (With<Player>, Changed<Ship>)>,
     mut game_state: ResMut<PlayerGameState>,
     current_system: Res<CurrentStarSystem>,
 ) {
@@ -269,8 +271,10 @@ fn sync_player_state(
             .collect();
         game_state.player_ship = ship.clone();
     }
-    game_state.current_star_system = current_system.0.clone();
-    game_state.visited_systems.insert(current_system.0.clone());
+    if game_state.current_star_system != current_system.0 {
+        game_state.current_star_system = current_system.0.clone();
+        game_state.visited_systems.insert(current_system.0.clone());
+    }
 }
 
 /// Spawns the player ship on the first entry into Flying (from the main menu).

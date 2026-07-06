@@ -41,3 +41,136 @@ fn fresh_weapon_starts_ready() {
         );
     }
 }
+
+// ── Guided-missile launch + drag model ───────────────────────────────────────
+
+use avian2d::prelude::{LinearVelocity, Position};
+use bevy::time::TimeUpdateStrategy;
+use std::time::Duration;
+
+/// Fire a javelin from a moving ship and inspect the spawned projectile:
+/// launch velocity must be `forward·speed + ship_vel·MISSILE_LAUNCH_INHERIT`,
+/// and the drag rate must satisfy the settle boundary condition
+/// `r = ln(1/ε)/lifetime` (excess speed decays to ε by end of lifetime).
+#[test]
+fn guided_launch_inherits_partial_velocity_with_settling_drag() {
+    let iu = real_universe();
+    let javelin = iu
+        .weapons
+        .get("javelin")
+        .expect("javelin in weapons.yaml")
+        .clone();
+    assert!(javelin.guided, "test premise: javelin is guided");
+
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(iu)
+        .add_message::<FireCommand>()
+        .add_message::<WeaponFired>()
+        .add_message::<crate::carrier::SpawnEscort>()
+        .add_systems(Update, weapon_fire);
+
+    let ship_vel = Vec2::new(120.0, 40.0);
+    let mut ship = crate::ship::Ship::default();
+    ship.weapon_systems = WeaponSystems::build(
+        &HashMap::from([("javelin".to_string(), (1u8, Some(4u32)))]),
+        app.world().resource::<ItemUniverse>(),
+    );
+    let shooter = app
+        .world_mut()
+        .spawn((
+            ship,
+            Transform::default(), // nose +Y
+            Position(Vec2::ZERO),
+            LinearVelocity(ship_vel),
+        ))
+        .id();
+
+    app.world_mut().write_message(FireCommand {
+        ship: shooter,
+        weapon_type: "javelin".into(),
+        target: None,
+    });
+    app.update();
+
+    let world = app.world_mut();
+    let mut q = world.query::<(&LinearVelocity, &GuidedMissile)>();
+    let (vel, missile) = q.single(world).expect("one projectile spawned");
+
+    let expected = Vec2::Y * javelin.speed + ship_vel * MISSILE_LAUNCH_INHERIT;
+    assert!(
+        (vel.0 - expected).length() < 1e-3,
+        "launch velocity {:?} != forward·speed + ship_vel·{MISSILE_LAUNCH_INHERIT} = {expected:?}",
+        vel.0
+    );
+    let expected_rate = (1.0 / MISSILE_SETTLE_FRACTION).ln() / javelin.lifetime;
+    assert!(
+        (missile.drag_rate - expected_rate).abs() < 1e-4,
+        "drag rate {} != ln(1/ε)/lifetime = {expected_rate}",
+        missile.drag_rate
+    );
+    assert!(
+        (missile.cruise_speed - javelin.speed).abs() < 1e-6,
+        "cruise speed must be the weapon's own speed"
+    );
+}
+
+/// The drag model itself: an over-speed missile must decay monotonically
+/// toward cruise, reaching (within ε) cruise speed by the end of its lifetime
+/// — the "a fast ship can eventually outrun a missile" design invariant.
+#[test]
+fn missile_drag_settles_to_cruise_within_lifetime() {
+    let cruise = 160.0_f32;
+    let lifetime = 3.0_f32;
+    let v0 = 400.0_f32; // big inherited boost
+    let drag_rate = (1.0 / MISSILE_SETTLE_FRACTION).ln() / lifetime;
+
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            50,
+        )))
+        .add_systems(Update, missile_guidance);
+    app.world_mut().spawn((
+        Projectile {
+            lifetime,
+            owner: Entity::PLACEHOLDER,
+            weapon_type: "test".into(),
+        },
+        GuidedMissile {
+            target: None,
+            turn_rate: 2.0,
+            cruise_speed: cruise,
+            drag_rate,
+        },
+        Transform::default(),
+        LinearVelocity(Vec2::Y * v0),
+    ));
+    app.update(); // time baseline
+
+    let mut last = v0;
+    let steps = (lifetime / 0.05) as usize;
+    for _ in 0..steps {
+        app.update();
+        let world = app.world_mut();
+        let mut q = world.query::<(&LinearVelocity, &GuidedMissile)>();
+        let (vel, _) = q.single(world).unwrap();
+        let speed = vel.0.length();
+        assert!(
+            speed <= last + 1e-3,
+            "speed must decay monotonically: {speed} > {last}"
+        );
+        assert!(
+            speed >= cruise - 1e-3,
+            "speed must never drop below cruise: {speed} < {cruise}"
+        );
+        last = speed;
+    }
+    // After a full lifetime the excess must have settled to ~ε of the boost.
+    let allowed = cruise + (v0 - cruise) * MISSILE_SETTLE_FRACTION * 1.5;
+    assert!(
+        last <= allowed,
+        "after {lifetime}s the speed ({last}) must be near cruise ({cruise}); \
+         allowed {allowed}"
+    );
+}

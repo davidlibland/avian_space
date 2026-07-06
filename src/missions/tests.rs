@@ -580,49 +580,6 @@ fn mission_def_yaml_roundtrip_destroy_ships_no_collect() {
 
 // ── Mission state machine scenarios ─────────────────────────────────────────
 
-#[test]
-fn scenario_locked_to_available_to_active_to_completed() {
-    let mut log = MissionLog::default();
-    let unlocks = PlayerUnlocks::default();
-    let mut catalog = MissionCatalog::default();
-
-    let def = MissionDef {
-        briefing: "Intro".into(),
-        success_text: "Done".into(),
-        failure_text: "Fail".into(),
-        preconditions: Vec::new(),
-        offer: OfferKind::Tab { weight: 1.0 },
-        start_effects: Vec::new(),
-        objective: Objective::TravelToSystem {
-            system: "sol".into(),
-        },
-        requires: Vec::new(),
-        completion_effects: Vec::new(),
-    };
-    catalog.defs.insert("m1".into(), def);
-
-    // Initially Locked.
-    assert_eq!(log.status("m1"), MissionStatus::Locked);
-
-    // Preconditions are met (empty) → should become Available.
-    let def = catalog.defs.get("m1").unwrap();
-    assert!(preconditions_met(&def.preconditions, &log, &unlocks));
-
-    // Simulate: set to Available.
-    log.set("m1", MissionStatus::Available);
-    assert_eq!(log.status("m1"), MissionStatus::Available);
-
-    // Accept: set to Active.
-    log.set(
-        "m1",
-        MissionStatus::Active(ObjectiveProgress::default()),
-    );
-    assert!(matches!(log.status("m1"), MissionStatus::Active(_)));
-
-    // Complete.
-    log.set("m1", MissionStatus::Completed);
-    assert_eq!(log.status("m1"), MissionStatus::Completed);
-}
 
 #[test]
 fn scenario_gated_mission_unlocks_after_prerequisite_completes() {
@@ -708,94 +665,7 @@ fn scenario_completion_requirement_prevents_completion() {
     assert!(requirements_met(&def, &ship_sufficient, &unlocks));
 }
 
-#[test]
-fn scenario_destroy_progress_tracking() {
-    let mut log = MissionLog::default();
-    log.set(
-        "bounty",
-        MissionStatus::Active(ObjectiveProgress {
-            destroyed: 0,
-            collected: 0,
-        }),
-    );
 
-    // Simulate killing 1 of 3.
-    let MissionStatus::Active(p) = log.status("bounty") else {
-        panic!();
-    };
-    assert_eq!(p.destroyed, 0);
-
-    log.set(
-        "bounty",
-        MissionStatus::Active(ObjectiveProgress {
-            destroyed: 1,
-            ..p
-        }),
-    );
-    let MissionStatus::Active(p) = log.status("bounty") else {
-        panic!();
-    };
-    assert_eq!(p.destroyed, 1);
-
-    // Kill 2 more.
-    log.set(
-        "bounty",
-        MissionStatus::Active(ObjectiveProgress {
-            destroyed: 3,
-            ..p
-        }),
-    );
-    let MissionStatus::Active(p) = log.status("bounty") else {
-        panic!();
-    };
-    assert_eq!(p.destroyed, 3);
-}
-
-#[test]
-fn scenario_destroy_with_collect_both_must_complete() {
-    let def = MissionDef {
-        objective: Objective::DestroyShips {
-            system: "sol".into(),
-            ship_type: "pirate".into(),
-            count: 2,
-            target_name: "Pirates".into(),
-            hostile: true,
-            collect: Some(CollectRequirement {
-                commodity: "iron".into(),
-                quantity: 5,
-            }),
-        },
-        ..dummy_def()
-    };
-
-    // Kills done but not enough collected.
-    let progress = ObjectiveProgress {
-        destroyed: 2,
-        collected: 3,
-    };
-    let Objective::DestroyShips { count, collect, .. } = &def.objective else {
-        panic!();
-    };
-    let kills_done = progress.destroyed >= *count;
-    let collect_done = collect
-        .as_ref()
-        .map(|req| progress.collected >= req.quantity)
-        .unwrap_or(true);
-    assert!(kills_done);
-    assert!(!collect_done);
-
-    // Now enough collected.
-    let progress2 = ObjectiveProgress {
-        destroyed: 2,
-        collected: 5,
-    };
-    let collect_done2 = collect
-        .as_ref()
-        .map(|req| progress2.collected >= req.quantity)
-        .unwrap_or(true);
-    assert!(kills_done);
-    assert!(collect_done2);
-}
 
 // ── Ship.reserved_cargo integration ─────────────────────────────────────────
 
@@ -1148,5 +1018,376 @@ mod toast_queue {
         toast.push("other");
         toast.push("same");
         assert_eq!(toast.queue.len(), 3, "only adjacent duplicates dedup");
+    }
+}
+
+// ── Mission runtime: drive the REAL systems through messages ────────────────
+//
+// These exercise the actual Update-chain systems (accept flow, start effects,
+// objective advancement, completion/failure effects) in a minimal App — not
+// hand-mutated `log.set` reproductions of their logic.
+
+mod runtime {
+    use super::super::events::*;
+    use super::super::log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
+    use super::super::progress;
+    use super::*;
+    use crate::Player;
+    use bevy::prelude::*;
+
+    /// App wired with the mission chain (same order as `missions_plugin`) and
+    /// a player ship with the given cargo space.
+    fn missions_app(cargo_space: u16) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<MissionLog>()
+            .init_resource::<MissionCatalog>()
+            .init_resource::<MissionOffers>()
+            .init_resource::<PlayerUnlocks>()
+            .add_message::<PlayerLandedOnPlanet>()
+            .add_message::<PlayerEnteredSystem>()
+            .add_message::<PickupCollected>()
+            .add_message::<ShipDestroyed>()
+            .add_message::<AcceptMission>()
+            .add_message::<DeclineMission>()
+            .add_message::<AbandonMission>()
+            .add_message::<MissionStarted>()
+            .add_message::<MissionCompleted>()
+            .add_message::<MissionFailed>()
+            .add_message::<NpcMet>()
+            .add_message::<NpcCaught>()
+            .add_systems(
+                Update,
+                (
+                    progress::update_locked_to_available,
+                    progress::handle_ui_actions,
+                    progress::apply_start_effects,
+                    progress::advance_travel_objectives,
+                    progress::advance_land_objectives,
+                    progress::advance_destroy_objectives,
+                    progress::advance_destroy_collect,
+                    progress::finalize_completions,
+                    progress::finalize_failures,
+                )
+                    .chain(),
+            );
+        let player = app
+            .world_mut()
+            .spawn((ship_with_cargo(cargo_space, &[]), Player))
+            .id();
+        (app, player)
+    }
+
+    fn insert_mission(app: &mut App, id: &str, def: MissionDef) {
+        app.world_mut()
+            .resource_mut::<MissionCatalog>()
+            .defs
+            .insert(id.to_string(), def);
+    }
+
+    fn status(app: &mut App, id: &str) -> MissionStatus {
+        app.world().resource::<MissionLog>().status(id)
+    }
+
+    fn delivery_def() -> MissionDef {
+        MissionDef {
+            briefing: "b".into(),
+            success_text: "s".into(),
+            failure_text: "f".into(),
+            preconditions: vec![],
+            offer: OfferKind::Tab { weight: 1.0 },
+            start_effects: vec![StartEffect::LoadCargo {
+                commodity: "food".into(),
+                quantity: 10,
+                reserved: true,
+            }],
+            objective: Objective::LandOnPlanet {
+                planet: "mars".into(),
+            },
+            requires: vec![CompletionRequirement::HasCargo {
+                commodity: "food".into(),
+                quantity: 10,
+            }],
+            completion_effects: vec![
+                CompletionEffect::RemoveCargo {
+                    commodity: "food".into(),
+                    quantity: 10,
+                },
+                CompletionEffect::Pay { credits: 5000 },
+                CompletionEffect::GrantUnlock {
+                    name: "test_license".into(),
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn accept_starts_mission_and_loads_reserved_cargo() {
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        app.update(); // update_locked_to_available flips Locked → Available
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Available));
+
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Active(_)));
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert_eq!(ship.cargo.get("food"), Some(&10), "start effect loads cargo");
+        assert_eq!(
+            ship.reserved_cargo.get("food"),
+            Some(&10),
+            "mission cargo is reserved (unsellable)"
+        );
+    }
+
+    #[test]
+    fn accept_refused_when_hold_too_small() {
+        // The defence-in-depth cargo gate in handle_ui_actions, not the UI.
+        let (mut app, player) = missions_app(5); // < the 10 the mission loads
+        insert_mission(&mut app, "m", delivery_def());
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Available),
+            "accept must be refused — the hold cannot fit the start cargo"
+        );
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert!(ship.cargo.is_empty(), "no cargo may be loaded on refusal");
+    }
+
+    #[test]
+    fn landing_completes_delivery_and_applies_all_effects() {
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "mars".into(),
+        });
+        app.update();
+
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Completed));
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert_eq!(ship.cargo.get("food"), None, "delivered cargo removed");
+        assert_eq!(ship.reserved_cargo.get("food"), None, "reservation cleared");
+        // from_ship_data starts ships at 10_000 credits; the mission pays 5_000.
+        assert_eq!(ship.credits, 15_000, "payment applied on top of starting credits");
+        assert!(
+            app.world().resource::<PlayerUnlocks>().has("test_license"),
+            "grant_unlock applied"
+        );
+    }
+
+    #[test]
+    fn landing_without_cargo_fails_the_delivery() {
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+        // Lose the cargo (jettison/sell equivalent), then land.
+        app.world_mut().get_mut::<Ship>(player).unwrap().cargo.clear();
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "mars".into(),
+        });
+        app.update();
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Failed),
+            "landing at the destination without the goods fails the mission"
+        );
+    }
+
+    #[test]
+    fn abandon_strips_mission_cargo_but_keeps_own() {
+        // Anti-exploit: accept a delivery, abandon it, keep the free cargo.
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        // Player already owns 3 food of their own.
+        app.world_mut()
+            .get_mut::<Ship>(player)
+            .unwrap()
+            .cargo
+            .insert("food".into(), 3);
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update(); // now holds 3 own + 10 mission food
+
+        app.world_mut().write_message(AbandonMission("m".into()));
+        app.update();
+
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Failed));
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert_eq!(
+            ship.cargo.get("food"),
+            Some(&3),
+            "mission cargo stripped, player's own 3 kept"
+        );
+        assert!(
+            ship.reserved_cargo.get("food").is_none(),
+            "reservation fully cleared"
+        );
+    }
+
+    #[test]
+    fn auto_chain_cascades_through_real_transitions() {
+        // A completed prerequisite must flip an unlock-gated mission to
+        // Available and an Auto follow-up to Active (with MissionStarted) —
+        // via update_locked_to_available's fixpoint, not hand-set statuses.
+        let (mut app, _player) = missions_app(20);
+        let mut auto_follow = dummy_def();
+        auto_follow.preconditions = vec![Precondition::Completed {
+            mission: "first".into(),
+        }];
+        auto_follow.offer = OfferKind::Auto;
+        let mut offered_follow = dummy_def();
+        offered_follow.preconditions = vec![Precondition::Completed {
+            mission: "first".into(),
+        }];
+        offered_follow.offer = OfferKind::Tab { weight: 1.0 };
+
+        let mut first = delivery_def();
+        first.requires.clear();
+        first.start_effects.clear();
+        first.completion_effects.clear();
+        insert_mission(&mut app, "first", first);
+        insert_mission(&mut app, "auto_follow", auto_follow);
+        insert_mission(&mut app, "offered_follow", offered_follow);
+
+        app.update();
+        assert!(matches!(status(&mut app, "auto_follow"), MissionStatus::Locked));
+
+        app.world_mut().write_message(AcceptMission("first".into()));
+        app.update();
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "mars".into(),
+        });
+        app.update(); // completes "first"
+        app.update(); // next pass flips the followups
+
+        assert!(
+            matches!(status(&mut app, "auto_follow"), MissionStatus::Active(_)),
+            "Auto follow-up must self-start once its prerequisite completes"
+        );
+        assert!(
+            matches!(status(&mut app, "offered_follow"), MissionStatus::Available),
+            "offered follow-up becomes Available (not started)"
+        );
+    }
+
+    #[test]
+    fn destroy_with_collect_requires_both() {
+        // Replaces the old tautological scenario test: this drives
+        // advance_destroy_objectives / advance_destroy_collect with real
+        // ShipDestroyed / PickupCollected messages.
+        let (mut app, _player) = missions_app(20);
+        let mut def = dummy_def();
+        def.objective = Objective::DestroyShips {
+            system: "sol".into(),
+            ship_type: "pirate".into(),
+            count: 2,
+            target_name: "Raiders".into(),
+            hostile: true,
+            collect: Some(CollectRequirement {
+                commodity: "iron".into(),
+                quantity: 3,
+            }),
+        };
+        def.offer = OfferKind::Auto;
+        insert_mission(&mut app, "m", def);
+        app.update(); // auto-starts
+
+        let kill = |app: &mut App| {
+            let e = Entity::PLACEHOLDER;
+            app.world_mut().write_message(ShipDestroyed {
+                entity: e,
+                mission_target: Some(MissionTarget {
+                    mission_id: "m".into(),
+                    display_name: "Raider".into(),
+                    always_targets_player: true,
+                }),
+            });
+            app.update();
+        };
+        let collect = |app: &mut App, qty: u16| {
+            app.world_mut().write_message(PickupCollected {
+                commodity: "iron".into(),
+                quantity: qty,
+                system: "sol".into(),
+            });
+            app.update();
+        };
+
+        kill(&mut app);
+        kill(&mut app);
+        match status(&mut app, "m") {
+            MissionStatus::Active(p) => {
+                assert_eq!(p.destroyed, 2, "kills tracked");
+                assert_eq!(p.collected, 0);
+            }
+            s => panic!("kills alone must not complete the mission: {s:?}"),
+        }
+
+        collect(&mut app, 2);
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Active(_)),
+            "partial collect must not complete"
+        );
+        collect(&mut app, 1);
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Completed),
+            "kills + full collect completes"
+        );
+    }
+
+    #[test]
+    fn new_offer_rolls_mid_visit_exactly_once() {
+        // roll_new_offers_while_landed: a mission that becomes Available
+        // while the player is landed gets one roll on the spot (weight 1.0 →
+        // guaranteed offer) and is not re-added on later frames.
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<MissionLog>()
+            .init_resource::<MissionCatalog>()
+            .init_resource::<MissionOffers>()
+            .init_resource::<PlayerUnlocks>()
+            .insert_resource(crate::planet_ui::LandedContext {
+                planet_name: Some("earth".into()),
+            })
+            .add_systems(Update, progress::roll_new_offers_while_landed);
+
+        let mut def = dummy_def();
+        def.offer = OfferKind::NpcOffer {
+            planet: "earth".into(),
+            weight: 1.0,
+            building: None,
+            approach: NpcApproach::Wait,
+        };
+        app.world_mut()
+            .resource_mut::<MissionCatalog>()
+            .defs
+            .insert("m".into(), def);
+        app.world_mut()
+            .resource_mut::<MissionLog>()
+            .set("m", MissionStatus::Available);
+
+        app.update();
+        let offers = app.world().resource::<MissionOffers>();
+        assert_eq!(
+            offers.npc.get("earth").map(|v| v.as_slice()),
+            Some(&["m".to_string()][..]),
+            "newly Available NpcOffer must appear without re-landing"
+        );
+
+        app.update();
+        app.update();
+        let offers = app.world().resource::<MissionOffers>();
+        assert_eq!(
+            offers.npc.get("earth").map(|v| v.len()),
+            Some(1),
+            "one roll per visit — never duplicated on later frames"
+        );
     }
 }
