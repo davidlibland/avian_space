@@ -226,15 +226,19 @@ pub struct PpoConfig {
     /// Probability a swap picks the isolated `simulator` system.
     pub simulator_fraction: f32,
     /// Finalization anneal (0 = off). When `finalize_start_cycle > 0`, at that
-    /// cycle a two-phase decay begins toward a sharp pure-RL final policy:
-    ///  - Phase A: linearly decay `bc_coeff` → 0 over `finalize_bc_decay_cycles`
-    ///    (RL takes the policy off the BC leash), lr/entropy held.
-    ///  - Phase B: then linearly decay `policy_lr` and `entropy_coeff` → 0 over
-    ///    `finalize_lr_decay_cycles` (anneal to a low-noise optimum).
-    /// After both phases policy_lr is 0 (policy effectively frozen).
+    /// cycle a two-phase decay begins toward a sharp final policy:
+    ///  - Phase A: linearly decay `bc_coeff` → `finalize_bc_floor` over
+    ///    `finalize_bc_decay_cycles` (RL off the BC leash, but only down to the
+    ///    floor — weaning below ~0.10 collapses the fighter policy), lr/entropy held.
+    ///  - Phase B: hold bc at the floor while linearly decaying `policy_lr` and
+    ///    `entropy_coeff` → 0 over `finalize_lr_decay_cycles` (low-noise optimum).
+    ///    `finalize_lr_decay_cycles == 0` holds at the floor with full lr (used
+    ///    to settle at a candidate floor and compare before the lr decay).
+    /// After Phase B policy_lr is 0 (policy effectively frozen).
     pub finalize_start_cycle: usize,
     pub finalize_bc_decay_cycles: usize,
     pub finalize_lr_decay_cycles: usize,
+    pub finalize_bc_floor: f32,
 }
 
 impl Default for PpoConfig {
@@ -264,6 +268,7 @@ impl Default for PpoConfig {
             finalize_start_cycle: 0,
             finalize_bc_decay_cycles: 0,
             finalize_lr_decay_cycles: 0,
+            finalize_bc_floor: 0.0,
         }
     }
 }
