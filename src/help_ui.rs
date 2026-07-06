@@ -38,11 +38,16 @@ pub fn help_ui_plugin(app: &mut App) {
 
 fn toggle_help(
     keyboard: Res<ButtonInput<KeyCode>>,
+    play_state: Res<State<PlayState>>,
     mut state: ResMut<HelpUiOpen>,
     mut virtual_time: ResMut<Time<Virtual>>,
 ) {
     let pressed_open = keyboard.just_pressed(KeyCode::F1);
-    let pressed_close = state.open && keyboard.just_pressed(KeyCode::Escape);
+    // In Flying, Escape belongs to `escape_router` (which closes the topmost
+    // UI or exits to the menu); handling it here too would double-fire.
+    let pressed_close = state.open
+        && keyboard.just_pressed(KeyCode::Escape)
+        && *play_state.get() != PlayState::Flying;
     if pressed_open || pressed_close {
         let next = !state.open;
         set_open(&mut state, &mut virtual_time, next);

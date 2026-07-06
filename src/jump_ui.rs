@@ -90,7 +90,7 @@ fn system_faction(sys: &StarSystem, iu: &ItemUniverse) -> String {
 
 #[derive(Resource, Default)]
 pub struct JumpUiOpen {
-    open: bool,
+    pub open: bool,
     scroll_initialized: bool,
 }
 

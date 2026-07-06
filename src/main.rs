@@ -502,7 +502,7 @@ fn build_app(
         )
         .add_systems(
             Update,
-            escape_to_menu.run_if(in_state(PlayState::Flying)),
+            escape_router.run_if(in_state(PlayState::Flying)),
         );
     }
 
@@ -649,13 +649,40 @@ fn set_arrival_velocity(
         .remove::<(Sensor, Mass, AngularInertia)>();
 }
 
-/// Return to the main menu when Escape is pressed. Progress is intentionally
-/// not saved here — saves only happen on landing/takeoff.
-fn escape_to_menu(
+/// Single owner of Escape while flying: close the topmost open UI first, and
+/// only return to the main menu when nothing is open. (Every UI reading Esc
+/// independently meant closing a window ALSO quit to the menu.) Progress is
+/// intentionally not saved on menu exit — saves only happen on landing/takeoff.
+fn escape_router(
     keyboard: Res<ButtonInput<KeyCode>>,
+    mut help: ResMut<help_ui::HelpUiOpen>,
+    mut jump: ResMut<jump_ui::JumpUiOpen>,
+    mut log: ResMut<missions::ui::MissionLogOpen>,
+    mut virtual_time: ResMut<Time<Virtual>>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
-    if keyboard.just_pressed(KeyCode::Escape) {
+    if !keyboard.just_pressed(KeyCode::Escape) {
+        return;
+    }
+    let closed = if help.open {
+        help.open = false;
+        true
+    } else if jump.open {
+        jump.open = false;
+        true
+    } else if log.open {
+        log.open = false;
+        true
+    } else {
+        false
+    };
+    if closed {
+        // These UIs pause the game while open; resume only when the last
+        // one is gone (they may be stacked).
+        if !help.open && !jump.open && !log.open {
+            virtual_time.unpause();
+        }
+    } else {
         next_state.set(PlayState::MainMenu);
     }
 }
