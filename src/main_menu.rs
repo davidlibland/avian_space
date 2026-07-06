@@ -20,14 +20,6 @@ fn refresh_saves(mut menu_state: ResMut<MainMenuState>) {
     menu_state.saves = list_saves();
 }
 
-/// Clear any UI-pause that was active when the player bailed out of Flying.
-/// Otherwise `Time<Virtual>` stays paused across a load, freezing physics
-/// while real-time systems (input, audio) keep running — producing the
-/// "thruster sfx plays but the ship doesn't move" symptom.
-fn reset_pause_on_menu(mut virtual_time: ResMut<Time<Virtual>>) {
-    virtual_time.unpause();
-}
-
 fn main_menu_ui(
     mut commands: Commands,
     mut egui_contexts: EguiContexts,
@@ -117,10 +109,9 @@ fn main_menu_ui(
 
 pub fn main_menu_plugin(app: &mut App) {
     app.init_resource::<MainMenuState>()
-        .add_systems(
-            OnEnter(PlayState::MainMenu),
-            (refresh_saves, reset_pause_on_menu),
-        )
+        // (Stuck-pause cleanup on menu entry is handled by sync_ui_pause +
+        // close_uis_on_main_menu in main.rs — pause state is derived now.)
+        .add_systems(OnEnter(PlayState::MainMenu), refresh_saves)
         .add_systems(
             EguiPrimaryContextPass,
             main_menu_ui.run_if(in_state(PlayState::MainMenu)),

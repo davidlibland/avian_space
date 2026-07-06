@@ -20,15 +20,14 @@ impl crate::session::SessionResource for HelpUiOpen {
     }
 }
 
+// NB: pausing is DERIVED from `HelpUiOpen.open` by `sync_ui_pause` (main.rs);
+// this module only flips the flag. The flag is likewise cleared on menu entry
+// by `close_uis_on_main_menu`.
 pub fn help_ui_plugin(app: &mut App) {
     app.init_session_resource::<HelpUiOpen>()
         .add_systems(
             Update,
             toggle_help.run_if(not(in_state(PlayState::MainMenu))),
-        )
-        .add_systems(
-            Update,
-            close_help_on_main_menu.run_if(state_changed::<PlayState>),
         )
         .add_systems(
             EguiPrimaryContextPass,
@@ -40,7 +39,6 @@ fn toggle_help(
     keyboard: Res<ButtonInput<KeyCode>>,
     play_state: Res<State<PlayState>>,
     mut state: ResMut<HelpUiOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
 ) {
     let pressed_open = keyboard.just_pressed(KeyCode::F1);
     // In Flying, Escape belongs to `escape_router` (which closes the topmost
@@ -49,39 +47,12 @@ fn toggle_help(
         && keyboard.just_pressed(KeyCode::Escape)
         && *play_state.get() != PlayState::Flying;
     if pressed_open || pressed_close {
-        let next = !state.open;
-        set_open(&mut state, &mut virtual_time, next);
-    }
-}
-
-fn close_help_on_main_menu(
-    play_state: Res<State<PlayState>>,
-    mut state: ResMut<HelpUiOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
-) {
-    if *play_state.get() == PlayState::MainMenu && state.open {
-        set_open(&mut state, &mut virtual_time, false);
-    }
-}
-
-fn set_open(state: &mut HelpUiOpen, virtual_time: &mut Time<Virtual>, open: bool) {
-    if state.open == open {
-        return;
-    }
-    state.open = open;
-    if open {
-        virtual_time.pause();
-    } else {
-        virtual_time.unpause();
+        state.open = !state.open;
     }
 }
 
 /// Small "?" button anchored to the top-left corner. Clicking toggles the help window.
-fn help_corner_button(
-    mut egui_contexts: EguiContexts,
-    mut state: ResMut<HelpUiOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
-) {
+fn help_corner_button(mut egui_contexts: EguiContexts, mut state: ResMut<HelpUiOpen>) {
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
@@ -100,8 +71,7 @@ fn help_corner_button(
             // clears all egui focus outside the main menu to prevent that.
             let resp = ui.add(button).on_hover_text("Help (F1)");
             if resp.clicked() {
-                let next = !state.open;
-                set_open(&mut state, &mut virtual_time, next);
+                state.open = !state.open;
             }
         });
 }
@@ -110,7 +80,6 @@ fn help_window(
     mut egui_contexts: EguiContexts,
     mut state: ResMut<HelpUiOpen>,
     play_state: Res<State<PlayState>>,
-    mut virtual_time: ResMut<Time<Virtual>>,
 ) {
     if !state.open {
         return;
@@ -165,7 +134,7 @@ fn help_window(
         });
 
     if close {
-        set_open(&mut state, &mut virtual_time, false);
+        state.open = false;
     }
 }
 

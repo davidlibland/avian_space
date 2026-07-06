@@ -503,7 +503,10 @@ fn build_app(
         .add_systems(
             Update,
             escape_router.run_if(in_state(PlayState::Flying)),
-        );
+        )
+        // UI-open resources only exist with the UI plugins (non-headless).
+        .add_systems(Update, sync_ui_pause)
+        .add_systems(OnEnter(PlayState::MainMenu), close_uis_on_main_menu);
     }
 
     app.add_systems(
@@ -658,33 +661,56 @@ fn escape_router(
     mut help: ResMut<help_ui::HelpUiOpen>,
     mut jump: ResMut<jump_ui::JumpUiOpen>,
     mut log: ResMut<missions::ui::MissionLogOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
     if !keyboard.just_pressed(KeyCode::Escape) {
         return;
     }
-    let closed = if help.open {
+    // Pause state follows the flags automatically (see sync_ui_pause).
+    if help.open {
         help.open = false;
-        true
     } else if jump.open {
         jump.open = false;
-        true
     } else if log.open {
         log.open = false;
-        true
-    } else {
-        false
-    };
-    if closed {
-        // These UIs pause the game while open; resume only when the last
-        // one is gone (they may be stacked).
-        if !help.open && !jump.open && !log.open {
-            virtual_time.unpause();
-        }
     } else {
         next_state.set(PlayState::MainMenu);
     }
+}
+
+/// Single owner of the virtual-clock pause state: the game is paused iff a
+/// pausing UI is open or the player is docked at the ship pad. UIs only flip
+/// their `open` flag; deriving pause here (instead of 10 pause()/unpause()
+/// call-sites spread over four modules) means stacked UIs can't unfreeze the
+/// game early and a bailed-out session can't leak a stuck pause into the menu.
+fn sync_ui_pause(
+    help: Res<help_ui::HelpUiOpen>,
+    jump: Res<jump_ui::JumpUiOpen>,
+    log: Res<missions::ui::MissionLogOpen>,
+    play_state: Res<State<PlayState>>,
+    mut virtual_time: ResMut<Time<Virtual>>,
+) {
+    let want_paused =
+        help.open || jump.open || log.open || *play_state.get() == PlayState::Landed;
+    if want_paused != virtual_time.is_paused() {
+        if want_paused {
+            virtual_time.pause();
+        } else {
+            virtual_time.unpause();
+        }
+    }
+}
+
+/// Any UI left open when the player bails to the menu must not leak into the
+/// next session (its flag would re-pause the fresh game via sync_ui_pause).
+fn close_uis_on_main_menu(
+    mut help: ResMut<help_ui::HelpUiOpen>,
+    mut jump: ResMut<jump_ui::JumpUiOpen>,
+    mut log: ResMut<missions::ui::MissionLogOpen>,
+) {
+    help.open = false;
+    jump.open = false;
+    log.open = false;
 }
 
 /// Compute (turn, thrust) to fly toward the ballistic intercept point of the

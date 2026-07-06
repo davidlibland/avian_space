@@ -24,8 +24,8 @@ pub fn planet_ui_plugin(app: &mut App) {
                 .before(bevy_egui::EguiPreUpdateSet::ProcessInput)
                 .run_if(not(in_state(PlayState::MainMenu))),
         )
-        .add_systems(OnEnter(PlayState::Landed), pause_physics)
-        .add_systems(OnExit(PlayState::Landed), unpause_physics)
+        // NB: the Landed-state game-clock pause is derived by sync_ui_pause
+        // (main.rs) from PlayState — no OnEnter/OnExit pause pair needed.
         .add_systems(OnEnter(PlayState::Flying), place_player_at_launch_site);
 }
 
@@ -165,14 +165,6 @@ fn place_player_at_launch_site(
             full_size,
         });
     }
-}
-
-pub fn pause_physics(mut time: ResMut<Time<Virtual>>) {
-    time.pause();
-}
-
-pub fn unpause_physics(mut time: ResMut<Time<Virtual>>) {
-    time.unpause();
 }
 
 // ---------------------------------------------------------------------------

@@ -115,18 +115,12 @@ pub fn jump_ui_plugin(app: &mut App) {
         );
 }
 
-fn toggle_jump_ui(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<JumpUiOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
-) {
+fn toggle_jump_ui(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<JumpUiOpen>) {
+    // Pausing is derived from `open` by sync_ui_pause (main.rs).
     if keyboard.just_pressed(KeyCode::KeyJ) {
         state.open = !state.open;
         if state.open {
             state.scroll_initialized = false;
-            virtual_time.pause();
-        } else {
-            virtual_time.unpause();
         }
     }
 }
@@ -478,11 +472,9 @@ fn jump_ui(
             travel_ctx.destination = dest;
             travel_ctx.phase = TravelPhase::Accelerating;
             ui_state.open = false;
-            virtual_time.unpause();
         }
     }
     if close {
         ui_state.open = false;
-        virtual_time.unpause();
     }
 }

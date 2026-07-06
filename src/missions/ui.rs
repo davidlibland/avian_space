@@ -226,18 +226,10 @@ impl crate::session::SessionResource for MissionLogOpen {
     fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
 }
 
-fn toggle_mission_log(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<MissionLogOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
-) {
+fn toggle_mission_log(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<MissionLogOpen>) {
+    // Pausing is derived from `open` by sync_ui_pause (main.rs).
     if keyboard.just_pressed(KeyCode::KeyI) {
         state.open = !state.open;
-        if state.open {
-            virtual_time.pause();
-        } else {
-            virtual_time.unpause();
-        }
     }
 }
 
@@ -295,7 +287,6 @@ fn render_mission_log(
         });
     if close {
         state.open = false;
-        virtual_time.unpause();
     }
 }
 
