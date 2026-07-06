@@ -174,6 +174,13 @@ fn place_player_at_launch_site(
 use crate::planets::PlanetData;
 use bevy_egui::egui;
 
+/// Batch size for shift-clicked Buy/Sell: a round multiple of 5, scaled to
+/// roughly an eighth of the hold so it stays proportionate — 5 for a shuttle
+/// (10 cargo), 10 for a hauler (70–80), 20 for a bulk carrier (160).
+fn bulk_trade_amount(cargo_space: u16) -> u16 {
+    ((cargo_space / 8 + 4) / 5 * 5).max(5)
+}
+
 /// Render the Trade tab content into an egui Ui.
 pub fn render_trade_tab(
     ui: &mut egui::Ui,
@@ -181,7 +188,13 @@ pub fn render_trade_tab(
     planet: &PlanetData,
     item_universe: &ItemUniverse,
 ) {
+    let bulk = bulk_trade_amount(ship.data.cargo_space);
     ui.label(format!("Credits: {}", ship.credits));
+    ui.label(
+        egui::RichText::new(format!("Shift-click Buy/Sell to trade {bulk} at a time."))
+            .small()
+            .color(egui::Color32::GRAY),
+    );
     ui.separator();
     egui::Grid::new("trade_grid")
         .num_columns(6)
@@ -227,11 +240,21 @@ pub fn render_trade_tab(
                     ui.label("-");
                 }
                 ui.label(qty.to_string());
-                if ui.button("Buy").clicked() {
-                    ship.buy_cargo(&commodity, 1, price);
+                let shift = ui.input(|i| i.modifiers.shift);
+                let amount = if shift { bulk } else { 1 };
+                if ui
+                    .button("Buy")
+                    .on_hover_text(format!("Shift-click: buy {bulk}"))
+                    .clicked()
+                {
+                    ship.buy_cargo(&commodity, amount, price);
                 }
-                if ui.button("Sell").clicked() {
-                    ship.sell_cargo(&commodity, 1, price);
+                if ui
+                    .button("Sell")
+                    .on_hover_text(format!("Shift-click: sell {bulk}"))
+                    .clicked()
+                {
+                    ship.sell_cargo(&commodity, amount, price);
                 }
                 ui.end_row();
             }
@@ -271,8 +294,14 @@ pub fn render_trade_tab(
                     ui.label(commodity_display);
                     ui.label(sell_price.to_string());
                     ui.label(qty.to_string());
-                    if ui.button("Sell").clicked() {
-                        ship.sell_cargo(commodity, 1, sell_price);
+                    let shift = ui.input(|i| i.modifiers.shift);
+                    let amount = if shift { bulk } else { 1 };
+                    if ui
+                        .button("Sell")
+                        .on_hover_text(format!("Shift-click: sell {bulk}"))
+                        .clicked()
+                    {
+                        ship.sell_cargo(commodity, amount, sell_price);
                     }
                     ui.end_row();
                 }
@@ -294,6 +323,11 @@ pub fn render_outfitter_tab(
         ship.remaining_item_space(),
         ship.data.item_space
     ));
+    ui.label(
+        egui::RichText::new("Shift-click ammo Buy/Sell to fill the racks / sell all.")
+            .small()
+            .color(egui::Color32::GRAY),
+    );
     ui.separator();
     egui::Grid::new("outfitter_grid")
         .num_columns(6)
@@ -348,11 +382,28 @@ pub fn render_outfitter_tab(
                     Some(qty) => qty.to_string(),
                     _ => "n/a".to_string(),
                 });
-                if ui.button("Buy").clicked() {
-                    ship.buy_ammo(&item, &item_universe);
+                let shift = ui.input(|i| i.modifiers.shift);
+                if ui
+                    .button("Buy")
+                    .on_hover_text("Shift-click: fill the racks")
+                    .clicked()
+                {
+                    if shift {
+                        ship.buy_max_ammo(&item, &item_universe);
+                    } else {
+                        ship.buy_ammo(&item, &item_universe);
+                    }
                 }
-                if ui.button("Sell").clicked() {
-                    ship.sell_ammo(&item, &item_universe);
+                if ui
+                    .button("Sell")
+                    .on_hover_text("Shift-click: sell all ammo")
+                    .clicked()
+                {
+                    if shift {
+                        ship.sell_all_ammo(&item, &item_universe);
+                    } else {
+                        ship.sell_ammo(&item, &item_universe);
+                    }
                 }
                 ui.end_row();
             }
@@ -432,5 +483,24 @@ pub fn render_shipyard_tab(
                     ui.end_row();
                 }
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bulk_trade_amount;
+
+    #[test]
+    fn bulk_amount_scales_in_round_steps() {
+        assert_eq!(bulk_trade_amount(8), 5); // fighter
+        assert_eq!(bulk_trade_amount(10), 5); // shuttle
+        assert_eq!(bulk_trade_amount(40), 5); // freighter
+        assert_eq!(bulk_trade_amount(70), 10); // hauler
+        assert_eq!(bulk_trade_amount(160), 20); // bulk carrier
+        // Always a multiple of 5, never zero.
+        for space in 0..=200 {
+            let b = bulk_trade_amount(space);
+            assert!(b >= 5 && b % 5 == 0, "space {space} → {b}");
+        }
     }
 }

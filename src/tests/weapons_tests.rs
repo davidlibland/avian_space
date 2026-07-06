@@ -174,3 +174,31 @@ fn missile_drag_settles_to_cruise_within_lifetime() {
          allowed {allowed}"
     );
 }
+
+/// Shift-click "sell all" must pay out every round at the listed ammo price
+/// and leave the rack empty (but keep the launcher + ammo tracking).
+#[test]
+fn sell_all_ammo_empties_rack_and_pays() {
+    let iu = real_universe();
+    let ammo_price = match iu.outfitter_items.get("javelin").unwrap() {
+        crate::item_universe::OutfitterItem::SecondaryWeapon { ammo_price, .. } => *ammo_price,
+        _ => panic!("javelin must be a secondary weapon"),
+    };
+    let mut ship = crate::ship::Ship::default();
+    ship.weapon_systems = WeaponSystems::build(
+        &HashMap::from([("javelin".to_string(), (1u8, Some(4u32)))]),
+        &iu,
+    );
+    let before = ship.credits;
+    ship.sell_all_ammo("javelin", &iu);
+    assert_eq!(ship.credits, before + 4 * ammo_price);
+    assert_eq!(
+        ship.weapon_systems.find_weapon("javelin").unwrap().ammo_quantity,
+        Some(0),
+        "rack empty, launcher retained"
+    );
+    // Selling again is a no-op, not a payout.
+    let before = ship.credits;
+    ship.sell_all_ammo("javelin", &iu);
+    assert_eq!(ship.credits, before);
+}

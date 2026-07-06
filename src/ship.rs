@@ -648,6 +648,25 @@ impl Ship {
             _ => (),
         }
     }
+    /// Sell every round of ammo for `weapon_type` in one transaction
+    /// (shift-click in the outfitter UI).
+    pub fn sell_all_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
+        let Some(OutfitterItem::SecondaryWeapon { ammo_price, .. }) =
+            item_universe.outfitter_items.get(weapon_type)
+        else {
+            return;
+        };
+        if let std::collections::hash_map::Entry::Occupied(mut view) =
+            self.weapon_systems.find_weapon_entry(weapon_type)
+        {
+            let val = view.get_mut();
+            if let Some(qty) = val.ammo_quantity {
+                self.credits += ammo_price * qty as i128;
+                val.ammo_quantity = Some(0);
+            }
+        }
+    }
+
     /// Returns true when this ship should fight `other`.
     /// Checks whether this ship's own faction appears in `other`'s hostility map,
     /// i.e. other is flagged as hostile toward my faction.
