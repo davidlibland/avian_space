@@ -14,9 +14,37 @@ pub fn planet_ui_plugin(app: &mut App) {
             EguiPrimaryContextPass,
             ship_pad_ui.run_if(in_state(PlayState::Landed)),
         )
+        // Clear focus right BEFORE egui processes this frame's input, so no
+        // widget can ever be keyboard-activated — regardless of which UI
+        // system focused it, in which order, on any earlier frame.
+        .add_systems(
+            PreUpdate,
+            drop_egui_keyboard_focus
+                .after(bevy_egui::EguiPreUpdateSet::InitContexts)
+                .before(bevy_egui::EguiPreUpdateSet::ProcessInput)
+                .run_if(not(in_state(PlayState::MainMenu))),
+        )
         .add_systems(OnEnter(PlayState::Landed), pause_physics)
         .add_systems(OnExit(PlayState::Landed), unpause_physics)
         .add_systems(OnEnter(PlayState::Flying), place_player_at_launch_site);
+}
+
+/// egui activates the keyboard-focused widget on Space/Enter — but Space is
+/// FIRE in flight, so any HUD button that ever retains focus (a mouse-clicked
+/// "?" or toast Dismiss) turns later Space presses into stray UI clicks.
+/// The ONLY widget in the game that legitimately needs keyboard focus is the
+/// pilot-name field in the main menu; everywhere else, surrender any egui
+/// focus every frame so the whole class of bug is structurally impossible —
+/// no per-button `surrender_focus()` convention to remember.
+fn drop_egui_keyboard_focus(mut egui_contexts: EguiContexts) {
+    let Ok(ctx) = egui_contexts.ctx_mut() else {
+        return;
+    };
+    ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
 }
 
 #[derive(Resource, Default)]

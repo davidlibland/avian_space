@@ -90,12 +90,10 @@ fn help_corner_button(
                 .min_size(egui::Vec2::splat(28.0))
                 .fill(Color32::from_rgba_unmultiplied(0, 0, 0, 160))
                 .stroke(egui::Stroke::new(1.0, Color32::from_rgb(140, 180, 220)));
+            // NB: egui would "click" this button on Space (= FIRE) if it ever
+            // kept keyboard focus; `drop_egui_keyboard_focus` (planet_ui.rs)
+            // clears all egui focus outside the main menu to prevent that.
             let resp = ui.add(button).on_hover_text("Help (F1)");
-            // Never let this button keep keyboard focus: egui "clicks" the
-            // focused widget on Space/Enter, so once the player had clicked
-            // the "?" with the mouse, every later Space press to FIRE also
-            // toggled the help window (and paused the game).
-            resp.surrender_focus();
             if resp.clicked() {
                 let next = !state.open;
                 set_open(&mut state, &mut virtual_time, next);

@@ -194,12 +194,10 @@ pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionTo
             } else {
                 "Dismiss".to_string()
             };
-            let resp = ui.button(label);
-            // Don't hold keyboard focus: egui "clicks" the focused widget on
-            // Space, and Space is also FIRE — a previously mouse-dismissed
-            // toast would make later Space presses swallow unread messages.
-            resp.surrender_focus();
-            if resp.clicked() {
+            // Keyboard focus is globally surrendered outside the main menu
+            // (see drop_egui_keyboard_focus), so Space (= FIRE) can never
+            // "click" this button and swallow unread messages.
+            if ui.button(label).clicked() {
                 toast.queue.pop_front();
             }
         });
