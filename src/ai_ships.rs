@@ -449,7 +449,19 @@ fn manage_ship_population(
     star_system: Res<CurrentStarSystem>,
     time: Res<Time>,
     mut timer: ResMut<ShipPopulationTimer>,
-    ai_ships: Query<(Entity, &Ship), (With<AIShip>, Without<JumpingOut>)>,
+    // Escorts and mission targets are never cull candidates: an escort
+    // jumping out deserts the player, and a mission target that leaves
+    // isn't a kill — spawn_mission_targets would just conjure a replacement
+    // mid-mission.
+    ai_ships: Query<
+        (Entity, &Ship),
+        (
+            With<AIShip>,
+            Without<JumpingOut>,
+            Without<crate::carrier::Escort>,
+            Without<crate::missions::MissionTarget>,
+        ),
+    >,
     all_ai_ships: Query<Entity, With<AIShip>>,
     mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
 ) {
@@ -1016,7 +1028,10 @@ fn tick_ai_landed(
 /// or resume flying.
 fn finish_ai_takeoff(
     mut reader: MessageReader<ScaleUpFinished>,
-    ships: Query<(Entity, &Ship, &Position, &AIShip), Without<crate::carrier::Escort>>,
+    ships: Query<
+        (Entity, &Ship, &Position, &AIShip),
+        (Without<crate::carrier::Escort>, Without<crate::missions::MissionTarget>),
+    >,
     ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
     mut commands: Commands,
 ) {
