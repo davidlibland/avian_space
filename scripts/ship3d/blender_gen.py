@@ -242,6 +242,8 @@ def add_cylinder(name, loc, r, length, mat, *, axis="y", r2=None, seg=20,
             a = 2 * math.pi * k / seg
             if axis == "y":
                 verts.append((cx + rr * math.cos(a), cy + end, cz + rr * math.sin(a)))
+            elif axis == "x":
+                verts.append((cx + end, cy + rr * math.cos(a), cz + rr * math.sin(a)))
             else:
                 verts.append((cx + rr * math.cos(a), cy + rr * math.sin(a), cz + end))
     for j in range(seg):

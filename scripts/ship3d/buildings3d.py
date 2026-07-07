@@ -465,6 +465,25 @@ def build_garrison(s, m):
     B.add_box("dish", (-w / 2 + 0.8, d / 2 - 0.8, top + 1.9), (0.5, 0.08, 0.34), m["trim"], bevel=0.02)
     # glowing insignia plate over the door
     B.add_box("crest", (0, -d / 2 - 0.06, z0 + 2.55), (1.3, 0.08, 0.55), m["glow"], bevel=0.02)
+    # ── forecourt props (pp_ → own depth-sorted layer) ──
+    # Monument gun: a decommissioned siege cannon on a stone plinth, left of
+    # the door — the oldest way to say "military administration" in one prop.
+    B.add_box("pp_gplinth", (-1.9, -d / 2 - 1.2, 0.25), (2.0, 1.0, 0.5), m["stone"], bevel=0.04)
+    # low trunnion blocks; the barrel rides clearly ABOVE them so its full
+    # length reads at the oblique camera angle
+    for tx in (-2.25, -1.55):
+        B.add_box("pp_gcarr", (tx, -d / 2 - 1.2, 0.68), (0.28, 0.55, 0.42), m["dark"], bevel=0.05)
+    B.add_cylinder("pp_gbarrel", (-1.65, -d / 2 - 1.2, 1.12), 0.17, 2.2, m["metal"], axis="x", r2=0.11)
+    B.add_cylinder("pp_gmuzzle", (-0.6, -d / 2 - 1.2, 1.12), 0.15, 0.26, m["dark"], axis="x")
+    B.add_cylinder("pp_gbreech", (-2.6, -d / 2 - 1.2, 1.12), 0.21, 0.4, m["dark"], axis="x")
+    # Sandbag emplacement guarding the right of the approach, two courses high.
+    for sx, sy in ((1.35, -d / 2 - 0.85), (1.95, -d / 2 - 1.1), (2.55, -d / 2 - 0.85)):
+        B.add_box("pp_sbag_a", (sx, sy, 0.18), (0.58, 0.42, 0.34), m["wall_d"], bevel=0.14)
+        B.add_box("pp_sbag_b", (sx + 0.08, sy + 0.04, 0.44), (0.5, 0.38, 0.3), m["wall_d"], bevel=0.14)
+    # Glowing recruitment board beside the door ("the flag remembers").
+    B.add_cylinder("pp_rpost", (0.95, -d / 2 - 0.55, 0.62), 0.05, 1.24, m["metal"], axis="z")
+    B.add_box("pp_rboard", (0.95, -d / 2 - 0.62, 1.3), (0.82, 0.06, 0.62), m["glow"], bevel=0.02)
+
     # flagpole on the pad-side corner of the forecourt, base plinth + pole + finial
     fp = (w / 2 + 0.55, -d / 2 + 0.3)
     B.add_box("pp_flagbase", (fp[0], fp[1], 0.14), (0.5, 0.5, 0.28), m["wall_d"], bevel=0.03)
@@ -689,7 +708,7 @@ def bake():
                 # (the garrison pole stands beside the wall).
                 base = {"market": 1.7, "outfitter": 1.3, "bar": 1.1,
                         "mechanic": 2.0, "fuel_station": 1.85,
-                        "garrison": -0.3}.get(fn, 0.5)
+                        "garrison": 1.7}.get(fn, 0.5)
                 if fn == "fuel_station" and st == "cryo":
                     base = 3.05   # ice storm-porch pushes the pumps forward
                 prop_dy = base
