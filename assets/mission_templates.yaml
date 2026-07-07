@@ -115,7 +115,7 @@ federation_bounty:
 # {dest_display} {count} {quantity} {commodity}.
 arrest:
   kind: arrest
-  meet_briefing: "Your ship is impounded the moment the clamps lock. {faction} enforcement has flagged you as hostile — officers are already crossing the pad to arrest you."
+  meet_briefing: "Dock control is moving to impound your ship. {faction} enforcement has flagged you as hostile — officers are crossing the pad to arrest you. Face them, or run before the clamps lock."
   meet_success: "The {faction} sergeant reads the charges and offers terms: pay the fine ({fine} credits) at the clerk, serve a warrant against raiders preying on {faction} space, or run relief supplies where they're needed. Settle ANY one and your record is wiped back to merely watched."
   meet_failure: "You slipped {faction} enforcement — this time."
   fine_briefing: "Settle your {faction} charges the simple way: pay the {fine}-credit fine at the fines clerk by the market."
