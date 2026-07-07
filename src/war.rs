@@ -217,15 +217,21 @@ fn offer_war_missions(
                 .collect();
             let mut templates = templates;
             templates.sort_by_key(|(id, _)| (*id).clone());
-            let Some((tmpl_id, tmpl)) = templates
-                .get(rng.gen_range(0..templates.len().max(1)))
-                .copied()
-            else {
+            if templates.is_empty() {
                 continue;
-            };
-            *counter += 1;
-            let id = format!("war__{}__{:04}", tmpl_id, *counter);
-            if let Some(def) = instantiate_war_mission(tmpl, front, &iu, &galaxy, &mut rng) {
+            }
+            // Start at a random template but fall through the rest: some
+            // can't instantiate for some fronts (covert ops need a landable
+            // enemy world, which empty buffer zones lack).
+            let start = rng.gen_range(0..templates.len());
+            for k in 0..templates.len() {
+                let (tmpl_id, tmpl) = templates[(start + k) % templates.len()];
+                let Some(def) = instantiate_war_mission(tmpl, front, &iu, &galaxy, &mut rng)
+                else {
+                    continue;
+                };
+                *counter += 1;
+                let id = format!("war__{}__{:04}", tmpl_id, *counter);
                 catalog.defs.insert(id.clone(), def);
                 offers
                     .npc
@@ -234,6 +240,7 @@ fn offer_war_missions(
                     .push(id.clone());
                 offers.considered.insert(id);
                 offered += 1;
+                break;
             }
         }
     }
