@@ -4,8 +4,8 @@
 # (mission log, I) ends the whole tutorial — the rest stays locked forever,
 # which is the intended exit for experienced pilots.
 tutorial_flight:
-  briefing: "Flight check, pilot. Thrust with UP, turn with LEFT/RIGHT, and hold DOWN to flip for a braking burn. Now find the ground: cycle planet targets with [ and ], select Earth, hold A — the intercept autopilot — and press L when close to request docking. On the surface walk with WASD and press E to enter buildings. Stop by the OUTFITTER and buy a Laser; you'll want teeth for the next lesson. (F1 shows every control.)"
-  success_text: "Clean approach, clean landing. Fit that laser before you lift off — asteroids don't crack themselves."
+  briefing: "Flight check, pilot. Thrust with UP, turn with LEFT/RIGHT, and hold DOWN to flip for a braking burn. Now find the ground: cycle planet targets with [ and ], select Earth, hold A — the intercept autopilot — and press L when close to request docking. (F1 shows every control.)"
+  success_text: "Clean approach, clean landing."
   failure_text: "Tutorial ended. You clearly know your way around a cockpit — the rest of the course stands down."
   preconditions: []
   offer:
@@ -17,7 +17,7 @@ tutorial_flight:
   - kind: pay
     credits: 300
 tutorial_mining:
-  briefing: "Rocks are money. In space, press Q to target the nearest asteroid, hold SPACE to break it up, then hold A to scoop 2 units of iron from the debris. No laser yet? Earth's outfitter sells them for pocket change."
+  briefing: "Welcome to the ground: walk with WASD and press E to enter buildings. Stop by the OUTFITTER and buy a Laser — rocks are money. Then lift off, press Q to target the nearest asteroid, hold SPACE to break it up, and hold A to scoop 2 units of iron from the debris."
   success_text: "Ore in the hold. Sell it at any market — every planet pays its own price."
   failure_text: "Tutorial ended. The asteroids will keep."
   preconditions:
