@@ -298,3 +298,27 @@ fn hostility_derived_from_standing_thresholds() {
         "restored standing clears the hunt"
     );
 }
+
+/// Standings persist across save/load — SAVE_KEY defaults to None
+/// (ephemeral), which silently wiped them until pinned here.
+#[test]
+fn standings_and_galaxy_persist() {
+    use crate::session::SessionResource;
+    assert!(FactionStandings::SAVE_KEY.is_some(), "standings must persist");
+    assert!(
+        crate::galaxy::GalaxyControl::SAVE_KEY.is_some(),
+        "the war state must persist"
+    );
+
+    let iu = universe();
+    let mut s = FactionStandings::default();
+    s.adjust("Federation", -33.0);
+    let restored = FactionStandings::from_save(s.to_save(), &iu);
+    assert_eq!(restored.get("Federation"), -33.0);
+
+    let mut g = crate::galaxy::GalaxyControl::seeded_from(&iu);
+    g.apply_shift("drift", "Rebel", 0.7);
+    let restored = crate::galaxy::GalaxyControl::from_save(g.to_save(), &iu);
+    assert_eq!(restored.influence_of("drift", "Rebel"), g.influence_of("drift", "Rebel"));
+    assert_eq!(restored.controllers, g.controllers);
+}

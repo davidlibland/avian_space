@@ -68,6 +68,9 @@ impl FactionStandings {
 
 impl crate::session::SessionResource for FactionStandings {
     type SaveData = HashMap<String, f32>;
+    // NB: SAVE_KEY defaults to None (ephemeral)! Without this line the
+    // standings silently reset on every load.
+    const SAVE_KEY: Option<&'static str> = Some("faction_standings");
     fn new_session(_: &ItemUniverse) -> Self {
         Self::default()
     }

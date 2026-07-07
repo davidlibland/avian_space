@@ -50,6 +50,9 @@ pub struct GalaxyControlSave {
 
 impl crate::session::SessionResource for GalaxyControl {
     type SaveData = GalaxyControlSave;
+    // NB: SAVE_KEY defaults to None (ephemeral)! Without this line the whole
+    // war state — every front the player moved — reset on every load.
+    const SAVE_KEY: Option<&'static str> = Some("galaxy_control");
     fn new_session(iu: &ItemUniverse) -> Self {
         Self::seeded_from(iu)
     }
