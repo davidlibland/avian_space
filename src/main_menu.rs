@@ -100,176 +100,244 @@ fn main_menu_ui(
 
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.vertical_centered(|ui| {
-            ui.add_space(80.0);
-
+            ui.add_space(32.0);
             ui.heading(egui::RichText::new("AVIAN SPACE").size(48.0));
-            ui.add_space(48.0);
+        });
+        ui.add_space(24.0);
 
-            // ── New pilot ─────────────────────────────────────────────────
-            egui::Frame::group(ui.style()).show(ui, |ui| {
-                ui.set_min_width(300.0);
-                ui.label("New Pilot");
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut menu_state.new_pilot_name)
-                            .hint_text("Pilot name…")
-                            .desired_width(200.0),
-                    );
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Gender:");
-                    let before = menu_state.new_pilot_gender;
-                    ui.radio_value(&mut menu_state.new_pilot_gender, Gender::Boy, "Boy");
-                    ui.radio_value(&mut menu_state.new_pilot_gender, Gender::Girl, "Girl");
-                    if menu_state.new_pilot_gender != before {
-                        // Rebuild the avatar for the new body type.
-                        menu_state.new_pilot_avatar =
-                            Some(AvatarSpec::for_gender(menu_state.new_pilot_gender));
-                    }
-                });
+        // Two columns when there are saves to load; centered single panel
+        // otherwise. Side-by-side keeps the avatar creator on screen without
+        // pushing the load list below the fold.
+        if menu_state.saves.is_empty() {
+            ui.vertical_centered(|ui| {
+                new_pilot_panel(
+                    ui,
+                    &mut menu_state,
+                    &mut game_state,
+                    &mut current_system,
+                    &mut next_state,
+                    &item_universe,
+                    layers.as_deref_mut(),
+                    preview_tex,
+                );
+            });
+        } else {
+            ui.columns(2, |cols| {
+                cols[0].with_layout(
+                    egui::Layout::top_down(egui::Align::Center),
+                    |ui| {
+                        new_pilot_panel(
+                            ui,
+                            &mut menu_state,
+                            &mut game_state,
+                            &mut current_system,
+                            &mut next_state,
+                            &item_universe,
+                            layers.as_deref_mut(),
+                            preview_tex,
+                        );
+                    },
+                );
+                cols[1].with_layout(
+                    egui::Layout::top_down(egui::Align::Center),
+                    |ui| {
+                        load_pilot_panel(
+                            ui,
+                            &mut commands,
+                            &menu_state,
+                            &mut game_state,
+                            &mut current_system,
+                            &mut next_state,
+                            &item_universe,
+                        );
+                    },
+                );
+            });
+        }
+    });
+}
 
-                // ── Avatar creator ────────────────────────────────────────
-                if let (Some(layers), Some(mut spec)) =
-                    (layers.as_deref_mut(), menu_state.new_pilot_avatar.clone())
-                {
-                    ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        // Live preview: down-facing still frame (tile 0 of the
-                        // 3x4 sheet), drawn at 4x.
-                        if let Some(tex) = preview_tex {
-                            let img = egui::Image::new(egui::load::SizedTexture::new(
-                                tex,
-                                [96.0, 128.0],
-                            ))
-                            .uv(egui::Rect::from_min_max(
-                                egui::pos2(0.0, 0.0),
-                                egui::pos2(1.0 / 3.0, 0.25),
-                            ))
-                            .fit_to_exact_size([128.0, 128.0].into());
-                            ui.add(img);
-                        }
-                        ui.vertical(|ui| {
-                            let sex = spec.sex.clone();
-                            let mut changed = false;
-                            // Item slots (hair/beard/hat may be empty).
-                            for (label, slot, allow_none) in [
-                                ("Hair", "hair", true),
-                                ("Beard", "beard", true),
-                                ("Top", "torso", false),
-                                ("Legs", "legs", false),
-                                ("Shoes", "feet", false),
-                                ("Hat", "hat", true),
-                            ] {
-                                if slot == "beard" && sex != "male" {
-                                    continue;
-                                }
-                                let options = layers.all_item_ids(slot, &sex);
-                                if options.is_empty() {
-                                    continue;
-                                }
-                                let mut current = spec.slots.get(slot).cloned();
-                                if cycle_row(ui, label, &mut current, &options, allow_none) {
-                                    match current {
-                                        Some(id) => spec.slots.insert(slot.into(), id),
-                                        None => spec.slots.remove(slot),
-                                    };
-                                    changed = true;
-                                }
-                            }
-                            // Color ramps.
-                            for (label, mat) in [
-                                ("Skin", "body"),
-                                ("Hair col", "hair"),
-                                ("Eyes", "eye"),
-                                ("Cloth", "cloth"),
-                            ] {
-                                let options: Vec<String> = layers
-                                    .ramp_names(mat, None)
-                                    .into_iter()
-                                    .map(String::from)
-                                    .collect();
-                                if options.is_empty() {
-                                    continue;
-                                }
-                                let mut current = spec.colors.get(mat).cloned();
-                                if cycle_row(ui, label, &mut current, &options, false) {
-                                    if let Some(ramp) = current {
-                                        spec.colors.insert(mat.into(), ramp);
-                                    }
-                                    changed = true;
-                                }
-                            }
-                            ui.add_space(2.0);
-                            if ui.button("🎲 Randomize").clicked() {
-                                let mut rng = rand::thread_rng();
-                                let mut random = layers.random_spec(&mut rng, "civilian");
-                                // Keep the chosen gender's body type.
-                                random.sex = sex.clone();
-                                let head =
-                                    if sex == "male" { "head_m" } else { "head_f" };
-                                random.slots.insert("head".into(), head.into());
-                                if sex != "male" {
-                                    random.slots.remove("beard");
-                                }
-                                spec = random;
-                                changed = true;
-                            }
-                            if changed {
-                                menu_state.new_pilot_avatar = Some(spec.clone());
-                            }
-                        });
-                    });
+/// "New Pilot" group: name, gender, avatar creator, Create button.
+#[allow(clippy::too_many_arguments)]
+fn new_pilot_panel(
+    ui: &mut egui::Ui,
+    menu_state: &mut MainMenuState,
+    game_state: &mut PlayerGameState,
+    current_system: &mut CurrentStarSystem,
+    next_state: &mut NextState<PlayState>,
+    item_universe: &ItemUniverse,
+    mut layers: Option<&mut CharacterLayers>,
+    preview_tex: Option<egui::TextureId>,
+) {
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        ui.set_min_width(300.0);
+        ui.label("New Pilot");
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut menu_state.new_pilot_name)
+                    .hint_text("Pilot name…")
+                    .desired_width(200.0),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label("Gender:");
+            let before = menu_state.new_pilot_gender;
+            ui.radio_value(&mut menu_state.new_pilot_gender, Gender::Boy, "Boy");
+            ui.radio_value(&mut menu_state.new_pilot_gender, Gender::Girl, "Girl");
+            if menu_state.new_pilot_gender != before {
+                // Rebuild the avatar for the new body type.
+                menu_state.new_pilot_avatar =
+                    Some(AvatarSpec::for_gender(menu_state.new_pilot_gender));
+            }
+        });
+
+        // ── Avatar creator ────────────────────────────────────────────────
+        if let (Some(layers), Some(mut spec)) =
+            (layers.as_deref_mut(), menu_state.new_pilot_avatar.clone())
+        {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                // Live preview: down-facing still frame (tile 0 of the
+                // 3x4 sheet), drawn at 4x.
+                if let Some(tex) = preview_tex {
+                    let img = egui::Image::new(egui::load::SizedTexture::new(
+                        tex,
+                        [96.0, 128.0],
+                    ))
+                    .uv(egui::Rect::from_min_max(
+                        egui::pos2(0.0, 0.0),
+                        egui::pos2(1.0 / 3.0, 0.25),
+                    ))
+                    .fit_to_exact_size([128.0, 128.0].into());
+                    ui.add(img);
                 }
-
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    let ready = !menu_state.new_pilot_name.trim().is_empty();
-                    if ui.add_enabled(ready, egui::Button::new("Create")).clicked() {
-                        let name = menu_state.new_pilot_name.trim().to_string();
-                        let gender = menu_state.new_pilot_gender;
-                        *game_state =
-                            PlayerGameState::new_pilot(&name, gender, &item_universe);
-                        if let Some(avatar) = menu_state.new_pilot_avatar.clone() {
-                            game_state.avatar = avatar;
+                ui.vertical(|ui| {
+                    let sex = spec.sex.clone();
+                    let mut changed = false;
+                    // Item slots (hair/beard/hat may be empty).
+                    for (label, slot, allow_none) in [
+                        ("Hair", "hair", true),
+                        ("Beard", "beard", true),
+                        ("Top", "torso", false),
+                        ("Legs", "legs", false),
+                        ("Shoes", "feet", false),
+                        ("Hat", "hat", true),
+                    ] {
+                        if slot == "beard" && sex != "male" {
+                            continue;
                         }
-                        current_system.0 = game_state.current_star_system.clone();
-                        // No PendingSessionLoad — session resources start fresh
-                        // via their new_session() defaults.
-                        next_state.set(PlayState::Flying);
+                        let options = layers.all_item_ids(slot, &sex);
+                        if options.is_empty() {
+                            continue;
+                        }
+                        let mut current = spec.slots.get(slot).cloned();
+                        if cycle_row(ui, label, &mut current, &options, allow_none) {
+                            match current {
+                                Some(id) => spec.slots.insert(slot.into(), id),
+                                None => spec.slots.remove(slot),
+                            };
+                            changed = true;
+                        }
+                    }
+                    // Color ramps.
+                    for (label, mat) in [
+                        ("Skin", "body"),
+                        ("Hair col", "hair"),
+                        ("Eyes", "eye"),
+                        ("Cloth", "cloth"),
+                    ] {
+                        let options: Vec<String> = layers
+                            .ramp_names(mat, None)
+                            .into_iter()
+                            .map(String::from)
+                            .collect();
+                        if options.is_empty() {
+                            continue;
+                        }
+                        let mut current = spec.colors.get(mat).cloned();
+                        if cycle_row(ui, label, &mut current, &options, false) {
+                            if let Some(ramp) = current {
+                                spec.colors.insert(mat.into(), ramp);
+                            }
+                            changed = true;
+                        }
+                    }
+                    ui.add_space(2.0);
+                    if ui.button("🎲 Randomize").clicked() {
+                        let mut rng = rand::thread_rng();
+                        let mut random = layers.random_spec(&mut rng, "civilian");
+                        // Keep the chosen gender's body type.
+                        random.sex = sex.clone();
+                        let head = if sex == "male" { "head_m" } else { "head_f" };
+                        random.slots.insert("head".into(), head.into());
+                        if sex != "male" {
+                            random.slots.remove("beard");
+                        }
+                        spec = random;
+                        changed = true;
+                    }
+                    if changed {
+                        menu_state.new_pilot_avatar = Some(spec.clone());
                     }
                 });
             });
+        }
 
-            // ── Load pilot ────────────────────────────────────────────────
-            if !menu_state.saves.is_empty() {
-                ui.add_space(24.0);
-                egui::Frame::group(ui.style()).show(ui, |ui| {
-                    ui.set_min_width(300.0);
-                    ui.label("Load Pilot");
-                    ui.add_space(4.0);
-                    let saves = menu_state.saves.clone();
-                    for save_name in &saves {
-                        if ui
-                            .add_sized([300.0, 28.0], egui::Button::new(save_name))
-                            .clicked()
-                        {
-                            if let Some(save) = load_save(save_name) {
-                                current_system.0 = save.current_star_system.clone();
-                                // Store the resources map for session resources to
-                                // consume on entering Flying.
-                                commands.insert_resource(PendingSessionLoad {
-                                    resources: save.resources.clone(),
-                                });
-                                *game_state =
-                                    PlayerGameState::from_save(&save, &item_universe);
-                                next_state.set(PlayState::Flying);
-                            }
-                        }
-                    }
-                });
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let ready = !menu_state.new_pilot_name.trim().is_empty();
+            if ui.add_enabled(ready, egui::Button::new("Create")).clicked() {
+                let name = menu_state.new_pilot_name.trim().to_string();
+                let gender = menu_state.new_pilot_gender;
+                *game_state = PlayerGameState::new_pilot(&name, gender, item_universe);
+                if let Some(avatar) = menu_state.new_pilot_avatar.clone() {
+                    game_state.avatar = avatar;
+                }
+                current_system.0 = game_state.current_star_system.clone();
+                // No PendingSessionLoad — session resources start fresh
+                // via their new_session() defaults.
+                next_state.set(PlayState::Flying);
             }
         });
+    });
+}
+
+/// "Load Pilot" group: scrollable save list.
+fn load_pilot_panel(
+    ui: &mut egui::Ui,
+    commands: &mut Commands,
+    menu_state: &MainMenuState,
+    game_state: &mut PlayerGameState,
+    current_system: &mut CurrentStarSystem,
+    next_state: &mut NextState<PlayState>,
+    item_universe: &ItemUniverse,
+) {
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        ui.set_min_width(300.0);
+        ui.label("Load Pilot");
+        ui.add_space(4.0);
+        egui::ScrollArea::vertical()
+            .max_height(ui.available_height() - 16.0)
+            .show(ui, |ui| {
+                for save_name in &menu_state.saves {
+                    if ui
+                        .add_sized([300.0, 28.0], egui::Button::new(save_name))
+                        .clicked()
+                    {
+                        if let Some(save) = load_save(save_name) {
+                            current_system.0 = save.current_star_system.clone();
+                            // Store the resources map for session resources to
+                            // consume on entering Flying.
+                            commands.insert_resource(PendingSessionLoad {
+                                resources: save.resources.clone(),
+                            });
+                            *game_state = PlayerGameState::from_save(&save, item_universe);
+                            next_state.set(PlayState::Flying);
+                        }
+                    }
+                }
+            });
     });
 }
 
