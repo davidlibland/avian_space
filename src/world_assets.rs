@@ -153,10 +153,23 @@ pub struct Building3dSprite {
     pub d: u32,
     /// Footprint front-centre on the ground, as a Bevy `Anchor::Custom` fraction.
     pub anchor: (f32, f32),
-    /// Ground line of the building's south-protruding props (its own baked
-    /// `_props` layer), in tiles SOUTH of the front wall. None = no props.
+    /// South-protruding props, each baked as its own object with its own
+    /// depth-sort line (see `BuildingPropSprite`).
     #[serde(default)]
-    pub prop_dy: Option<f32>,
+    pub props: Vec<BuildingPropSprite>,
+}
+
+/// One baked building prop (`{style}_{func}_prop_{name}.png`): an individual
+/// object depth-sorted at its own ground line — or, for overhead pieces like
+/// the market porch and the bar sign, at its SUPPORT line.
+#[derive(Deserialize, Debug)]
+pub struct BuildingPropSprite {
+    pub name: String,
+    /// Front-centre pinning fraction, same convention as the building layers.
+    pub anchor: (f32, f32),
+    /// Sort line in tiles SOUTH of the building's front wall (negative =
+    /// north of it, e.g. the garrison flagpole standing beside the wall).
+    pub dy: f32,
 }
 
 /// `buildings3d_manifest.ron` — baked 3/4 building sprites (scripts/ship3d/buildings3d.py bake).

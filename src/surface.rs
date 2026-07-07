@@ -650,7 +650,7 @@ fn spawn_building_3d(
     fc: Vec2,
     scale: f32,
     tile_px: f32,
-    prop_dy: Option<f32>,
+    props: &[crate::world_assets::BuildingPropSprite],
 ) {
     // _floor: the building's own floor + thresholds (walkable). ALWAYS below the
     // player (and above terrain at -10), so the player walks over it and it hides
@@ -691,21 +691,22 @@ fn spawn_building_3d(
             .with_scale(Vec3::splat(scale)),
     ));
     // South-protruding props (market crates, the mechanic's engine, fuel
-    // pumps, the garrison flagpole) live in their own baked layer, depth-
-    // sorted at THEIR ground line rather than the building's wall plane: a
-    // player between the props and the wall draws over the facade but under
-    // the props — exactly what the eye expects.
-    if let Some(dy) = prop_dy {
+    // pumps, the garrison's monument gun) spawn as INDIVIDUAL objects, each
+    // depth-sorted at its own ground line — a player weaving between the
+    // mechanic's toolbox and armor plate sorts correctly against each.
+    // Overhead pieces (porch, hanging sign) carry their SUPPORT line as dy.
+    for prop in props {
         commands.spawn((
             DespawnOnExit(PlayState::Exploring),
-            Sprite::from_image(
-                asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_props.png")),
-            ),
-            bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
+            Sprite::from_image(asset_server.load(format!(
+                "{WORLDS_DIR}/buildings3d/{style}_{func}_prop_{}.png",
+                prop.name
+            ))),
+            bevy::sprite::Anchor(Vec2::new(prop.anchor.0, prop.anchor.1)),
             Transform::from_xyz(
                 fc.x,
                 fc.y,
-                crate::surface_objects::depth_z(fc.y - dy * tile_px),
+                crate::surface_objects::depth_z(fc.y - prop.dy * tile_px),
             )
             .with_scale(Vec3::splat(scale)),
         ));
@@ -1383,7 +1384,7 @@ fn setup_surface(
                     fc,
                     scale,
                     tile_px,
-                    spr.prop_dy,
+                    &spr.props,
                 );
             }
             // The repair engine sits front-left of the door. Its tiles were marked
@@ -1491,7 +1492,7 @@ fn setup_surface(
                         fc,
                         scale,
                         tile_px,
-                        spr.prop_dy,
+                        &spr.props,
                     );
                     // The garrison flies the CONTROLLING faction's colors: a
                     // grayscale cloth sprite tinted at runtime, pinned to the
@@ -1519,12 +1520,17 @@ fn setup_surface(
                                     ..default()
                                 },
                                 // The cloth rides just above the pole, which
-                                // lives in the props layer at its own depth.
+                                // is its own prop object at its own depth.
                                 Transform::from_xyz(
                                     fc.x + offset.x,
                                     fc.y + offset.y,
                                     crate::surface_objects::depth_z(
-                                        fc.y - spr.prop_dy.unwrap_or(0.0) * tile_px,
+                                        fc.y - spr
+                                            .props
+                                            .iter()
+                                            .find(|p| p.name == "flag")
+                                            .map_or(0.0, |p| p.dy)
+                                            * tile_px,
                                     ) + 0.0004,
                                 ),
                             ));
