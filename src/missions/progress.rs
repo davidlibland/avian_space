@@ -1388,9 +1388,10 @@ pub(super) fn instantiate_template(
 
             vec![(stage1_id, s1), (stage2_id, s2), (stage3_id, s3)]
         }
-        // Instantiated ad-hoc by the standing system on landing, never by the
-        // offer rolls.
+        // Instantiated ad-hoc (arrests by the standing system, war/covert by
+        // the front generator), never by the offer rolls.
         MissionTemplate::Arrest { .. } => Vec::new(),
+        MissionTemplate::War { .. } | MissionTemplate::Covert { .. } => Vec::new(),
     }
 }
 

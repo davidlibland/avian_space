@@ -50,6 +50,7 @@ mod surface_pathfinding;
 mod surface_terrain;
 mod utils;
 mod validate_assets;
+mod war;
 mod value_fn;
 mod weapons;
 mod world_assets;
@@ -423,6 +424,7 @@ fn build_app(
     app.add_plugins((item_universe_plugin, session::session_plugin));
     app.add_plugins(standing::standing_plugin);
     app.add_plugins(galaxy::galaxy_plugin);
+    app.add_plugins(war::war_plugin);
 
     // ── Rendering-dependent plugins (skipped in headless) ────────────────
     if headless {

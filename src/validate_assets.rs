@@ -304,6 +304,17 @@ fn validate_mission_templates(iu: &ItemUniverse) {
                     }
                 }
             }
+            MissionTemplate::War { .. } => {}
+            MissionTemplate::Covert { action, .. } => {
+                if let crate::missions::types::CovertAction::Smuggle { commodity, .. } = action {
+                    if !iu.commodities.contains_key(commodity) {
+                        warn!(
+                            "Mission template \"{tmpl_id}\" smuggle commodity \
+                             \"{commodity}\" is not defined in commodities.yaml"
+                        );
+                    }
+                }
+            }
             MissionTemplate::Arrest {
                 service_commodity, ..
             } => {
