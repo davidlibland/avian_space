@@ -1,8 +1,17 @@
-# Galactic War — design (planned 2026-07)
+# Galactic War — design (implemented 2026-07)
 
 Systems change hands between factions through player-driven missions; the
 galaxy's markets, standings, traffic, and mission offers all follow
-automatically. **Nothing here is built yet** — this doc pins the design.
+automatically.
+
+**Status**: phases 1–3 and the news/map polish of phase 4 are BUILT
+(src/galaxy.rs, src/war.rs, the Escort/CarriedBy split in src/carrier.rs,
+War/Covert/Arrest templates in assets/mission_templates.yaml). Two design
+notes from implementation: fronts are usually fought over the UNALIGNED
+buffer systems separating faction cores (direct enemy borders are rare on
+the real map), and campaign tiers key on the SPONSOR's progress toward the
+control threshold. Remaining phase-4 ideas (war-scarcity prices,
+planted-intel hooks, Elo logging) stay future work.
 
 The guiding principle is the one the codebase already lives by: *state is
 data, consequences are derived.* Faction control is one number per

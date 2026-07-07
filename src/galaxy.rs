@@ -106,12 +106,6 @@ impl GalaxyControl {
         self.controllers.get(system).map(String::as_str)
     }
 
-    /// A planet's effective faction: its system's controller (planets follow
-    /// their system; contested systems are effectively Independent).
-    pub fn effective_faction(&self, system: &str) -> Option<&str> {
-        self.controller(system)
-    }
-
     /// Shift `faction`'s share in `system` by `delta`, keeping the simplex
     /// valid: an increase draws first from the unaligned remainder, then
     /// proportionally from the other factions; a decrease releases share back
@@ -274,6 +268,30 @@ fn rederive_traffic_on_influence_change(galaxy: Res<GalaxyControl>, mut iu: ResM
     iu.rederive_ship_presence(&galaxy);
 }
 
+/// Galactic news: surface control flips to the player through the mission
+/// toast queue ("Federation seizes the Drift"). Headless-safe: the toast
+/// resource only exists with the UI plugins.
+fn control_change_news(
+    mut reader: MessageReader<SystemControlChanged>,
+    iu: Res<ItemUniverse>,
+    toast: Option<ResMut<crate::missions::ui::MissionToast>>,
+) {
+    let Some(mut toast) = toast else {
+        return;
+    };
+    for SystemControlChanged { system, controller } in reader.read() {
+        let display = iu
+            .star_systems
+            .get(system)
+            .map(|s| s.display_name.clone())
+            .unwrap_or_else(|| system.clone());
+        toast.push(match controller {
+            Some(f) => format!("GALACTIC NEWS — {f} seizes control of {display}."),
+            None => format!("GALACTIC NEWS — {display} descends into contested chaos."),
+        });
+    }
+}
+
 pub fn galaxy_plugin(app: &mut App) {
     use crate::session::SessionResourceExt;
     app.init_session_resource::<GalaxyControl>()
@@ -284,6 +302,7 @@ pub fn galaxy_plugin(app: &mut App) {
                 influence_on_mission_complete,
                 update_controllers.run_if(resource_changed::<GalaxyControl>),
                 rederive_on_control_change,
+                control_change_news,
                 rederive_traffic_on_influence_change.run_if(resource_changed::<GalaxyControl>),
             )
                 .chain()

@@ -54,10 +54,21 @@ fn dim(c: Color32, t: f32) -> Color32 {
     Color32::from_rgb(l(c.r(), 4), l(c.g(), 4), l(c.b(), 18))
 }
 
-/// The controlling faction of a system: the faction holding its planets, or — for
-/// uninhabited systems — the single faction that dominates its spawns (so the
-/// Precursor deep reads Precursor). Contested borderlands (e.g. the Drift, an even
-/// Federation/Rebel split) return "" and read neutral.
+/// The faction a system reads as on the map. The LIVE controller wins (so
+/// war fronts recolor as they flip, and contested systems read neutral);
+/// systems outside the galaxy sim (the Precursor deep) fall back to the
+/// faction dominating their spawns.
+fn map_faction(sys: &StarSystem, iu: &ItemUniverse, live: Option<Option<&str>>) -> String {
+    match live {
+        Some(Some(f)) => return f.to_string(),
+        Some(None) => return String::new(), // contested → neutral
+        None => {}
+    }
+    system_faction(sys, iu)
+}
+
+/// Static fallback: the faction holding a system's planets, or — for
+/// uninhabited systems — the single faction that dominates its spawns.
 fn system_faction(sys: &StarSystem, iu: &ItemUniverse) -> String {
     use std::collections::HashMap;
     let mut by: HashMap<&str, f32> = HashMap::new();
@@ -191,6 +202,7 @@ fn jump_ui(
     mut travel_ctx: ResMut<TravelContext>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     game_state: Res<PlayerGameState>,
     mission_log: Res<MissionLog>,
     mission_catalog: Res<MissionCatalog>,
@@ -365,7 +377,11 @@ fn jump_ui(
                         }
                     }
 
-                    let base = faction_color(&system_faction(sys, &item_universe));
+                    let live = galaxy
+                        .influence
+                        .contains_key(sys_name.as_str())
+                        .then(|| galaxy.controller(sys_name.as_str()));
+                    let base = faction_color(&map_faction(sys, &item_universe, live));
                     let fill = if is_current || is_visited {
                         base
                     } else {
