@@ -343,7 +343,8 @@ fn save_on_explore(
 /// its NPC spawned immediately, instead of only on the next re-land.
 fn spawn_mission_npcs(
     mut commands: Commands,
-    sprites: Option<Res<crate::surface_civilians::CivilianSprites>>,
+    layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
+    mut images: ResMut<Assets<Image>>,
     paths: Option<Res<crate::surface_pathfinding::SurfacePaths>>,
     cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
     mission_offers: Res<crate::missions::MissionOffers>,
@@ -352,9 +353,11 @@ fn spawn_mission_npcs(
     landed_context: Res<crate::planet_ui::LandedContext>,
     existing: Query<&crate::surface_npc::MissionNpc>,
 ) {
-    let (Some(sprites), Some(paths), Some(cost_map)) = (sprites, paths, cost_map) else {
+    let (Some(mut layers), Some(paths), Some(cost_map)) = (layers, paths, cost_map) else {
         return;
     };
+    let layers = &mut *layers;
+    let walk_speed = layers.walk_speed;
     let planet_name = landed_context.planet_name.as_deref().unwrap_or("");
 
     let already_spawned: std::collections::HashSet<&str> =
@@ -446,10 +449,12 @@ fn spawn_mission_npcs(
 
         crate::surface_npc::spawn_mission_npc(
             &mut commands,
-            &sprites,
+            layers,
+            &mut images,
+            "civilian",
             mission_id,
             spawn_tile,
-            sprites.walk_speed,
+            walk_speed,
             seek,
         );
     }
@@ -488,10 +493,12 @@ fn spawn_mission_npcs(
                 );
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
-                    &sprites,
+                    layers,
+                    &mut images,
+                    "civilian",
                     mission_id,
                     spawn_tile,
-                    sprites.walk_speed,
+                    walk_speed,
                     crate::surface_npc::ObjectiveKind::Meet { seek },
                 );
             }
@@ -507,10 +514,12 @@ fn spawn_mission_npcs(
                     crate::surface_pathfinding::SurfaceCostMap::tile_to_world(door.0, door.1);
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
-                    &sprites,
+                    layers,
+                    &mut images,
+                    "civilian",
                     mission_id,
                     door,
-                    sprites.walk_speed * 1.2,
+                    walk_speed * 1.2,
                     crate::surface_npc::ObjectiveKind::Catch,
                 );
             }
@@ -810,6 +819,7 @@ fn setup_surface(
     game_state: Res<crate::game_save::PlayerGameState>,
     mut comms: ResMut<crate::hud::CommsChannel>,
     mut images: ResMut<Assets<Image>>,
+    mut character_layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
 ) {
     comms.send("");
     commands.insert_resource(ClearColor(Color::BLACK));
@@ -1646,12 +1656,7 @@ fn setup_surface(
         }
 
         // ── Setup civilian NPCs ─────────────────────────────────────────
-        crate::surface_civilians::setup_civilians(
-            &mut commands,
-            &asset_server,
-            &mut atlas_layouts,
-            seed,
-        );
+        crate::surface_civilians::setup_civilians(&mut commands, seed);
 
         // ── Spawn landscape objects (plants, creatures, etc.) ─────────
         {
@@ -1722,11 +1727,25 @@ fn setup_surface(
     // Spawn on the landing pad (always at map center).
     let spawn_pos = tile_to_world(map_w / 2, map_h / 2, map_w, map_h, tile_px);
 
-    let walker_sheet = WalkerSheet::load(
-        &asset_server,
-        &mut atlas_layouts,
-        game_state.gender.sprite_dir(),
-    );
+    // Composite the player's avatar sheet (32px). Falls back to the legacy
+    // 16px boy/girl sheets if the layer catalog isn't available.
+    let (walker_image, walker_layout, foot_offset) = match character_layers
+        .as_deref_mut()
+        .and_then(|layers| {
+            layers
+                .composite(&game_state.avatar, &mut images)
+                .map(|img| (img, layers.layout.clone()))
+        }) {
+        Some((image, layout)) => (image, layout, 14.0),
+        None => {
+            let sheet = WalkerSheet::load(
+                &asset_server,
+                &mut atlas_layouts,
+                game_state.gender.sprite_dir(),
+            );
+            (sheet.image, sheet.layout, 8.0)
+        }
+    };
     let initial_index = crate::surface_character::sprite_index(
         crate::surface_character::Facing::Down,
         crate::surface_character::WalkFrame::Still,
@@ -1735,6 +1754,7 @@ fn setup_surface(
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Walker,
+        crate::surface_objects::FootOffset(foot_offset),
         CharacterAnim::default(),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
@@ -1745,20 +1765,18 @@ fn setup_surface(
         MaxLinearSpeed(WALK_SPEED),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
-            walker_sheet.image.clone(),
+            walker_image,
             TextureAtlas {
-                layout: walker_sheet.layout.clone(),
+                layout: walker_layout,
                 index: initial_index,
             },
         ),
         Transform::from_xyz(
             spawn_pos.x,
             spawn_pos.y,
-            crate::surface_objects::depth_z(spawn_pos.y - 8.0),
+            crate::surface_objects::depth_z(spawn_pos.y - foot_offset),
         ),
     ));
-
-    commands.insert_resource(walker_sheet);
 
     // "Press E" prompt is now shown via the comms ticker (no floating text).
 

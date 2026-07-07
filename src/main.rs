@@ -40,6 +40,7 @@ mod space;
 mod standing;
 mod starfield;
 mod surface;
+mod character_compositor;
 mod surface_character;
 mod surface_civilians;
 mod surface_fauna;
@@ -481,6 +482,8 @@ fn build_app(
     // ── Startup systems ──────────────────────────────────────────────────
     if !headless {
         app.add_systems(Startup, setup); // spawns Camera2d
+        // Character layer catalog for composited NPC/player sprites.
+        app.add_systems(Startup, character_compositor::setup_character_layers);
     }
 
     // In headless mode, skip the main menu and jump straight to Flying.

@@ -19,32 +19,13 @@ use crate::PlayState;
 /// Target average number of civilians walking at once.
 const TARGET_CIVILIAN_COUNT: f32 = 2.0;
 
-// ── RON manifest ─────────────────────────────────────────────────────────
-
-#[derive(Deserialize, Debug)]
-struct CivilianManifest {
-    sprites: Vec<String>,
-    cols: u32,
-    rows: u32,
-    tile_w: u32,
-    tile_h: u32,
-    walk_speed: f32,
-}
-
 // ── Components ───────────────────────────────────────────────────────────
 
+use crate::character_compositor::CharacterLayers;
 use crate::surface_character::CharacterAnim;
 use crate::surface_npc::{Npc, NpcBehavior, Behavior};
 
 // ── Resource ─────────────────────────────────────────────────────────────
-
-/// Loaded civilian sprite data (inserted at surface setup).
-#[derive(Resource)]
-pub struct CivilianSprites {
-    pub images: Vec<Handle<Image>>,
-    pub layout: Handle<TextureAtlasLayout>,
-    pub walk_speed: f32,
-}
 
 /// Spawn timer — controls spawn rate to maintain TARGET_CIVILIAN_COUNT.
 #[derive(Resource)]
@@ -55,50 +36,9 @@ pub struct CivilianSpawnTimer {
 
 // ── Public setup ─────────────────────────────────────────────────────────
 
-/// Load civilian manifest and insert resources.  Call from `setup_surface`.
-pub fn setup_civilians(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    atlas_layouts: &mut Assets<TextureAtlasLayout>,
-    seed: u64,
-) {
-    let manifest: CivilianManifest = match crate::embedded_assets::read_to_string(
-        "assets/sprites/people/civilians.ron",
-    )
-    .ok()
-    .and_then(|t| ron::from_str(&t).ok())
-    {
-        Some(m) => m,
-        None => {
-            eprintln!("[civilians] WARNING: could not load civilians.ron");
-            return;
-        }
-    };
-
-    let images: Vec<Handle<Image>> = manifest
-        .sprites
-        .iter()
-        .map(|path| asset_server.load(path.clone()))
-        .collect();
-
-    let layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
-        UVec2::new(manifest.tile_w, manifest.tile_h),
-        manifest.cols,
-        manifest.rows,
-        None,
-        None,
-    ));
-
-    commands.insert_resource(CivilianSprites {
-        images,
-        layout,
-        walk_speed: manifest.walk_speed,
-    });
-
-    // Average walk time across the map ≈ map_width / speed × tile_px.
-    // With 64 tiles, speed 40, tile 32: ~51 seconds per crossing.
-    // To maintain 2 civilians, spawn one every ~25 seconds.
-    // We'll adjust dynamically based on current count.
+/// Insert the civilian spawn timer.  Call from `setup_surface`.
+/// (Sprites now come from the global [`CharacterLayers`] compositor.)
+pub fn setup_civilians(commands: &mut Commands, seed: u64) {
     commands.insert_resource(CivilianSpawnTimer {
         timer: Timer::from_seconds(2.0, TimerMode::Repeating),
         rng: rand::rngs::StdRng::seed_from_u64(seed.wrapping_add(0xC1C1_0001)),
@@ -110,14 +50,15 @@ pub fn setup_civilians(
 /// Periodically spawn civilian NPCs if below the target count.
 pub fn spawn_civilians(
     mut commands: Commands,
-    sprites: Option<Res<CivilianSprites>>,
+    layers: Option<ResMut<CharacterLayers>>,
+    mut images: ResMut<Assets<Image>>,
     paths_res: Option<Res<SurfacePaths>>,
     mut spawn_timer: ResMut<CivilianSpawnTimer>,
     time: Res<Time>,
     existing: Query<(), With<Npc>>,
 ) {
-    let (Some(sprites), Some(paths)) = (sprites, paths_res) else { return };
-    if paths.paths.is_empty() || sprites.images.is_empty() {
+    let (Some(mut layers), Some(paths)) = (layers, paths_res) else { return };
+    if paths.paths.is_empty() || layers.items.is_empty() {
         return;
     }
 
@@ -145,9 +86,13 @@ pub fn spawn_civilians(
         return;
     }
 
-    // Pick a random sprite.
-    let sprite_idx = rng.r#gen_range(0..sprites.images.len());
-    let image = sprites.images[sprite_idx].clone();
+    // Composite a fresh random civilian look (retry next tick if the layer
+    // images are still loading).
+    let spec = layers.random_spec(rng, "civilian");
+    let Some(image) = layers.composite(&spec, &mut images) else {
+        return;
+    };
+    let walk_speed = layers.walk_speed;
 
     // Convert start tile to world position.
     let (tx, ty) = waypoints[0];
@@ -156,7 +101,7 @@ pub fn spawn_civilians(
     // Build a patrol behavior: walk this path, then pick another on completion.
     // The NPC behavior system will auto-despawn when the queue is empty.
     // We push two patrols so they walk two routes before despawning.
-    let mut behavior = NpcBehavior::new(sprites.walk_speed);
+    let mut behavior = NpcBehavior::new(walk_speed);
     behavior.push(Behavior::Patrol {
         waypoints,
         current_idx: 0,
@@ -173,18 +118,18 @@ pub fn spawn_civilians(
         CharacterAnim::with_interval(0.2),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(4.0),
+        Collider::circle(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
             image,
             TextureAtlas {
-                layout: sprites.layout.clone(),
+                layout: layers.layout.clone(),
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, depth_z(start.y - 8.0)),
+        Transform::from_xyz(start.x, start.y, depth_z(start.y - 14.0)),
     ));
 }
 
@@ -193,12 +138,11 @@ pub fn depth_sort_npcs(
     mut npcs: Query<&mut Transform, (With<Npc>, Without<Walker>)>,
 ) {
     for mut tf in &mut npcs {
-        tf.translation.z = depth_z(tf.translation.y - 8.0);
+        tf.translation.z = depth_z(tf.translation.y - 14.0);
     }
 }
 
 /// Clean up civilian resources on exit.
 pub fn cleanup_civilians(mut commands: Commands) {
-    commands.remove_resource::<CivilianSprites>();
     commands.remove_resource::<CivilianSpawnTimer>();
 }

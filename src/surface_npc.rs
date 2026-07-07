@@ -466,17 +466,20 @@ pub fn update_npc_markers(
 ///   If false, the NPC stands near the building and waits.
 pub fn spawn_mission_npc(
     commands: &mut Commands,
-    sprites: &crate::surface_civilians::CivilianSprites,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    role: &str,
     mission_id: &str,
     door_tile: (u32, u32),
     speed: f32,
     seek: bool,
 ) {
-    use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    let sprite_idx = rng.r#gen_range(0..sprites.images.len());
-    let image = sprites.images[sprite_idx].clone();
+    let spec = layers.random_spec(&mut rng, role);
+    let Some(image) = layers.composite(&spec, images) else {
+        return; // layer images still loading; idempotent caller retries
+    };
     let start = SurfaceCostMap::tile_to_world(door_tile.0, door_tile.1);
 
     let mut behavior = NpcBehavior::new(speed);
@@ -507,18 +510,18 @@ pub fn spawn_mission_npc(
         crate::surface_character::CharacterAnim::with_interval(0.2),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(4.0),
+        Collider::circle(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
             image,
             TextureAtlas {
-                layout: sprites.layout.clone(),
+                layout: layers.layout.clone(),
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 8.0)),
+        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 14.0)),
     )).id();
 
     // Spawn "!" marker as a child.
@@ -528,7 +531,7 @@ pub fn spawn_mission_npc(
             Text2d::new("!"),
             TextFont { font_size: 20.0, ..default() },
             TextColor(Color::srgb(1.0, 0.9, 0.2)),
-            Transform::from_xyz(0.0, 14.0, 0.1).with_scale(Vec3::splat(0.6)),
+            Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
     });
 }
@@ -542,17 +545,20 @@ pub enum ObjectiveKind {
 /// Spawn an NPC for a MeetNpc or CatchNpc mission objective.
 pub fn spawn_objective_npc(
     commands: &mut Commands,
-    sprites: &crate::surface_civilians::CivilianSprites,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    role: &str,
     mission_id: &str,
     door_tile: (u32, u32),
     speed: f32,
     kind: ObjectiveKind,
 ) {
-    use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    let sprite_idx = rng.r#gen_range(0..sprites.images.len());
-    let image = sprites.images[sprite_idx].clone();
+    let spec = layers.random_spec(&mut rng, role);
+    let Some(image) = layers.composite(&spec, images) else {
+        return; // layer images still loading; idempotent caller retries
+    };
     let start = SurfaceCostMap::tile_to_world(door_tile.0, door_tile.1);
 
     // Marker: "?" blue for meet, "!" red for catch.
@@ -613,18 +619,18 @@ pub fn spawn_objective_npc(
         crate::surface_character::CharacterAnim::with_interval(0.18),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(4.0),
+        Collider::circle(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
             image,
             TextureAtlas {
-                layout: sprites.layout.clone(),
+                layout: layers.layout.clone(),
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 8.0)),
+        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 14.0)),
     )).id();
 
     commands.entity(npc_entity).with_children(|parent| {
@@ -633,7 +639,7 @@ pub fn spawn_objective_npc(
             Text2d::new(marker_text),
             TextFont { font_size: 20.0, ..default() },
             TextColor(marker_color),
-            Transform::from_xyz(0.0, 14.0, 0.1).with_scale(Vec3::splat(0.6)),
+            Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
     });
 }

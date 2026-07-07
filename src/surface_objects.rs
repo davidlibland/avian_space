@@ -306,13 +306,17 @@ pub fn spawn_landscape_objects(
 
 // ── Animation system ─────────────────────────────────────────────────────
 
+/// Distance from a character sprite's center down to its feet, for depth
+/// sorting. 14 for composited 32px avatars, 8 for the legacy 16px sheets.
+#[derive(Component)]
+pub struct FootOffset(pub f32);
+
 /// Update the walker's z for depth sorting (every frame).
 pub fn depth_sort_walker(
-    mut walkers: Query<&mut Transform, With<Walker>>,
+    mut walkers: Query<(&mut Transform, Option<&FootOffset>), With<Walker>>,
 ) {
-    let Ok(mut tf) = walkers.single_mut() else { return };
-    // Walker sprite is 16px tall, centered — feet are 8px below center.
-    let foot_y = tf.translation.y - 8.0;
+    let Ok((mut tf, foot)) = walkers.single_mut() else { return };
+    let foot_y = tf.translation.y - foot.map_or(8.0, |f| f.0);
     tf.translation.z = depth_z(foot_y);
 }
 

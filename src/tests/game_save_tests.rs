@@ -5,6 +5,7 @@ fn sample_save() -> PilotSave {
     PilotSave {
         pilot_name: "Zara".to_string(),
         gender: Gender::default(),
+        avatar: None, // legacy save shape — resolved from gender on load
         current_star_system: "sol".to_string(),
         ship_type: "shuttle".to_string(),
         health: 75,

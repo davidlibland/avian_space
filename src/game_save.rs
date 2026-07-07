@@ -39,6 +39,9 @@ pub struct PilotSave {
     pub pilot_name: String,
     #[serde(default)]
     pub gender: Gender,
+    /// Composited character look. `None` in old saves → derived from gender.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<crate::character_compositor::AvatarSpec>,
     pub current_star_system: String,
     pub ship_type: String,
     pub health: i32,
@@ -72,6 +75,7 @@ pub struct PilotSave {
 pub struct PlayerGameState {
     pub pilot_name: String,
     pub gender: Gender,
+    pub avatar: crate::character_compositor::AvatarSpec,
     pub current_star_system: String,
     pub player_ship: Ship,
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
@@ -90,6 +94,7 @@ impl PlayerGameState {
         Self {
             pilot_name: name.to_string(),
             gender,
+            avatar: crate::character_compositor::AvatarSpec::for_gender(gender),
             current_star_system: item_universe.starting_system.clone(),
             player_ship: Ship::from_ship_data(starting_ship_data, &starting_ship),
             weapon_loadout: HashMap::new(),
@@ -167,6 +172,10 @@ impl PlayerGameState {
         Self {
             pilot_name: save.pilot_name.clone(),
             gender: save.gender,
+            avatar: save
+                .avatar
+                .clone()
+                .unwrap_or_else(|| crate::character_compositor::AvatarSpec::for_gender(save.gender)),
             current_star_system: save.current_star_system.clone(),
             player_ship: ship,
             weapon_loadout: save.weapon_loadout.clone(),
@@ -182,6 +191,7 @@ impl PlayerGameState {
         PilotSave {
             pilot_name: self.pilot_name.clone(),
             gender: self.gender,
+            avatar: Some(self.avatar.clone()),
             current_star_system: self.current_star_system.clone(),
             ship_type: self.player_ship.ship_type.clone(),
             health: self.player_ship.health,

@@ -87,3 +87,17 @@ New storylines can be added by writing mission entries in `missions.yaml` with b
 ```bash
 cargo test --features dev
 ```
+
+## Art Credits & Licensing
+
+NPC and player character sprites are composited at runtime from layers derived
+from the [Liberated Pixel Cup (LPC)](https://lpc.opengameart.org/) asset
+collection (via the [Universal LPC Spritesheet Character Generator](https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator)).
+Those art assets — including our derived layer sheets under
+`assets/sprites/people/layers/` — are licensed CC-BY-SA 3.0 / GPL 3.0 (some
+CC0 / OGA-BY / CC-BY); per-artist attributions are auto-generated into
+[`assets/CREDITS-SPRITES.md`](assets/CREDITS-SPRITES.md) by
+`scripts/people_lpc_gen.py`. These licenses cover the art only, not the game
+code. When distributing builds, ship the credits file and avoid wrapping the
+game in DRM (or regenerate with `--strict` to restrict to CC0/OGA-BY/CC-BY
+assets).
