@@ -20,6 +20,20 @@ struct HealthBarFill;
 #[derive(Component)]
 struct CreditsText;
 
+/// Container for the escort overview at the foot of the HUD column.
+/// One row per escort of the player (bay fighters + mission squadrons);
+/// hidden while the player has none.
+#[derive(Component)]
+struct EscortPanel;
+
+/// One escort's row; holds the escort entity it reports on.
+#[derive(Component)]
+struct EscortRow(Entity);
+
+/// The fill node of an escort row's health bar.
+#[derive(Component)]
+struct EscortBarFill(Entity);
+
 #[derive(Component)]
 struct CargoText;
 
@@ -150,7 +164,8 @@ impl Plugin for HudPlugin {
         )
         .add_systems(
             Update,
-            (update_radar_dots, draw_target_reticle).run_if(in_state(PlayState::Flying)),
+            (update_radar_dots, draw_target_reticle, update_escort_panel)
+                .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(
             Update,
@@ -481,9 +496,123 @@ fn spawn_hud(mut commands: Commands) {
                     TextColor(Color::srgb(0.6, 0.85, 0.9)),
                 ));
             });
+
+            // ── Escort overview (foot of the HUD; hidden when no escorts) ──
+            root.spawn((
+                EscortPanel,
+                SpaceOnlyHud,
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(3.0),
+                    padding: UiRect::axes(Val::Px(4.0), Val::Px(3.0)),
+                    border_radius: BorderRadius::all(Val::Px(3.0)),
+                    display: Display::None,
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.0, 0.1, 0.0, 0.6)),
+            ));
         });
 
     commands.insert_resource(RadarEntity(radar_id));
+}
+
+/// Escort overview at the foot of the HUD: one row per escort of the player
+/// (ship name + health bar). Rows are rebuilt when the escort set changes;
+/// bar widths/colors update in place every frame.
+fn update_escort_panel(
+    mut commands: Commands,
+    player_query: Query<Entity, With<Player>>,
+    escorts_query: Query<(Entity, &Ship, &crate::carrier::Escort)>,
+    mut panel_query: Query<(Entity, &mut Node), With<EscortPanel>>,
+    rows_query: Query<(Entity, &EscortRow)>,
+    mut fills_query: Query<(&mut Node, &mut BackgroundColor, &EscortBarFill), Without<EscortPanel>>,
+) {
+    let Ok(player_entity) = player_query.single() else { return };
+    let Ok((panel_entity, mut panel_node)) = panel_query.single_mut() else { return };
+
+    // The player's escorts, in a stable order.
+    let mut escorts: Vec<(Entity, &Ship)> = escorts_query
+        .iter()
+        .filter(|(_, _, e)| e.mother == player_entity)
+        .map(|(ent, ship, _)| (ent, ship))
+        .collect();
+    escorts.sort_by_key(|(ent, _)| *ent);
+
+    panel_node.display = if escorts.is_empty() {
+        Display::None
+    } else {
+        Display::Flex
+    };
+
+    // Rebuild rows when the set of escort entities changes.
+    let mut current: Vec<Entity> = rows_query.iter().map(|(_, row)| row.0).collect();
+    current.sort();
+    let desired: Vec<Entity> = escorts.iter().map(|(e, _)| *e).collect();
+    if current != desired {
+        for (row_entity, _) in rows_query.iter() {
+            safe_despawn(&mut commands, row_entity);
+        }
+        commands.entity(panel_entity).with_children(|panel| {
+            for (escort_entity, ship) in &escorts {
+                panel
+                    .spawn((
+                        EscortRow(*escort_entity),
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(1.0),
+                            ..default()
+                        },
+                    ))
+                    .with_children(|row| {
+                        row.spawn((
+                            Text::new(ship.data.display_name.clone()),
+                            TextFont {
+                                font_size: 10.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.5, 1.0, 0.6)),
+                        ));
+                        // Bar track + fill.
+                        row.spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                height: Val::Px(4.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgba(0.1, 0.25, 0.1, 0.8)),
+                        ))
+                        .with_children(|track| {
+                            track.spawn((
+                                EscortBarFill(*escort_entity),
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    height: Val::Percent(100.0),
+                                    ..default()
+                                },
+                                BackgroundColor(Color::srgb(0.2, 0.9, 0.3)),
+                            ));
+                        });
+                    });
+            }
+        });
+        return; // fills spawn next frame; update them then
+    }
+
+    // Update bar fills in place.
+    for (mut node, mut bg, fill) in &mut fills_query {
+        let Some((_, ship)) = escorts.iter().find(|(e, _)| *e == fill.0) else {
+            continue;
+        };
+        let frac = (ship.health.max(0) as f32 / ship.max_health().max(1) as f32).clamp(0.0, 1.0);
+        node.width = Val::Percent(frac * 100.0);
+        *bg = BackgroundColor(if frac > 0.5 {
+            Color::srgb(0.2, 0.9, 0.3) // healthy: green
+        } else if frac > 0.25 {
+            Color::srgb(0.95, 0.8, 0.2) // hurt: amber
+        } else {
+            Color::srgb(1.0, 0.25, 0.15) // critical: red
+        });
+    }
 }
 
 fn update_health_bar(
@@ -524,7 +653,10 @@ fn update_radar_dots(
     config: Res<RadarConfig>,
     time: Res<Time>,
     player_query: Query<(Entity, &Transform, &Ship), With<Player>>,
-    ships_query: Query<(Entity, &Transform, &Ship), (With<Ship>, Without<Player>)>,
+    ships_query: Query<
+        (Entity, &Transform, &Ship, Option<&crate::carrier::Escort>),
+        (With<Ship>, Without<Player>),
+    >,
     planets_query: Query<(Entity, &Transform), With<Planet>>,
     dots_query: Query<Entity, With<RadarDot>>,
 ) {
@@ -591,7 +723,7 @@ fn update_radar_dots(
             });
 
         // ── Ships ────────────────────────────────────────────────────────
-        for (ship_entity, ship_tf, ship) in ships_query.iter() {
+        for (ship_entity, ship_tf, ship, escort) in ships_query.iter() {
             let offset = ship_tf.translation.truncate() - player_pos;
             if offset.length() > config.range {
                 continue;
@@ -605,9 +737,12 @@ fn update_radar_dots(
             let rx = half + (offset.x / config.range) * half - DOT_SIZE / 2.0;
             let ry = half - (offset.y / config.range) * half - DOT_SIZE / 2.0;
 
+            let is_player_escort = escort.is_some_and(|e| e.mother == player_entity);
             let targets_player =
                 matches!(&ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
-            let color = if targets_player {
+            let color = if is_player_escort {
+                Color::srgb(0.0, 1.0, 0.3) // green: player's escort wing
+            } else if targets_player {
                 Color::srgb(1.0, 0.15, 0.15) // red: hostile
             } else {
                 Color::WHITE
