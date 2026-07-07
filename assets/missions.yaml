@@ -4,10 +4,25 @@
 # (mission log, I) ends the whole tutorial — the rest stays locked forever,
 # which is the intended exit for experienced pilots.
 tutorial_flight:
-  briefing: "Flight check, pilot. Thrust with UP, turn with LEFT/RIGHT, and hold DOWN to flip for a braking burn. Now earn your wings: press Q to target the nearest asteroid, hold SPACE to break it up, then hold A — the intercept autopilot — to scoop 2 units of iron from the debris. (F1 shows every control.)"
-  success_text: "Ore in the hold — you can fly. Next: getting back on the ground."
+  briefing: "Flight check, pilot. Thrust with UP, turn with LEFT/RIGHT, and hold DOWN to flip for a braking burn. Now find the ground: cycle planet targets with [ and ], select Earth, hold A — the intercept autopilot — and press L when close to request docking. On the surface walk with WASD and press E to enter buildings. Stop by the OUTFITTER and buy a Laser; you'll want teeth for the next lesson. (F1 shows every control.)"
+  success_text: "Clean approach, clean landing. Fit that laser before you lift off — asteroids don't crack themselves."
   failure_text: "Tutorial ended. You clearly know your way around a cockpit — the rest of the course stands down."
   preconditions: []
+  offer:
+    kind: auto
+  objective:
+    kind: land_on_planet
+    planet: earth
+  completion_effects:
+  - kind: pay
+    credits: 300
+tutorial_mining:
+  briefing: "Rocks are money. In space, press Q to target the nearest asteroid, hold SPACE to break it up, then hold A to scoop 2 units of iron from the debris. No laser yet? Earth's outfitter sells them for pocket change."
+  success_text: "Ore in the hold. Sell it at any market — every planet pays its own price."
+  failure_text: "Tutorial ended. The asteroids will keep."
+  preconditions:
+  - kind: completed
+    mission: tutorial_flight
   offer:
     kind: auto
   objective:
@@ -18,28 +33,13 @@ tutorial_flight:
   completion_effects:
   - kind: pay
     credits: 200
-tutorial_landing:
-  briefing: "Time to land. Cycle planet targets with [ and ] until Earth is selected, hold A to let the autopilot take you in, then press L when close to request docking. On the ground: walk with WASD, press E to enter buildings — sell that iron at the MARKET — and walk back to your ship to lift off."
-  success_text: "Docking clamps released and your iron sold. Every planet trades at its own prices — remember that."
-  failure_text: "Tutorial ended. The landing pad will figure itself out."
-  preconditions:
-  - kind: completed
-    mission: tutorial_flight
-  offer:
-    kind: auto
-  objective:
-    kind: land_on_planet
-    planet: earth
-  completion_effects:
-  - kind: pay
-    credits: 300
 tutorial_jump:
-  briefing: "Let's leave the system. Fuel is jumps — top up at the MECHANIC when landed. In space, press J to open the star map, pick BARNARD, and confirm. The flash does the rest."
+  briefing: "Let's leave the system. Fuel is jumps — top up at the FUEL STATION when landed. In space, press J to open the star map, pick BARNARD, and confirm. The flash does the rest."
   success_text: "Welcome to Barnard. New system, new prices, new faces."
   failure_text: "Tutorial ended. The stars aren't going anywhere."
   preconditions:
   - kind: completed
-    mission: tutorial_landing
+    mission: tutorial_mining
   offer:
     kind: auto
   objective:

@@ -392,7 +392,7 @@ pub struct Ship {
     pub recent_landings: HashMap<String, f32>,
     pub credits: i128,
     /// Current fuel = jumps remaining (max = `data.fuel_capacity`). Each system
-    /// jump consumes 1; refuel at the mechanic.
+    /// jump consumes 1; refuel at the fuel station.
     #[serde(default)]
     pub fuel: u16,
     // A map indicating inclusion in factions

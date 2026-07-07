@@ -1458,7 +1458,7 @@ mod tutorial {
             "the tutorial greets a fresh pilot unprompted"
         );
         assert!(matches!(
-            app.world().resource::<MissionLog>().status("tutorial_landing"),
+            app.world().resource::<MissionLog>().status("tutorial_mining"),
             MissionStatus::Locked
         ));
 
@@ -1472,7 +1472,7 @@ mod tutorial {
             app.world().resource::<MissionLog>().status("tutorial_flight"),
             MissionStatus::Failed
         ));
-        for stage in ["tutorial_landing", "tutorial_jump", "tutorial_trade"] {
+        for stage in ["tutorial_mining", "tutorial_jump", "tutorial_trade"] {
             assert!(
                 matches!(
                     app.world().resource::<MissionLog>().status(stage),

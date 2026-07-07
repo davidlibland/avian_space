@@ -472,7 +472,7 @@ fn jump_ui(
             if fuel == 0 {
                 ui.colored_label(
                     Color32::from_rgb(220, 80, 80),
-                    "Out of fuel — land at a mechanic to refuel.",
+                    "Out of fuel — land and refuel at the fuel station.",
                 );
             }
             if ui.button("Close  [J]").clicked() {
