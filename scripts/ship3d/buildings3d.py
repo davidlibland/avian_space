@@ -43,10 +43,10 @@ STYLES = {
     "colony": dict(biome="garden", roof="gable",
                    wall=C(156, 170, 138), wall_d=C(98, 112, 82),
                    beam=C(94, 70, 48), roof_c=C(168, 104, 74),
-                   trim=C(206, 212, 196), glow=C(190, 236, 180)),
+                   trim=C(206, 212, 196), glow=C(150, 224, 130)),
     "cryo": dict(biome="ice", roof="dome",
                  wall=C(195, 218, 238), wall_d=C(150, 180, 210),
-                 roof_c=C(220, 234, 246), trim=C(238, 246, 252), glow=C(145, 220, 255)),
+                 roof_c=C(220, 234, 246), trim=C(238, 246, 252), glow=C(110, 205, 255)),
     "extraction": dict(biome="rocky", roof="flat_industrial",
                        wall=C(118, 95, 68), wall_d=C(78, 62, 46),
                        roof_c=C(92, 78, 64), trim=C(150, 130, 100), glow=C(255, 135, 55)),
@@ -125,15 +125,22 @@ def mats(s):
         roof=textured(B.toon_material("roof", s["roof_c"], spec=0.12), ROOF_TEX[s["biome"]],
                       s["roof_c"], scale=5.5),
         roof_d=B.toon_material("roof_d", tuple(c * 0.7 for c in s["roof_c"]), spec=0.12),  # shingle-course shadow
-        trim=B.toon_material("trim", s["trim"], spec=0.2),
+        trim=B.toon_material("trim", s["trim"], spec=0.1),
         beam=textured(B.toon_material("beam", s.get("beam", s["wall_d"]), spec=0.0), "wood",
                       s.get("beam", s["wall_d"]), scale=4.0),
         plant=B.toon_material("plant", s.get("plant", C(96, 152, 74)), spec=0.0),
         stone=textured(B.toon_material("stone", C(140, 136, 128), spec=0.05), "brick", C(140, 136, 128), scale=6.0),
         dark=B.toon_material("dark", C(40, 42, 48), spec=0.0),
-        metal=textured(B.toon_material("metal", C(122, 128, 136), spec=1.3, spec_sharp=0.82), "noise",
+        # spec is ADDED on top of the cel shade, and a flat face square to the
+        # camera catches the glossy lobe across its whole area — 1.3 turned
+        # every forward-facing metal panel pure white (gantry beams, pump
+        # tops). Keep a faint sharp glint instead.
+        metal=textured(B.toon_material("metal", C(122, 128, 136), spec=0.35, spec_sharp=0.9), "noise",
                        C(122, 128, 136), scale=9.0),
-        glow=B.glow_material("glow", s["glow"], strength=5.0),
+        # strength 5 pushed windows/signs past white — hue was lost entirely;
+        # ~1.2 keeps them clearly lit AND clearly colored (pale palette glows
+        # were also deepened, or they tone-map to white regardless).
+        glow=B.glow_material("glow", s["glow"], strength=1.2),
     )
 
 
@@ -481,10 +488,13 @@ def build_garrison(s, m):
     B.add_cylinder("pp_gun__breech", (-2.6, -d / 2 - 1.2, 1.12), 0.21, 0.4, m["dark"], axis="x")
     # memorial plaque glowing on the plinth's south face
     B.add_box("pp_gun__plaque", (-1.9, -d / 2 - 1.74, 0.3), (0.7, 0.06, 0.28), m["glow"], bevel=0.02)
-    # Sandbag emplacement guarding the right of the approach, two courses high.
+    # Sandbag emplacement guarding the right of the approach, two courses
+    # high. TWO prop groups: the middle bag sits a quarter-tile forward of
+    # its flankers, so they can't share a sort line.
     for sx, sy in ((1.35, -d / 2 - 0.85), (1.95, -d / 2 - 1.1), (2.55, -d / 2 - 0.85)):
-        B.add_box("pp_bags__a", (sx, sy, 0.18), (0.58, 0.42, 0.34), m["wall_d"], bevel=0.14)
-        B.add_box("pp_bags__b", (sx + 0.08, sy + 0.04, 0.44), (0.5, 0.38, 0.3), m["wall_d"], bevel=0.14)
+        g = "pp_bagsf" if sy < -d / 2 - 1.0 else "pp_bagsb"
+        B.add_box(f"{g}__a", (sx, sy, 0.18), (0.58, 0.42, 0.34), m["wall_d"], bevel=0.14)
+        B.add_box(f"{g}__b", (sx + 0.08, sy + 0.04, 0.44), (0.5, 0.38, 0.3), m["wall_d"], bevel=0.14)
     # Glowing recruitment board beside the door ("the flag remembers").
     B.add_cylinder("pp_board__post", (0.95, -d / 2 - 0.55, 0.62), 0.05, 1.24, m["metal"], axis="z")
     B.add_box("pp_board__face", (0.95, -d / 2 - 0.62, 1.3), (0.82, 0.06, 0.62), m["glow"], bevel=0.02)
@@ -665,7 +675,8 @@ PROP_DY = {
     ("mechanic", "engine"): 2.05, ("mechanic", "plate"): 1.2,
     ("mechanic", "toolbox"): 1.7,
     ("fuel_station", "totem"): 0.6, ("fuel_station", "pumps"): 1.85,
-    ("garrison", "gun"): 1.7, ("garrison", "bags"): 1.3,
+    ("garrison", "gun"): 1.7,
+    ("garrison", "bagsf"): 1.3, ("garrison", "bagsb"): 1.05,
     ("garrison", "board"): 0.65, ("garrison", "flag"): -0.3,
 }
 

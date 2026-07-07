@@ -606,6 +606,17 @@ fn building_kinds_for_planet(
 /// Template (footprint + door) used to place each building kind. Chosen so the
 /// baked 3/4 sprite — which assumes this footprint — fits. Every style provides
 /// these three (cryo/station were given the missing two).
+/// Door (walkable, sensor) tiles for a building: the template's entry
+/// points — except the SHIPYARD, whose baked 3/4 sprite is an open hull-bay:
+/// its whole front row is a walkable threshold apart from the corner pillars.
+fn door_tiles_for(kind: BuildingKind, tmpl: &crate::world_assets::BuildingTemplate) -> Vec<(u32, u32)> {
+    if kind == BuildingKind::Shipyard && tmpl.width >= 3 {
+        (1..tmpl.width - 1).map(|c| (c, 0)).collect()
+    } else {
+        tmpl.entry_points.clone()
+    }
+}
+
 fn kind_template(kind: BuildingKind) -> &'static str {
     match kind {
         BuildingKind::Outfitter => "small_house",    // 4×4
@@ -1110,13 +1121,13 @@ fn setup_surface(
             std::collections::HashSet::new();
 
         // Template buildings: mark each non-zero tile as solid (except doors).
-        for &(_, bx, by, ti) in &building_assignments {
+        for &(kind, bx, by, ti) in &building_assignments {
             if let Some(tmpl) = templates.get(ti) {
-                let door_set: std::collections::HashSet<(u32, u32)> = tmpl
-                    .entry_points
-                    .iter()
-                    .map(|&(dc, dr)| (bx + dc, by + dr))
-                    .collect();
+                let door_set: std::collections::HashSet<(u32, u32)> =
+                    door_tiles_for(kind, tmpl)
+                        .into_iter()
+                        .map(|(dc, dr)| (bx + dc, by + dr))
+                        .collect();
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
                         let tile_idx = tmpl.tiles[row as usize][col as usize];
@@ -1461,7 +1472,7 @@ fn setup_surface(
                 // from the template's `entry_points` (not tile values), so the
                 // collision matches the floorplan + sprite exactly.
                 let door_set: std::collections::HashSet<(u32, u32)> =
-                    tmpl.entry_points.iter().copied().collect();
+                    door_tiles_for(kind, tmpl).into_iter().collect();
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
                         let tx = anchor_tx + col;
