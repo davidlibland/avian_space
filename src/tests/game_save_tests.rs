@@ -29,6 +29,7 @@ fn basic_item_universe() -> ItemUniverse {
         display_name: String::new(),
         tech_level: 1,
         sold_by: Vec::new(),
+        aura: None,
         thrust: 200.0,
         max_speed: 300.0,
         torque: 20.0,

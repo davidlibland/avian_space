@@ -355,10 +355,10 @@ impl Weapon {
         self.speed * self.lifetime
     }
     /// Particle emitter component for this weapon's projectile, when declared.
-    pub fn particle_emitter(&self) -> Option<crate::explosions::WeaponParticleEmitter> {
+    pub fn particle_emitter(&self) -> Option<crate::explosions::ParticleEmitter> {
         self.particles
             .as_ref()
-            .map(|fx| crate::explosions::WeaponParticleEmitter {
+            .map(|fx| crate::explosions::ParticleEmitter {
                 fx: fx.clone(),
                 color: fx.color.unwrap_or(self.color),
                 accum: 0.0,

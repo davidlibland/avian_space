@@ -386,3 +386,86 @@ fn ai_auto_deploys_decoy_against_inbound_missile() {
     let world = app.world_mut();
     assert_eq!(world.query::<&Decoy>().iter(world).count(), 1);
 }
+
+/// The precursor lure is an AMMO-LESS decoy: it fires forever (no ammo
+/// tracking, cooldown is the only limiter) — the mechanism that renders
+/// guided weapons near-useless against alien hulls.
+#[test]
+fn ammoless_lure_fires_repeatedly() {
+    let iu = real_universe();
+    let lure = iu.weapons.get("precursor_lure").expect("lure exists");
+    assert!(matches!(lure.behavior, WeaponBehavior::Decoy { strength } if strength >= 0.9));
+    assert!(lure.ammo.is_none(), "no ammo: the lure recharges, never runs dry");
+
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(iu)
+        .add_message::<FireCommand>()
+        .add_message::<WeaponFired>()
+        .add_message::<DecoyDeployed>()
+        .add_message::<crate::carrier::SpawnEscort>()
+        .add_systems(Update, weapon_fire);
+    let mut ship = crate::ship::Ship::default();
+    ship.weapon_systems = WeaponSystems::build(
+        &HashMap::from([("precursor_lure".to_string(), (1u8, None))]),
+        app.world().resource::<ItemUniverse>(),
+    );
+    let alien = app
+        .world_mut()
+        .spawn((
+            ship,
+            Transform::default(),
+            Position(Vec2::ZERO),
+            LinearVelocity(Vec2::ZERO),
+        ))
+        .id();
+    // Fire, reset the cooldown by hand, fire again — no ammo ever consumed.
+    for round in 1..=3 {
+        app.world_mut().write_message(FireCommand {
+            ship: alien,
+            weapon_type: "precursor_lure".into(),
+            target: None,
+        });
+        app.update();
+        let world = app.world_mut();
+        let count = world.query::<&Decoy>().iter(world).count();
+        assert_eq!(count, round, "a fresh lure every volley");
+        let mut ship = world.get_mut::<crate::ship::Ship>(alien).unwrap();
+        let ws = ship.weapon_systems.find_weapon("precursor_lure").unwrap();
+        assert_eq!(ws.ammo_quantity, None, "still no ammo tracking");
+        let d = ws.cooldown.duration();
+        ws.cooldown.tick(d);
+    }
+}
+
+/// Ships whose data declares an aura get their particle emitter attached
+/// (the violet shimmer that makes the tiny precursor hulls readable).
+#[test]
+fn precursor_ships_get_their_aura() {
+    let iu = real_universe();
+    assert!(
+        iu.ships["precursor_seeker"].aura.is_some(),
+        "the smallest alien hull declares an aura"
+    );
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_systems(Update, crate::explosions::attach_ship_auras_for_tests);
+    let seeker = crate::ship::Ship::from_ship_data(&iu.ships["precursor_seeker"], "precursor_seeker");
+    let plain = crate::ship::Ship::from_ship_data(&iu.ships["shuttle"], "shuttle");
+    let alien = app.world_mut().spawn(seeker).id();
+    let normie = app.world_mut().spawn(plain).id();
+    app.update();
+    app.update();
+    assert!(
+        app.world()
+            .get::<crate::explosions::ParticleEmitter>(alien)
+            .is_some(),
+        "aura emitter attached"
+    );
+    assert!(
+        app.world()
+            .get::<crate::explosions::ParticleEmitter>(normie)
+            .is_none(),
+        "no aura on plain hulls"
+    );
+}

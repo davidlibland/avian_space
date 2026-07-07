@@ -748,6 +748,7 @@ precursor_seeker:
   cargo_space: 0
   item_space: 4
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [1, null]
   radius: 10.0
   price: 35000
@@ -758,6 +759,12 @@ precursor_seeker:
   required_unlocks: [precursor_ship_license]
   tech_level: 4
   sold_by: [Order]
+  aura:
+    rate: 30.0
+    particle_lifetime: 0.9
+    speed: 10.0
+    size: 1.6
+    color: [0.75, 0.5, 1.0]
 precursor_sentinel:
   thrust: 90.0
   max_speed: 150.0
@@ -766,6 +773,7 @@ precursor_sentinel:
   cargo_space: 0
   item_space: 8
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [2, null]
   radius: 18.0
   price: 120000
@@ -776,6 +784,12 @@ precursor_sentinel:
   required_unlocks: [precursor_ship_license]
   tech_level: 4
   sold_by: [Order]
+  aura:
+    rate: 18.0
+    particle_lifetime: 0.8
+    speed: 12.0
+    size: 1.6
+    color: [0.75, 0.5, 1.0]
 precursor_harbinger:
   thrust: 82.0
   max_speed: 142.0
@@ -784,6 +798,7 @@ precursor_harbinger:
   cargo_space: 0
   item_space: 14
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [3, null]
   radius: 30.0
   price: 280000
@@ -794,6 +809,12 @@ precursor_harbinger:
   required_unlocks: [precursor_ship_license]
   tech_level: 4
   sold_by: [Order]
+  aura:
+    rate: 16.0
+    particle_lifetime: 0.8
+    speed: 14.0
+    size: 1.8
+    color: [0.75, 0.5, 1.0]
 precursor_sleeper:
   thrust: 40.0
   max_speed: 70.0
@@ -802,6 +823,7 @@ precursor_sleeper:
   cargo_space: 0
   item_space: 24
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [4, null]
   radius: 60.0
   price: 650000
@@ -812,6 +834,12 @@ precursor_sleeper:
   required_unlocks: [precursor_ship_license]
   tech_level: 4
   sold_by: [Order]
+  aura:
+    rate: 14.0
+    particle_lifetime: 0.9
+    speed: 18.0
+    size: 2.2
+    color: [0.75, 0.5, 1.0]
 
 # ── Faction economy ships (traders & miners) ─────────────────────────────────────
 frontier_prospector:
@@ -972,6 +1000,7 @@ precursor_gleaner:
   cargo_space: 8
   item_space: 4
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [1, null]
   radius: 9.0
   price: 40000
@@ -982,3 +1011,9 @@ precursor_gleaner:
   required_unlocks: [precursor_ship_license]
   tech_level: 4
   sold_by: [Order]
+  aura:
+    rate: 30.0
+    particle_lifetime: 0.9
+    speed: 10.0
+    size: 1.6
+    color: [0.75, 0.5, 1.0]

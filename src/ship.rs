@@ -248,6 +248,11 @@ pub struct ShipData {
     pub sold_by: Vec<String>,
     #[serde(default)]
     pub display_name: String,
+    /// Optional continuous particle aura around the hull (e.g. the violet
+    /// precursor shimmer that makes tiny alien hulls readable against the
+    /// void). Rides the same emitter as weapon particle trails.
+    #[serde(default)]
+    pub aura: Option<crate::weapons::ParticleFx>,
     /// Named unlock flags the player must have (all of) before this ship
     /// appears in shipyard listings. Empty = always available.
     #[serde(default)]

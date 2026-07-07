@@ -448,3 +448,19 @@ rebel_chaff:
     ammo:
         !Ammo:
             space: 1
+precursor_lure:
+    name: precursor_lure
+    lifetime: 3.0
+    speed: 35.0
+    cooldown: 2.0
+    color: [0.75, 0.5, 1.0]
+    damage: 0
+    display_name: "Precursor Lure"
+    behavior: !Decoy { strength: 0.95 }
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 40.0
+        particle_lifetime: 1.2
+        speed: 16.0
+        size: 2.4
+        replace_sprite: true

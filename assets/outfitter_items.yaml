@@ -300,3 +300,12 @@ repair_bot:
     display_name: "Hull Repair Bot"
     effect: !RepairBot { hp_per_sec: 0.6 }
     tech_level: 3
+precursor_lure:
+  !PrimaryWeapon
+    price: 6000
+    space: 1
+    weapon_type: precursor_lure
+    display_name: "Precursor Lure"
+    required_unlocks: [precursor_tech_license]
+    tech_level: 4
+    factions: [Order]

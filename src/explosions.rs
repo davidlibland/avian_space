@@ -10,10 +10,47 @@ pub fn explosions_plugin(app: &mut App) {
         .add_message::<TriggerJumpFlash>()
         .add_systems(
             Update,
-            (trigger_explosions, trigger_jump_flashes, emit_weapon_particles)
+            (
+                trigger_explosions,
+                trigger_jump_flashes,
+                emit_weapon_particles,
+                attach_ship_auras,
+            )
                 .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(Update, tick_particles.run_if(in_state(PlayState::Flying)));
+}
+
+/// Give ships whose data declares an `aura:` their particle emitter (once).
+/// Idempotent over all spawn paths — AI spawner, escorts, the player.
+fn attach_ship_auras(
+    mut commands: Commands,
+    ships: Query<(Entity, &crate::ship::Ship), Without<ParticleEmitter>>,
+) {
+    attach_ship_auras_impl(&mut commands, &ships);
+}
+
+#[cfg(test)]
+pub fn attach_ship_auras_for_tests(
+    mut commands: Commands,
+    ships: Query<(Entity, &crate::ship::Ship), Without<ParticleEmitter>>,
+) {
+    attach_ship_auras_impl(&mut commands, &ships);
+}
+
+fn attach_ship_auras_impl(
+    commands: &mut Commands,
+    ships: &Query<(Entity, &crate::ship::Ship), Without<ParticleEmitter>>,
+) {
+    for (entity, ship) in ships {
+        if let Some(fx) = &ship.data.aura {
+            commands.entity(entity).insert(ParticleEmitter {
+                fx: fx.clone(),
+                color: fx.color.unwrap_or([0.8, 0.6, 1.0]),
+                accum: 0.0,
+            });
+        }
+    }
 }
 
 // ── Weapon particle trails ───────────────────────────────────────────────────
@@ -22,7 +59,7 @@ pub fn explosions_plugin(app: &mut App) {
 /// `particles:` block — a continuous emitter riding the entity. The flare's
 /// "slow firework" look is entirely data: low speed, long particle life.
 #[derive(Component)]
-pub struct WeaponParticleEmitter {
+pub struct ParticleEmitter {
     pub fx: crate::weapons::ParticleFx,
     /// Base color (from the fx override or the weapon color).
     pub color: [f32; 3],
@@ -36,7 +73,7 @@ fn emit_weapon_particles(
     time: Res<Time>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    mut emitters: Query<(&Transform, &mut WeaponParticleEmitter)>,
+    mut emitters: Query<(&Transform, &mut ParticleEmitter)>,
 ) {
     let mut rng = rand::thread_rng();
     let dt = time.delta_secs();
