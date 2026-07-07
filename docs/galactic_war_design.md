@@ -225,10 +225,15 @@ target holds a landable covert venue:
 
 | War | Fronts (sponsor: home → target) |
 |---|---|
-| Federation–Rebel | sol→alpha_centauri, barnard→drift / sirius→alpha_centauri, procyon→drift (venues: centauri_post, drift_anchorage) |
+| Federation–Rebel | sol→alpha_centauri, barnard→drift / sirius→alpha_centauri, procyon→drift (venues: centauri_post, drift_station) |
 | Federation–Bastion | kepler_22 & epsilon_eridani → the_marches / iron_march & coldforge → the_marches (venue: marches_freeport) |
 | Bastion–FreeFrontier | iron_march → drumlin & the_barrens / drumlin & lowmark → the_barrens (venue: barrens_hold) |
 | Helios–Order | the_foundry → pilgrims_deep / the_threshold → pilgrims_deep (venue: pilgrims_rest) |
+
+Venue texture: alpha_centauri keeps a planeted outpost (it's a star
+system); drift's venue is a REMOTE STATION (a landable habitat, no world);
+the_gyre and the_long_dark are truly empty wilderness — unaligned pirate
+pockets no front targets, so they need no venue at all.
 
 Bastion–Rebel and FreeFrontier–Helios stay COLD by design: their cores sit
 on opposite ends of the map with third factions between them — the enmity

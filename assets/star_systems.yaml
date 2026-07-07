@@ -587,22 +587,19 @@ drift:
   map_position: [100.0, 150.0]
   connections: [procyon, halcyon, barnard, alpha_centauri]
   planets:
-    drift_anchorage:
+    drift_station:
       planet_type: rocky
       tech_level: 1
       location: [500.0, -350.0]
-      description: A tumbling ore-hauler hulk fused into a planetoid, now a way-station for whoever holds the surrounding dark this month. Its docking fees change with the flag.
-      radius: 20.0
-      color: [0.45, 0.48, 0.5]
+      description: A remote relay station bolted onto a captured iron asteroid — no ground, no flag, one long habitation ring. Whoever holds the surrounding dark this month sets the docking fees, and everyone lies about their cargo.
+      radius: 15.0
+      color: [0.4, 0.42, 0.48]
       commodities:
         water: 3
         oxygen: 3
-        iron: 2
-        silicates: 3
         food: 6
         fuel_cells: 16
         electronics: 20
-        titanium: 12
   astroid_fields:
     -
       location: [0., 0.]
@@ -997,7 +994,7 @@ the_verge:
 kuiper_reach:
   contestable: true
   map_position: [180.0, 580.0]
-  connections: [outer_dark, ceres_freehold, the_verge]
+  connections: [outer_dark, ceres_freehold, the_verge, the_gyre]
   astroid_fields:
     -
       location: [240.0, -160.0]
@@ -1677,7 +1674,7 @@ drumlin:
 tycho_drift:
   contestable: true
   map_position: [-340.0, -300.0]
-  connections: [epsilon_eridani, tycho_yards, coldforge]
+  connections: [epsilon_eridani, tycho_yards, coldforge, the_long_dark]
   display_name: "Tycho Drift"
   planets:
     tycho_drift:
@@ -1723,7 +1720,7 @@ tycho_drift:
 coldforge:
   contestable: true
   map_position: [-620.0, -310.0]
-  connections: [the_anvil, tycho_drift, iron_march, bastion, the_marches]
+  connections: [the_anvil, tycho_drift, iron_march, bastion, the_marches, the_long_dark]
   display_name: "Cold Forge"
   planets:
     coldforge:
@@ -1816,7 +1813,7 @@ wayfarer:
 outer_dark:
   contestable: true
   map_position: [370.0, 600.0]
-  connections: [kuiper_reach, the_verge, wayfarer]
+  connections: [kuiper_reach, the_verge, wayfarer, the_gyre]
   display_name: "The Outer Dark"
   planets:
     outer_dark:
@@ -2080,3 +2077,32 @@ pilgrims_deep:
     radius: 500.0
     commodities:
       iron: 1.0
+
+# Truly empty space — no planets, no stations. Unaligned pockets where the
+# derived traffic sends pirates after the wealth passing through. Neither
+# borders an enemy pair, so no fronts target them and no covert venue is
+# needed; they exist so the map keeps some genuine wilderness.
+the_gyre:
+  contestable: true
+  map_position: [270.0, 760.0]
+  connections: [kuiper_reach, outer_dark]
+  planets: {}
+  astroid_fields:
+  - location: [100.0, 100.0]
+    number: 24
+    radius: 750.0
+    commodities:
+      iron: 1.0
+  - location: [-350.0, -250.0]
+    number: 12
+    radius: 450.0
+
+the_long_dark:
+  contestable: true
+  map_position: [-480.0, -460.0]
+  connections: [tycho_drift, coldforge]
+  planets: {}
+  astroid_fields:
+  - location: [0.0, 0.0]
+    number: 15
+    radius: 650.0
