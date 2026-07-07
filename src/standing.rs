@@ -101,15 +101,6 @@ pub fn markup_price(price: i128, markup: f32) -> i128 {
     }
 }
 
-/// The faction a planet answers to, if it's a real faction the standing
-/// system tracks (Independent worlds don't care who you've angered).
-pub fn planet_faction(planet: &crate::planets::PlanetData) -> Option<&str> {
-    match planet.faction.as_str() {
-        "" | "Independent" => None,
-        f => Some(f),
-    }
-}
-
 
 
 // ── Systems ──────────────────────────────────────────────────────────────────
@@ -226,17 +217,22 @@ fn subst(s: &str, vars: &[(&str, String)]) -> String {
 /// corvette — someone is always raiding somebody.
 fn penal_bounty_ship(iu: &ItemUniverse, faction: &str) -> String {
     let enemy_factions = iu.enemies.get(faction).cloned().unwrap_or_default();
-    iu.ships
-        .iter()
-        .filter(|(_, d)| {
-            d.faction
-                .as_ref()
-                .is_some_and(|f| enemy_factions.contains(f))
-                && d.personality == crate::ship::Personality::Fighter
-        })
-        .min_by_key(|(_, d)| d.price)
-        .map(|(name, _)| name.clone())
-        .unwrap_or_else(|| "pirate_corvette".to_string())
+    let fighter_of = |pred: &dyn Fn(&str) -> bool| {
+        iu.ships
+            .iter()
+            .filter(|(_, d)| {
+                d.faction.as_deref().is_some_and(pred)
+                    && d.personality == crate::ship::Personality::Fighter
+            })
+            .min_by_key(|(_, d)| d.price)
+            .map(|(name, _)| name.clone())
+    };
+    // The faction's actual enemies; failing that, someone LAWLESS is always
+    // raiding somebody (no ship ids hardcoded).
+    fighter_of(&|f| enemy_factions.iter().any(|e| e == f))
+        .or_else(|| fighter_of(&|f| iu.faction_is_lawless(f)))
+        .or_else(|| fighter_of(&|_| true))
+        .unwrap_or_default()
 }
 
 /// A landable planet of the same faction to run community service to
@@ -256,7 +252,7 @@ fn penal_service_destination(
         .collect();
     candidates
         .iter()
-        .find(|(_, p)| planet_faction(p) == Some(faction))
+        .find(|(_, p)| p.faction == faction)
         .or_else(|| candidates.first())
         .map(|(pid, p)| ((*pid).clone(), p.display_name.clone()))
 }

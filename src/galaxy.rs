@@ -179,7 +179,7 @@ pub fn effective_planet_faction(
     planet: &str,
 ) -> Option<String> {
     let (sys_name, pd) = iu.find_gameplay_planet(planet)?;
-    if pd.faction == "Independent" {
+    if !pd.faction.is_empty() && !iu.faction_takes_sides(&pd.faction) {
         return None;
     }
     galaxy.controller(sys_name).map(String::from)

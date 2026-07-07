@@ -821,6 +821,7 @@ mod template_targets {
             mining_system: None,
             outfitter_items: HashMap::new(),
             commodities: HashMap::new(),
+            factions: HashMap::new(),
             missions: HashMap::new(),
             mission_templates: HashMap::new(),
             global_average_price: HashMap::new(),

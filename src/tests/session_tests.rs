@@ -74,6 +74,7 @@ fn basic_universe() -> ItemUniverse {
         mining_system: None,
         outfitter_items: HashMap::new(),
         commodities: HashMap::new(),
+        factions: HashMap::new(),
         missions: HashMap::from([("base_quest".to_string(), base_mission)]),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),

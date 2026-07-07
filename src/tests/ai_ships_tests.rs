@@ -18,6 +18,7 @@ fn empty_item_universe() -> ItemUniverse {
         starting_ship: String::new(),
         starting_system: String::new(),
         commodities: HashMap::new(),
+        factions: HashMap::new(),
         missions: HashMap::new(),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),

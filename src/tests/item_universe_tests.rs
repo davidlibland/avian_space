@@ -119,6 +119,7 @@ fn test_universe() -> ItemUniverse {
         starting_ship: "shuttle".to_string(),
         starting_system: "sol".to_string(),
         commodities: HashMap::new(),
+        factions: HashMap::new(),
         missions: HashMap::new(),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),

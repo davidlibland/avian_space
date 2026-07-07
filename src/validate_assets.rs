@@ -18,6 +18,7 @@ use crate::ship::Personality;
 
 /// Run every validation pass and log warnings for anything broken.
 pub fn validate(iu: &ItemUniverse) {
+    validate_faction_references(iu);
     validate_ship_weapon_space(iu);
     validate_uncolonized_planets(iu);
     validate_star_system_references(iu);
@@ -51,6 +52,43 @@ fn validate_ship_steering(iu: &ItemUniverse) {
                  budget — raise angular_drag in assets/ships.yaml",
                 ship_data.torque, ship_data.angular_drag,
             );
+        }
+    }
+}
+
+/// Every faction named by a planet, system, ship, or enemies/allies entry
+/// must exist in the faction registry (assets/factions.yaml) — a typo'd
+/// faction silently behaves like a real (unknown) territorial power.
+fn validate_faction_references(iu: &ItemUniverse) {
+    let check = |kind: &str, whom: &str, f: &str| {
+        if !f.is_empty() && !iu.factions.contains_key(f) {
+            warn!("{kind} \"{whom}\" references faction \"{f}\" missing from factions.yaml");
+        }
+    };
+    for (sys_name, sys) in &iu.star_systems {
+        check("system", sys_name, &sys.faction);
+        for (p_name, p) in &sys.planets {
+            check("planet", p_name, &p.faction);
+        }
+    }
+    for (ship_name, ship) in &iu.ships {
+        if let Some(f) = &ship.faction {
+            check("ship", ship_name, f);
+        }
+        for f in &ship.sold_by {
+            check("ship sold_by", ship_name, f);
+        }
+    }
+    for (f, enemies) in &iu.enemies {
+        check("enemies.yaml", f, f);
+        for e in enemies {
+            check("enemies.yaml", f, e);
+        }
+    }
+    for (f, allies) in &iu.allies {
+        check("allies.yaml", f, f);
+        for a in allies {
+            check("allies.yaml", f, a);
         }
     }
 }
@@ -582,7 +620,7 @@ fn validate_completion_effects(
 /// Training-only systems folded in by `materialize_training_systems`; they are
 /// intentionally disconnected from the campaign jump graph, so skip them in the
 /// reachability check.
-const TRAINING_SYSTEMS: &[&str] = &["simulator", "escort", "mining"];
+const TRAINING_SYSTEMS: &[&str] = &ItemUniverse::TRAINING_SYSTEM_KEYS;
 
 /// A planet is "landable" (has a surface with buildings) iff it is colonised,
 /// which the data models as having a non-empty commodity market.

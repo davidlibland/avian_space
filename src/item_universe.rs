@@ -13,6 +13,26 @@ use serde::de::DeserializeOwned;
 use serde_yaml::{Mapping, Value};
 use std::path::Path;
 
+/// A faction's identity and traits (assets/factions.yaml) — the single
+/// source of truth game logic keys on, instead of hardcoded faction names.
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct FactionData {
+    #[serde(default)]
+    pub display_name: String,
+    /// Star-map colour (0–255 RGB).
+    #[serde(default)]
+    pub color: [u8; 3],
+    /// Fighters follow wealth, not territory (pirates).
+    #[serde(default)]
+    pub lawless: bool,
+    /// A guild, not a government: universal logistics, holds no systems.
+    #[serde(default)]
+    pub stateless: bool,
+    /// Unaligned: never takes a side, restricts markets, or tracks standing.
+    #[serde(default)]
+    pub neutral: bool,
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct CommodityData {
     pub color: [f32; 3],
@@ -59,6 +79,9 @@ pub struct ItemUniverse {
     pub starting_system: String,
     #[serde(default)]
     pub commodities: HashMap<String, CommodityData>,
+    /// Faction registry (assets/factions.yaml).
+    #[serde(default)]
+    pub factions: HashMap<String, FactionData>,
     #[serde(default)]
     pub missions: HashMap<String, MissionDef>,
     #[serde(default)]
@@ -114,6 +137,9 @@ impl ItemUniverse {
         for (k, v) in &mut self.commodities {
             fill(&mut v.display_name, k);
         }
+        for (k, v) in &mut self.factions {
+            fill(&mut v.display_name, k);
+        }
         for (k, v) in &mut self.outfitter_items {
             fill(v.display_name_mut(), k);
         }
@@ -159,6 +185,22 @@ impl ItemUniverse {
         }
     }
 
+    /// Whether a faction name is "real" for territorial purposes: known,
+    /// non-empty, and not flagged neutral. Unknown names count as real so a
+    /// typo shows up as odd behavior + a validator warning, not silence.
+    pub fn faction_takes_sides(&self, name: &str) -> bool {
+        if name.is_empty() {
+            return false;
+        }
+        self.factions.get(name).map(|f| !f.neutral).unwrap_or(true)
+    }
+    pub fn faction_is_lawless(&self, name: &str) -> bool {
+        self.factions.get(name).map(|f| f.lawless).unwrap_or(false)
+    }
+    pub fn faction_is_stateless(&self, name: &str) -> bool {
+        self.factions.get(name).map(|f| f.stateless).unwrap_or(false)
+    }
+
     /// Find a planet by name across GAMEPLAY systems only. The RL-training
     /// systems clone real planets (the simulator is a copy of Sol), so any
     /// name-based scan that included them would nondeterministically resolve
@@ -175,15 +217,13 @@ impl ItemUniverse {
     /// GalaxyControl and for the initial market/traffic derivation.
     pub fn static_system_faction(iu: &ItemUniverse, system: &str) -> Option<String> {
         let sys = iu.star_systems.get(system)?;
-        match sys.faction.as_str() {
-            "" | "Independent" => {}
-            f => return Some(f.to_string()),
+        if iu.faction_takes_sides(&sys.faction) {
+            return Some(sys.faction.clone());
         }
         let mut counts: HashMap<&str, usize> = HashMap::new();
         for planet in sys.planets.values() {
-            match planet.faction.as_str() {
-                "" | "Independent" => {}
-                f => *counts.entry(f).or_insert(0) += 1,
+            if iu.faction_takes_sides(&planet.faction) {
+                *counts.entry(planet.faction.as_str()).or_insert(0) += 1;
             }
         }
         counts
@@ -200,7 +240,7 @@ impl ItemUniverse {
             .values()
             .flat_map(|s| s.planets.values())
             .map(|p| p.faction.clone())
-            .filter(|f| !f.is_empty() && f != "Independent")
+            .filter(|f| self.faction_takes_sides(f))
             .collect()
     }
 
@@ -256,19 +296,23 @@ impl ItemUniverse {
     /// tech_level 0 (the default) = no trade buildings at all.
     fn derive_market_catalogs(&mut self) {
         let planet_factions = self.planet_owning_factions();
+        let neutral: std::collections::HashSet<String> = self
+            .factions
+            .iter()
+            .filter(|(_, f)| f.neutral)
+            .map(|(n, _)| n.clone())
+            .collect();
+        let takes_sides = |f: &str| !f.is_empty() && !neutral.contains(f);
         for sys in self.star_systems.values_mut() {
             let system_faction = sys.faction.clone();
             for planet in sys.planets.values_mut() {
                 planet.explicit_outfitter = planet.outfitter.clone();
                 planet.explicit_shipyard = planet.shipyard.clone();
-                let seller: Option<String> = match planet.faction.as_str() {
-                    "" => match system_faction.as_str() {
-                        "" | "Independent" => None,
-                        f => Some(f.to_string()),
-                    },
-                    "Independent" => None,
-                    f => Some(f.to_string()),
-                };
+                let seller: Option<String> = [planet.faction.as_str(), system_faction.as_str()]
+                    .iter()
+                    .find(|f| !f.is_empty())
+                    .filter(|f| takes_sides(f))
+                    .map(|f| f.to_string());
                 Self::derive_planet_market(
                     planet,
                     seller.as_deref(),
@@ -285,11 +329,17 @@ impl ItemUniverse {
     /// stock only). Independent enclaves stay independent.
     pub fn rederive_system_market(&mut self, system: &str, controller: Option<&str>) {
         let planet_factions = self.planet_owning_factions();
+        let neutral: std::collections::HashSet<String> = self
+            .factions
+            .iter()
+            .filter(|(_, f)| f.neutral)
+            .map(|(n, _)| n.clone())
+            .collect();
         let Some(sys) = self.star_systems.get_mut(system) else {
             return;
         };
         for planet in sys.planets.values_mut() {
-            let seller = if planet.faction == "Independent" {
+            let seller = if neutral.contains(&planet.faction) {
                 None
             } else {
                 controller
@@ -418,23 +468,30 @@ impl ItemUniverse {
 
             let mut types: HashMap<String, f32> = HashMap::new();
             for (ship_name, ship) in &self.ships {
-                let f = ship.faction.as_deref();
+                // Faction TRAITS (assets/factions.yaml) drive the buckets —
+                // no faction names are special-cased in code.
+                let f = ship
+                    .faction
+                    .as_deref()
+                    .filter(|f| !self.faction_is_stateless(f));
+                let lawless = f.is_some_and(|f| self.faction_is_lawless(f));
                 let w = match (&ship.personality, f) {
-                    // Traders/miners: universal hulls at base rate; a
-                    // faction's own logistics scale with its presence.
-                    (Personality::Trader, None | Some("Merchant")) => merchants_w,
+                    // Traders/miners: stateless/unfactioned hulls at the
+                    // universal base rate; a faction's own logistics scale
+                    // with its presence.
+                    (Personality::Trader, None) => merchants_w,
                     (Personality::Trader, Some(f)) => {
                         2.0 * merchants_w * presence.get(f).copied().unwrap_or(0.0)
                     }
-                    (Personality::Miner, None | Some("Merchant")) => miners_w,
+                    (Personality::Miner, None) => miners_w,
                     (Personality::Miner, Some(f)) => {
                         2.0 * miners_w * presence.get(f).copied().unwrap_or(0.0)
                     }
-                    // Combat: pirates follow wealth; faction patrols follow
-                    // propagated presence (they roam borders); CAPITAL ships
-                    // (tech 4+) deploy only where their faction holds actual
-                    // ground — a titan doesn't wander two jumps from home.
-                    (Personality::Fighter, Some("Pirate")) => pirates_w,
+                    // Combat: LAWLESS fighters follow wealth; faction patrols
+                    // follow propagated presence (they roam borders); CAPITAL
+                    // ships (tech 4+) deploy only where their faction holds
+                    // actual ground — a titan doesn't wander far from home.
+                    (Personality::Fighter, Some(_)) if lawless => pirates_w,
                     (Personality::Fighter, Some(f)) if ship.tech_level >= 4 => {
                         Self::COMBAT_PER_PRESENCE
                             * galaxy
