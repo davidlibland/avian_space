@@ -647,6 +647,7 @@ fn find_planet<'a>(iu: &'a ItemUniverse, name: &str) -> Option<&'a PlanetData> {
 /// Run all strict checks and collect human-readable problems (empty == good).
 pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     let mut p = Vec::new();
+    check_base_weapons_fit_mounts(iu, &mut p);
     check_trade_routes(iu, &mut p);
     check_sprites_exist(iu, &mut p);
     check_reachability(iu, &mut p);
@@ -657,6 +658,40 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_fenced_carrier_items(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
+}
+
+/// Every hull's factory loadout must fit its own gun/turret mounts —
+/// otherwise the limits would be a lie the moment an AI ship spawns.
+fn check_base_weapons_fit_mounts(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (ship_name, data) in &iu.ships {
+        let mut guns = 0u32;
+        let mut turrets = 0u32;
+        for (weapon_name, (count, _)) in &data.base_weapons {
+            let Some(w) = iu.weapons.get(weapon_name) else {
+                continue; // dangling reference — validate_ship_base_weapons reports it
+            };
+            if !w.uses_mount() {
+                continue;
+            }
+            if w.is_turret() {
+                turrets += *count as u32;
+            } else {
+                guns += *count as u32;
+            }
+        }
+        if guns > data.gun_mounts as u32 {
+            p.push(format!(
+                "ship '{ship_name}': base loadout uses {guns} gun mounts but the hull has {}",
+                data.gun_mounts
+            ));
+        }
+        if turrets > data.turret_mounts as u32 {
+            p.push(format!(
+                "ship '{ship_name}': base loadout uses {turrets} turret mounts but the hull has {}",
+                data.turret_mounts
+            ));
+        }
+    }
 }
 
 /// An outfitter item sold UNIVERSALLY (empty `factions`) whose only carriers

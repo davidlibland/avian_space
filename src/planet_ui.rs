@@ -350,6 +350,11 @@ pub fn render_outfitter_tab(
         ship.remaining_item_space(),
         ship.data.item_space
     ));
+    let (guns_used, turrets_used) = ship.mounts_used();
+    ui.label(format!(
+        "Mounts: {guns_used}/{} guns, {turrets_used}/{} turrets",
+        ship.data.gun_mounts, ship.data.turret_mounts
+    ));
     ui.label(
         egui::RichText::new("Shift-click ammo Buy/Sell to fill the racks / sell all.")
             .small()
@@ -396,11 +401,23 @@ pub fn render_outfitter_tab(
                     .get(&item)
                     .map(|i| i.display_name())
                     .unwrap_or(&item);
+                // Whether this hull has a free mount of the right class.
+                let mount_ok = item_universe
+                    .weapons
+                    .get(&item)
+                    .map(|w| ship.mount_free_for(w))
+                    .unwrap_or(true);
                 ui.label(item_display);
                 ui.label(crate::standing::markup_price(price, markup).to_string());
                 ui.label(space.to_string());
                 ui.label(owned.to_string());
-                if ui.button("Buy").clicked() {
+                let buy = ui.add_enabled(mount_ok, egui::Button::new("Buy"));
+                let buy = if mount_ok {
+                    buy
+                } else {
+                    buy.on_disabled_hover_text("No free mount on this hull")
+                };
+                if buy.clicked() {
                     ship.buy_weapon(&item, &item_universe, markup);
                 }
                 if ui.button("Sell").clicked() {

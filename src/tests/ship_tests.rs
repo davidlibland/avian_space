@@ -273,3 +273,53 @@ fn repair_bot_heals_toward_effective_max() {
     }
     assert_eq!(app.world().get::<Ship>(entity).unwrap().health, 100);
 }
+
+#[test]
+fn weapon_mounts_limit_guns_and_turrets() {
+    let iu: crate::item_universe::ItemUniverse = {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        iu
+    };
+    // A fighter: 3 gun mounts, no turret ring, ships with 2 lasers.
+    let data = iu.ships.get("fighter").unwrap();
+    assert_eq!((data.gun_mounts, data.turret_mounts), (3, 0));
+    let mut ship = Ship::from_ship_data(data, "fighter");
+    ship.weapon_systems = crate::weapons::WeaponSystems::build(&data.base_weapons, &iu);
+    ship.credits = 1_000_000;
+    assert_eq!(ship.mounts_used(), (2, 0));
+
+    // One more laser fits; the fourth gun does not.
+    ship.buy_weapon("laser", &iu, 1.0);
+    assert_eq!(ship.mounts_used(), (3, 0));
+    let credits = ship.credits;
+    ship.buy_weapon("laser", &iu, 1.0);
+    assert_eq!(ship.mounts_used(), (3, 0), "no fourth gun on a 3-mount hull");
+    assert_eq!(ship.credits, credits, "refused purchases charge nothing");
+
+    // No turret ring on a fighter, whatever the credits.
+    ship.buy_weapon("laser_turret", &iu, 1.0);
+    assert_eq!(ship.mounts_used(), (3, 0), "small hulls can't mount turrets");
+    assert_eq!(ship.credits, credits);
+
+    // Decoy pods use item space, not mounts.
+    ship.buy_weapon("flare_pod", &iu, 1.0);
+    assert!(ship.weapon_systems.find_weapon("flare_pod").is_some());
+    assert_eq!(ship.mounts_used(), (3, 0), "countermeasures don't take mounts");
+
+    // A carrier has real turret rings.
+    let carrier = iu.ships.get("fed_carrier").unwrap();
+    let mut big = Ship::from_ship_data(carrier, "fed_carrier");
+    big.weapon_systems = crate::weapons::WeaponSystems::build(&carrier.base_weapons, &iu);
+    big.credits = 1_000_000;
+    let (_, turrets) = big.mounts_used();
+    assert_eq!(turrets, 2, "factory fit: two proton turrets");
+    // Mount-wise there's room for more turrets (item space is the binding
+    // constraint at factory fit, which is its own limit).
+    let turret = iu.weapons.get("proton_beam_turret").unwrap();
+    assert!(big.mount_free_for(turret), "carriers have spare turret rings");
+    let small = iu.ships.get("fighter").unwrap();
+    let s2 = Ship::from_ship_data(small, "fighter");
+    assert!(!s2.mount_free_for(turret) || small.turret_mounts > 0);
+}

@@ -213,6 +213,10 @@ fn default_reverse_kd() -> Scalar {
 fn default_fuel_capacity() -> u16 {
     4
 }
+fn default_gun_mounts() -> u8 {
+    2
+}
+
 fn default_tech_level() -> u8 {
     1
 }
@@ -257,6 +261,15 @@ pub struct ShipData {
     /// appears in shipyard listings. Empty = always available.
     #[serde(default)]
     pub required_unlocks: Vec<String>,
+    /// Fixed/tube weapon hardpoints (lasers, cannons, missile and mine
+    /// tubes). Carrier bays and decoy pods don't use mounts — item space
+    /// governs those.
+    #[serde(default = "default_gun_mounts")]
+    pub gun_mounts: u8,
+    /// Rotating turret rings (full-arc ballistic weapons). Small hulls have
+    /// none — a turret ring needs a hull big enough to carry it.
+    #[serde(default)]
+    pub turret_mounts: u8,
 
     // Tuning fields — rarely set in YAML, sensible defaults are fine:
     #[serde(default = "default_angular_drag")]
@@ -680,6 +693,36 @@ impl Ship {
                 (quantity_added as i128) * price;
         }
     }
+    /// (guns, turrets) currently occupying this hull's weapon mounts.
+    pub fn mounts_used(&self) -> (u8, u8) {
+        let mut guns = 0u8;
+        let mut turrets = 0u8;
+        for (_, ws) in self.weapon_systems.iter_all() {
+            if !ws.weapon.uses_mount() {
+                continue;
+            }
+            if ws.weapon.is_turret() {
+                turrets = turrets.saturating_add(ws.number);
+            } else {
+                guns = guns.saturating_add(ws.number);
+            }
+        }
+        (guns, turrets)
+    }
+
+    /// Whether one more of `weapon` fits this hull's gun/turret mounts.
+    pub fn mount_free_for(&self, weapon: &crate::weapons::Weapon) -> bool {
+        if !weapon.uses_mount() {
+            return true;
+        }
+        let (guns, turrets) = self.mounts_used();
+        if weapon.is_turret() {
+            turrets < self.data.turret_mounts
+        } else {
+            guns < self.data.gun_mounts
+        }
+    }
+
     pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
@@ -690,6 +733,11 @@ impl Ship {
         }
         if outfitter_item.space() as i32 > self.remaining_item_space() {
             return;
+        }
+        if let Some(weapon) = item_universe.weapons.get(weapon_type) {
+            if !self.mount_free_for(weapon) {
+                return;
+            }
         }
         // Increment count if the weapon is already present in either map.
         if let Some(ws) = self.weapon_systems.primary.get_mut(weapon_type) {

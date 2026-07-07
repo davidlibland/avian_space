@@ -15,6 +15,8 @@ fn basic_universe() -> ItemUniverse {
     let shuttle = ShipData {
         display_name: String::new(),
         tech_level: 1,
+        gun_mounts: 2,
+        turret_mounts: 0,
         sold_by: Vec::new(),
         aura: None,
         thrust: 200.0,

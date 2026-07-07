@@ -255,6 +255,25 @@ pub struct Weapon {
     pub display_name: String,
 }
 
+impl Weapon {
+    /// A turret occupies a rotating ring mount: full-arc direct-fire
+    /// weapons. Missiles and mines are tube-launched (gun mounts) whatever
+    /// their seeker arc.
+    pub fn is_turret(&self) -> bool {
+        matches!(self.behavior, WeaponBehavior::Ballistic)
+            && self.aimable_arc >= std::f32::consts::FRAC_PI_2
+    }
+
+    /// Whether this weapon occupies a gun/turret mount at all. Carrier bays
+    /// and decoy pods live in the hull, limited by item space instead.
+    pub fn uses_mount(&self) -> bool {
+        !matches!(
+            self.behavior,
+            WeaponBehavior::CarrierBay { .. } | WeaponBehavior::Decoy { .. }
+        )
+    }
+}
+
 /// Fraction of the launching ship's velocity a *guided* missile keeps at launch.
 /// (Unguided shots inherit it fully, so you can lead targets with ballistic fire.)
 /// Partial inheritance + drag-to-cruise lets a fast ship eventually outrun a homing
