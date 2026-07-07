@@ -454,7 +454,20 @@ pub fn render_outfitter_tab(
             }
         });
 
-    // ── Ship mods ────────────────────────────────────────────────────────
+}
+
+/// The mechanic's hull-modification bench: engine tunes, armor, repair bots.
+/// Stock comes from the planet's derived outfitter catalog (tech/faction
+/// gated like everything else); the MECHANIC sells them because hull work is
+/// their trade — the outfitter sells armament.
+pub fn render_mods_section(
+    ui: &mut egui::Ui,
+    ship: &mut Ship,
+    planet: &PlanetData,
+    item_universe: &ItemUniverse,
+    unlocks: &crate::missions::PlayerUnlocks,
+    markup: f32,
+) {
     let mods: Vec<String> = planet
         .outfitter
         .iter()

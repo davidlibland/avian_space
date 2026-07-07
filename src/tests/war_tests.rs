@@ -140,6 +140,17 @@ fn war_missions_offered_only_to_trusted_pilots() {
         .iter()
         .find(|(id, _)| id.starts_with("war__") && !id.ends_with("__return"))
         .unwrap();
+    // Venue split: overt war work is posted at the GARRISON desk; covert ops
+    // come from a stranger in the bar.
+    if let crate::missions::types::OfferKind::NpcOffer { building: Some(b), .. } = &def.offer {
+        if id.contains("covert") {
+            assert_eq!(b, "bar", "covert stays deniable");
+        } else {
+            assert_eq!(b, "garrison", "war work is official");
+        }
+    } else {
+        panic!("war missions are NPC offers");
+    }
     let iu = world.resource::<ItemUniverse>();
     if let crate::missions::Objective::DestroyShips { ship_type, .. } = &def.objective {
         assert!(iu.ships.contains_key(ship_type), "battle target ship exists");
@@ -256,6 +267,13 @@ fn every_covert_template_instantiates_on_the_marches_front() {
         let (def, follow_up) = instantiate_war_mission(tmpl, &front, &iu, &galaxy, &mut rng)
             .unwrap_or_else(|| panic!("{id} must instantiate on a landable front"));
         assert!(!def.briefing.contains('{'), "{id}: all vars substituted: {}", def.briefing);
+        // Deniability: covert offers come from a stranger in the BAR, never
+        // anyone at the garrison desk.
+        assert!(
+            matches!(&def.offer, OfferKind::NpcOffer { building: Some(b), approach, .. }
+                if b == "bar" && matches!(approach, crate::missions::types::NpcApproach::Seek)),
+            "{id}: covert work is offered by a stranger in the bar"
+        );
         // The influence lever always points at the front target, and the
         // final stage always pays (bribes pay negative).
         match &follow_up {

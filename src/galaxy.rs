@@ -140,7 +140,7 @@ impl GalaxyControl {
     /// Recompute a single system's controller with hysteresis. Returns the
     /// new controller if it CHANGED (Some(None) = became contested).
     #[allow(clippy::option_option)]
-    fn recompute_controller(&mut self, system: &str) -> Option<Option<String>> {
+    pub(crate) fn recompute_controller(&mut self, system: &str) -> Option<Option<String>> {
         let top = self
             .influence
             .get(system)

@@ -338,8 +338,10 @@ fn instantiate_war_mission(
                     offer: OfferKind::NpcOffer {
                         planet: String::new(), // placed directly into offers
                         weight: 1.0,
-                        building: Some("bar".to_string()),
-                        approach: NpcApproach::Seek,
+                        // Overt war work is OFFICIAL: the duty officer waits
+                        // at the faction's garrison.
+                        building: Some("garrison".to_string()),
+                        approach: NpcApproach::Wait,
                     },
                     start_effects: Vec::new(),
                     objective: Objective::DestroyShips {
@@ -591,8 +593,10 @@ fn instantiate_war_mission(
                     offer: OfferKind::NpcOffer {
                         planet: String::new(),
                         weight: 1.0,
+                        // Covert work is DENIABLE: a stranger sidles up in the
+                        // bar, never anyone in a uniform.
                         building: Some("bar".to_string()),
-                        approach: NpcApproach::Wait,
+                        approach: NpcApproach::Seek,
                     },
                     start_effects,
                     objective,

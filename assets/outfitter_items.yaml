@@ -304,6 +304,57 @@ repair_bot:
     display_name: "Hull Repair Bot"
     effect: !RepairBot { hp_per_sec: 0.6 }
     tech_level: 3
+# ── Masterwork mods: one specialty per major faction, sold only in their
+# space at high tech — chase content that rides the standing/tariff/war
+# systems (a war that flips the seller's system moves the shop).
+helios_solar_drive:
+  !ShipMod
+    price: 60000
+    space: 4
+    display_name: "Helios Solar-Forge Drive"
+    effect: !Engine { speed: 1.35, thrust: 1.4, torque: 1.35 }
+    tech_level: 4
+    factions: [Helios]
+rebel_smugglers_drive:
+  !ShipMod
+    price: 35000
+    space: 3
+    display_name: "Smuggler's Overtuned Drive"
+    effect: !Engine { speed: 1.3, thrust: 1.15, torque: 1.3 }
+    tech_level: 3
+    factions: [Rebel]
+frontier_scrap_turbine:
+  !ShipMod
+    price: 20000
+    space: 4
+    display_name: "Frontier Scrap Turbine"
+    effect: !Engine { speed: 1.22, thrust: 1.3, torque: 1.15 }
+    tech_level: 2
+    factions: [FreeFrontier]
+bastion_bulwark_plating:
+  !ShipMod
+    price: 45000
+    space: 7
+    display_name: "Bastion Bulwark Plating"
+    effect: !Armor { bonus_hp: 100 }
+    tech_level: 3
+    factions: [Bastion]
+order_relic_ward:
+  !ShipMod
+    price: 32000
+    space: 5
+    display_name: "Relic Ward Lattice"
+    effect: !Armor { bonus_hp: 75 }
+    tech_level: 3
+    factions: [Order]
+fed_nanite_foundry:
+  !ShipMod
+    price: 60000
+    space: 5
+    display_name: "Federation Nanite Foundry"
+    effect: !RepairBot { hp_per_sec: 1.6 }
+    tech_level: 4
+    factions: [Federation]
 precursor_lure:
   !PrimaryWeapon
     price: 6000

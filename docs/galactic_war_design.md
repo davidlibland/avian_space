@@ -235,6 +235,11 @@ system); drift's venue is a REMOTE STATION (a landable habitat, no world);
 the_gyre and the_long_dark are truly empty wilderness — unaligned pirate
 pockets no front targets, so they need no venue at all.
 
+War missions are posted at the GARRISON — a dedicated building on every
+world whose live controller takes sides (it appears/disappears with
+conquest and flies a flag tinted with the controller's colors); covert
+ops stay deniable, offered by a stranger who seeks you out in the bar.
+
 Bastion–Rebel and FreeFrontier–Helios stay COLD by design: their cores sit
 on opposite ends of the map with third factions between them — the enmity
 lives in the data (hit bonuses, hostility) but no front generates.

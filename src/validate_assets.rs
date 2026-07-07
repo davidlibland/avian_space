@@ -634,6 +634,9 @@ fn is_landable(pd: &PlanetData) -> bool {
 fn planet_has_building(pd: &PlanetData, building: &str) -> bool {
     match building {
         "market" | "bar" | "fuel_station" | "mechanicshop" => is_landable(pd),
+        // The garrison exists only on faction-held worlds (live controller),
+        // so static content should use it sparingly; landable is the floor.
+        "garrison" => is_landable(pd),
         "outfitter" => !pd.outfitter.is_empty(),
         "shipyard" => !pd.shipyard.is_empty(),
         _ => false, // unknown building name => typo

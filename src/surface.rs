@@ -15,7 +15,8 @@ use crate::missions::{
     render_missions_tab,
 };
 use crate::planet_ui::{
-    LandedContext, render_outfitter_tab, render_shipyard_tab, render_trade_tab,
+    LandedContext, render_mods_section, render_outfitter_tab, render_shipyard_tab,
+    render_trade_tab,
 };
 use crate::ship::{BuyShip, Ship};
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
@@ -70,6 +71,10 @@ pub enum BuildingKind {
     Shipyard,
     Bar,
     FuelStation,
+    /// The controlling faction's war office — present only on worlds whose
+    /// effective faction takes sides. War missions are posted here; it flies
+    /// a flag tinted with the faction's colors.
+    Garrison,
 }
 
 impl BuildingKind {
@@ -82,6 +87,7 @@ impl BuildingKind {
             BuildingKind::Shipyard => "Shipyard",
             BuildingKind::Bar => "Bar",
             BuildingKind::FuelStation => "Fuel",
+            BuildingKind::Garrison => "Garrison",
         }
     }
 
@@ -94,6 +100,7 @@ impl BuildingKind {
             BuildingKind::Shipyard => Color::srgb(0.3, 0.5, 0.8),
             BuildingKind::Bar => Color::srgb(0.8, 0.4, 0.1),
             BuildingKind::FuelStation => Color::srgb(0.3, 0.8, 0.9),
+            BuildingKind::Garrison => Color::srgb(0.45, 0.55, 0.35),
         }
     }
 }
@@ -563,6 +570,7 @@ fn building_kinds_for_planet(
     planet_name: &str,
     item_universe: &ItemUniverse,
     system_name: &str,
+    galaxy: &crate::galaxy::GalaxyControl,
 ) -> Vec<BuildingKind> {
     let mut kinds = Vec::new();
     let planet_data = item_universe
@@ -584,6 +592,14 @@ fn building_kinds_for_planet(
     // Every landable colony has a fuel station — you must be able to refuel
     // wherever you set down (or you'd risk being stranded with an empty tank).
     kinds.push(BuildingKind::FuelStation);
+    // The war office follows the LIVE controller: only factions that take
+    // sides garrison their worlds, so the building appears/disappears when a
+    // system changes hands (and never on unaligned freeports).
+    if crate::galaxy::effective_planet_faction(galaxy, item_universe, planet_name)
+        .is_some_and(|f| item_universe.faction_takes_sides(&f))
+    {
+        kinds.push(BuildingKind::Garrison);
+    }
     kinds
 }
 
@@ -609,6 +625,7 @@ fn kind_func(kind: BuildingKind) -> &'static str {
         BuildingKind::MechanicShop => "mechanic",
         BuildingKind::ShipPad => "pad",
         BuildingKind::FuelStation => "fuel_station",
+        BuildingKind::Garrison => "garrison",
     }
 }
 
@@ -676,7 +693,7 @@ fn spawn_building_3d(
     ));
     // Animated roll-up door (over the facade): overlays _front exactly (same
     // anchor/pos), and rolls open when the player nears. Only door buildings.
-    if matches!(func, "market" | "outfitter" | "bar" | "mechanic" | "fuel_station") {
+    if matches!(func, "market" | "outfitter" | "bar" | "mechanic" | "fuel_station" | "garrison") {
         let frames: Vec<Handle<Image>> = (0..4)
             .map(|k| {
                 asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_door{k}.png"))
@@ -789,6 +806,7 @@ fn setup_surface(
     player_query: Query<Entity, With<Player>>,
     landed_context: Res<LandedContext>,
     item_universe: Res<ItemUniverse>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     current_system: Res<crate::CurrentStarSystem>,
     mut camera_query: Query<&mut Transform, With<Camera2d>>,
     mut zoom: ResMut<CameraZoom>,
@@ -874,7 +892,8 @@ fn setup_surface(
         // Find building positions on the initial terrain, then force
         // nearby tiles to walkable terrain and re-clamp before building
         // the tilemap.
-        let building_kinds = building_kinds_for_planet(&planet_name, &item_universe, system_name);
+        let building_kinds =
+            building_kinds_for_planet(&planet_name, &item_universe, system_name, &galaxy);
 
         let initial_col: Vec<u8> = initial_terrain
             .iter()
@@ -1442,6 +1461,39 @@ fn setup_surface(
                         scale,
                         tile_px,
                     );
+                    // The garrison flies the CONTROLLING faction's colors: a
+                    // grayscale cloth sprite tinted at runtime, pinned to the
+                    // baked flagpole (model: pole at (w/2+0.55, -d/2+0.3),
+                    // finial z≈4.2; screen offset = (x, Δdepth·sin50° +
+                    // z·cos50°) in tiles — see build_garrison in
+                    // scripts/ship3d/buildings3d.py).
+                    if kind == BuildingKind::Garrison {
+                        if let Some(color) = crate::galaxy::effective_planet_faction(
+                            &galaxy,
+                            &item_universe,
+                            &planet_name,
+                        )
+                        .and_then(|f| item_universe.factions.get(&f))
+                        .map(|fd| fd.color)
+                        {
+                            let offset = Vec2::new(4.25, 2.61) * tile_px;
+                            commands.spawn((
+                                DespawnOnExit(PlayState::Exploring),
+                                Sprite {
+                                    image: asset_server
+                                        .load(format!("{WORLDS_DIR}/buildings3d/flag.png")),
+                                    color: Color::srgb_u8(color[0], color[1], color[2]),
+                                    custom_size: Some(Vec2::new(1.3, 0.84) * tile_px),
+                                    ..default()
+                                },
+                                Transform::from_xyz(
+                                    fc.x + offset.x,
+                                    fc.y + offset.y,
+                                    crate::surface_objects::depth_z(fc.y) + 8.3,
+                                ),
+                            ));
+                        }
+                    }
                 }
             } else {
                 let world_pos = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
@@ -2198,8 +2250,58 @@ fn surface_building_ui(
                             ui.label("Hull is at full integrity. No repairs needed.");
                         }
 
+                        // Hull modification bench — the mechanic's trade.
+                        if let Some(pd) = planet_data {
+                            let markup = planet_markup(
+                                &standings,
+                                &galaxy,
+                                &item_universe,
+                                planet_name,
+                            );
+                            render_mods_section(
+                                ui,
+                                &mut ship,
+                                pd,
+                                &item_universe,
+                                &unlocks,
+                                markup,
+                            );
+                        }
+
                         ui.add_space(4.0);
                         ui.label(format!("Credits: {}", ship.credits));
+                    }
+                }
+                BuildingKind::Garrison => {
+                    let faction = crate::galaxy::effective_planet_faction(
+                        &galaxy,
+                        &item_universe,
+                        planet_name,
+                    );
+                    match faction {
+                        Some(f) => {
+                            let standing = standings.get(&f);
+                            ui.label(format!("{} war office.", f));
+                            ui.label(format!("Your standing: {:+.0}", standing));
+                            ui.add_space(6.0);
+                            if standing >= 10.0 {
+                                ui.label(
+                                    "The duty officer posts commissions outside when a \
+                                     front needs freelance pilots. Fight for the flag and \
+                                     the flag remembers.",
+                                );
+                            } else {
+                                ui.colored_label(
+                                    bevy_egui::egui::Color32::from_rgb(230, 160, 100),
+                                    "The duty officer looks through you. War work goes to \
+                                     TRUSTED pilots — run their missions, hunt their \
+                                     enemies, come back at +10.",
+                                );
+                            }
+                        }
+                        None => {
+                            ui.label("The office stands empty — nobody holds this world.");
+                        }
                     }
                 }
                 BuildingKind::FuelStation => {
@@ -2275,4 +2377,43 @@ fn camera_follow_walker(
         return;
     };
     cam_tf.translation = cam_tf.translation.lerp(walker_tf.translation, 0.1);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn universe() -> ItemUniverse {
+        let mut iu: ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        iu
+    }
+
+    /// The garrison follows the LIVE controller: faction worlds have one,
+    /// unaligned freeports don't — until somebody takes the system.
+    #[test]
+    fn garrison_stands_on_faction_worlds_only() {
+        let iu = universe();
+        let mut galaxy = crate::galaxy::GalaxyControl::seeded_from(&iu);
+
+        let kinds = building_kinds_for_planet("earth", &iu, "sol", &galaxy);
+        assert!(kinds.contains(&BuildingKind::Garrison), "Federation garrisons Earth");
+
+        let kinds = building_kinds_for_planet("marches_freeport", &iu, "the_marches", &galaxy);
+        assert!(
+            !kinds.contains(&BuildingKind::Garrison),
+            "no flag flies over an unaligned freeport"
+        );
+
+        // Federation takes the Marches → the garrison (and its flag) appears.
+        // (update_controllers does the recompute every frame in the live game.)
+        galaxy.apply_shift("the_marches", "Federation", 1.0);
+        galaxy.recompute_controller("the_marches");
+        let kinds = building_kinds_for_planet("marches_freeport", &iu, "the_marches", &galaxy);
+        assert!(
+            kinds.contains(&BuildingKind::Garrison),
+            "conquest raises a garrison"
+        );
+    }
 }

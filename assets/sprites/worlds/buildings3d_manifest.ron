@@ -38,5 +38,10 @@
         (style: "outpost", func: "bar", w: 6, d: 5, anchor: (0.0042, -0.4614)),
         (style: "outpost", func: "pad", w: 3, d: 3, anchor: (0.0, -0.4753)),
         (style: "outpost", func: "fuel_station", w: 4, d: 4, anchor: (-0.0046, -0.277)),
+        (style: "colony", func: "garrison", w: 6, d: 5, anchor: (-0.0242, -0.4774)),
+        (style: "cryo", func: "garrison", w: 6, d: 5, anchor: (-0.0159, -0.4097)),
+        (style: "extraction", func: "garrison", w: 6, d: 5, anchor: (-0.0519, -0.4992)),
+        (style: "station", func: "garrison", w: 6, d: 5, anchor: (-0.0417, -0.4804)),
+        (style: "outpost", func: "garrison", w: 6, d: 5, anchor: (-0.0242, -0.4635)),
     ],
 )
