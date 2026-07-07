@@ -221,6 +221,7 @@ fed_patrol:
   faction: Federation
   required_unlocks: [federation_ship_license]
   tech_level: 2
+  sold_by: [Federation, Rebel]
 
 fed_destroyer:
   thrust: 65.0
@@ -240,6 +241,7 @@ fed_destroyer:
   faction: Federation
   required_unlocks: [federation_ship_license, federation_capital_license]
   tech_level: 3
+  sold_by: [Federation, Rebel]
 
 fed_missile_cruiser:
   thrust: 55.0
@@ -260,6 +262,7 @@ fed_missile_cruiser:
   faction: Federation
   required_unlocks: [federation_ship_license]
   tech_level: 4
+  sold_by: [Federation, Rebel]
 
 # ── Rebel faction ──────────────────────────────────────────────────────────────
 # Blue/green. Faster than Federation, lighter armour, less heavy weapons.
@@ -281,6 +284,7 @@ rebel_fighter:
   faction: Rebel
   required_unlocks: [rebel_ship_license]
   tech_level: 1
+  sold_by: [Rebel, Federation]
 
 rebel_gunboat:
   thrust: 95.0
@@ -299,6 +303,7 @@ rebel_gunboat:
   faction: Rebel
   required_unlocks: [rebel_ship_license]
   tech_level: 2
+  sold_by: [Rebel, Federation]
 
 rebel_frigate:
   thrust: 80.0

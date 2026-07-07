@@ -291,7 +291,14 @@ fn market_catalogs_derive_from_tech_and_faction() {
         earth.shipyard.contains(&"shuttle".to_string()),
         "landless-faction (Merchant) hulls sell universally"
     );
-    assert!(!earth.shipyard.contains(&"rebel_fighter".to_string()));
+    assert!(
+        earth.shipyard.contains(&"rebel_fighter".to_string()),
+        "espionage licensed copies: fed yards build rebel fighters"
+    );
+    assert!(
+        !earth.shipyard.contains(&"rebel_frigate".to_string()),
+        "the frigate stays rebel-only"
+    );
 
     // Moon: Federation tech 1 — basics only.
     let moon = planet("moon");

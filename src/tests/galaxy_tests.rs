@@ -128,16 +128,18 @@ fn control_flip_restocks_markets() {
     let procyon_prime = |iu: &ItemUniverse| {
         iu.find_gameplay_planet("procyon_prime").unwrap().1.clone()
     };
-    // Rebel-held: rebel gear on the shelves.
+    // Rebel-held: rebel-fenced gear on the shelves. (javelin/rebel_fighter
+    // now sell in Federation space too — espionage licensed copies — so the
+    // discriminators are pirate_laser and the rebel frigate, still fenced.)
     let before = procyon_prime(&iu);
-    assert!(before.outfitter.contains(&"javelin".to_string()));
-    assert!(before.shipyard.contains(&"rebel_fighter".to_string()));
+    assert!(before.outfitter.contains(&"pirate_laser".to_string()));
+    assert!(before.shipyard.contains(&"rebel_frigate".to_string()));
 
     // Federation takes the system.
     iu.rederive_system_market("procyon", Some("Federation"));
     let flipped = procyon_prime(&iu);
-    assert!(!flipped.outfitter.contains(&"javelin".to_string()));
-    assert!(!flipped.shipyard.contains(&"rebel_fighter".to_string()));
+    assert!(!flipped.outfitter.contains(&"pirate_laser".to_string()));
+    assert!(!flipped.shipyard.contains(&"rebel_frigate".to_string()));
     assert!(flipped.shipyard.contains(&"fed_patrol".to_string()));
     assert!(
         flipped.outfitter.contains(&"laser".to_string()),
@@ -148,7 +150,7 @@ fn control_flip_restocks_markets() {
     iu.rederive_system_market("procyon", None);
     let contested = procyon_prime(&iu);
     assert!(!contested.shipyard.contains(&"fed_patrol".to_string()));
-    assert!(!contested.shipyard.contains(&"rebel_fighter".to_string()));
+    assert!(!contested.shipyard.contains(&"rebel_frigate".to_string()));
     assert!(contested.outfitter.contains(&"laser".to_string()));
     assert!(
         contested.shipyard.contains(&"shuttle".to_string()),
@@ -318,7 +320,7 @@ fn mission_shift_flips_system_and_restocks() {
         .planets
         .get("procyon_prime")
         .unwrap();
-    assert!(!pp.outfitter.contains(&"javelin".to_string()));
+    assert!(!pp.outfitter.contains(&"pirate_laser".to_string()));
     assert!(pp.shipyard.contains(&"fed_patrol".to_string()));
 
     // The illegal grab on Sol did nothing.

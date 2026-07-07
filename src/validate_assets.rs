@@ -14,7 +14,7 @@ use crate::missions::types::{
     Precondition, StartEffect,
 };
 use crate::planets::PlanetData;
-use crate::ship::Personality;
+use crate::ship::{Personality, ShipData};
 
 /// Run every validation pass and log warnings for anything broken.
 pub fn validate(iu: &ItemUniverse) {
@@ -654,8 +654,66 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_unlock_obtainability(iu, &mut p);
     check_ship_weapons_buyable(iu, &mut p);
     check_everything_sold_somewhere(iu, &mut p);
+    check_fenced_carrier_items(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
+}
+
+/// An outfitter item sold UNIVERSALLY (empty `factions`) whose only carriers
+/// are faction-fenced hulls is almost certainly a mistake — e.g. the pirate
+/// corvette bay on sale at Earth while the corvettes themselves are fenced
+/// through rebel yards. Warn so the item gets fenced like its carriers.
+fn check_fenced_carrier_items(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (item_name, item) in &iu.outfitter_items {
+        if !item.factions().is_empty() {
+            continue; // already fenced
+        }
+        let carriers: Vec<&ShipData> = iu
+            .ships
+            .values()
+            .filter(|d| d.base_weapons.contains_key(item_name))
+            .collect();
+        if carriers.is_empty() {
+            continue; // generic gear nobody ships with — universal is fine
+        }
+        let planet_factions: HashSet<&str> = iu
+            .star_systems
+            .values()
+            .flat_map(|s| s.planets.values())
+            .map(|pd| pd.faction.as_str())
+            .filter(|f| iu.faction_takes_sides(f))
+            .collect();
+        let all_fenced = carriers.iter().all(|d| {
+            if !d.sold_by.is_empty() {
+                return true;
+            }
+            d.faction
+                .as_deref()
+                .is_some_and(|f| planet_factions.contains(f))
+        });
+        if !all_fenced {
+            continue;
+        }
+        let fences: HashSet<&str> = carriers
+            .iter()
+            .flat_map(|d| {
+                if d.sold_by.is_empty() {
+                    d.faction.iter().map(String::as_str).collect::<Vec<_>>()
+                } else {
+                    d.sold_by.iter().map(String::as_str).collect()
+                }
+            })
+            .collect();
+        // Only the unambiguous case: every carrier is fenced to ONE faction.
+        // Gear spanning several factions' hulls is genuinely generic.
+        if fences.len() == 1 {
+            p.push(format!(
+                "outfitter item '{item_name}' is sold universally but only \
+                 {fences:?}-fenced hulls carry it — fence the item's \
+                 `factions` to match its carriers"
+            ));
+        }
+    }
 }
 
 /// Every ship and outfitter item must be purchasable SOMEWHERE: stocked on at

@@ -4,6 +4,7 @@ pirate_laser:
     space: 2
     weapon_type: pirate_laser
     tech_level: 1
+    factions: [Rebel]
 goose:
   !SecondaryWeapon
     price: 400
@@ -12,6 +13,7 @@ goose:
     ammo_price: 35
     ammo_space: 2
     tech_level: 2
+    factions: [Rebel]
 laser:
   !PrimaryWeapon
     price: 100
@@ -39,6 +41,7 @@ proton_beam_turret:
     weapon_type: proton_beam_turret
     required_unlocks: [turret_license]
     tech_level: 4
+    factions: [Federation]
 ir_missile:
   !SecondaryWeapon
     price: 800
@@ -57,7 +60,7 @@ javelin:
     ammo_space: 1
     required_unlocks: [rebel_weapons_license]
     tech_level: 3
-    factions: [Rebel]
+    factions: [Rebel, Federation]
 space_mine:
   !SecondaryWeapon
     price: 500
@@ -112,6 +115,7 @@ pirate_corvette_bay:
     ammo_price: 1500
     ammo_space: 3
     tech_level: 4
+    factions: [Rebel]
 flak_gun:
   !PrimaryWeapon
     price: 220
@@ -278,7 +282,7 @@ rebel_chaff:
     display_name: "Surplus Chaff Pod"
     required_unlocks: [rebel_ship_license]
     tech_level: 2
-    factions: [Rebel]
+    factions: [Rebel, Federation]
 engine_mk2:
   !ShipMod
     price: 15000
