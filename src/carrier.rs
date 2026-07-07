@@ -15,8 +15,8 @@ use bevy::prelude::*;
 use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::rl_collection::{RLAgent, RLStepSet};
 use crate::sfx::EscortSfx;
-use crate::ship::{Ship, ShipCommand, ShipHostility, Target};
-use crate::ship_anim::{self, ANIM_MIN_SCALE, ScalingUp};
+use crate::ship::{Ship, ShipCommand, Target};
+use crate::ship_anim::{ANIM_MIN_SCALE, ScalingUp};
 use crate::utils::safe_despawn;
 use crate::weapons::FireCommand;
 use crate::{GameLayer, PlayState, Player};
@@ -173,7 +173,7 @@ fn spawn_escort_ships(
 ) {
     let player_entity = player.single().ok();
     for event in reader.read() {
-        let Ok((mother_pos, mother_vel, mother_tf, mother_ship)) =
+        let Ok((_, mother_vel, mother_tf, mother_ship)) =
             mother_ships.get(event.mother)
         else {
             continue;
@@ -185,11 +185,15 @@ fn spawn_escort_ships(
             _ => EscortMode::Escort,
         };
 
+        // Spawn where the event says, not at the mother: bay launches pass
+        // the mother's position anyway, but squadron wings arrive in a ring
+        // formation — stacking them all on one point left the physics solver
+        // to pop the wing apart.
         let mut bundle = crate::ship::ship_bundle(
             &event.ship_type,
             &item_universe,
             &current_system.0,
-            mother_pos.0,
+            event.position,
         );
         let personality = bundle.get_personality();
 
@@ -219,7 +223,7 @@ fn spawn_escort_ships(
                 bundle,
             ))
             .insert((
-                Position(mother_pos.0),
+                Position(event.position),
                 LinearVelocity(mother_vel.0),
             ))
             .insert_if(

@@ -77,6 +77,14 @@ fn squadron_musters_once_in_the_battle_system() {
         assert!(s.carried.is_none(), "squadron wings are not carried");
         assert_eq!(s.mission.as_deref(), Some("battle"));
     }
+    // The wing arrives in a ring around the player, not stacked on one point
+    // (the spawner honors SpawnEscort.position).
+    for (a, b) in [(0, 1), (0, 2), (1, 2)] {
+        assert!(
+            spawns[a].position.distance(spawns[b].position) > 1.0,
+            "wingmen spawn at distinct formation slots"
+        );
+    }
 
     // Never re-mustered — losses are real.
     app.update();
