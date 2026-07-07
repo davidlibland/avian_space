@@ -535,7 +535,7 @@ fn npc_identity(
 ) -> Option<(String, crate::character_compositor::AvatarSpec)> {
     let id = npc_id.as_ref()?;
     let Some(def) = universe.npcs.get(id) else {
-        eprintln!("[missions] WARNING: unknown npc id {id:?} (see assets/npc.yaml)");
+        eprintln!("[missions] WARNING: unknown npc id {id:?} (see assets/npcs.yaml)");
         return None;
     };
     let role = def.role.as_deref().unwrap_or("civilian");

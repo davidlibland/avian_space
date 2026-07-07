@@ -588,7 +588,7 @@ mod tests {
         assert!(body.ramps.values().any(|r| r.group == "human"));
     }
 
-    /// Every authored avatar in assets/npc.yaml must reference valid layer
+    /// Every authored avatar in assets/npcs.yaml must reference valid layer
     /// item ids (for its sex) and valid color ramps — a typo would silently
     /// drop the layer at composite time.
     #[test]
@@ -600,18 +600,17 @@ mod tests {
         .expect("layers.ron missing");
         let m: LayersManifest = ron::from_str(&layers_txt).unwrap();
 
+        // npcs.yaml is loaded as ItemUniverse.npcs — a flat id→NpcDef map
+        // (file stem must match the field name; no wrapper key).
         let npc_txt = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/assets/npc.yaml"
+            "/assets/npcs.yaml"
         ))
-        .expect("npc.yaml missing");
-        #[derive(serde::Deserialize)]
-        struct NpcFile {
-            npcs: std::collections::HashMap<String, crate::item_universe::NpcDef>,
-        }
-        let file: NpcFile = serde_yaml::from_str(&npc_txt).expect("npc.yaml failed to parse");
+        .expect("npcs.yaml missing");
+        let npcs: std::collections::HashMap<String, crate::item_universe::NpcDef> =
+            serde_yaml::from_str(&npc_txt).expect("npcs.yaml failed to parse");
 
-        for (id, def) in &file.npcs {
+        for (id, def) in &npcs {
             assert!(!def.name.trim().is_empty(), "npc {id}: empty name");
             let Some(avatar) = &def.avatar else { continue };
             assert!(

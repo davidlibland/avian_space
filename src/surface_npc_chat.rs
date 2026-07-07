@@ -192,7 +192,7 @@ pub fn npc_chat_ui(
 
     let mut close = false;
 
-    // Recurring characters (assets/npc.yaml) title the window with their name.
+    // Recurring characters (assets/npcs.yaml) title the window with their name.
     let title = chat
         .entity
         .and_then(|e| identities.get(e).ok())

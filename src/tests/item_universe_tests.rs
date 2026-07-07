@@ -243,6 +243,47 @@ fn test_full_assets_parse_like_the_game() {
     }
 }
 
+/// Every `npc:` reference in missions.yaml must resolve to a character in
+/// npcs.yaml. This also guards the file→field wiring: npcs.yaml is keyed by
+/// its stem, so if the file is misnamed or wrapped, `iu.npcs` comes back
+/// empty and every reference fails here (the bug this test was added for).
+#[test]
+fn story_npc_references_resolve() {
+    use crate::missions::{Objective, OfferKind};
+    use std::path::Path;
+    let iu: ItemUniverse =
+        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse");
+
+    assert!(
+        !iu.npcs.is_empty(),
+        "npcs.yaml did not load into ItemUniverse.npcs — check the file is \
+         named `npcs.yaml` (stem must match the field) with entries at the top \
+         level (no `npcs:` wrapper)"
+    );
+
+    let mut missing = Vec::new();
+    for (mid, def) in &iu.missions {
+        let mut refs = Vec::new();
+        if let OfferKind::NpcOffer { npc, .. } = &def.offer {
+            refs.push(npc);
+        }
+        match &def.objective {
+            Objective::MeetNpc { npc, .. } | Objective::CatchNpc { npc, .. } => refs.push(npc),
+            _ => {}
+        }
+        for npc in refs.into_iter().flatten() {
+            if !iu.npcs.contains_key(npc) {
+                missing.push(format!("{mid} → {npc:?}"));
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "missions reference npc ids absent from npcs.yaml:\n  - {}",
+        missing.join("\n  - ")
+    );
+}
+
 /// Strict, enforced asset invariants (trade routes, sprites, reachability,
 /// mission coherence). See `validate_assets::collect_problems`. This FAILS the
 /// build if any are violated, unlike the advisory `warn!` passes.

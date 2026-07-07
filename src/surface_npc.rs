@@ -126,7 +126,7 @@ pub struct Npc;
 #[derive(Component)]
 pub struct MissionNpc(pub String);
 
-/// A recurring character's display name (from assets/npc.yaml), shown as the
+/// A recurring character's display name (from assets/npcs.yaml), shown as the
 /// conversation window title instead of the generic "Conversation".
 #[derive(Component)]
 pub struct NpcIdentity {
