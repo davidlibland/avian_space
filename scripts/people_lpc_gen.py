@@ -52,6 +52,7 @@ import people_lpc_config as cfg  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent   # repo root
 LPC = ROOT / "scripts" / "lpc"
 OUT_LAYERS = ROOT / "assets" / "sprites" / "people" / "layers"
+OUT_PORTRAITS = ROOT / "assets" / "sprites" / "people" / "portraits"
 OUT_RON = ROOT / "assets" / "sprites" / "people" / "layers.ron"
 OUT_CREDITS = ROOT / "assets" / "CREDITS-SPRITES.md"
 
@@ -201,7 +202,11 @@ def assemble_game_sheet(srcdir, variant=None):
         for game_col, (img, col) in enumerate(plan):
             frame = img.crop((col * f, lpc_row * f, (col + 1) * f, (lpc_row + 1) * f))
             sheet.paste(frame, (game_col * f, game_row * f))
-    return sheet.resize((cfg.GAME_COLS * cfg.TILE, cfg.GAME_ROWS * cfg.TILE), Image.NEAREST)
+    # Portrait: the down-facing idle frame at native LPC 64px, composited by
+    # the game's avatar-creator preview at full resolution.
+    portrait = sheet.crop((0, 0, f, f))
+    small = sheet.resize((cfg.GAME_COLS * cfg.TILE, cfg.GAME_ROWS * cfg.TILE), Image.NEAREST)
+    return small, portrait
 
 
 # ── main generation ──────────────────────────────────────────────────────────
@@ -250,10 +255,11 @@ def generate(strict=False, preview=False):
                 by_src.setdefault(src, []).append(sex)
             for src, sexes in sorted(by_src.items()):
                 for variant in variants:
-                    sheet = assemble_game_sheet(src, variant)
-                    if sheet is None:
+                    assembled = assemble_game_sheet(src, variant)
+                    if assembled is None:
                         warned.append(f"no walk src: {item['id']} {src} variant={variant}")
                         continue
+                    sheet, portrait = assembled
                     suffix = ""
                     if len(by_src) > 1:
                         suffix += "_" + "".join(s[0] for s in sexes)  # _m / _f
@@ -263,15 +269,20 @@ def generate(strict=False, preview=False):
                         suffix += f"_l{layer_idx}"
                     fname = f"{item['id']}{suffix}.png"
                     rel = f"sprites/people/layers/{item['slot']}/{fname}"
+                    rel_portrait = f"sprites/people/portraits/{item['slot']}/{fname}"
                     out = OUT_LAYERS / item["slot"] / fname
                     out.parent.mkdir(parents=True, exist_ok=True)
                     sheet.save(out, optimize=True)
+                    pout = OUT_PORTRAITS / item["slot"] / fname
+                    pout.parent.mkdir(parents=True, exist_ok=True)
+                    portrait.save(pout, optimize=True)
                     entries.append({
                         "id": item["id"] + (f"_{slug(variant)}" if variant else ""),
                         "slot": item["slot"],
                         "layer": layer_idx,
                         "z": z,
                         "path": rel,
+                        "portrait": rel_portrait,
                         "materials": materials if not variant else [],
                         "sexes": sorted(sexes),
                         "roles": item["roles"],
@@ -320,7 +331,8 @@ def write_ron(entries, palettes):
     for e in sorted(entries, key=lambda e: (e["slot"], e["id"], e["layer"], e["sexes"])):
         lines.append(
             f'        (id: "{e["id"]}", slot: "{e["slot"]}", layer: {e["layer"]}, '
-            f'z: {e["z"]}, path: "{e["path"]}", materials: {ron_str_list(e["materials"])}, '
+            f'z: {e["z"]}, path: "{e["path"]}", portrait: "{e["portrait"]}", '
+            f'materials: {ron_str_list(e["materials"])}, '
             f'sexes: {ron_str_list(e["sexes"])}, roles: {ron_str_list(e["roles"])}, '
             f'tags: {ron_str_list(e["tags"])}),'
         )

@@ -72,7 +72,9 @@ fn main_menu_ui(
     mut images: ResMut<Assets<Image>>,
 ) {
     // Keep the avatar spec in sync with the gender radios and composite the
-    // preview sheet (cached by spec) before borrowing the egui context.
+    // 64px portrait preview (cached by spec) before borrowing the egui
+    // context. Also warm the full walk-sheet cache so the surface walker
+    // spawn finds it ready.
     let mut preview_tex: Option<egui::TextureId> = None;
     if let Some(layers) = layers.as_deref_mut() {
         let gender = menu_state.new_pilot_gender;
@@ -82,9 +84,10 @@ fn main_menu_ui(
             .clone();
         let stale = menu_state.preview.as_ref().map(|(s, _)| *s != spec).unwrap_or(true);
         if stale {
-            if let Some(handle) = layers.composite(&spec, &mut images) {
-                menu_state.preview = Some((spec, handle));
+            if let Some(handle) = layers.composite_portrait(&spec, &mut images) {
+                menu_state.preview = Some((spec.clone(), handle));
             }
+            layers.composite(&spec, &mut images);
         }
         if let Some((_, handle)) = &menu_state.preview {
             preview_tex = Some(
@@ -198,20 +201,13 @@ fn new_pilot_panel(
         {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                // Live preview: down-facing still frame (tile 0 of the
-                // 18x4 sheet), drawn at 4x.
+                // Live preview: the 64×64 native-resolution portrait
+                // (down-facing idle frame), drawn at 2x.
                 if let Some(tex) = preview_tex {
-                    let cols = crate::surface_character::PERSON_COLS as f32;
-                    let img = egui::Image::new(egui::load::SizedTexture::new(
+                    ui.add(egui::Image::new(egui::load::SizedTexture::new(
                         tex,
-                        [cols * 32.0, 128.0],
-                    ))
-                    .uv(egui::Rect::from_min_max(
-                        egui::pos2(0.0, 0.0),
-                        egui::pos2(1.0 / cols, 0.25),
-                    ))
-                    .fit_to_exact_size([128.0, 128.0].into());
-                    ui.add(img);
+                        [128.0, 128.0],
+                    )));
                 }
                 ui.vertical(|ui| {
                     let sex = spec.sex.clone();

@@ -56,6 +56,8 @@ struct ItemDef {
     layer: u32,
     z: u32,
     path: String,
+    /// Down-idle frame at native LPC 64px (avatar-creator preview).
+    portrait: String,
     materials: Vec<String>,
     sexes: Vec<String>,
     roles: Vec<String>,
@@ -90,6 +92,8 @@ pub struct LayerItem {
     pub roles: Vec<String>,
     pub tags: Vec<String>,
     pub handle: Handle<Image>,
+    /// 64×64 down-idle frame (avatar-creator preview).
+    pub portrait: Handle<Image>,
 }
 
 /// Everything needed to render one character. Deterministic + hashable so it
@@ -148,6 +152,7 @@ pub struct CharacterLayers {
     cols: u32,
     rows: u32,
     cache: HashMap<AvatarSpec, Handle<Image>>,
+    portrait_cache: HashMap<AvatarSpec, Handle<Image>>,
 }
 
 fn hex_rgb(s: &str) -> Option<[u8; 3]> {
@@ -212,6 +217,7 @@ pub fn setup_character_layers(
         .into_iter()
         .map(|d| LayerItem {
             handle: asset_server.load(d.path.clone()),
+            portrait: asset_server.load(d.portrait.clone()),
             id: d.id,
             slot: d.slot,
             layer: d.layer,
@@ -240,6 +246,7 @@ pub fn setup_character_layers(
         cols: manifest.cols,
         rows: manifest.rows,
         cache: HashMap::new(),
+        portrait_cache: HashMap::new(),
     });
 }
 
@@ -347,19 +354,9 @@ impl CharacterLayers {
         AvatarSpec { sex, slots, colors }
     }
 
-    /// Compose the sheet for `spec`. Returns `None` while any needed layer
-    /// image is still loading (callers simply retry later).
-    pub fn composite(
-        &mut self,
-        spec: &AvatarSpec,
-        images: &mut Assets<Image>,
-    ) -> Option<Handle<Image>> {
-        if let Some(h) = self.cache.get(spec) {
-            return Some(h.clone());
-        }
-
-        // Collect every layer of every chosen item (includes behind-body
-        // layers, layer >= 2), sorted by z then layer for a stable stack.
+    /// Every layer of every item chosen by `spec` (includes behind-body
+    /// layers, layer >= 2), sorted by z then layer for a stable stack.
+    fn chosen_layers(&self, spec: &AvatarSpec) -> Vec<&LayerItem> {
         let mut chosen: Vec<&LayerItem> = self
             .items
             .iter()
@@ -368,16 +365,52 @@ impl CharacterLayers {
                     && spec.slots.get(&i.slot).is_some_and(|id| *id == i.id)
             })
             .collect();
+        chosen.sort_by_key(|i| (i.z, i.layer, i.id.clone()));
+        chosen
+    }
+
+    /// Color LUT for one layer under `spec` (exact match on base ramps).
+    fn layer_lut(&self, item: &LayerItem, spec: &AvatarSpec) -> HashMap<[u8; 3], [u8; 3]> {
+        let mut lut = HashMap::new();
+        for mat in &item.materials {
+            let (Some(pal), Some(ramp_name)) = (self.palettes.get(mat), spec.colors.get(mat))
+            else {
+                continue;
+            };
+            let Some(ramp) = pal.ramps.get(ramp_name) else { continue };
+            let (nb, nt) = (pal.base.len(), ramp.colors.len());
+            if nb == 0 || nt == 0 {
+                continue;
+            }
+            // Rank-interpolate ramp lengths: j = round(i*(nt-1)/(nb-1)).
+            let denom = nb.saturating_sub(1).max(1);
+            for (i, src) in pal.base.iter().enumerate() {
+                let j = (i * (nt - 1) + denom / 2) / denom;
+                lut.insert(*src, ramp.colors[j.min(nt - 1)]);
+            }
+        }
+        lut
+    }
+
+    /// Stack `spec`'s layers into a `w`×`h` RGBA image. `pick_handle` selects
+    /// which per-item image to stack (full sheet vs 64px portrait). Returns
+    /// `None` while any needed layer image is still loading.
+    fn blend(
+        &self,
+        spec: &AvatarSpec,
+        w: u32,
+        h: u32,
+        images: &mut Assets<Image>,
+        pick_handle: impl Fn(&LayerItem) -> &Handle<Image>,
+    ) -> Option<Handle<Image>> {
+        let chosen = self.chosen_layers(spec);
         if chosen.is_empty() {
             return None;
         }
-        chosen.sort_by_key(|i| (i.z, i.layer, i.id.clone()));
-
-        let (w, h) = (self.tile.x * self.cols, self.tile.y * self.rows);
         let mut out = vec![0u8; (w * h * 4) as usize];
 
         for item in &chosen {
-            let img = images.get(&item.handle)?;
+            let img = images.get(pick_handle(item))?;
             if img.texture_descriptor.format
                 != bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb
             {
@@ -389,26 +422,7 @@ impl CharacterLayers {
                 eprintln!("[avatar] {}: unexpected sheet size, skipping", item.id);
                 continue;
             }
-            // Build the color LUT for this layer (exact match on base ramps).
-            let mut lut: HashMap<[u8; 3], [u8; 3]> = HashMap::new();
-            for mat in &item.materials {
-                let (Some(pal), Some(ramp_name)) =
-                    (self.palettes.get(mat), spec.colors.get(mat))
-                else {
-                    continue;
-                };
-                let Some(ramp) = pal.ramps.get(ramp_name) else { continue };
-                let (nb, nt) = (pal.base.len(), ramp.colors.len());
-                if nb == 0 || nt == 0 {
-                    continue;
-                }
-                // Rank-interpolate ramp lengths: j = round(i*(nt-1)/(nb-1)).
-                let denom = nb.saturating_sub(1).max(1);
-                for (i, src) in pal.base.iter().enumerate() {
-                    let j = (i * (nt - 1) + denom / 2) / denom;
-                    lut.insert(*src, ramp.colors[j.min(nt - 1)]);
-                }
-            }
+            let lut = self.layer_lut(item, spec);
             // src-over composite with remap.
             for px in 0..(w * h) as usize {
                 let s = &data[px * 4..px * 4 + 4];
@@ -450,12 +464,45 @@ impl CharacterLayers {
             bevy::asset::RenderAssetUsages::MAIN_WORLD | bevy::asset::RenderAssetUsages::RENDER_WORLD,
         );
         img.sampler = bevy::image::ImageSampler::nearest();
-        let handle = images.add(img);
+        Some(images.add(img))
+    }
+
+    /// Compose the full 18×4 walk sheet for `spec`. Returns `None` while any
+    /// needed layer image is still loading (callers simply retry later).
+    pub fn composite(
+        &mut self,
+        spec: &AvatarSpec,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
+        if let Some(h) = self.cache.get(spec) {
+            return Some(h.clone());
+        }
+        let (w, h) = (self.tile.x * self.cols, self.tile.y * self.rows);
+        let handle = self.blend(spec, w, h, images, |item| &item.handle)?;
 
         if self.cache.len() >= MAX_CACHE {
             self.cache.clear();
         }
         self.cache.insert(spec.clone(), handle.clone());
+        Some(handle)
+    }
+
+    /// Compose the 64×64 down-idle portrait for `spec` at native LPC
+    /// resolution (used by the avatar-creator preview).
+    pub fn composite_portrait(
+        &mut self,
+        spec: &AvatarSpec,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
+        if let Some(h) = self.portrait_cache.get(spec) {
+            return Some(h.clone());
+        }
+        let handle = self.blend(spec, 64, 64, images, |item| &item.portrait)?;
+
+        if self.portrait_cache.len() >= MAX_CACHE {
+            self.portrait_cache.clear();
+        }
+        self.portrait_cache.insert(spec.clone(), handle.clone());
         Some(handle)
     }
 }
