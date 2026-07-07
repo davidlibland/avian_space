@@ -118,7 +118,7 @@ pub fn spawn_civilians(
         CharacterAnim::person(0.11),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(5.0),
+        crate::surface_objects::character_foot_collider(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
@@ -129,7 +129,7 @@ pub fn spawn_civilians(
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, depth_z(start.y - 14.0)),
+        Transform::from_xyz(start.x, start.y, depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
     ));
 }
 
@@ -138,7 +138,7 @@ pub fn depth_sort_npcs(
     mut npcs: Query<&mut Transform, (With<Npc>, Without<Walker>)>,
 ) {
     for mut tf in &mut npcs {
-        tf.translation.z = depth_z(tf.translation.y - 14.0);
+        tf.translation.z = depth_z(tf.translation.y - crate::surface_objects::CHARACTER_FOOT_OFFSET);
     }
 }
 

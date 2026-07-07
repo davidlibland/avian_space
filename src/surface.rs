@@ -1785,21 +1785,11 @@ fn setup_surface(
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Walker,
-        crate::surface_objects::FootOffset(14.0),
+        crate::surface_objects::FootOffset(crate::surface_objects::CHARACTER_FOOT_OFFSET),
         walker_anim,
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        // The collider wraps the FEET, not the sprite centre: depth sorting
-        // and everything the player reads as "where I stand" anchor at
-        // y - FootOffset(14), and the 32px LPC sheets put the visible feet a
-        // full 14px below centre — a centre collider stops the walker an
-        // invisible margin short of walls and never overlaps door sensors
-        // even when the feet are visibly in the doorway.
-        Collider::compound(vec![(
-            Vec2::new(0.0, -(14.0 - WALKER_RADIUS)),
-            0.0,
-            Collider::circle(WALKER_RADIUS),
-        )]),
+        crate::surface_objects::character_foot_collider(WALKER_RADIUS),
         CollisionLayers::new(GameLayer::Character, [GameLayer::Surface]),
         CollisionEventsEnabled,
         LinearDamping(WALKER_DAMPING),
@@ -1815,7 +1805,7 @@ fn setup_surface(
         Transform::from_xyz(
             spawn_pos.x,
             spawn_pos.y,
-            crate::surface_objects::depth_z(spawn_pos.y - 14.0),
+            crate::surface_objects::depth_z(spawn_pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET),
         ),
     ));
 

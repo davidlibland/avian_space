@@ -311,6 +311,23 @@ pub fn spawn_landscape_objects(
 #[derive(Component)]
 pub struct FootOffset(pub f32);
 
+/// Standard foot anchor for the composited 32px LPC character sheets: the
+/// visible feet sit this far below the sprite centre. Depth sorting, the
+/// physics collider, and spawn z must all agree on this one number.
+pub const CHARACTER_FOOT_OFFSET: f32 = 14.0;
+
+/// A surface character's physics collider, wrapped around the FEET rather
+/// than the sprite centre. A centre collider stops a character an invisible
+/// margin short of walls and misses door/terrain sensors even when the feet
+/// are visibly inside them — every walker/NPC/civilian uses this.
+pub fn character_foot_collider(radius: f32) -> avian2d::prelude::Collider {
+    avian2d::prelude::Collider::compound(vec![(
+        Vec2::new(0.0, -(CHARACTER_FOOT_OFFSET - radius)),
+        0.0,
+        avian2d::prelude::Collider::circle(radius),
+    )])
+}
+
 /// Update the walker's z for depth sorting (every frame).
 pub fn depth_sort_walker(
     mut walkers: Query<(&mut Transform, Option<&FootOffset>), With<Walker>>,

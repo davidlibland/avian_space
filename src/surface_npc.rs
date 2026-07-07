@@ -510,7 +510,7 @@ pub fn spawn_mission_npc(
         crate::surface_character::CharacterAnim::person(0.11),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(5.0),
+        crate::surface_objects::character_foot_collider(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
@@ -521,7 +521,7 @@ pub fn spawn_mission_npc(
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 14.0)),
+        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
     )).id();
 
     // Spawn "!" marker as a child.
@@ -619,7 +619,7 @@ pub fn spawn_objective_npc(
         crate::surface_character::CharacterAnim::person(0.10),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(5.0),
+        crate::surface_objects::character_foot_collider(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
@@ -630,7 +630,7 @@ pub fn spawn_objective_npc(
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 14.0)),
+        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
     )).id();
 
     commands.entity(npc_entity).with_children(|parent| {
