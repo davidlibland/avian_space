@@ -651,6 +651,7 @@ fn find_planet<'a>(iu: &'a ItemUniverse, name: &str) -> Option<&'a PlanetData> {
 pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     let mut p = Vec::new();
     check_base_weapons_fit_mounts(iu, &mut p);
+    check_base_weapons_fit_item_space(iu, &mut p);
     check_trade_routes(iu, &mut p);
     check_sprites_exist(iu, &mut p);
     check_reachability(iu, &mut p);
@@ -661,6 +662,24 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_fenced_carrier_items(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
+}
+
+/// Every hull's factory loadout must fit its own item space (test-enforced
+/// twin of the validate_ship_weapon_space startup warning).
+fn check_base_weapons_fit_item_space(iu: &ItemUniverse, p: &mut Vec<String>) {
+    use crate::weapons::WeaponSystems;
+    for (ship_name, data) in &iu.ships {
+        let used: i32 = WeaponSystems::build(&data.base_weapons, iu)
+            .iter_all()
+            .map(|(_, s)| s.space_consumed())
+            .sum();
+        if used > data.item_space as i32 {
+            p.push(format!(
+                "ship '{ship_name}': base loadout uses {used} item space but the hull has {}",
+                data.item_space
+            ));
+        }
+    }
 }
 
 /// Every hull's factory loadout must fit its own gun/turret mounts —

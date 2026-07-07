@@ -208,7 +208,7 @@ bulk_carrier:
   torque: 4.0
   max_health: 280
   cargo_space: 160
-  item_space: 44
+  item_space: 50
   gun_mounts: 3
   turret_mounts: 2
   base_weapons:
@@ -433,7 +433,7 @@ fed_carrier:
   torque: 4.0
   max_health: 500
   cargo_space: 15
-  item_space: 76
+  item_space: 84
   gun_mounts: 4
   turret_mounts: 4
   base_weapons:
@@ -456,7 +456,7 @@ rebel_carrier:
   torque: 5.0
   max_health: 400
   cargo_space: 12
-  item_space: 76
+  item_space: 84
   gun_mounts: 4
   turret_mounts: 4
   base_weapons:
@@ -479,7 +479,7 @@ pirate_carrier:
   torque: 3.5
   max_health: 350
   cargo_space: 20
-  item_space: 67
+  item_space: 74
   gun_mounts: 4
   turret_mounts: 3
   base_weapons:

@@ -1778,7 +1778,17 @@ fn setup_surface(
         walker_anim,
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(WALKER_RADIUS),
+        // The collider wraps the FEET, not the sprite centre: depth sorting
+        // and everything the player reads as "where I stand" anchor at
+        // y - FootOffset(14), and the 32px LPC sheets put the visible feet a
+        // full 14px below centre — a centre collider stops the walker an
+        // invisible margin short of walls and never overlaps door sensors
+        // even when the feet are visibly in the doorway.
+        Collider::compound(vec![(
+            Vec2::new(0.0, -(14.0 - WALKER_RADIUS)),
+            0.0,
+            Collider::circle(WALKER_RADIUS),
+        )]),
         CollisionLayers::new(GameLayer::Character, [GameLayer::Surface]),
         CollisionEventsEnabled,
         LinearDamping(WALKER_DAMPING),
