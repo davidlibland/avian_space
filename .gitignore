@@ -9,3 +9,4 @@ dev_catalog/.venv-sprites/
 __pycache__/
 scripts/ship3d/out/
 .venv-bpy/
+scripts/lpc/
