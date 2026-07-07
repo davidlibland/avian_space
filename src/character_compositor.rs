@@ -19,8 +19,10 @@ use std::collections::{BTreeMap, HashMap};
 
 pub const SEXES: [&str; 2] = ["male", "female"];
 /// Required slots: every character has these; the rest are optional.
-pub const REQUIRED_SLOTS: [&str; 5] = ["body", "head", "torso", "legs", "feet"];
-pub const OPTIONAL_SLOTS: [&str; 3] = ["hair", "beard", "hat"];
+/// "shirt" is the base top; "over" is overwear (aprons/jackets/armour)
+/// layered above it — LPC z-values stack them correctly.
+pub const REQUIRED_SLOTS: [&str; 5] = ["body", "head", "shirt", "legs", "feet"];
+pub const OPTIONAL_SLOTS: [&str; 4] = ["hair", "beard", "over", "hat"];
 
 const MAX_CACHE: usize = 512;
 
@@ -114,13 +116,14 @@ impl Default for AvatarSpec {
         slots.insert("body".into(), "body".into());
         slots.insert("head".into(), "head_m".into());
         slots.insert("hair".into(), "cowlick".into());
-        slots.insert("torso".into(), "tunic_blue".into());
+        slots.insert("shirt".into(), "tshirt".into());
         slots.insert("legs".into(), "pants".into());
         slots.insert("feet".into(), "shoes_black".into());
         let mut colors = BTreeMap::new();
         colors.insert("body".into(), "tan".into());
         colors.insert("hair".into(), "brown".into());
         colors.insert("eye".into(), "brown".into());
+        colors.insert("cloth".into(), "blue".into());
         AvatarSpec { sex: "male".into(), slots, colors }
     }
 }
@@ -133,7 +136,7 @@ impl AvatarSpec {
             spec.sex = "female".into();
             spec.slots.insert("head".into(), "head_f".into());
             spec.slots.insert("hair".into(), "bob".into());
-            spec.slots.insert("torso".into(), "blouse_white".into());
+            spec.slots.insert("shirt".into(), "blouse_white".into());
         }
         spec
     }
@@ -333,6 +336,17 @@ impl CharacterLayers {
             let cands = self.candidates("beard", &sex, role);
             if let Some(pick) = cands.get(rng.gen_range(0..cands.len().max(1))) {
                 slots.insert("beard".to_string(), pick.id.clone());
+            }
+        }
+        // Overwear: role-specific overwear (guard armour, miner overalls,
+        // merchant jackets) is the role's uniform — always worn. Civilians
+        // only sometimes layer something over the shirt.
+        {
+            let cands = self.candidates("over", &sex, role);
+            let role_specific = cands.iter().any(|i| i.roles.iter().any(|r| r == role));
+            if !cands.is_empty() && (role_specific || rng.gen_bool(0.25)) {
+                let pick = cands[rng.gen_range(0..cands.len())];
+                slots.insert("over".to_string(), pick.id.clone());
             }
         }
 

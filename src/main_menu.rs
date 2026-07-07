@@ -216,7 +216,8 @@ fn new_pilot_panel(
                     for (label, slot, allow_none) in [
                         ("Hair", "hair", true),
                         ("Beard", "beard", true),
-                        ("Top", "torso", false),
+                        ("Top", "shirt", false),
+                        ("Over", "over", true),
                         ("Legs", "legs", false),
                         ("Shoes", "feet", false),
                         ("Hat", "hat", true),

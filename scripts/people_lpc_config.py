@@ -96,25 +96,37 @@ ITEMS = [
     I("sheet_definitions/hair/mustaches/beards_mustache.json", "beard", "mustache", sexes=("male",)),
     I("sheet_definitions/hair/beards/beards_5oclock_shadow.json", "beard", "stubble", sexes=("male",)),
 
-    # Slot: torso (required; these shirts are variant-style = baked colors) ---
-    I("sheet_definitions/torso/shirts/torso_clothes_tunic.json", "torso", "tunic",
+    # Slot: shirt (required base top; mostly recolor-style = runtime cloth
+    # colors). LPC layers tops: these are FULL shirts (torso + sleeves) —
+    # the "sleeves/*Overlay" defs are add-on sleeves only, don't use them here.
+    I("sheet_definitions/torso/shirts/shortsleeve/torso_clothes_tshirt.json", "shirt", "tshirt"),
+    I("sheet_definitions/torso/shirts/shortsleeve/torso_clothes_tshirt_vneck.json", "shirt", "tshirt_v"),
+    I("sheet_definitions/torso/shirts/shortsleeve/torso_clothes_shortsleeve.json", "shirt", "shortsleeve"),
+    I("sheet_definitions/torso/shirts/longsleeve/torso_clothes_longsleeve.json", "shirt", "longsleeve"),
+    I("sheet_definitions/torso/shirts/longsleeve/torso_clothes_longsleeve2_buttoned.json", "shirt", "buttoned"),
+    I("sheet_definitions/torso/shirts/longsleeve/torso_clothes_longsleeve2_cardigan.json", "shirt", "cardigan"),
+    I("sheet_definitions/torso/shirts/sleeveless/torso_clothes_sleeveless.json", "shirt", "sleeveless",
+      variants=("white", "black", "blue", "forest", "red")),
+    I("sheet_definitions/torso/shirts/torso_clothes_tunic.json", "shirt", "tunic",
       variants=("blue", "forest", "red", "charcoal", "tan", "purple")),
-    I("sheet_definitions/torso/shirts/torso_clothes_blouse.json", "torso", "blouse",
+    I("sheet_definitions/torso/shirts/torso_clothes_blouse.json", "shirt", "blouse",
       variants=("white", "blue", "rose", "forest")),
-    I("sheet_definitions/torso/shirts/torso_clothes_blouse_longsleeve.json", "torso", "blouse_ls",
+    I("sheet_definitions/torso/shirts/torso_clothes_blouse_longsleeve.json", "shirt", "blouse_ls",
       variants=("white", "charcoal", "navy")),
-    I("sheet_definitions/torso/shirts/sleeves/torso_clothes_longsleeves.json", "torso", "longsleeve"),
-    I("sheet_definitions/torso/shirts/torso_clothes_corset.json", "torso", "corset", tags=("fancy",),
+
+    # Slot: over (optional overwear layered above the shirt; LPC zPos values
+    # already stack these correctly).
+    I("sheet_definitions/torso/shirts/torso_clothes_corset.json", "over", "corset", tags=("fancy",),
       variants=("maroon", "brown")),
-    I("sheet_definitions/torso/jacket/torso_jacket_collared.json", "torso", "jacket_collared",
+    I("sheet_definitions/torso/jacket/torso_jacket_collared.json", "over", "jacket_collared",
       roles=("merchant",), variants=("charcoal", "navy", "brown")),
-    I("sheet_definitions/torso/jacket/torso_jacket_trench.json", "torso", "jacket_trench",
+    I("sheet_definitions/torso/jacket/torso_jacket_trench.json", "over", "jacket_trench",
       roles=("merchant",), variants=("dark_gray", "gray")),
-    I("sheet_definitions/torso/armour/torso_armour_leather.json", "torso", "armour_leather", roles=("guard",)),
-    I("sheet_definitions/torso/torso_chainmail.json", "torso", "chainmail", roles=("guard",)),
-    I("sheet_definitions/torso/aprons/torso_aprons_overalls.json", "torso", "overalls",
+    I("sheet_definitions/torso/armour/torso_armour_leather.json", "over", "armour_leather", roles=("guard",)),
+    I("sheet_definitions/torso/torso_chainmail.json", "over", "chainmail", roles=("guard",)),
+    I("sheet_definitions/torso/aprons/torso_aprons_overalls.json", "over", "overalls",
       roles=("miner", "mechanic"), variants=("blue", "brown", "charcoal", "forest")),
-    I("sheet_definitions/torso/aprons/torso_aprons_apron.json", "torso", "apron",
+    I("sheet_definitions/torso/aprons/torso_aprons_apron.json", "over", "apron",
       roles=("merchant",), variants=("white", "brown", "forest")),
 
     # Slot: legs (required, material cloth/metal) ------------------------------
@@ -145,7 +157,8 @@ SLOTS = {
     "head":  {"z": 100, "required": True},
     "hair":  {"z": 120, "required": False},
     "beard": {"z": 118, "required": False},
-    "torso": {"z": 40,  "required": True},
+    "shirt": {"z": 35,  "required": True},
+    "over":  {"z": 45,  "required": False},
     "legs":  {"z": 20,  "required": True},
     "feet":  {"z": 25,  "required": True},
     "hat":   {"z": 130, "required": False},
