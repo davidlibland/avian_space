@@ -69,6 +69,10 @@ pub enum OfferKind {
         /// still near the building (`wait`).  Defaults to `wait`.
         #[serde(default)]
         approach: NpcApproach,
+        /// Recurring character id (key in `assets/npc.yaml`). Gives the
+        /// giver a consistent name + appearance across a storyline.
+        #[serde(default)]
+        npc: Option<String>,
     },
 }
 
@@ -124,6 +128,10 @@ pub enum Objective {
         /// Whether the NPC walks toward the player or waits.
         #[serde(default)]
         approach: NpcApproach,
+        /// Recurring character id (key in `assets/npc.yaml`) for a
+        /// consistent name + appearance.
+        #[serde(default)]
+        npc: Option<String>,
     },
     /// Player must catch a fleeing NPC on a planet surface.  The NPC runs
     /// away; objective completes when the player gets adjacent.
@@ -134,6 +142,9 @@ pub enum Objective {
         /// Which building the NPC starts near.
         #[serde(default)]
         building: Option<String>,
+        /// Recurring character id (key in `assets/npc.yaml`).
+        #[serde(default)]
+        npc: Option<String>,
     },
     /// Player must destroy a group of ships in a specific system. The ships
     /// are spawned when the player enters the system with this mission active

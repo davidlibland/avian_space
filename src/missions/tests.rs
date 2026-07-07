@@ -475,6 +475,7 @@ fn mission_def_yaml_roundtrip_land_with_requires() {
             weight: 0.5,
             building: None,
             approach: Default::default(),
+            npc: None,
         },
         start_effects: vec![StartEffect::LoadCargo {
             commodity: "food".into(),
@@ -836,6 +837,7 @@ mod template_targets {
             starting_ship: "shuttle".to_string(),
             enemies: HashMap::new(),
             allies: HashMap::new(),
+            npcs: HashMap::new(),
         }
     }
 
@@ -1397,6 +1399,7 @@ pub(super) mod runtime {
             weight: 1.0,
             building: None,
             approach: NpcApproach::Wait,
+            npc: None,
         };
         app.world_mut()
             .resource_mut::<MissionCatalog>()

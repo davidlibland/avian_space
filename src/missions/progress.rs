@@ -1406,6 +1406,7 @@ pub(super) fn instantiate_template(
                     planet: chase_planet,
                     npc_name: target_name.clone(),
                     building: None,
+                    npc: None,
                 },
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],

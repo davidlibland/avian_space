@@ -131,6 +131,7 @@ fn test_universe() -> ItemUniverse {
         asteroid_field_expected_value: HashMap::new(),
         ship_credit_scale: HashMap::new(),
         allies: HashMap::new(),
+        npcs: HashMap::new(),
     };
     iu.compute_global_averages();
     iu.compute_trade_maps();

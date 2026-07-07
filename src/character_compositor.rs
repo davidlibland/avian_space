@@ -13,7 +13,7 @@
 //! Convention mirrored from the generator: a hat excludes "bulky"-tagged hair.
 
 use bevy::prelude::*;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
@@ -481,6 +481,27 @@ impl CharacterLayers {
         Some(images.add(img))
     }
 
+    /// The look for a recurring NPC: the authored avatar when present,
+    /// otherwise an appearance derived deterministically from the npc id —
+    /// the same character every time it spawns.
+    pub fn spec_for_npc(
+        &self,
+        npc_id: &str,
+        authored: Option<&AvatarSpec>,
+        role: &str,
+    ) -> AvatarSpec {
+        if let Some(spec) = authored {
+            return spec.clone();
+        }
+        let seed = npc_id
+            .bytes()
+            .fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+                (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3)
+            });
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        self.random_spec(&mut rng, role)
+    }
+
     /// Compose the full 18×4 walk sheet for `spec`. Returns `None` while any
     /// needed layer image is still loading (callers simply retry later).
     pub fn composite(
@@ -565,5 +586,56 @@ mod tests {
         let body = &m.palettes["body"];
         assert!(body.ramps.values().any(|r| r.group == "alien"));
         assert!(body.ramps.values().any(|r| r.group == "human"));
+    }
+
+    /// Every authored avatar in assets/npc.yaml must reference valid layer
+    /// item ids (for its sex) and valid color ramps — a typo would silently
+    /// drop the layer at composite time.
+    #[test]
+    fn npc_yaml_avatars_reference_valid_layers() {
+        let layers_txt = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/sprites/people/layers.ron"
+        ))
+        .expect("layers.ron missing");
+        let m: LayersManifest = ron::from_str(&layers_txt).unwrap();
+
+        let npc_txt = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/npc.yaml"
+        ))
+        .expect("npc.yaml missing");
+        #[derive(serde::Deserialize)]
+        struct NpcFile {
+            npcs: std::collections::HashMap<String, crate::item_universe::NpcDef>,
+        }
+        let file: NpcFile = serde_yaml::from_str(&npc_txt).expect("npc.yaml failed to parse");
+
+        for (id, def) in &file.npcs {
+            assert!(!def.name.trim().is_empty(), "npc {id}: empty name");
+            let Some(avatar) = &def.avatar else { continue };
+            assert!(
+                SEXES.contains(&avatar.sex.as_str()),
+                "npc {id}: bad sex {:?}",
+                avatar.sex
+            );
+            for (slot, item_id) in &avatar.slots {
+                assert!(
+                    m.items.iter().any(|i| i.slot == *slot
+                        && i.id == *item_id
+                        && i.sexes.iter().any(|s| *s == avatar.sex)),
+                    "npc {id}: no item {item_id:?} in slot {slot:?} for sex {:?}",
+                    avatar.sex
+                );
+            }
+            for (material, ramp) in &avatar.colors {
+                assert!(
+                    m.palettes
+                        .get(material)
+                        .is_some_and(|p| p.ramps.contains_key(ramp)),
+                    "npc {id}: unknown ramp {ramp:?} for material {material:?}"
+                );
+            }
+        }
     }
 }

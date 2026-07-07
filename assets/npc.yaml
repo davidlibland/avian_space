@@ -1,0 +1,101 @@
+# Recurring NPC characters for storyline missions.
+#
+# Referenced from missions.yaml via `npc: <id>` on `npc_offer` offers and
+# `meet_npc` / `catch_npc` objectives. The `name` becomes the conversation
+# window title; `avatar` (optional) is a full character-compositor spec —
+# see assets/sprites/people/layers.ron for valid slot item ids and color
+# ramps. When `avatar` is omitted, a deterministic look is derived from the
+# npc id (biased by `role`: civilian/guard/miner/merchant/mechanic/alien),
+# so the character still appears identical everywhere.
+
+npcs:
+  # ── Mining Guild chain ────────────────────────────────────────────────
+  guild_recruiter:
+    name: "Recruiter Dessa Vane"
+    role: miner
+    avatar:
+      sex: female
+      slots: { body: body, head: head_f, hair: braid, shirt: longsleeve, over: overalls_brown, legs: pants, feet: boots_brown }
+      colors: { body: bronze, hair: black, eye: brown, cloth: tan }
+  guild_foreman:
+    name: "Foreman Ada Okafor"
+    role: miner
+    avatar:
+      sex: female
+      slots: { body: body, head: head_f, hair: cornrows, shirt: tshirt, over: overalls_blue, legs: pants, feet: boots_black }
+      colors: { body: coffee, hair: black, eye: brown, cloth: yellow }
+  guild_agent:
+    name: "Agent Silas Marr"
+    role: miner
+
+  # ── Merchant Guild chain ──────────────────────────────────────────────
+  merchant_rep:
+    name: "Guildsman Tobin Vale"
+    role: merchant
+  merchant_manager:
+    name: "Manager Odile Rhee"
+    role: merchant
+
+  # ── Federation bounty chain ───────────────────────────────────────────
+  officer_vasquez:
+    name: "Captain Vasquez"
+    role: guard
+    avatar:
+      sex: female
+      slots: { body: body, head: head_f, hair: bob, shirt: tshirt, over: armour_leather, legs: pants, feet: boots_black }
+      colors: { body: tan, hair: black, eye: brown, cloth: navy, metal: steel }
+
+  # ── Federation Intelligence (espionage) chain ─────────────────────────
+  fedintel_sable:
+    name: "Agent Sable"
+    avatar:
+      sex: female
+      slots: { body: body, head: head_f, hair: bangs, shirt: buttoned, legs: pants_formal, feet: shoes_black }
+      colors: { body: porcelain, hair: charcoal, eye: gray, cloth: charcoal }
+
+  # ── Free Frontier chain ───────────────────────────────────────────────
+  harbormaster_brekk:
+    name: "Harbormaster Brekk"
+    role: miner
+
+  # ── Helios Combine chain ──────────────────────────────────────────────
+  helios_handler:
+    name: "Mr. Aurelian"
+    role: merchant
+    avatar:
+      sex: male
+      slots: { body: body, head: head_m, hair: curtains, shirt: buttoned, over: jacket_collared_navy, legs: pants_formal, feet: shoes_black }
+      colors: { body: ivory, hair: platinum, eye: blue, cloth: white }
+
+  # ── Bastion chain ─────────────────────────────────────────────────────
+  bastion_strake:
+    name: "Commander Strake"
+    role: guard
+    avatar:
+      sex: male
+      slots: { body: body, head: head_m, hair: buzzcut, beard: stubble, shirt: longsleeve, over: chainmail, legs: legs_armour, feet: boots_black }
+      colors: { body: peach, hair: gray, eye: gray, cloth: maroon, metal: steel }
+
+  # ── Order chain ───────────────────────────────────────────────────────
+  order_proctor:
+    name: "Proctor Ilyen"
+    avatar:
+      sex: male
+      slots: { body: body, head: head_m, hair: curtains, beard: beard, shirt: cardigan, legs: pants, feet: sandals_brown }
+      colors: { body: honey, hair: gray, eye: hazel, cloth: purple }
+
+  # ── Rift (Precursor) chain ────────────────────────────────────────────
+  rift_envoy:
+    name: "Envoy Chandra"
+    avatar:
+      sex: female
+      slots: { body: body, head: head_f, hair: bangs_long, shirt: blouse_ls_white, legs: skirt, feet: shoes_brown }
+      colors: { body: tawny, hair: brown, eye: green, cloth: teal }
+
+  # ── Named villains ────────────────────────────────────────────────────
+  pirate_king:
+    name: "Redmaw, the Pirate King"
+    avatar:
+      sex: male
+      slots: { body: body, head: head_m, hair: bedhead, beard: beard, shirt: sleeveless_red, over: jacket_trench_gray, legs: pants_cuffed, feet: boots_leather, hat: bandana }
+      colors: { body: bronze, hair: red, eye: green, cloth: red }

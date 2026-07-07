@@ -336,6 +336,7 @@ fn spawn_mission_npcs(
     mission_catalog: Res<crate::missions::MissionCatalog>,
     mission_log: Res<crate::missions::MissionLog>,
     landed_context: Res<crate::planet_ui::LandedContext>,
+    item_universe: Res<ItemUniverse>,
     existing: Query<&crate::surface_npc::MissionNpc>,
 ) {
     let (Some(mut layers), Some(paths), Some(cost_map)) = (layers, paths, cost_map) else {
@@ -395,10 +396,14 @@ fn spawn_mission_npcs(
             continue;
         }
         // Look up the mission def for NpcOffer config.
-        let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str()) {
+        let (seek, door, identity) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str())
+        {
             match &def.offer {
                 crate::missions::OfferKind::NpcOffer {
-                    building, approach, ..
+                    building,
+                    approach,
+                    npc,
+                    ..
                 } => {
                     let seek = *approach == crate::missions::NpcApproach::Seek;
 
@@ -412,17 +417,17 @@ fn spawn_mission_npcs(
                             door_tiles[rng.r#gen_range(0..door_tiles.len())]
                         });
 
-                    (seek, door)
+                    (seek, door, npc_identity(&item_universe, layers, npc))
                 }
                 _ => {
                     // Fallback for non-NpcOffer (shouldn't happen here).
                     let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
-                    (false, door)
+                    (false, door, None)
                 }
             }
         } else {
             let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
-            (false, door)
+            (false, door, None)
         };
 
         // For waiters, pick a tile near the door (not on it).
@@ -437,6 +442,7 @@ fn spawn_mission_npcs(
             layers,
             &mut images,
             "civilian",
+            identity,
             mission_id,
             spawn_tile,
             walk_speed,
@@ -459,6 +465,7 @@ fn spawn_mission_npcs(
                 planet,
                 building,
                 approach,
+                npc,
                 ..
             } if planet == planet_name => {
                 let door = building
@@ -481,6 +488,7 @@ fn spawn_mission_npcs(
                     layers,
                     &mut images,
                     "civilian",
+                    npc_identity(&item_universe, layers, npc),
                     mission_id,
                     spawn_tile,
                     walk_speed,
@@ -488,7 +496,10 @@ fn spawn_mission_npcs(
                 );
             }
             crate::missions::Objective::CatchNpc {
-                planet, building, ..
+                planet,
+                building,
+                npc,
+                ..
             } if planet == planet_name => {
                 let door = building
                     .as_ref()
@@ -502,6 +513,7 @@ fn spawn_mission_npcs(
                     layers,
                     &mut images,
                     "civilian",
+                    npc_identity(&item_universe, layers, npc),
                     mission_id,
                     door,
                     walk_speed * 1.2,
@@ -511,6 +523,24 @@ fn spawn_mission_npcs(
             _ => {}
         }
     }
+}
+
+/// Resolve a mission's recurring-NPC reference (`npc:` in missions.yaml) to
+/// a display name + consistent avatar. Unknown ids warn and fall back to the
+/// anonymous random look.
+fn npc_identity(
+    universe: &ItemUniverse,
+    layers: &crate::character_compositor::CharacterLayers,
+    npc_id: &Option<String>,
+) -> Option<(String, crate::character_compositor::AvatarSpec)> {
+    let id = npc_id.as_ref()?;
+    let Some(def) = universe.npcs.get(id) else {
+        eprintln!("[missions] WARNING: unknown npc id {id:?} (see assets/npc.yaml)");
+        return None;
+    };
+    let role = def.role.as_deref().unwrap_or("civilian");
+    let spec = layers.spec_for_npc(id, def.avatar.as_ref(), role);
+    Some((def.name.clone(), spec))
 }
 
 /// Find a walkable tile near `door` but not on it (1–10 tiles along a

@@ -184,6 +184,7 @@ pub fn npc_chat_ui(
     mut accept_writer: MessageWriter<crate::missions::AcceptMission>,
     mut decline_writer: MessageWriter<crate::missions::DeclineMission>,
     mut npcs: Query<&mut NpcBehavior, With<Npc>>,
+    identities: Query<&crate::surface_npc::NpcIdentity>,
     mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
     if chat.entity.is_none() { return }
@@ -191,7 +192,15 @@ pub fn npc_chat_ui(
 
     let mut close = false;
 
-    bevy_egui::egui::Window::new("Conversation")
+    // Recurring characters (assets/npc.yaml) title the window with their name.
+    let title = chat
+        .entity
+        .and_then(|e| identities.get(e).ok())
+        .map(|id| id.name.clone())
+        .unwrap_or_else(|| "Conversation".to_string());
+
+    bevy_egui::egui::Window::new(title)
+        .id(bevy_egui::egui::Id::new("npc_conversation"))
         .collapsible(false)
         .resizable(true)
         .anchor(bevy_egui::egui::Align2::CENTER_CENTER, [0.0, 0.0])

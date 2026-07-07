@@ -342,6 +342,7 @@ fn instantiate_war_mission(
                         // at the faction's garrison.
                         building: Some("garrison".to_string()),
                         approach: NpcApproach::Wait,
+                        npc: None,
                     },
                     start_effects: Vec::new(),
                     objective: Objective::DestroyShips {
@@ -430,6 +431,7 @@ fn instantiate_war_mission(
                         npc_name: npc_name.clone(),
                         building: None,
                         approach: NpcApproach::Seek,
+                        npc: None,
                     },
                     Vec::new(),
                     Vec::new(),
@@ -440,6 +442,7 @@ fn instantiate_war_mission(
                         planet: planet_id.clone(),
                         npc_name: npc_name.clone(),
                         building: None,
+                        npc: None,
                     },
                     Vec::new(),
                     Vec::new(),
@@ -469,6 +472,7 @@ fn instantiate_war_mission(
                         npc_name: npc_name.clone(),
                         building: None,
                         approach: NpcApproach::Wait,
+                        npc: None,
                     },
                     Vec::new(),
                     Vec::new(),
@@ -487,6 +491,7 @@ fn instantiate_war_mission(
                             npc_name: npc_name.clone(),
                             building: None,
                             approach: NpcApproach::Seek,
+                            npc: None,
                         },
                         Vec::new(),
                         Vec::new(),
@@ -506,6 +511,7 @@ fn instantiate_war_mission(
                             npc_name: npc_name.clone(),
                             building: None,
                             approach: NpcApproach::Seek,
+                            npc: None,
                         },
                         Vec::new(),
                     ));
@@ -597,6 +603,7 @@ fn instantiate_war_mission(
                         // bar, never anyone in a uniform.
                         building: Some("bar".to_string()),
                         approach: NpcApproach::Seek,
+                        npc: None,
                     },
                     start_effects,
                     objective,

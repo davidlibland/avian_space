@@ -152,6 +152,7 @@ mining_story_1:
     planet: earth
     weight: 1.0
     building: shipyard
+    npc: guild_recruiter
   objective:
     kind: collect_pickups
     commodity: iron
@@ -173,6 +174,7 @@ mining_story_2:
     planet: mars
     weight: 1.0
     building: market
+    npc: guild_foreman
   objective:
     kind: collect_pickups
     commodity: iron
@@ -194,6 +196,7 @@ mining_story_3:
     planet: barnard_rock
     weight: 1.0
     building: market
+    npc: guild_agent
   objective:
     kind: collect_pickups
     commodity: iron
@@ -223,6 +226,7 @@ merchant_story_1:
     planet: earth
     weight: 1.0
     building: market
+    npc: merchant_rep
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -256,6 +260,7 @@ merchant_story_2:
     planet: moon
     weight: 1.0
     building: market
+    npc: merchant_rep
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -289,6 +294,7 @@ merchant_story_3:
     planet: tau_ceti_2
     weight: 1.0
     building: market
+    npc: merchant_manager
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -377,6 +383,7 @@ bounty_story_1:
     weight: 1.0
     building: shipyard
     approach: seek
+    npc: officer_vasquez
   objective:
     kind: destroy_ships
     system: alpha_centauri
@@ -401,6 +408,7 @@ bounty_story_2:
     weight: 1.0
     building: shipyard
     approach: seek
+    npc: officer_vasquez
   objective:
     kind: destroy_ships
     system: drift
@@ -449,6 +457,7 @@ bounty_story_3:
     weight: 1.0
     building: mechanicshop
     approach: seek
+    npc: officer_vasquez
   objective:
     kind: destroy_ships
     system: drift
@@ -473,6 +482,7 @@ bounty_story_4:
     weight: 1.0
     building: shipyard
     approach: seek
+    npc: officer_vasquez
   objective:
     kind: destroy_ships
     system: alpha_centauri
@@ -525,6 +535,7 @@ bounty_story_5:
     weight: 1.0
     building: mechanicshop
     approach: seek
+    npc: officer_vasquez
   objective:
     kind: destroy_ships
     system: drift
@@ -549,6 +560,7 @@ bounty_story_6:
     weight: 1.0
     building: shipyard
     approach: seek
+    npc: officer_vasquez
   objective:
     kind: destroy_ships
     system: alpha_centauri
@@ -573,6 +585,7 @@ bounty_story_6_catch:
     kind: catch_npc
     planet: pluto
     npc_name: "the Pirate King"
+    npc: pirate_king
     building: bar
   completion_effects:
     - kind: pay
@@ -609,6 +622,7 @@ espionage_1:
     weight: 1.0
     building: bar
     approach: wait
+    npc: fedintel_sable
   objective:
     kind: catch_npc
     planet: earth
@@ -631,6 +645,7 @@ espionage_2:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: catch_npc
     planet: mars
@@ -653,6 +668,7 @@ espionage_3:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: catch_npc
     planet: kepler_22b
@@ -677,6 +693,7 @@ espionage_4:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: destroy_ships
     system: alpha_centauri
@@ -727,6 +744,7 @@ espionage_5:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: destroy_ships
     system: drift
@@ -781,6 +799,7 @@ espionage_6:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: meet_npc
     planet: procyon_prime
@@ -803,6 +822,7 @@ espionage_7:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: meet_npc
     planet: sirius_c
@@ -853,6 +873,7 @@ espionage_8:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: destroy_ships
     system: sirius
@@ -905,6 +926,7 @@ espionage_9:
     weight: 1.0
     building: bar
     approach: seek
+    npc: fedintel_sable
   objective:
     kind: meet_npc
     planet: rigel_outpost
@@ -985,6 +1007,7 @@ frontier_1:
     weight: 1.0
     building: bar
     approach: seek
+    npc: harbormaster_brekk
   objective:
     kind: destroy_ships
     system: halcyon
@@ -1010,6 +1033,7 @@ frontier_2:
     weight: 1.0
     building: market
     approach: seek
+    npc: harbormaster_brekk
   start_effects:
     - kind: load_cargo
       commodity: food
@@ -1043,6 +1067,7 @@ frontier_3:
     weight: 1.0
     building: bar
     approach: seek
+    npc: harbormaster_brekk
   objective:
     kind: meet_npc
     planet: kuiper_haven
@@ -1066,6 +1091,7 @@ frontier_4:
     weight: 1.0
     building: bar
     approach: seek
+    npc: harbormaster_brekk
   objective:
     kind: destroy_ships
     system: ceres_freehold
@@ -1091,6 +1117,7 @@ frontier_5:
     weight: 1.0
     building: bar
     approach: seek
+    npc: harbormaster_brekk
   objective:
     kind: destroy_ships
     system: kuiper_reach
@@ -1120,6 +1147,7 @@ helios_1:
     weight: 1.0
     building: bar
     approach: seek
+    npc: helios_handler
   objective:
     kind: destroy_ships
     system: the_foundry
@@ -1145,6 +1173,7 @@ helios_2:
     weight: 1.0
     building: market
     approach: seek
+    npc: helios_handler
   start_effects:
     - kind: load_cargo
       commodity: weapons_parts
@@ -1178,6 +1207,7 @@ helios_3:
     weight: 1.0
     building: bar
     approach: seek
+    npc: helios_handler
   objective:
     kind: catch_npc
     planet: foundry_station
@@ -1201,6 +1231,7 @@ helios_4:
     weight: 1.0
     building: bar
     approach: seek
+    npc: helios_handler
   objective:
     kind: destroy_ships
     system: drift
@@ -1226,6 +1257,7 @@ helios_5:
     weight: 1.0
     building: bar
     approach: seek
+    npc: helios_handler
   objective:
     kind: destroy_ships
     system: drift
@@ -1256,6 +1288,7 @@ bastion_1:
     weight: 1.0
     building: bar
     approach: seek
+    npc: bastion_strake
   objective:
     kind: destroy_ships
     system: drift
@@ -1281,6 +1314,7 @@ bastion_2:
     weight: 1.0
     building: market
     approach: seek
+    npc: bastion_strake
   start_effects:
     - kind: load_cargo
       commodity: weapons_parts
@@ -1314,6 +1348,7 @@ bastion_3:
     weight: 1.0
     building: bar
     approach: seek
+    npc: bastion_strake
   objective:
     kind: destroy_ships
     system: barnard
@@ -1339,6 +1374,7 @@ bastion_4:
     weight: 1.0
     building: bar
     approach: seek
+    npc: bastion_strake
   objective:
     kind: destroy_ships
     system: the_anvil
@@ -1364,6 +1400,7 @@ bastion_5:
     weight: 1.0
     building: bar
     approach: seek
+    npc: bastion_strake
   objective:
     kind: destroy_ships
     system: the_anvil
@@ -1394,6 +1431,7 @@ order_1:
     weight: 1.0
     building: bar
     approach: seek
+    npc: order_proctor
   objective:
     kind: destroy_ships
     system: tau_ceti
@@ -1422,6 +1460,7 @@ order_2:
     weight: 1.0
     building: bar
     approach: seek
+    npc: order_proctor
   objective:
     kind: meet_npc
     planet: kepler_22b
@@ -1445,6 +1484,7 @@ order_3:
     weight: 1.0
     building: bar
     approach: seek
+    npc: order_proctor
   objective:
     kind: destroy_ships
     system: the_foundry
@@ -1470,6 +1510,7 @@ order_4:
     weight: 1.0
     building: bar
     approach: seek
+    npc: order_proctor
   start_effects:
     - kind: load_cargo
       commodity: artifacts
@@ -1503,6 +1544,7 @@ order_5:
     weight: 1.0
     building: bar
     approach: seek
+    npc: order_proctor
   objective:
     kind: destroy_ships
     system: the_threshold
@@ -1535,6 +1577,7 @@ rift_1:
     weight: 1.0
     building: bar
     approach: seek
+    npc: rift_envoy
   objective:
     kind: destroy_ships
     system: the_rift
@@ -1558,6 +1601,7 @@ rift_2:
     weight: 1.0
     building: bar
     approach: seek
+    npc: rift_envoy
   objective:
     kind: destroy_ships
     system: the_silence
@@ -1581,6 +1625,7 @@ rift_final:
     weight: 1.0
     building: bar
     approach: seek
+    npc: rift_envoy
   objective:
     kind: destroy_ships
     system: the_seedbed
@@ -2009,6 +2054,7 @@ no_flag_4:
     kind: meet_npc
     planet: kuiper_haven
     npc_name: "the Pirate King"
+    npc: pirate_king
     building: bar
   completion_effects:
     - kind: pay

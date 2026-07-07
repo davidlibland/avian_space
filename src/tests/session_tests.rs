@@ -92,6 +92,7 @@ fn basic_universe() -> ItemUniverse {
         starting_ship: "shuttle".to_string(),
         enemies: HashMap::new(),
         allies: HashMap::new(),
+        npcs: HashMap::new(),
     }
 }
 

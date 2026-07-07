@@ -126,6 +126,13 @@ pub struct Npc;
 #[derive(Component)]
 pub struct MissionNpc(pub String);
 
+/// A recurring character's display name (from assets/npc.yaml), shown as the
+/// conversation window title instead of the generic "Conversation".
+#[derive(Component)]
+pub struct NpcIdentity {
+    pub name: String,
+}
+
 /// Marks the "!" indicator sprite above a mission-giver NPC.
 #[derive(Component)]
 pub struct NpcMarker;
@@ -469,6 +476,7 @@ pub fn spawn_mission_npc(
     layers: &mut crate::character_compositor::CharacterLayers,
     images: &mut Assets<Image>,
     role: &str,
+    identity: Option<(String, crate::character_compositor::AvatarSpec)>,
     mission_id: &str,
     door_tile: (u32, u32),
     speed: f32,
@@ -476,7 +484,10 @@ pub fn spawn_mission_npc(
 ) {
     let mut rng = rand::thread_rng();
 
-    let spec = layers.random_spec(&mut rng, role);
+    let spec = identity
+        .as_ref()
+        .map(|(_, spec)| spec.clone())
+        .unwrap_or_else(|| layers.random_spec(&mut rng, role));
     let Some(image) = layers.composite(&spec, images) else {
         return; // layer images still loading; idempotent caller retries
     };
@@ -524,6 +535,10 @@ pub fn spawn_mission_npc(
         Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
     )).id();
 
+    if let Some((name, _)) = identity {
+        commands.entity(npc_entity).insert(NpcIdentity { name });
+    }
+
     // Spawn "!" marker as a child.
     commands.entity(npc_entity).with_children(|parent| {
         parent.spawn((
@@ -548,6 +563,7 @@ pub fn spawn_objective_npc(
     layers: &mut crate::character_compositor::CharacterLayers,
     images: &mut Assets<Image>,
     role: &str,
+    identity: Option<(String, crate::character_compositor::AvatarSpec)>,
     mission_id: &str,
     door_tile: (u32, u32),
     speed: f32,
@@ -555,7 +571,10 @@ pub fn spawn_objective_npc(
 ) {
     let mut rng = rand::thread_rng();
 
-    let spec = layers.random_spec(&mut rng, role);
+    let spec = identity
+        .as_ref()
+        .map(|(_, spec)| spec.clone())
+        .unwrap_or_else(|| layers.random_spec(&mut rng, role));
     let Some(image) = layers.composite(&spec, images) else {
         return; // layer images still loading; idempotent caller retries
     };
@@ -632,6 +651,10 @@ pub fn spawn_objective_npc(
         ),
         Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
     )).id();
+
+    if let Some((name, _)) = identity {
+        commands.entity(npc_entity).insert(NpcIdentity { name });
+    }
 
     commands.entity(npc_entity).with_children(|parent| {
         parent.spawn((

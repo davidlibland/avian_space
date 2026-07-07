@@ -13,6 +13,23 @@ use serde::de::DeserializeOwned;
 use serde_yaml::{Mapping, Value};
 use std::path::Path;
 
+/// A recurring NPC character (assets/npc.yaml): a consistent name and
+/// appearance for storyline mission givers / objective NPCs. Referenced by
+/// id from missions.yaml (`npc:` on npc_offer / meet_npc / catch_npc).
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct NpcDef {
+    /// Display name shown as the conversation title (e.g. "Foreman Okafor").
+    pub name: String,
+    /// Authored look. When absent, a deterministic appearance is derived
+    /// from the npc id, so the character still looks the same everywhere.
+    #[serde(default)]
+    pub avatar: Option<crate::character_compositor::AvatarSpec>,
+    /// Outfit bias for the derived appearance ("civilian", "guard", "miner",
+    /// "merchant", "alien", ...). Ignored when `avatar` is authored.
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
 /// A faction's identity and traits (assets/factions.yaml) — the single
 /// source of truth game logic keys on, instead of hardcoded faction names.
 #[derive(Deserialize, Serialize, Clone, Default)]
@@ -86,6 +103,10 @@ pub struct ItemUniverse {
     pub missions: HashMap<String, MissionDef>,
     #[serde(default)]
     pub mission_templates: HashMap<String, MissionTemplate>,
+    /// Recurring NPC characters (assets/npc.yaml): consistent names +
+    /// appearances for storyline mission givers and objective NPCs.
+    #[serde(default)]
+    pub npcs: HashMap<String, NpcDef>,
     /// Average price of each commodity across all planets in all star systems.
     #[serde(skip)]
     pub global_average_price: HashMap<String, f64>,

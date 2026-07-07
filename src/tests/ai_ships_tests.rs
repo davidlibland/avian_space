@@ -30,6 +30,7 @@ fn empty_item_universe() -> ItemUniverse {
         asteroid_field_expected_value: HashMap::new(),
         ship_credit_scale: HashMap::new(),
         allies: HashMap::new(),
+        npcs: HashMap::new(),
     }
 }
 
