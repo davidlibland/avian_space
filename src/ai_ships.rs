@@ -277,14 +277,9 @@ fn spawn_ai_ship_at(
 /// The ship appears at a random point on a circle of radius `JUMP_IN_RADIUS`,
 /// moving at `JUMP_SPEED` toward the origin, and carries `JumpingIn` until it
 /// decelerates to its normal maximum speed.
-fn spawn_ai_ship_jumping_in(
-    commands: &mut Commands,
-    item_universe: &Res<ItemUniverse>,
-    jump_flash_writer: &mut MessageWriter<crate::explosions::TriggerJumpFlash>,
-    system_name: &str,
-    ship_type: &str,
-) {
-    let mut rng = rand::thread_rng();
+/// Entry point + inbound velocity for a hyperspace arrival: a random spot on
+/// the system edge, moving roughly toward the center at jump speed.
+pub fn jump_in_entry(rng: &mut impl Rng) -> (Vec2, Vec2) {
     let theta = rng.gen_range(0.0_f32..(2.0 * PI));
     let edge_pos = Vec2::new(theta.cos(), theta.sin()) * JUMP_IN_RADIUS;
     // Velocity points roughly toward the system center with a small random spread.
@@ -295,7 +290,25 @@ fn spawn_ai_ship_jumping_in(
         inbound_dir.x * ca - inbound_dir.y * sa,
         inbound_dir.x * sa + inbound_dir.y * ca,
     );
-    let vel = dir * JUMP_SPEED;
+    (edge_pos, dir * JUMP_SPEED)
+}
+
+/// Marker bundle for a ship arriving from hyperspace — `jump_in_system`
+/// decelerates it and strips these once it reaches cruise speed.
+pub fn jump_in_markers(radius: f32) -> (JumpingIn, Sensor, Mass, AngularInertia) {
+    let (mass, inertia) = sensor_mass_for_ship(radius);
+    (JumpingIn, Sensor, mass, inertia)
+}
+
+fn spawn_ai_ship_jumping_in(
+    commands: &mut Commands,
+    item_universe: &Res<ItemUniverse>,
+    jump_flash_writer: &mut MessageWriter<crate::explosions::TriggerJumpFlash>,
+    system_name: &str,
+    ship_type: &str,
+) {
+    let mut rng = rand::thread_rng();
+    let (edge_pos, vel) = jump_in_entry(&mut rng);
 
     // Small flash at entry point.
     jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
@@ -310,7 +323,6 @@ fn spawn_ai_ship_jumping_in(
         .get(ship_type)
         .map(|s| s.radius)
         .unwrap_or(20.0);
-    let (mass, inertia) = sensor_mass_for_ship(radius);
     commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
@@ -318,10 +330,7 @@ fn spawn_ai_ship_jumping_in(
                 personality: personality.clone(),
             },
             RLAgent::new(personality),
-            JumpingIn,
-            Sensor,
-            mass,
-            inertia,
+            jump_in_markers(radius),
             bundle,
         ))
         .insert(LinearVelocity(vel))

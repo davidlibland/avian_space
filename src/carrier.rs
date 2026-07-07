@@ -97,9 +97,11 @@ pub struct SpawnEscort {
 // ---------------------------------------------------------------------------
 
 pub fn carrier_plugin(app: &mut App) {
-    // Register EscortSfx here (rather than in sfx_plugin) so the producers in
-    // this module work in headless mode, where sfx_plugin isn't loaded.
+    // Register EscortSfx/TriggerJumpFlash here (rather than only in the
+    // sfx/explosions plugins) so the producers in this module work in
+    // headless mode, where those plugins aren't loaded.
     app.add_message::<EscortSfx>();
+    app.add_message::<crate::explosions::TriggerJumpFlash>();
     app.add_message::<SpawnEscort>().add_systems(
         Update,
         (
@@ -169,6 +171,7 @@ fn spawn_escort_ships(
     mother_ships: Query<(&Position, &LinearVelocity, &Transform, &Ship)>,
     player: Query<Entity, With<Player>>,
     mut sfx_writer: MessageWriter<EscortSfx>,
+    mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
     images: Res<Assets<Image>>,
 ) {
     let player_entity = player.single().ok();
@@ -196,11 +199,21 @@ fn spawn_escort_ships(
             event.position,
         );
         let personality = bundle.get_personality();
+        let is_bay_launch = event.carried.is_some();
 
-        // Determine the full sprite size, then shrink it for the launch animation.
+        // Bay launches grow out of the mother's hull; squadron wings jump in
+        // at their formation slots, full-size with a hyperspace flash — they
+        // arrive WITH the player, they aren't built by her ship.
         let full_size = crate::ship::ship_display_size(bundle.radius());
-        let start_size = full_size * ANIM_MIN_SCALE;
-        bundle.sprite.custom_size = Some(start_size);
+        if is_bay_launch {
+            bundle.sprite.custom_size = Some(full_size * ANIM_MIN_SCALE);
+        } else {
+            bundle.sprite.custom_size = Some(full_size);
+            jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
+                location: event.position,
+                size: 8.0,
+            });
+        }
 
         // Match the mother's heading via Transform rotation.
         // avian2d will initialize Rotation from this on the first physics step.
@@ -216,12 +229,15 @@ fn spawn_escort_ships(
                     mother: event.mother,
                 },
                 initial_mode,
+                bundle,
+            ))
+            .insert_if(
                 ScalingUp {
                     timer: Timer::from_seconds(LAUNCH_DURATION, TimerMode::Once),
                     full_size,
                 },
-                bundle,
-            ))
+                || is_bay_launch,
+            )
             .insert((
                 Position(event.position),
                 LinearVelocity(mother_vel.0),

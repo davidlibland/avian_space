@@ -443,6 +443,7 @@ pub fn spawn_mission_targets(
     current: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
     existing: Query<&MissionTarget>,
+    mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
 ) {
     let mut rng = rand::thread_rng();
     for (id, def) in &catalog.defs {
@@ -492,10 +493,13 @@ pub fn spawn_mission_targets(
             (0, 0)
         };
         for i in 0..need {
-            let pos = bevy::math::Vec2::new(
-                rng.gen_range(-3000.0..3000.0),
-                rng.gen_range(-3000.0..3000.0),
-            );
+            // Targets arrive from hyperspace like ambient traffic — no ship
+            // ever silently pops into existence mid-mission.
+            let (pos, vel) = crate::ai_ships::jump_in_entry(&mut rng);
+            jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
+                location: pos,
+                size: 8.0,
+            });
             let mut bundle = ship_bundle(ship_type, &item_universe, system, pos);
             if let Some(req) = collect {
                 // First `collect_remainder` ships carry an extra unit so the
@@ -504,7 +508,13 @@ pub fn spawn_mission_targets(
                 bundle.set_mission_cargo(req.commodity.clone(), collect_per_ship + extra);
             }
             let personality = bundle.get_personality();
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            let radius = item_universe
+                .ships
+                .get(ship_type)
+                .map(|s| s.radius)
+                .unwrap_or(20.0);
+            // Face the direction of travel (ship forward is +Y).
+            let angle = vel.y.atan2(vel.x) - std::f32::consts::FRAC_PI_2;
             commands
                 .spawn((
                     DespawnOnExit(crate::PlayState::Flying),
@@ -517,12 +527,14 @@ pub fn spawn_mission_targets(
                         display_name: target_name.clone(),
                         always_targets_player: *hostile,
                     },
+                    crate::ai_ships::jump_in_markers(radius),
                     bundle,
                 ))
-                .insert(
+                .insert((
                     Transform::from_xyz(pos.x, pos.y, 0.0)
                         .with_rotation(Quat::from_rotation_z(angle)),
-                )
+                    avian2d::prelude::LinearVelocity(vel),
+                ))
                 .with_child((
                     Collider::circle(DETECTION_RADIUS),
                     Sensor,

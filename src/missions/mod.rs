@@ -28,6 +28,9 @@ pub fn missions_plugin(app: &mut App) {
         .init_session_resource::<MissionOffers>()
         .init_session_resource::<PlayerUnlocks>()
         .add_message::<PlayerLandedOnPlanet>()
+        // spawn_mission_targets writes arrival flashes; registered here (as
+        // well as in explosions_plugin) so headless worlds stay self-contained.
+        .add_message::<crate::explosions::TriggerJumpFlash>()
         .add_message::<PlayerEnteredSystem>()
         .add_message::<PickupCollected>()
         .add_message::<ShipDestroyed>()
