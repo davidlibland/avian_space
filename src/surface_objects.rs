@@ -306,13 +306,34 @@ pub fn spawn_landscape_objects(
 
 // ── Animation system ─────────────────────────────────────────────────────
 
+/// Distance from a character sprite's center down to its feet, for depth
+/// sorting. 14 for composited 32px avatars, 8 for the legacy 16px sheets.
+#[derive(Component)]
+pub struct FootOffset(pub f32);
+
+/// Standard foot anchor for the composited 32px LPC character sheets: the
+/// visible feet sit this far below the sprite centre. Depth sorting, the
+/// physics collider, and spawn z must all agree on this one number.
+pub const CHARACTER_FOOT_OFFSET: f32 = 14.0;
+
+/// A surface character's physics collider, wrapped around the FEET rather
+/// than the sprite centre. A centre collider stops a character an invisible
+/// margin short of walls and misses door/terrain sensors even when the feet
+/// are visibly inside them — every walker/NPC/civilian uses this.
+pub fn character_foot_collider(radius: f32) -> avian2d::prelude::Collider {
+    avian2d::prelude::Collider::compound(vec![(
+        Vec2::new(0.0, -(CHARACTER_FOOT_OFFSET - radius)),
+        0.0,
+        avian2d::prelude::Collider::circle(radius),
+    )])
+}
+
 /// Update the walker's z for depth sorting (every frame).
 pub fn depth_sort_walker(
-    mut walkers: Query<&mut Transform, With<Walker>>,
+    mut walkers: Query<(&mut Transform, Option<&FootOffset>), With<Walker>>,
 ) {
-    let Ok(mut tf) = walkers.single_mut() else { return };
-    // Walker sprite is 16px tall, centered — feet are 8px below center.
-    let foot_y = tf.translation.y - 8.0;
+    let Ok((mut tf, foot)) = walkers.single_mut() else { return };
+    let foot_y = tf.translation.y - foot.map_or(8.0, |f| f.0);
     tf.translation.z = depth_z(foot_y);
 }
 

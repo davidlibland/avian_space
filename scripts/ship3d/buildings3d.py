@@ -30,7 +30,8 @@ ORTHO = 17.0                 # fixed across the montage so relative sizes show
 
 # footprint W×D in tiles (base/collision box); roofs/awnings may overhang
 FOOTPRINTS = {"market": (6, 5), "outfitter": (4, 4), "shipyard": (8, 6),
-              "mechanic": (6, 4), "bar": (6, 5), "pad": (3, 3), "fuel_station": (4, 4)}
+              "mechanic": (6, 4), "bar": (6, 5), "pad": (3, 3), "fuel_station": (4, 4),
+              "garrison": (6, 5)}
 
 
 def C(*v):
@@ -42,10 +43,10 @@ STYLES = {
     "colony": dict(biome="garden", roof="gable",
                    wall=C(156, 170, 138), wall_d=C(98, 112, 82),
                    beam=C(94, 70, 48), roof_c=C(168, 104, 74),
-                   trim=C(206, 212, 196), glow=C(190, 236, 180)),
+                   trim=C(206, 212, 196), glow=C(150, 224, 130)),
     "cryo": dict(biome="ice", roof="dome",
                  wall=C(195, 218, 238), wall_d=C(150, 180, 210),
-                 roof_c=C(220, 234, 246), trim=C(238, 246, 252), glow=C(145, 220, 255)),
+                 roof_c=C(220, 234, 246), trim=C(238, 246, 252), glow=C(110, 205, 255)),
     "extraction": dict(biome="rocky", roof="flat_industrial",
                        wall=C(118, 95, 68), wall_d=C(78, 62, 46),
                        roof_c=C(92, 78, 64), trim=C(150, 130, 100), glow=C(255, 135, 55)),
@@ -124,15 +125,22 @@ def mats(s):
         roof=textured(B.toon_material("roof", s["roof_c"], spec=0.12), ROOF_TEX[s["biome"]],
                       s["roof_c"], scale=5.5),
         roof_d=B.toon_material("roof_d", tuple(c * 0.7 for c in s["roof_c"]), spec=0.12),  # shingle-course shadow
-        trim=B.toon_material("trim", s["trim"], spec=0.2),
+        trim=B.toon_material("trim", s["trim"], spec=0.1),
         beam=textured(B.toon_material("beam", s.get("beam", s["wall_d"]), spec=0.0), "wood",
                       s.get("beam", s["wall_d"]), scale=4.0),
         plant=B.toon_material("plant", s.get("plant", C(96, 152, 74)), spec=0.0),
         stone=textured(B.toon_material("stone", C(140, 136, 128), spec=0.05), "brick", C(140, 136, 128), scale=6.0),
         dark=B.toon_material("dark", C(40, 42, 48), spec=0.0),
-        metal=textured(B.toon_material("metal", C(122, 128, 136), spec=1.3, spec_sharp=0.82), "noise",
+        # spec is ADDED on top of the cel shade, and a flat face square to the
+        # camera catches the glossy lobe across its whole area — 1.3 turned
+        # every forward-facing metal panel pure white (gantry beams, pump
+        # tops). Keep a faint sharp glint instead.
+        metal=textured(B.toon_material("metal", C(122, 128, 136), spec=0.35, spec_sharp=0.9), "noise",
                        C(122, 128, 136), scale=9.0),
-        glow=B.glow_material("glow", s["glow"], strength=5.0),
+        # strength 5 pushed windows/signs past white — hue was lost entirely;
+        # ~1.2 keeps them clearly lit AND clearly colored (pale palette glows
+        # were also deepened, or they tone-map to white regardless).
+        glow=B.glow_material("glow", s["glow"], strength=1.2),
     )
 
 
@@ -309,13 +317,17 @@ def entry(s, m, w, d, z0):
     # floor shows through the open door, with the frame/lintel/roof intact.
     b = s["biome"]; fz = -d / 2
     if b == "ice":                         # storm-porch airlock vestibule
-        B.add_box("vest", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.06)
-        B.add_box("vroof", (0, fz - 0.7, z0 + 1.78), (2.1, 1.62, 0.18), m["roof"], bevel=0.04)
+        # The vestibule juts 1.4 tiles FORWARD of the wall, so it bakes as its
+        # own prop object sorted at ITS front line — a player stepping into
+        # the airlock mouth is framed by it instead of drawing over it. The
+        # game also sorts the animated door at this line (see door overlay).
+        B.add_box("pp_vest__wall", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.06)
+        B.add_box("pp_vest__roof", (0, fz - 0.7, z0 + 1.78), (2.1, 1.62, 0.18), m["roof"], bevel=0.04)
         B.add_box("doorpanel", (0, fz - 1.44, z0 + 0.68), (0.96, 0.08, 1.3), m["wall_d"], bevel=0.03)
-        B.add_box("vglow", (0, fz - 1.46, z0 + 1.42), (1.1, 0.1, 0.13), m["glow"], bevel=0.0)
+        B.add_box("pp_vest__glow", (0, fz - 1.46, z0 + 1.42), (1.1, 0.1, 0.13), m["glow"], bevel=0.0)
         # the cut runs from in FRONT of the vestibule (which juts forward) all the
         # way back through the body, so the whole doorway is a real opening
-        cut_doorway(m, ["vest", "body"], 0, fz - 1.55, 1.02, 1.46, z0 + 0.72, 1.55 + d / 2 + 0.4)
+        cut_doorway(m, ["pp_vest__wall", "body"], 0, fz - 1.55, 1.02, 1.46, z0 + 0.72, 1.55 + d / 2 + 0.4)
     else:
         B.add_box("doorpanel", (0, fz - 0.06, z0 + 0.65), (1.0, 0.08, 1.3), m["wall_d"], bevel=0.02)
         B.add_box("lintel", (0, fz - 0.06, z0 + 1.34), (1.3, 0.16, 0.16), m["glow"], bevel=0.0)
@@ -356,25 +368,26 @@ def build_market(s, m):
     # front beam on grounded posts; produce crates pulled against the posts.
     wp, yf, zf = w + 0.2, -d / 2 - 1.5, z0 + 1.9
     v = [(-wp / 2, -d / 2, top - 0.15), (wp / 2, -d / 2, top - 0.15), (wp / 2, yf, zf), (-wp / 2, yf, zf)]
-    B._obj_from_pydata("porch", v, [(0, 1, 2, 3)], m["roof"], smooth=False, bevel=0.0)
-    B.add_box("pbeam", (0, yf, zf - 0.05), (wp, 0.16, 0.18), m["beam"], bevel=0.0)
+    B._obj_from_pydata("pp_porch__roof", v, [(0, 1, 2, 3)], m["roof"], smooth=False, bevel=0.0)
+    B.add_box("pp_porch__beam", (0, yf, zf - 0.05), (wp, 0.16, 0.18), m["beam"], bevel=0.0)
     for sx in (-wp / 2 + 0.25, wp / 2 - 0.25):
-        B.add_box("ppost", (sx, yf, zf / 2), (0.16, 0.16, zf), m["beam"], bevel=0.02)
+        B.add_box("pp_porch__post", (sx, yf, zf / 2), (0.16, 0.16, zf), m["beam"], bevel=0.02)
     for i, (bx, by) in enumerate([(-wp / 2 + 0.55, yf + 0.2), (-wp / 2 + 1.0, yf + 0.3), (wp / 2 - 0.6, yf + 0.2)]):
-        B.add_box("crate", (bx, by, 0.42), (0.8, 0.8, 0.8), m["wall_d"] if i % 2 else m["beam"], bevel=0.04)
-        B.add_box("crlabel", (bx, by - 0.42, 0.46), (0.46, 0.03, 0.26), m["trim"], bevel=0.0)        # shipping label
-        B.add_box("crband", (bx, by - 0.41, 0.42), (0.84, 0.02, 0.08), m["beam"], bevel=0.0)         # strap
+        g = f"pp_crate{i}"
+        B.add_box(f"{g}__box", (bx, by, 0.42), (0.8, 0.8, 0.8), m["wall_d"] if i % 2 else m["beam"], bevel=0.04)
+        B.add_box(f"{g}__label", (bx, by - 0.42, 0.46), (0.46, 0.03, 0.26), m["trim"], bevel=0.0)        # shipping label
+        B.add_box(f"{g}__band", (bx, by - 0.41, 0.42), (0.84, 0.02, 0.08), m["beam"], bevel=0.0)         # strap
 
 
 def build_outfitter(s, m):
     w, d, h = 4, 4, 3.4        # outfitter → small_house 4×4
     z0, top = shell(s, m, w, d, h, win=(2, 1))
     # weapon rack out front (arms dealer) + rooftop test-mount
-    B.add_box("rackbar", (0, -d / 2 - 1.3, 1.2), (3.0, 0.16, 0.16), m["metal"], bevel=0.0)
+    B.add_box("pp_rack__bar", (0, -d / 2 - 1.3, 1.2), (3.0, 0.16, 0.16), m["metal"], bevel=0.0)
     for rx in (-1.0, 0.0, 1.0):
-        B.add_cylinder("missile", (rx, -d / 2 - 1.3, 0.7), 0.12, 1.0, m["dark"], axis="z", r2=0.02)
+        B.add_cylinder("pp_rack__missile", (rx, -d / 2 - 1.3, 0.7), 0.12, 1.0, m["dark"], axis="z", r2=0.02)
     for rx in (-1.2, 1.2):
-        B.add_cylinder("rackleg", (rx, -d / 2 - 1.3, 0.6), 0.07, 1.2, m["metal"], axis="z")
+        B.add_cylinder("pp_rack__leg", (rx, -d / 2 - 1.3, 0.6), 0.07, 1.2, m["metal"], axis="z")
     B.add_box("rack", (0, 0, top + 0.5), (2.4, 0.5, 0.5), m["metal"], bevel=0.05)
     B.add_cylinder("barrel", (0, -1.0, top + 0.9), 0.18, 2.2, m["dark"], axis="y")
 
@@ -427,8 +440,8 @@ def build_mechanic(s, m):
     # a ship engine pulled out front on a stand, opened up for repair — to the
     # far LEFT, clear of the centred door (a solid impassable tile in-game)
     repair_engine(-2.0, -d / 2 - 1.5, m)
-    B.add_box("plate", (w / 2 - 0.5, -d / 2 - 1.1, 1.1), (1.4, 0.14, 2.0), m["wall_d"], bevel=0.05)
-    B.add_box("toolbox", (w / 2 - 1.5, -d / 2 - 1.4, 0.35), (0.9, 0.6, 0.5), m["roof"], bevel=0.05)
+    B.add_box("pp_plate__plate", (w / 2 - 0.5, -d / 2 - 1.1, 1.1), (1.4, 0.14, 2.0), m["wall_d"], bevel=0.05)
+    B.add_box("pp_toolbox__box", (w / 2 - 1.5, -d / 2 - 1.4, 0.35), (0.9, 0.6, 0.5), m["roof"], bevel=0.05)
     B.add_cylinder("jib_p", (w / 2 - 0.3, d / 2 - 0.3, top + 0.8), 0.14, 2.0, m["metal"], axis="z")
     B.add_box("jib_a", (w / 2 - 1.2, d / 2 - 0.3, top + 1.4), (2.0, 0.2, 0.2), m["metal"], bevel=0.03)
 
@@ -437,13 +450,64 @@ def build_bar(s, m):
     w, d, h = 6, 5, 3.2        # bar → medium_house 6×5
     z0, top = shell(s, m, w, d, h, win=(3, 2))
     # big glowing hanging sign on a bracket arm + roof chimney
-    B.add_box("bracket", (-w / 2 + 0.2, -d / 2 - 0.5, top - 0.3), (0.1, 1.0, 0.1), m["beam"], bevel=0.0)
-    B.add_box("signpost", (-w / 2 + 0.2, -d / 2 - 1.0, top - 1.1), (0.12, 0.12, 1.0), m["dark"], bevel=0.0)
-    B.add_box("signface", (-w / 2 + 0.2, -d / 2 - 1.06, top - 1.6), (1.4, 0.1, 0.85), m["glow"], bevel=0.02)
+    B.add_box("pp_sign__bracket", (-w / 2 + 0.2, -d / 2 - 0.5, top - 0.3), (0.1, 1.0, 0.1), m["beam"], bevel=0.0)
+    B.add_box("pp_sign__post", (-w / 2 + 0.2, -d / 2 - 1.0, top - 1.1), (0.12, 0.12, 1.0), m["dark"], bevel=0.0)
+    B.add_box("pp_sign__face", (-w / 2 + 0.2, -d / 2 - 1.06, top - 1.6), (1.4, 0.1, 0.85), m["glow"], bevel=0.02)
     B.add_cylinder("chimney", (w / 4, d / 4, top + 0.9), 0.3, 1.5, m["wall_d"], axis="z")
     B.add_cylinder("chimcap", (w / 4, d / 4, top + 1.7), 0.36, 0.2, m["beam"], axis="z")
     if s["biome"] == "garden":
         planters(w, d, m)
+
+
+def build_garrison(s, m):
+    """Faction war office: stern civic block — parapet roofline, comms mast,
+    insignia plate over the door, and a GROUND-MOUNTED flagpole beside the
+    entrance. The flag cloth itself is NOT modeled: the game overlays a sprite
+    tinted with the CONTROLLING faction's colors at the pole top (ground pole →
+    the runtime offset is identical across styles; see FLAG_* in surface.rs:
+    pole base (w/2+0.55, -d/2+0.3), top z=4.2, flag centre z≈3.7)."""
+    w, d, h = 6, 5, 3.4        # garrison → medium_house 6×5
+    z0, top = shell(s, m, w, d, h, win=(3, 1))
+    # parapet rim: raised lip on the roofline corners (reads fortified)
+    for px, py, lw, ld in ((0, d / 2 - 0.15, w - 0.4, 0.18), (0, -d / 2 + 0.15, w - 0.4, 0.18),
+                           (w / 2 - 0.15, 0, 0.18, d - 0.4), (-w / 2 + 0.15, 0, 0.18, d - 0.4)):
+        B.add_box("parapet", (px, py, top + 0.22), (lw, ld, 0.34), m["wall_d"], bevel=0.02)
+    # comms mast, rear corner
+    B.add_cylinder("mast", (-w / 2 + 0.8, d / 2 - 0.8, top + 1.0), 0.06, 2.0, m["metal"], axis="z")
+    B.add_box("dish", (-w / 2 + 0.8, d / 2 - 0.8, top + 1.9), (0.5, 0.08, 0.34), m["trim"], bevel=0.02)
+    # glowing insignia plate over the door
+    B.add_box("crest", (0, -d / 2 - 0.06, z0 + 2.55), (1.3, 0.08, 0.55), m["glow"], bevel=0.02)
+    # ── forecourt props (pp_ → own depth-sorted layer) ──
+    # Monument gun: a decommissioned siege cannon on a stone plinth, left of
+    # the door — the oldest way to say "military administration" in one prop.
+    B.add_box("pp_gun__plinth", (-1.9, -d / 2 - 1.2, 0.25), (2.0, 1.0, 0.5), m["stone"], bevel=0.04)
+    # low trunnion blocks; the barrel rides clearly ABOVE them so its full
+    # length reads at the oblique camera angle
+    for tx in (-2.25, -1.55):
+        B.add_box("pp_gun__carr", (tx, -d / 2 - 1.2, 0.68), (0.28, 0.55, 0.42), m["dark"], bevel=0.05)
+    B.add_cylinder("pp_gun__barrel", (-1.65, -d / 2 - 1.2, 1.12), 0.17, 2.2, m["metal"], axis="x", r2=0.11)
+    for rx in (-1.15, -0.85):
+        B.add_cylinder("pp_gun__ring", (rx, -d / 2 - 1.2, 1.12), 0.19, 0.1, m["dark"], axis="x")
+    B.add_cylinder("pp_gun__muzzle", (-0.6, -d / 2 - 1.2, 1.12), 0.15, 0.26, m["dark"], axis="x")
+    B.add_cylinder("pp_gun__breech", (-2.6, -d / 2 - 1.2, 1.12), 0.21, 0.4, m["dark"], axis="x")
+    # memorial plaque glowing on the plinth's south face
+    B.add_box("pp_gun__plaque", (-1.9, -d / 2 - 1.74, 0.3), (0.7, 0.06, 0.28), m["glow"], bevel=0.02)
+    # Sandbag emplacement guarding the right of the approach, two courses
+    # high. TWO prop groups: the middle bag sits a quarter-tile forward of
+    # its flankers, so they can't share a sort line.
+    for sx, sy in ((1.35, -d / 2 - 0.85), (1.95, -d / 2 - 1.1), (2.55, -d / 2 - 0.85)):
+        g = "pp_bagsf" if sy < -d / 2 - 1.0 else "pp_bagsb"
+        B.add_box(f"{g}__a", (sx, sy, 0.18), (0.58, 0.42, 0.34), m["wall_d"], bevel=0.14)
+        B.add_box(f"{g}__b", (sx + 0.08, sy + 0.04, 0.44), (0.5, 0.38, 0.3), m["wall_d"], bevel=0.14)
+    # Glowing recruitment board beside the door ("the flag remembers").
+    B.add_cylinder("pp_board__post", (0.95, -d / 2 - 0.55, 0.62), 0.05, 1.24, m["metal"], axis="z")
+    B.add_box("pp_board__face", (0.95, -d / 2 - 0.62, 1.3), (0.82, 0.06, 0.62), m["glow"], bevel=0.02)
+
+    # flagpole on the pad-side corner of the forecourt, base plinth + pole + finial
+    fp = (w / 2 + 0.55, -d / 2 + 0.3)
+    B.add_box("pp_flag__base", (fp[0], fp[1], 0.14), (0.5, 0.5, 0.28), m["wall_d"], bevel=0.03)
+    B.add_cylinder("pp_flag__pole", (fp[0], fp[1], 2.15), 0.055, 4.0, m["trim"], axis="z")
+    B.add_cylinder("pp_flag__finial", (fp[0], fp[1], 4.25), 0.11, 0.14, m["glow"], axis="z")
 
 
 def build_pad(s, m):
@@ -462,8 +526,8 @@ def build_pad(s, m):
 def planters(w, d, m):
     """Garden beds flanking the entrance — colony agrarian life (bible)."""
     for sx in (-w / 2 + 0.7, w / 2 - 0.7):
-        B.add_box("planter", (sx, -d / 2 - 0.35, 0.32), (1.0, 0.5, 0.34), m["beam"], bevel=0.05)
-        B.add_box("plants", (sx, -d / 2 - 0.35, 0.62), (0.9, 0.45, 0.34), m["plant"], bevel=0.2)
+        B.add_box("pp_planters__bed", (sx, -d / 2 - 0.35, 0.32), (1.0, 0.5, 0.34), m["beam"], bevel=0.05)
+        B.add_box("pp_planters__plants", (sx, -d / 2 - 0.35, 0.62), (0.9, 0.45, 0.34), m["plant"], bevel=0.2)
 
 
 def frame_detail(w, d, h, base_z, m):
@@ -490,14 +554,14 @@ def small_ship(cx, cy, cz, m, scale=1.0):
 
 def repair_engine(cx, cy, m):
     """A ship engine pulled onto a service stand, opened up — exposed glowing core."""
-    B.add_box("estand", (cx, cy, 0.08), (1.5, 1.1, 0.16), m["dark"], bevel=0.03)
+    B.add_box("pp_engine__stand", (cx, cy, 0.08), (1.5, 1.1, 0.16), m["dark"], bevel=0.03)
     for ox, oy in ((-0.55, -0.4), (0.55, -0.4), (-0.55, 0.4), (0.55, 0.4)):
-        B.add_cylinder("eleg", (cx + ox, cy + oy, 0.5), 0.06, 0.8, m["metal"], axis="z")
-    B.add_cylinder("ecore", (cx, cy, 1.2), 0.5, 1.7, m["metal"], axis="y", r2=0.42, seg=18)
-    B.add_cylinder("ebell", (cx, cy + 1.0, 1.2), 0.44, 0.5, m["dark"], axis="y")          # exhaust bell
-    B.add_box("eintern", (cx, cy - 0.25, 1.2), (0.7, 0.5, 0.7), m["glow"], bevel=0.02)    # exposed internals
-    B.add_cylinder("epipe", (cx - 0.55, cy - 0.1, 1.5), 0.07, 1.1, m["dark"], axis="y")
-    B.add_box("epanel", (cx + 0.62, cy - 0.3, 1.55), (0.1, 0.6, 0.5), m["wall_d"], bevel=0.03)  # open access hatch
+        B.add_cylinder("pp_engine__leg", (cx + ox, cy + oy, 0.5), 0.06, 0.8, m["metal"], axis="z")
+    B.add_cylinder("pp_engine__core", (cx, cy, 1.2), 0.5, 1.7, m["metal"], axis="y", r2=0.42, seg=18)
+    B.add_cylinder("pp_engine__bell", (cx, cy + 1.0, 1.2), 0.44, 0.5, m["dark"], axis="y")          # exhaust bell
+    B.add_box("pp_engine__intern", (cx, cy - 0.25, 1.2), (0.7, 0.5, 0.7), m["glow"], bevel=0.02)    # exposed internals
+    B.add_cylinder("pp_engine__pipe", (cx - 0.55, cy - 0.1, 1.5), 0.07, 1.1, m["dark"], axis="y")
+    B.add_box("pp_engine__panel", (cx + 0.62, cy - 0.3, 1.55), (0.1, 0.6, 0.5), m["wall_d"], bevel=0.03)  # open access hatch
 
 
 def build_fuel_station(s, m):
@@ -510,8 +574,8 @@ def build_fuel_station(s, m):
     B.add_box("fs_para", (0, -d / 2 - 0.12, top + 0.22), (w + 0.24, 0.14, 0.18), m["trim"], bevel=0.0)
     entry(s, m, w, d, z0)
     # roadside glowing FUEL totem on a pole beside the booth — a strong top-down read
-    B.add_cylinder("fs_pole", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 1.6), 0.1, 3.4, m["metal"], axis="z")
-    B.add_box("fs_totem", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 3.1), (0.72, 0.72, 0.95), m["glow"], bevel=0.06)
+    B.add_cylinder("pp_totem__pole", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 1.6), 0.1, 3.4, m["metal"], axis="z")
+    B.add_box("pp_totem__head", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 3.1), (0.72, 0.72, 0.95), m["glow"], bevel=0.06)
     # bulk storage tank on a cradle along the right side
     B.add_cylinder("fs_tank", (w / 2 + 0.6, 0.25, z0 + 0.8), 0.58, 2.5, m["metal"], axis="y")
     B.add_box("fs_cradle", (w / 2 + 0.6, 0.25, z0 + 0.16), (0.9, 2.2, 0.32), m["dark"], bevel=0.0)
@@ -521,18 +585,18 @@ def build_fuel_station(s, m):
     # further out so the pumps don't sit on top of the door.
     fwd = 1.2 if s["biome"] == "ice" else 0.0
     for px in (-1.0, 0.0, 1.0):
-        B.add_box("fs_base", (px, -d / 2 - 1.6 - fwd, z0 + 0.18), (0.46, 0.5, 0.36), m["dark"], bevel=0.04)
-        B.add_box("fs_pump", (px, -d / 2 - 1.6 - fwd, z0 + 0.85), (0.44, 0.46, 1.0), m["wall_d"], bevel=0.06)
-        B.add_box("fs_screen", (px, -d / 2 - 1.84 - fwd, z0 + 1.05), (0.3, 0.05, 0.34), m["glow"], bevel=0.0)
-        B.add_box("fs_top", (px, -d / 2 - 1.6 - fwd, z0 + 1.45), (0.46, 0.5, 0.18), m["metal"], bevel=0.03)
-        B.add_cylinder("fs_hose", (px + 0.3, -d / 2 - 1.54 - fwd, z0 + 0.7), 0.05, 0.9, m["dark"], axis="z")
+        B.add_box("pp_pumps__base", (px, -d / 2 - 1.6 - fwd, z0 + 0.18), (0.46, 0.5, 0.36), m["dark"], bevel=0.04)
+        B.add_box("pp_pumps__body", (px, -d / 2 - 1.6 - fwd, z0 + 0.85), (0.44, 0.46, 1.0), m["wall_d"], bevel=0.06)
+        B.add_box("pp_pumps__screen", (px, -d / 2 - 1.84 - fwd, z0 + 1.05), (0.3, 0.05, 0.34), m["glow"], bevel=0.0)
+        B.add_box("pp_pumps__top", (px, -d / 2 - 1.6 - fwd, z0 + 1.45), (0.46, 0.5, 0.18), m["metal"], bevel=0.03)
+        B.add_cylinder("pp_pumps__hose", (px + 0.3, -d / 2 - 1.54 - fwd, z0 + 0.7), 0.05, 0.9, m["dark"], axis="z")
     # hazard stripe marking the forecourt apron
-    B.add_box("fs_hazard", (0, -d / 2 - 2.25 - fwd, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
+    B.add_box("fl_fs_hazard", (0, -d / 2 - 2.25 - fwd, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
 
 
 BUILDERS = {"market": build_market, "outfitter": build_outfitter, "shipyard": build_shipyard,
             "mechanic": build_mechanic, "bar": build_bar, "pad": build_pad,
-            "fuel_station": build_fuel_station}
+            "fuel_station": build_fuel_station, "garrison": build_garrison}
 
 
 # ── camera / render ─────────────────────────────────────────────────────────
@@ -604,6 +668,26 @@ def z0_for_biome(b):
     return {"rocky": 0.74, "ice": 0.5, "desert": 0.46}.get(b, 0.36)
 
 
+# (func, prop group) → sort line in tiles SOUTH of the front wall.
+# Overhead objects (porch, hanging sign) sort at their SUPPORT (posts/wall).
+PROP_DY = {
+    ("market", "porch"): 1.5, ("market", "crate0"): 1.7,
+    ("market", "crate1"): 1.6, ("market", "crate2"): 1.7,
+    ("market", "planters"): 0.6,
+    ("outfitter", "rack"): 1.45,
+    ("bar", "sign"): 0.0, ("bar", "planters"): 0.6,
+    ("mechanic", "engine"): 2.05, ("mechanic", "plate"): 1.2,
+    ("mechanic", "toolbox"): 1.7,
+    ("fuel_station", "totem"): 0.6, ("fuel_station", "pumps"): 1.85,
+    # cryo storm-porch vestibule (front wall face 1.4 + door reveal)
+    ("market", "vest"): 1.45, ("outfitter", "vest"): 1.45, ("bar", "vest"): 1.45,
+    ("fuel_station", "vest"): 1.45, ("garrison", "vest"): 1.45,
+    ("garrison", "gun"): 1.7,
+    ("garrison", "bagsf"): 1.3, ("garrison", "bagsb"): 1.05,
+    ("garrison", "board"): 0.65, ("garrison", "flag"): -0.3,
+}
+
+
 def bake():
     """Bake committed game sprites, depth-split into _back (behind the player)
     and _front (over the player) layers so a player stands framed in a doorway.
@@ -619,11 +703,16 @@ def bake():
     vl = math.sqrt(sum(c * c for c in vv)); view = tuple(c / vl for c in vv)
     # (half-width, height-above-floor) of the doorway to cut open in _front
     door_funcs = {"market": (0.62, 1.25), "outfitter": (0.62, 1.25),
-                  "bar": (0.62, 1.25), "mechanic": (1.95, 2.5)}
+                  "bar": (0.62, 1.25), "mechanic": (1.95, 2.5),
+                  "garrison": (0.62, 1.25)}
     tmp = lambda n: os.path.join(OUT, f"_bk_{n}.png")
+    # BAKE_ONLY=garrison bakes a single function and MERGES it into the
+    # existing manifest (a full bake rewrites everything as before).
+    only = os.environ.get("BAKE_ONLY")
+    funcs = [f for f in BUILDERS if only is None or f == only]
     entries = []
     for st in STYLES:
-        for fn in BUILDERS:
+        for fn in funcs:
             B.reset(); s = STYLES[st]; m = mats(s); BUILDERS[fn](s, m)
             w_t, d_t = FOOTPRINTS[fn]
             # explicit walkable floor slab over the footprint (drawn BELOW the
@@ -641,17 +730,33 @@ def bake():
                 o.hide_render = not o.name.startswith(("floor", "fl_"))
             cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
             B.render_to(tmp("floor")); floor_im = Image.open(tmp("floor")).convert("RGBA")
-            # STRUCTURE passes: hide the floor slab AND the animated door panel
-            # (the facade keeps the dark recess behind the door).
+            # PROPS passes: south-protruding props bake as INDIVIDUAL objects
+            # (grouped pp_<group>__<part>), each with its own crop, anchor and
+            # authored sort line, so the game depth-sorts every prop at its
+            # own ground (or, for overhead pieces like the market porch and
+            # the bar sign, at its SUPPORT line — posts / wall bracket — not
+            # its visual bbox).
+            props = [o for o in meshes if o.name.startswith("pp_")]
+            prop_renders = []  # (group, Image)
+            if props:
+                groups = sorted({o.name[3:].split("__")[0] for o in props})
+                cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
+                for g in groups:
+                    for o in meshes:
+                        o.hide_render = not o.name.startswith(f"pp_{g}__")
+                    B.render_to(tmp("props"))
+                    prop_renders.append((g, Image.open(tmp("props")).convert("RGBA")))
+            # STRUCTURE passes: hide the floor slab, the animated door panel
+            # AND the props (they render in their own pass above).
             for o in meshes:
-                o.hide_render = o.name.startswith(("floor", "fl_", "doorpanel"))
+                o.hide_render = o.name.startswith(("floor", "fl_", "doorpanel", "pp_"))
             cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
             B.render_to(tmp("full")); full = Image.open(tmp("full")).convert("RGBA")
             cam.data.clip_end = depth
             B.render_to(tmp("front")); front = Image.open(tmp("front")).convert("RGBA")
             cam.data.clip_start = depth; cam.data.clip_end = 1000.0
             B.render_to(tmp("back")); back = Image.open(tmp("back")).convert("RGBA")
-            # union bbox (structure ∪ floor — the floor sits lower on screen)
+            # union bbox (structure ∪ floor — props crop independently)
             a = np.asarray(full)[..., 3]; afl = np.asarray(floor_im)[..., 3]
             ys, xs = np.where((a > 8) | (afl > 8))
             x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
@@ -686,18 +791,57 @@ def bake():
                         p.location.z = top - h * sc / 2
                     B.render_to(tmp("door"))
                     Image.open(tmp("door")).convert("RGBA").crop(box).save(dpath)
+            # each prop object: own alpha crop + own anchor fraction (same
+            # front-centre pinning math as the building layers)
+            prop_entries = []
+            anchor_row = RES / 2 + (d_t / 2 * math.sin(E) + tgt) * ppt
+            for g, im in prop_renders:
+                ga = np.asarray(im)[..., 3]
+                gys, gxs = np.where(ga > 8)
+                if len(gxs) == 0:
+                    continue
+                gx0, gy0, gx1, gy1 = int(gxs.min()), int(gys.min()), int(gxs.max()) + 1, int(gys.max()) + 1
+                gc = im.crop((gx0, gy0, gx1, gy1))
+                gw, gh = gc.size
+                gfx = (RES / 2 - gx0) / gw - 0.5
+                gfy = 0.5 - (anchor_row - gy0) / gh
+                gc.save(os.path.join(out_dir, f"{st}_{fn}_prop_{g}.png"))
+                gdy = PROP_DY.get((fn, g), 0.5)
+                if fn == "fuel_station" and st == "cryo" and g == "pumps":
+                    gdy = 3.05   # ice storm-porch pushes the pumps forward
+                # PROP_DY is authored in MODEL depth tiles; the oblique camera
+                # foreshortens depth by sin(ELEV) on screen, and the player
+                # moves in un-foreshortened terrain pixels — the sort line
+                # must be where the prop's base is VISIBLY drawn.
+                gdy = round(gdy * math.sin(E), 4)
+                prop_entries.append((g, round(gfx, 4), round(gfy, 4), gdy))
             full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
             Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
             bk.save(os.path.join(out_dir, f"{st}_{fn}_back.png"))
             floor_c.save(os.path.join(out_dir, f"{st}_{fn}_floor.png"))
-            entries.append((st, fn, w_t, d_t, round(fx, 4), round(fy, 4)))
+            entries.append((st, fn, w_t, d_t, round(fx, 4), round(fy, 4), prop_entries))
+    mpath = os.path.abspath(os.path.join(out_dir, "..", "buildings3d_manifest.ron"))
+    kept = []
+    if only is not None and os.path.exists(mpath):
+        import re as _re
+        rebaked = {(st, fn) for st, fn, *_ in entries}
+        for ln in open(mpath).read().splitlines():
+            m2 = _re.search(r'style: "([^"]+)", func: "([^"]+)"', ln)
+            if m2 and (m2.group(1), m2.group(2)) not in rebaked:
+                kept.append(ln.rstrip())
     lines = ["// buildings3d_manifest.ron — auto-generated by buildings3d.py bake",
              "// anchor = footprint front-centre on the ground, as Bevy Anchor::Custom fraction",
              "(", f"    px_per_tile: {round(ppt, 4)},", "    sprites: ["]
-    for st, fn, w, d, fx, fy in entries:
-        lines.append(f'        (style: "{st}", func: "{fn}", w: {w}, d: {d}, anchor: ({fx}, {fy})),')
+    lines += kept
+    for st, fn, w, d, fx, fy, pents in entries:
+        prop = ""
+        if pents:
+            inner = ", ".join(
+                f'(name: "{g}", anchor: ({gfx}, {gfy}), dy: {gdy})' for g, gfx, gfy, gdy in pents
+            )
+            prop = f", props: [{inner}]"
+        lines.append(f'        (style: "{st}", func: "{fn}", w: {w}, d: {d}, anchor: ({fx}, {fy}){prop}),')
     lines += ["    ],", ")", ""]
-    mpath = os.path.abspath(os.path.join(out_dir, "..", "buildings3d_manifest.ron"))
     open(mpath, "w").write("\n".join(lines))
     print(f"baked {len(entries)} sprites → {out_dir}")
     print(f"manifest → {mpath}")

@@ -24,10 +24,13 @@ pub struct GeneratedTerrain {
     pub collision: Vec<u8>,
 }
 
-/// Generate terrain and ensure all buildings are connected by walkable paths.
+/// Constrain a base terrain field and ensure all buildings are connected by
+/// walkable paths.
 ///
 /// # Steps
-/// 1. fBm terrain generation with pinned borders
+/// 1. Take the biome's base terrain (organic fBm or station layout —
+///    generated ONCE by the caller so building placement and the rendered
+///    map always agree)
 /// 2. Force tiles near buildings to walkable + clamp
 /// 3. Derive collision
 /// 4. Check connectivity; force paths for disconnected pairs
@@ -35,8 +38,7 @@ pub struct GeneratedTerrain {
 ///
 /// # Parameters
 /// - `map_w`, `map_h`: map dimensions
-/// - `n_terrain_types`: total terrain types (including void)
-/// - `seed`: planet seed
+/// - `base_terrain`: terrain indices per tile (row-major, bottom-up)
 /// - `collision_codes`: collision code per terrain index (from manifest)
 /// - `movement_costs`: movement cost per terrain index
 /// - `placed_buildings`: all building footprint rects `(x, y, w, h)`
@@ -45,29 +47,16 @@ pub struct GeneratedTerrain {
 pub fn generate_constrained_terrain(
     map_w: u32,
     map_h: u32,
-    n_terrain_types: u32,
-    seed: u64,
-    fbm_scale: f32,
-    fbm_octaves: u32,
-    fbm_lacunarity: f32,
-    fbm_gain: f32,
+    base_terrain: Vec<u32>,
     collision_codes: &[u8],
     movement_costs: &[f32],
     placed_buildings: &[(u32, u32, u32, u32)],
     door_positions: &[(BuildingKind, (u32, u32))],
     solid_building_tiles: &std::collections::HashSet<(u32, u32)>,
 ) -> GeneratedTerrain {
-    // ── Step 1: Generate raw terrain ─────────────────────────────────────
-    let mut terrain = crate::fbm::generate_terrain_map(
-        map_w,
-        map_h,
-        n_terrain_types,
-        fbm_scale,
-        fbm_octaves,
-        fbm_lacunarity,
-        fbm_gain,
-        seed,
-    );
+    // ── Step 1: Start from the biome's base terrain field ────────────────
+    let mut terrain = base_terrain;
+    debug_assert_eq!(terrain.len(), (map_w * map_h) as usize);
 
     let walkable_terrain: u32 = collision_codes
         .iter()

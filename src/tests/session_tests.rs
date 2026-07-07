@@ -14,6 +14,11 @@ use crate::ship::{Personality, ShipData};
 fn basic_universe() -> ItemUniverse {
     let shuttle = ShipData {
         display_name: String::new(),
+        tech_level: 1,
+        gun_mounts: 2,
+        turret_mounts: 0,
+        sold_by: Vec::new(),
+        aura: None,
         thrust: 200.0,
         max_speed: 300.0,
         torque: 20.0,
@@ -48,6 +53,8 @@ fn basic_universe() -> ItemUniverse {
         },
         requires: vec![],
         completion_effects: vec![],
+        squadron: Vec::new(),
+        faction: None,
     };
     ItemUniverse {
         weapons: HashMap::new(),
@@ -55,6 +62,9 @@ fn basic_universe() -> ItemUniverse {
         star_systems: HashMap::from([(
             "sol".to_string(),
             StarSystem {
+                faction: String::new(),
+                contestable: false,
+                authored_traffic: false,
                 display_name: String::new(),
                 map_position: bevy::math::Vec2::ZERO,
                 connections: vec![],
@@ -68,6 +78,7 @@ fn basic_universe() -> ItemUniverse {
         mining_system: None,
         outfitter_items: HashMap::new(),
         commodities: HashMap::new(),
+        factions: HashMap::new(),
         missions: HashMap::from([("base_quest".to_string(), base_mission)]),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),
@@ -82,6 +93,7 @@ fn basic_universe() -> ItemUniverse {
         starting_ship: "shuttle".to_string(),
         enemies: HashMap::new(),
         allies: HashMap::new(),
+        npcs: HashMap::new(),
     }
 }
 
@@ -98,6 +110,8 @@ fn sample_mission_def(name: &str) -> MissionDef {
         },
         requires: vec![],
         completion_effects: vec![],
+        squadron: Vec::new(),
+        faction: None,
     }
 }
 

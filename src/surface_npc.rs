@@ -118,6 +118,21 @@ impl NpcBehavior {
 #[derive(Component)]
 pub struct Npc;
 
+/// Tags an NPC spawned for a specific mission (offer-giver or objective NPC),
+/// so `spawn_mission_npcs` can tell which missions already have their NPC on
+/// the surface and stay idempotent — it runs every frame while exploring so
+/// follow-up missions that start *after* landing get their NPC immediately
+/// (previously they only spawned on surface entry, forcing a re-land).
+#[derive(Component)]
+pub struct MissionNpc(pub String);
+
+/// A recurring character's display name (from assets/npcs.yaml), shown as the
+/// conversation window title instead of the generic "Conversation".
+#[derive(Component)]
+pub struct NpcIdentity {
+    pub name: String,
+}
+
 /// Marks the "!" indicator sprite above a mission-giver NPC.
 #[derive(Component)]
 pub struct NpcMarker;
@@ -458,17 +473,24 @@ pub fn update_npc_markers(
 ///   If false, the NPC stands near the building and waits.
 pub fn spawn_mission_npc(
     commands: &mut Commands,
-    sprites: &crate::surface_civilians::CivilianSprites,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    role: &str,
+    identity: Option<(String, crate::character_compositor::AvatarSpec)>,
     mission_id: &str,
     door_tile: (u32, u32),
     speed: f32,
     seek: bool,
 ) {
-    use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    let sprite_idx = rng.r#gen_range(0..sprites.images.len());
-    let image = sprites.images[sprite_idx].clone();
+    let spec = identity
+        .as_ref()
+        .map(|(_, spec)| spec.clone())
+        .unwrap_or_else(|| layers.random_spec(&mut rng, role));
+    let Some(image) = layers.composite(&spec, images) else {
+        return; // layer images still loading; idempotent caller retries
+    };
     let start = SurfaceCostMap::tile_to_world(door_tile.0, door_tile.1);
 
     let mut behavior = NpcBehavior::new(speed);
@@ -494,23 +516,28 @@ pub fn spawn_mission_npc(
     let npc_entity = commands.spawn((
         DespawnOnExit(crate::PlayState::Exploring),
         Npc,
+        MissionNpc(mission_id.to_string()),
         behavior,
-        crate::surface_character::CharacterAnim::with_interval(0.2),
+        crate::surface_character::CharacterAnim::person(0.11),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(4.0),
+        crate::surface_objects::character_foot_collider(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
             image,
             TextureAtlas {
-                layout: sprites.layout.clone(),
+                layout: layers.layout.clone(),
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 8.0)),
+        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
     )).id();
+
+    if let Some((name, _)) = identity {
+        commands.entity(npc_entity).insert(NpcIdentity { name });
+    }
 
     // Spawn "!" marker as a child.
     commands.entity(npc_entity).with_children(|parent| {
@@ -519,7 +546,7 @@ pub fn spawn_mission_npc(
             Text2d::new("!"),
             TextFont { font_size: 20.0, ..default() },
             TextColor(Color::srgb(1.0, 0.9, 0.2)),
-            Transform::from_xyz(0.0, 14.0, 0.1).with_scale(Vec3::splat(0.6)),
+            Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
     });
 }
@@ -533,17 +560,24 @@ pub enum ObjectiveKind {
 /// Spawn an NPC for a MeetNpc or CatchNpc mission objective.
 pub fn spawn_objective_npc(
     commands: &mut Commands,
-    sprites: &crate::surface_civilians::CivilianSprites,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    role: &str,
+    identity: Option<(String, crate::character_compositor::AvatarSpec)>,
     mission_id: &str,
     door_tile: (u32, u32),
     speed: f32,
     kind: ObjectiveKind,
 ) {
-    use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    let sprite_idx = rng.r#gen_range(0..sprites.images.len());
-    let image = sprites.images[sprite_idx].clone();
+    let spec = identity
+        .as_ref()
+        .map(|(_, spec)| spec.clone())
+        .unwrap_or_else(|| layers.random_spec(&mut rng, role));
+    let Some(image) = layers.composite(&spec, images) else {
+        return; // layer images still loading; idempotent caller retries
+    };
     let start = SurfaceCostMap::tile_to_world(door_tile.0, door_tile.1);
 
     // Marker: "?" blue for meet, "!" red for catch.
@@ -599,23 +633,28 @@ pub fn spawn_objective_npc(
     let npc_entity = commands.spawn((
         DespawnOnExit(crate::PlayState::Exploring),
         Npc,
+        MissionNpc(mission_id.to_string()),
         behavior,
-        crate::surface_character::CharacterAnim::with_interval(0.18),
+        crate::surface_character::CharacterAnim::person(0.10),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(4.0),
+        crate::surface_objects::character_foot_collider(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         LinearDamping(10.0),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
             image,
             TextureAtlas {
-                layout: sprites.layout.clone(),
+                layout: layers.layout.clone(),
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - 8.0)),
+        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
     )).id();
+
+    if let Some((name, _)) = identity {
+        commands.entity(npc_entity).insert(NpcIdentity { name });
+    }
 
     commands.entity(npc_entity).with_children(|parent| {
         parent.spawn((
@@ -623,7 +662,7 @@ pub fn spawn_objective_npc(
             Text2d::new(marker_text),
             TextFont { font_size: 20.0, ..default() },
             TextColor(marker_color),
-            Transform::from_xyz(0.0, 14.0, 0.1).with_scale(Vec3::splat(0.6)),
+            Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
     });
 }

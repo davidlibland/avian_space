@@ -15,8 +15,8 @@ use bevy::prelude::*;
 use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::rl_collection::{RLAgent, RLStepSet};
 use crate::sfx::EscortSfx;
-use crate::ship::{Ship, ShipCommand, ShipHostility, Target};
-use crate::ship_anim::{self, ANIM_MIN_SCALE, ScalingUp};
+use crate::ship::{Ship, ShipCommand, Target};
+use crate::ship_anim::{ANIM_MIN_SCALE, ScalingUp};
 use crate::utils::safe_despawn;
 use crate::weapons::FireCommand;
 use crate::{GameLayer, PlayState, Player};
@@ -35,13 +35,27 @@ const DOCK_DESPAWN_SCALE: f32 = ANIM_MIN_SCALE;
 // Components
 // ---------------------------------------------------------------------------
 
-/// Marks a spawned escort, linking it to its mother ship.
+/// Marks a spawned escort, linking it to its mother ship. Escorts follow,
+/// take orders (B/N/M), and fight; whether they can DOCK depends on the
+/// separate [`CarriedBy`] component.
 #[derive(Component)]
-pub struct CarrierEscort {
+pub struct Escort {
     pub mother: Entity,
+}
+
+/// The escort lives in a carrier bay on the mother: it may dock to despawn
+/// and replenish that bay's ammo. Squadron escorts (mission support wings)
+/// have no `CarriedBy` — they fly with you but never dock.
+#[derive(Component)]
+pub struct CarriedBy {
     /// Weapon type key on the mother (for ammo replenishment on re-dock).
     pub weapon_type: String,
 }
+
+/// Tags a squadron escort spawned for a mission, so it despawns when the
+/// mission ends (same cleanup pattern as MissionTarget).
+#[derive(Component)]
+pub struct MissionSquadron(pub String);
 
 /// Escort is in the dock animation — shrinking as it returns to the mother.
 #[derive(Component)]
@@ -64,13 +78,18 @@ pub enum EscortMode {
     Dock,
 }
 
-/// Message emitted by `weapon_fire` when a carrier bay weapon fires.
-#[derive(Event, Message)]
+/// Spawn an escort ship. Emitted by `weapon_fire` for carrier bays
+/// (`carried: Some(weapon_type)`) and by `spawn_mission_squadrons` for
+/// mission support wings (`carried: None`, `mission: Some(id)`).
+#[derive(Event, Message, Clone)]
 pub struct SpawnEscort {
     pub mother: Entity,
     pub ship_type: String,
-    pub weapon_type: String,
+    /// Bay weapon key on the mother, when the escort is carried (dockable).
+    pub carried: Option<String>,
     pub position: Vec2,
+    /// Mission id for squadron escorts (cleanup on mission end).
+    pub mission: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -78,13 +97,16 @@ pub struct SpawnEscort {
 // ---------------------------------------------------------------------------
 
 pub fn carrier_plugin(app: &mut App) {
-    // Register EscortSfx here (rather than in sfx_plugin) so the producers in
-    // this module work in headless mode, where sfx_plugin isn't loaded.
+    // Register EscortSfx/TriggerJumpFlash here (rather than only in the
+    // sfx/explosions plugins) so the producers in this module work in
+    // headless mode, where those plugins aren't loaded.
     app.add_message::<EscortSfx>();
+    app.add_message::<crate::explosions::TriggerJumpFlash>();
     app.add_message::<SpawnEscort>().add_systems(
         Update,
         (
             auto_launch_carrier_bays,
+            spawn_mission_squadrons,
             spawn_escort_ships,
             escort_launch_movement,
             player_escort_input,
@@ -116,7 +138,7 @@ fn auto_launch_carrier_bays(
             continue;
         }
         for (weapon_type, ws) in ship.weapon_systems.iter_all() {
-            if ws.weapon.carrier_bay.is_none() {
+            if ws.weapon.carrier_bay().is_none() {
                 continue;
             }
             if ws.ammo_quantity.map(|n| n == 0).unwrap_or(false) {
@@ -149,32 +171,49 @@ fn spawn_escort_ships(
     mother_ships: Query<(&Position, &LinearVelocity, &Transform, &Ship)>,
     player: Query<Entity, With<Player>>,
     mut sfx_writer: MessageWriter<EscortSfx>,
+    mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
     images: Res<Assets<Image>>,
 ) {
     let player_entity = player.single().ok();
     for event in reader.read() {
-        let Ok((mother_pos, mother_vel, mother_tf, mother_ship)) =
+        let Ok((_, mother_vel, mother_tf, mother_ship)) =
             mother_ships.get(event.mother)
         else {
             continue;
         };
-        let initial_mode = match mother_ship.weapons_target.as_ref() {
-            Some(t) => EscortMode::Attack { target: t.clone() },
-            None => EscortMode::Escort,
+        // Squadron wings start in formation; bay launches engage the
+        // mother's current target immediately.
+        let initial_mode = match (&event.carried, mother_ship.weapons_target.as_ref()) {
+            (Some(_), Some(t)) => EscortMode::Attack { target: t.clone() },
+            _ => EscortMode::Escort,
         };
 
+        // Spawn where the event says, not at the mother: bay launches pass
+        // the mother's position anyway, but squadron wings arrive in a ring
+        // formation — stacking them all on one point left the physics solver
+        // to pop the wing apart.
         let mut bundle = crate::ship::ship_bundle(
             &event.ship_type,
             &item_universe,
             &current_system.0,
-            mother_pos.0,
+            event.position,
         );
         let personality = bundle.get_personality();
+        let is_bay_launch = event.carried.is_some();
 
-        // Determine the full sprite size, then shrink it for the launch animation.
+        // Bay launches grow out of the mother's hull; squadron wings jump in
+        // at their formation slots, full-size with a hyperspace flash — they
+        // arrive WITH the player, they aren't built by her ship.
         let full_size = crate::ship::ship_display_size(bundle.radius());
-        let start_size = full_size * ANIM_MIN_SCALE;
-        bundle.sprite.custom_size = Some(start_size);
+        if is_bay_launch {
+            bundle.sprite.custom_size = Some(full_size * ANIM_MIN_SCALE);
+        } else {
+            bundle.sprite.custom_size = Some(full_size);
+            jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
+                location: event.position,
+                size: 8.0,
+            });
+        }
 
         // Match the mother's heading via Transform rotation.
         // avian2d will initialize Rotation from this on the first physics step.
@@ -186,21 +225,33 @@ fn spawn_escort_ships(
                 AIShip {
                     personality: personality.clone(),
                 },
-                CarrierEscort {
+                Escort {
                     mother: event.mother,
-                    weapon_type: event.weapon_type.clone(),
                 },
                 initial_mode,
+                bundle,
+            ))
+            .insert_if(
                 ScalingUp {
                     timer: Timer::from_seconds(LAUNCH_DURATION, TimerMode::Once),
                     full_size,
                 },
-                bundle,
-            ))
+                || is_bay_launch,
+            )
             .insert((
-                Position(mother_pos.0),
+                Position(event.position),
                 LinearVelocity(mother_vel.0),
             ))
+            .insert_if(
+                CarriedBy {
+                    weapon_type: event.carried.clone().unwrap_or_default(),
+                },
+                || event.carried.is_some(),
+            )
+            .insert_if(
+                MissionSquadron(event.mission.clone().unwrap_or_default()),
+                || event.mission.is_some(),
+            )
             .with_children(|parent| {
                 parent.spawn((
                     Collider::circle(DETECTION_RADIUS),
@@ -224,10 +275,10 @@ fn spawn_escort_ships(
 fn escort_launch_movement(
     time: Res<Time>,
     mut escorts: Query<
-        (&ScalingUp, &mut LinearVelocity, &CarrierEscort),
+        (&ScalingUp, &mut LinearVelocity, &Escort),
         Without<DockingEscort>,
     >,
-    mother_transforms: Query<&Transform, Without<CarrierEscort>>,
+    mother_transforms: Query<&Transform, Without<Escort>>,
 ) {
     for (scaling, mut vel, escort) in &mut escorts {
         let t = scaling.timer.fraction();
@@ -255,9 +306,9 @@ fn escort_launch_movement(
 /// the escort either acquires the mother's current weapons target (NPC) or
 /// returns to escort mode (player escorts always disengage on kill).
 fn update_escort_modes(
-    mother_ships: Query<(&Ship, Has<Player>), Without<CarrierEscort>>,
+    mother_ships: Query<(&Ship, Has<Player>), Without<Escort>>,
     mut escorts: Query<
-        (&CarrierEscort, &mut EscortMode, &mut Ship),
+        (&Escort, &mut EscortMode, &mut Ship),
         Without<DockingEscort>,
     >,
     target_alive: Query<(), With<Position>>,
@@ -280,6 +331,9 @@ fn update_escort_modes(
                         Some(new_target) => EscortMode::Attack {
                             target: new_target.clone(),
                         },
+                        // Dock only means something for carried escorts;
+                        // begin_escort_dock gates on CarriedBy, so a squadron
+                        // wing in Dock mode just shadows its mother.
                         None => EscortMode::Dock,
                     }
                 };
@@ -306,7 +360,7 @@ fn update_escort_modes(
 fn player_escort_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     player: Query<(Entity, &Ship), With<Player>>,
-    mut escorts: Query<(&CarrierEscort, &mut EscortMode)>,
+    mut escorts: Query<(&Escort, Has<CarriedBy>, &mut EscortMode)>,
     mut sfx_writer: MessageWriter<EscortSfx>,
 ) {
     let Ok((player_entity, player_ship)) = player.single() else {
@@ -326,11 +380,32 @@ fn player_escort_input(
         return;
     };
     let Some(new_mode) = new_mode else { return };
-    sfx_writer.write(sfx);
-    for (escort, mut mode) in &mut escorts {
-        if escort.mother == player_entity {
-            *mode = new_mode.clone();
+    // Only command (and only SOUND) if the player actually has escorts —
+    // the cue used to play on every keypress, escorts or not.
+    let mut commanded = false;
+    let mut any_docked = false;
+    for (escort, carried, mut mode) in &mut escorts {
+        if escort.mother != player_entity {
+            continue;
         }
+        commanded = true;
+        // Squadron wings (not carried) can't dock — B falls back to
+        // holding formation.
+        *mode = if matches!(new_mode, EscortMode::Dock) && !carried {
+            EscortMode::Escort
+        } else {
+            any_docked |= carried;
+            new_mode.clone()
+        };
+    }
+    if commanded {
+        // The dock cue only fits if something can actually dock; a
+        // wings-only flight acknowledges with the formation cue instead.
+        let sfx = match sfx {
+            EscortSfx::Dock if !any_docked => EscortSfx::Escort,
+            other => other,
+        };
+        sfx_writer.write(sfx);
     }
 }
 
@@ -352,7 +427,7 @@ fn escort_act(
             &Transform,
             &mut Ship,
         ),
-        (With<CarrierEscort>, Without<ScalingUp>),
+        (With<Escort>, Without<ScalingUp>),
     >,
     all_positions: Query<&Position>,
     all_velocities: Query<&LinearVelocity>,
@@ -409,10 +484,14 @@ fn escort_act(
 fn begin_escort_dock(
     mut commands: Commands,
     escorts: Query<
-        (Entity, &CarrierEscort, &EscortMode, &Position, &Ship),
-        (Without<ScalingUp>, Without<DockingEscort>),
+        (Entity, &Escort, &EscortMode, &Position, &Ship),
+        (
+            With<CarriedBy>,
+            Without<ScalingUp>,
+            Without<DockingEscort>,
+        ),
     >,
-    mother_ships: Query<(&Ship, &Position), Without<CarrierEscort>>,
+    mother_ships: Query<(&Ship, &Position), Without<Escort>>,
 ) {
     for (entity, escort, mode, escort_pos, ship) in &escorts {
         if !matches!(mode, EscortMode::Dock) {
@@ -453,7 +532,8 @@ fn animate_escort_dock(
     mut commands: Commands,
     mut escorts: Query<(
         Entity,
-        &CarrierEscort,
+        &Escort,
+        &CarriedBy,
         &DockingEscort,
         &EscortMode,
         &Position,
@@ -461,13 +541,22 @@ fn animate_escort_dock(
         &mut Ship,
         &mut MaxLinearSpeed,
     )>,
-    mut mother_ships: Query<(&mut Ship, &Position), Without<CarrierEscort>>,
+    mut mother_ships: Query<(&mut Ship, &Position), Without<Escort>>,
     player: Query<Entity, With<Player>>,
     mut sfx_writer: MessageWriter<EscortSfx>,
 ) {
     let player_entity = player.single().ok();
-    for (entity, escort, dock, mode, escort_pos, mut sprite, mut escort_ship, mut max_speed) in
-        &mut escorts
+    for (
+        entity,
+        escort,
+        carried,
+        dock,
+        mode,
+        escort_pos,
+        mut sprite,
+        mut escort_ship,
+        mut max_speed,
+    ) in &mut escorts
     {
         // Mode may have changed mid-dock (e.g. player issued a new command);
         // cancel_escort_dock will remove DockingEscort, but its `commands` flush
@@ -494,7 +583,7 @@ fn animate_escort_dock(
 
         // Despawn when small enough
         if frac <= DOCK_DESPAWN_SCALE + 0.01 {
-            if let Some(ws) = mother.weapon_systems.find_weapon(&escort.weapon_type) {
+            if let Some(ws) = mother.weapon_systems.find_weapon(&carried.weapon_type) {
                 ws.ammo_quantity = ws.ammo_quantity.map(|n| n + 1);
             }
             if Some(escort.mother) == player_entity {
@@ -502,6 +591,68 @@ fn animate_escort_dock(
             }
             safe_despawn(&mut commands, entity);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mission squadrons
+// ---------------------------------------------------------------------------
+
+/// Spawn support wings for active missions that declare a `squadron`, once
+/// the player is in the mission's battle system. Idempotent per mission via
+/// `ObjectiveProgress::squadron_spawned` — wings that die are NOT replaced
+/// (losses are real), and the whole wing despawns when the mission ends
+/// (see missions::despawn_targets_on_failure).
+fn spawn_mission_squadrons(
+    catalog: Res<crate::missions::MissionCatalog>,
+    mut log: ResMut<crate::missions::MissionLog>,
+    current_system: Res<crate::CurrentStarSystem>,
+    player: Query<(Entity, &Position), With<Player>>,
+    mut writer: MessageWriter<SpawnEscort>,
+) {
+    use crate::missions::{MissionStatus, Objective};
+    let Ok((player_entity, player_pos)) = player.single() else {
+        return;
+    };
+    for (id, def) in &catalog.defs {
+        if def.squadron.is_empty() {
+            continue;
+        }
+        let MissionStatus::Active(progress) = log.status(id) else {
+            continue;
+        };
+        if progress.squadron_spawned {
+            continue;
+        }
+        // The wing musters in the mission's battle system (or wherever the
+        // player is, for objectives without a system).
+        let battle_system = match &def.objective {
+            Objective::DestroyShips { system, .. } | Objective::TravelToSystem { system } => {
+                Some(system.as_str())
+            }
+            _ => None,
+        };
+        if battle_system.is_some_and(|s| s != current_system.0) {
+            continue;
+        }
+        for (i, ship_type) in def.squadron.iter().enumerate() {
+            let angle = i as f32 / def.squadron.len().max(1) as f32 * std::f32::consts::TAU;
+            let offset = Vec2::new(angle.cos(), angle.sin()) * 80.0;
+            writer.write(SpawnEscort {
+                mother: player_entity,
+                ship_type: ship_type.clone(),
+                carried: None,
+                position: player_pos.0 + offset,
+                mission: Some(id.clone()),
+            });
+        }
+        log.set(
+            id,
+            MissionStatus::Active(crate::missions::types::ObjectiveProgress {
+                squadron_spawned: true,
+                ..progress
+            }),
+        );
     }
 }
 
@@ -514,16 +665,22 @@ fn animate_escort_dock(
 /// by the RL pipeline.
 fn orphan_escorts(
     mut commands: Commands,
-    mut escorts: Query<(Entity, &CarrierEscort, &AIShip, &mut Sprite)>,
+    mut escorts: Query<(Entity, &Escort, &AIShip, &Ship, &mut Sprite)>,
     mothers: Query<(), With<Ship>>,
 ) {
-    for (entity, escort, ai_ship, mut sprite) in &mut escorts {
+    for (entity, escort, ai_ship, ship, mut sprite) in &mut escorts {
         if mothers.get(escort.mother).is_err() {
-            sprite.custom_size = None;
+            // Atlas tiles are a fixed 128 px — custom_size carries the real
+            // display size, so clearing it ballooned orphans to tile size.
+            sprite.custom_size = Some(crate::ship::ship_display_size(ship.data.radius));
             commands
                 .entity(entity)
-                .remove::<(CarrierEscort, EscortMode, ScalingUp, DockingEscort)>()
+                .remove::<(Escort, EscortMode, ScalingUp, DockingEscort, CarriedBy, MissionSquadron)>()
                 .insert(RLAgent::new(ai_ship.personality.clone()));
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/carrier_tests.rs"]
+mod tests;

@@ -31,12 +31,18 @@ class Loader(yaml.SafeLoader):
     pass
 
 
-Loader.add_multi_constructor(
-    "!",
-    lambda l, s, n: l.construct_mapping(n, deep=True)
-    if isinstance(n, yaml.MappingNode)
-    else None,
-)
+def _tagged(loader, tag_suffix, node):
+    val = (
+        loader.construct_mapping(node, deep=True)
+        if isinstance(node, yaml.MappingNode)
+        else None
+    )
+    if isinstance(val, dict):
+        val["__tag__"] = tag_suffix
+    return val
+
+
+Loader.add_multi_constructor("!", _tagged)
 
 
 def load(name):
@@ -60,17 +66,20 @@ def main():
         sp = w.get("speed")
         lt = w.get("lifetime")
         space = item.get("space")
-        carrier = bool(w.get("carrier_bay"))
-        guided = bool(w.get("guided"))
+        behavior = w.get("behavior") or {}
+        btag = behavior.get("__tag__", "") if isinstance(behavior, dict) else ""
+        carrier = btag == "CarrierBay"
+        guided = btag == "Guided"
+        decoy = btag == "Decoy"
         ammo = (w.get("ammo") is not None) or ("ammo_price" in item)
         licenses = item.get("required_unlocks") or []
         rng = (sp * lt) if (sp is not None and lt is not None) else None
-        dps = (dmg / cd) if (dmg is not None and cd and not carrier) else None
+        dps = (dmg / cd) if (dmg is not None and cd and not carrier and not decoy) else None
         dps_sp = (dps / space) if (dps is not None and space) else None
         rows.append(
             dict(
                 id=wid, dmg=dmg, cd=cd, space=space, dps=dps, dps_sp=dps_sp,
-                rng=rng, speed=sp, life=lt, carrier=carrier, guided=guided,
+                rng=rng, speed=sp, life=lt, carrier=carrier, guided=guided, decoy=decoy,
                 ammo=ammo, price=item.get("price"),
                 lic=", ".join(licenses) if licenses else "—",
             )
@@ -82,6 +91,8 @@ def main():
             t.append("carrier-bay")
         if r["guided"]:
             t.append("guided")
+        if r.get("decoy"):
+            t.append("decoy")
         if r["ammo"]:
             t.append("ammo")
         return ", ".join(t) or "—"
@@ -124,7 +135,7 @@ def main():
     out.append("\n| weapon | range | speed | lifetime | type | licence |")
     out.append("|---|--:|--:|--:|---|---|")
     for r in sorted(
-        (r for r in rows if r["rng"] is not None and not r["carrier"]),
+        (r for r in rows if r["rng"] is not None and not r["carrier"] and not r.get("decoy")),
         key=lambda r: r["rng"], reverse=True,
     ):
         out.append(

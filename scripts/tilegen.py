@@ -185,6 +185,9 @@ class BiomeConfig:
     terrains: list[TerrainSpec]
     seed: int = 42  # used for tile texture rendering
     soft_boundaries: bool = True
+    # In-game terrain-field generator: "organic" (fBm noise) or "station"
+    # (designed corridor/room layout, src/station_layout.rs).
+    generator: str = "organic"
 
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -471,6 +474,7 @@ def write_world_manifest(
             f'        "{biome.name}": (\n',
             f'            atlas: "{biome.name}_atlas.png",\n',
             f"            soft_boundaries: {str(biome.soft_boundaries).lower()},\n",
+            f'            generator: "{biome.generator}",\n',
             "            terrains: [\n",
         ]
         for i, t in enumerate(biome.terrains):
@@ -881,6 +885,7 @@ INTERIOR = BiomeConfig(
     name="interior",
     seed=19,
     soft_boundaries=False,
+    generator="station",
     terrains=[
         TerrainSpec(
             "floor",

@@ -18,6 +18,7 @@ fn empty_item_universe() -> ItemUniverse {
         starting_ship: String::new(),
         starting_system: String::new(),
         commodities: HashMap::new(),
+        factions: HashMap::new(),
         missions: HashMap::new(),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),
@@ -29,6 +30,7 @@ fn empty_item_universe() -> ItemUniverse {
         asteroid_field_expected_value: HashMap::new(),
         ship_credit_scale: HashMap::new(),
         allies: HashMap::new(),
+        npcs: HashMap::new(),
     }
 }
 
@@ -568,4 +570,82 @@ fn test_ship_distribution_sample_empty() {
         result.is_empty(),
         "empty distribution should return no ships"
     );
+}
+
+// ── Population cull never picks mission-critical ships ───────────────────
+
+/// Escorts and mission targets must not be chosen by the over-population
+/// cull: a culled escort deserts the player mid-battle, and a culled
+/// mission target isn't a kill — spawn_mission_targets conjures a
+/// replacement out of thin air partway through the mission.
+#[test]
+fn population_cull_spares_escorts_and_mission_targets() {
+    use crate::ship::ShipData;
+
+    let mut iu = empty_item_universe();
+    let system = crate::item_universe::StarSystem {
+        faction: String::new(),
+        contestable: false,
+        authored_traffic: true,
+        map_position: Vec2::ZERO,
+        connections: Vec::new(),
+        planets: HashMap::new(),
+        astroid_fields: Vec::new(),
+        ships: crate::item_universe::ShipDistribution {
+            min: 0,
+            max: 1, // two AI ships below → always over budget
+            types: HashMap::from([("fighter".to_string(), 1.0)]),
+        },
+        display_name: String::new(),
+    };
+    iu.star_systems.insert("sys".to_string(), system);
+
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(iu)
+        .insert_resource(crate::CurrentStarSystem("sys".to_string()))
+        .insert_resource(ShipPopulationTimer(Timer::from_seconds(
+            0.0,
+            TimerMode::Repeating,
+        )))
+        .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_millis(100),
+        ))
+        .add_message::<crate::explosions::TriggerJumpFlash>()
+        .add_systems(Update, manage_ship_population);
+
+    let ship = || Ship::from_ship_data(&ShipData::default(), "fighter");
+    let player = app.world_mut().spawn_empty().id();
+    let escort = app
+        .world_mut()
+        .spawn((
+            ship(),
+            AIShip { personality: Personality::Fighter },
+            crate::carrier::Escort { mother: player },
+        ))
+        .id();
+    let target = app
+        .world_mut()
+        .spawn((
+            ship(),
+            AIShip { personality: Personality::Fighter },
+            crate::missions::MissionTarget {
+                mission_id: "battle".to_string(),
+                display_name: "Invader".to_string(),
+                always_targets_player: true,
+            },
+        ))
+        .id();
+
+    // Many cull opportunities: the only candidates are protected, so the
+    // over-populated system must never mark either ship JumpingOut.
+    for _ in 0..10 {
+        app.update();
+    }
+    for e in [escort, target] {
+        assert!(
+            app.world().get::<JumpingOut>(e).is_none(),
+            "mission-critical ships are not cull candidates"
+        );
+    }
 }

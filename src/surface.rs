@@ -15,7 +15,8 @@ use crate::missions::{
     render_missions_tab,
 };
 use crate::planet_ui::{
-    LandedContext, render_outfitter_tab, render_shipyard_tab, render_trade_tab,
+    LandedContext, render_mods_section, render_outfitter_tab, render_shipyard_tab,
+    render_trade_tab,
 };
 use crate::ship::{BuyShip, Ship};
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
@@ -24,7 +25,10 @@ use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 // Constants
 // ---------------------------------------------------------------------------
 
-const WALK_SPEED: f32 = 120.0;
+/// Player walking speed (below the run-animation threshold, 80).
+const WALK_SPEED: f32 = 70.0;
+/// Player speed while holding Shift (plays the run cycle).
+const RUN_SPEED: f32 = 120.0;
 const WALKER_RADIUS: f32 = 6.0;
 const WALKER_DAMPING: f32 = 10.0;
 
@@ -67,6 +71,10 @@ pub enum BuildingKind {
     Shipyard,
     Bar,
     FuelStation,
+    /// The controlling faction's war office — present only on worlds whose
+    /// effective faction takes sides. War missions are posted here; it flies
+    /// a flag tinted with the faction's colors.
+    Garrison,
 }
 
 impl BuildingKind {
@@ -79,6 +87,7 @@ impl BuildingKind {
             BuildingKind::Shipyard => "Shipyard",
             BuildingKind::Bar => "Bar",
             BuildingKind::FuelStation => "Fuel",
+            BuildingKind::Garrison => "Garrison",
         }
     }
 
@@ -91,6 +100,7 @@ impl BuildingKind {
             BuildingKind::Shipyard => Color::srgb(0.3, 0.5, 0.8),
             BuildingKind::Bar => Color::srgb(0.8, 0.4, 0.1),
             BuildingKind::FuelStation => Color::srgb(0.3, 0.8, 0.9),
+            BuildingKind::Garrison => Color::srgb(0.45, 0.55, 0.35),
         }
     }
 }
@@ -107,32 +117,7 @@ pub struct Walker;
 // Walker sprite loading
 // ---------------------------------------------------------------------------
 
-use crate::surface_character::{CharacterAnim, SPRITE_COLS};
-
-/// Loaded sprite sheet for the walker character.
-#[derive(Resource)]
-struct WalkerSheet {
-    image: Handle<Image>,
-    layout: Handle<TextureAtlasLayout>,
-}
-
-impl WalkerSheet {
-    fn load(
-        asset_server: &AssetServer,
-        atlas_layouts: &mut Assets<TextureAtlasLayout>,
-        gender: &str,
-    ) -> Self {
-        let image = asset_server.load(format!("sprites/people/{gender}.png"));
-        let layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
-            UVec2::new(16, 16),
-            SPRITE_COLS as u32,
-            4,
-            None,
-            None,
-        ));
-        Self { image, layout }
-    }
-}
+use crate::surface_character::CharacterAnim;
 
 /// Interaction zone for a building.
 #[derive(Component)]
@@ -259,7 +244,7 @@ pub fn surface_plugin(app: &mut App) {
         .init_resource::<crate::surface_npc_chat::NpcChatState>()
         .add_systems(
             OnEnter(PlayState::Exploring),
-            (setup_surface, save_on_explore, spawn_mission_npcs).chain(),
+            (setup_surface, save_on_explore).chain(),
         )
         .add_systems(
             OnExit(PlayState::Exploring),
@@ -281,6 +266,7 @@ pub fn surface_plugin(app: &mut App) {
                 track_terrain_speed,
                 building_interact,
                 update_interact_prompt,
+                spawn_mission_npcs,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )
@@ -333,22 +319,35 @@ fn save_on_explore(
     crate::game_save::write_save(&game_state, &session_data);
 }
 
-/// Spawn mission-giver NPCs from NpcOffer missions.  Runs after
-/// `setup_surface` so `CivilianSprites` and `SurfacePaths` are available.
+/// Spawn mission-giver NPCs from NpcOffer missions, plus objective NPCs for
+/// active MeetNpc/CatchNpc missions on this planet.
+///
+/// Idempotent (skips missions whose NPC is already on the surface) and runs
+/// every frame while Exploring: a follow-up mission that auto-starts *after*
+/// the player lands (e.g. its predecessor completed on this very landing) gets
+/// its NPC spawned immediately, instead of only on the next re-land.
 fn spawn_mission_npcs(
     mut commands: Commands,
-    sprites: Option<Res<crate::surface_civilians::CivilianSprites>>,
+    layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
+    mut images: ResMut<Assets<Image>>,
     paths: Option<Res<crate::surface_pathfinding::SurfacePaths>>,
     cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
     mission_offers: Res<crate::missions::MissionOffers>,
     mission_catalog: Res<crate::missions::MissionCatalog>,
     mission_log: Res<crate::missions::MissionLog>,
     landed_context: Res<crate::planet_ui::LandedContext>,
+    item_universe: Res<ItemUniverse>,
+    existing: Query<&crate::surface_npc::MissionNpc>,
 ) {
-    let (Some(sprites), Some(paths), Some(cost_map)) = (sprites, paths, cost_map) else {
+    let (Some(mut layers), Some(paths), Some(cost_map)) = (layers, paths, cost_map) else {
         return;
     };
+    let layers = &mut *layers;
+    let walk_speed = layers.walk_speed;
     let planet_name = landed_context.planet_name.as_deref().unwrap_or("");
+
+    let already_spawned: std::collections::HashSet<&str> =
+        existing.iter().map(|m| m.0.as_str()).collect();
 
     let mission_ids: Vec<String> = mission_offers
         .npc
@@ -388,11 +387,23 @@ fn spawn_mission_npcs(
     let mut rng = rand::thread_rng();
 
     for mission_id in &mission_ids {
+        if already_spawned.contains(mission_id.as_str()) {
+            continue;
+        }
+        // Stale offer (procedural def pruned since the roll): an NPC offering
+        // a mission that no longer exists would silently no-op on Accept.
+        if !mission_catalog.defs.contains_key(mission_id.as_str()) {
+            continue;
+        }
         // Look up the mission def for NpcOffer config.
-        let (seek, door) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str()) {
+        let (seek, door, identity) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str())
+        {
             match &def.offer {
                 crate::missions::OfferKind::NpcOffer {
-                    building, approach, ..
+                    building,
+                    approach,
+                    npc,
+                    ..
                 } => {
                     let seek = *approach == crate::missions::NpcApproach::Seek;
 
@@ -406,17 +417,17 @@ fn spawn_mission_npcs(
                             door_tiles[rng.r#gen_range(0..door_tiles.len())]
                         });
 
-                    (seek, door)
+                    (seek, door, npc_identity(&item_universe, layers, npc))
                 }
                 _ => {
                     // Fallback for non-NpcOffer (shouldn't happen here).
                     let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
-                    (false, door)
+                    (false, door, None)
                 }
             }
         } else {
             let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
-            (false, door)
+            (false, door, None)
         };
 
         // For waiters, pick a tile near the door (not on it).
@@ -428,10 +439,13 @@ fn spawn_mission_npcs(
 
         crate::surface_npc::spawn_mission_npc(
             &mut commands,
-            &sprites,
+            layers,
+            &mut images,
+            "civilian",
+            identity,
             mission_id,
             spawn_tile,
-            sprites.walk_speed,
+            walk_speed,
             seek,
         );
     }
@@ -439,6 +453,9 @@ fn spawn_mission_npcs(
     // ── Spawn NPCs for active MeetNpc / CatchNpc objectives ─────────
 
     for (mission_id, def) in &mission_catalog.defs {
+        if already_spawned.contains(mission_id.as_str()) {
+            continue;
+        }
         let status = mission_log.status(mission_id);
         if !matches!(status, crate::missions::MissionStatus::Active(_)) {
             continue;
@@ -448,6 +465,7 @@ fn spawn_mission_npcs(
                 planet,
                 building,
                 approach,
+                npc,
                 ..
             } if planet == planet_name => {
                 let door = building
@@ -467,15 +485,21 @@ fn spawn_mission_npcs(
                 );
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
-                    &sprites,
+                    layers,
+                    &mut images,
+                    "civilian",
+                    npc_identity(&item_universe, layers, npc),
                     mission_id,
                     spawn_tile,
-                    sprites.walk_speed,
+                    walk_speed,
                     crate::surface_npc::ObjectiveKind::Meet { seek },
                 );
             }
             crate::missions::Objective::CatchNpc {
-                planet, building, ..
+                planet,
+                building,
+                npc,
+                ..
             } if planet == planet_name => {
                 let door = building
                     .as_ref()
@@ -486,16 +510,37 @@ fn spawn_mission_npcs(
                     crate::surface_pathfinding::SurfaceCostMap::tile_to_world(door.0, door.1);
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
-                    &sprites,
+                    layers,
+                    &mut images,
+                    "civilian",
+                    npc_identity(&item_universe, layers, npc),
                     mission_id,
                     door,
-                    sprites.walk_speed * 1.2,
+                    walk_speed * 1.2,
                     crate::surface_npc::ObjectiveKind::Catch,
                 );
             }
             _ => {}
         }
     }
+}
+
+/// Resolve a mission's recurring-NPC reference (`npc:` in missions.yaml) to
+/// a display name + consistent avatar. Unknown ids warn and fall back to the
+/// anonymous random look.
+fn npc_identity(
+    universe: &ItemUniverse,
+    layers: &crate::character_compositor::CharacterLayers,
+    npc_id: &Option<String>,
+) -> Option<(String, crate::character_compositor::AvatarSpec)> {
+    let id = npc_id.as_ref()?;
+    let Some(def) = universe.npcs.get(id) else {
+        eprintln!("[missions] WARNING: unknown npc id {id:?} (see assets/npcs.yaml)");
+        return None;
+    };
+    let role = def.role.as_deref().unwrap_or("civilian");
+    let spec = layers.spec_for_npc(id, def.avatar.as_ref(), role);
+    Some((def.name.clone(), spec))
 }
 
 /// Find a walkable tile near `door` but not on it (1–10 tiles along a
@@ -555,6 +600,7 @@ fn building_kinds_for_planet(
     planet_name: &str,
     item_universe: &ItemUniverse,
     system_name: &str,
+    galaxy: &crate::galaxy::GalaxyControl,
 ) -> Vec<BuildingKind> {
     let mut kinds = Vec::new();
     let planet_data = item_universe
@@ -576,12 +622,31 @@ fn building_kinds_for_planet(
     // Every landable colony has a fuel station — you must be able to refuel
     // wherever you set down (or you'd risk being stranded with an empty tank).
     kinds.push(BuildingKind::FuelStation);
+    // The war office follows the LIVE controller: only factions that take
+    // sides garrison their worlds, so the building appears/disappears when a
+    // system changes hands (and never on unaligned freeports).
+    if crate::galaxy::effective_planet_faction(galaxy, item_universe, planet_name)
+        .is_some_and(|f| item_universe.faction_takes_sides(&f))
+    {
+        kinds.push(BuildingKind::Garrison);
+    }
     kinds
 }
 
 /// Template (footprint + door) used to place each building kind. Chosen so the
 /// baked 3/4 sprite — which assumes this footprint — fits. Every style provides
 /// these three (cryo/station were given the missing two).
+/// Door (walkable, sensor) tiles for a building: the template's entry
+/// points — except the SHIPYARD, whose baked 3/4 sprite is an open hull-bay:
+/// its whole front row is a walkable threshold apart from the corner pillars.
+fn door_tiles_for(kind: BuildingKind, tmpl: &crate::world_assets::BuildingTemplate) -> Vec<(u32, u32)> {
+    if kind == BuildingKind::Shipyard && tmpl.width >= 3 {
+        (1..tmpl.width - 1).map(|c| (c, 0)).collect()
+    } else {
+        tmpl.entry_points.clone()
+    }
+}
+
 fn kind_template(kind: BuildingKind) -> &'static str {
     match kind {
         BuildingKind::Outfitter => "small_house",    // 4×4
@@ -601,6 +666,7 @@ fn kind_func(kind: BuildingKind) -> &'static str {
         BuildingKind::MechanicShop => "mechanic",
         BuildingKind::ShipPad => "pad",
         BuildingKind::FuelStation => "fuel_station",
+        BuildingKind::Garrison => "garrison",
     }
 }
 
@@ -625,6 +691,7 @@ fn spawn_building_3d(
     fc: Vec2,
     scale: f32,
     tile_px: f32,
+    props: &[crate::world_assets::BuildingPropSprite],
 ) {
     // _floor: the building's own floor + thresholds (walkable). ALWAYS below the
     // player (and above terrain at -10), so the player walks over it and it hides
@@ -647,28 +714,48 @@ fn spawn_building_3d(
         Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y + tile_px))
             .with_scale(Vec3::splat(scale)),
     ));
-    // _front normally sits ABOVE the player: it holds the parts that should
-    // occlude them — the door frame + front-protruding props (awnings, the
-    // mechanic's engine, market crates). depth_z(fc.y) alone would let a player
-    // standing *in front* (y south of fc.y) sort over it, so lift it clear of the
-    // player z-band (under labels z5 / fliers z8), keeping per-building ordering.
-    //
-    // EXCEPT the shipyard: it's an open hull-bay with no door cut, so its "front"
-    // is a walkable threshold the player steps onto — that must stay BELOW the
-    // player (no lift), so they walk into the bay rather than under it.
-    let front_lift = if func == "shipyard" { 0.0 } else { 8.0 };
+    // _front sorts NATURALLY at the building's front-wall depth: a player
+    // whose feet are SOUTH of the wall line draws over it (their head can
+    // overlap the facade without being clipped), and a player whose feet
+    // cross into the doorway (north of the line) sorts underneath, framed by
+    // the jambs. The old +8 "always above the player" lift clipped the
+    // 32px sprites' heads a full tile before the doorway. The cost: front-
+    // protruding props (awnings, the mechanic's engine) draw under a player
+    // standing hard against them — their tiles are solid, so it's marginal.
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Sprite::from_image(
             asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_front.png")),
         ),
         bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift)
+        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y))
             .with_scale(Vec3::splat(scale)),
     ));
+    // South-protruding props (market crates, the mechanic's engine, fuel
+    // pumps, the garrison's monument gun) spawn as INDIVIDUAL objects, each
+    // depth-sorted at its own ground line — a player weaving between the
+    // mechanic's toolbox and armor plate sorts correctly against each.
+    // Overhead pieces (porch, hanging sign) carry their SUPPORT line as dy.
+    for prop in props {
+        commands.spawn((
+            DespawnOnExit(PlayState::Exploring),
+            Sprite::from_image(asset_server.load(format!(
+                "{WORLDS_DIR}/buildings3d/{style}_{func}_prop_{}.png",
+                prop.name
+            ))),
+            bevy::sprite::Anchor(Vec2::new(prop.anchor.0, prop.anchor.1)),
+            Transform::from_xyz(
+                fc.x,
+                fc.y,
+                crate::surface_objects::depth_z(fc.y - prop.dy * tile_px),
+            )
+            .with_scale(Vec3::splat(scale)),
+        ));
+    }
+
     // Animated roll-up door (over the facade): overlays _front exactly (same
     // anchor/pos), and rolls open when the player nears. Only door buildings.
-    if matches!(func, "market" | "outfitter" | "bar" | "mechanic" | "fuel_station") {
+    if matches!(func, "market" | "outfitter" | "bar" | "mechanic" | "fuel_station" | "garrison") {
         let frames: Vec<Handle<Image>> = (0..4)
             .map(|k| {
                 asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_door{k}.png"))
@@ -678,8 +765,22 @@ fn spawn_building_3d(
             DespawnOnExit(PlayState::Exploring),
             Sprite::from_image(frames[0].clone()),
             bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift - 0.1)
-                .with_scale(Vec3::splat(scale)),
+            // A hair BENEATH the facade — or beneath the VESTIBULE on cryo
+            // buildings, whose airlock (and its door) juts forward of the
+            // wall: the panel sits in whichever recess it was baked into.
+            Transform::from_xyz(
+                fc.x,
+                fc.y,
+                crate::surface_objects::depth_z(
+                    fc.y
+                        - props
+                            .iter()
+                            .find(|p| p.name == "vest")
+                            .map_or(0.0, |p| p.dy)
+                            * tile_px,
+                ) - 0.0004,
+            )
+            .with_scale(Vec3::splat(scale)),
             BuildingDoor {
                 frames,
                 door_pos: fc,
@@ -781,6 +882,7 @@ fn setup_surface(
     player_query: Query<Entity, With<Player>>,
     landed_context: Res<LandedContext>,
     item_universe: Res<ItemUniverse>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     current_system: Res<crate::CurrentStarSystem>,
     mut camera_query: Query<&mut Transform, With<Camera2d>>,
     mut zoom: ResMut<CameraZoom>,
@@ -789,6 +891,7 @@ fn setup_surface(
     game_state: Res<crate::game_save::PlayerGameState>,
     mut comms: ResMut<crate::hud::CommsChannel>,
     mut images: ResMut<Assets<Image>>,
+    mut character_layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
 ) {
     comms.send("");
     commands.insert_resource(ClearColor(Color::BLACK));
@@ -849,23 +952,35 @@ fn setup_surface(
                 )
             };
 
-        // Generate initial terrain+collision for building placement.
-        let initial_terrain = crate::fbm::generate_terrain_map(
-            map_w,
-            map_h,
-            N_TERRAIN_TYPES,
-            FBM_SCALE,
-            FBM_OCTAVES,
-            FBM_LACUNARITY,
-            FBM_GAIN,
-            seed,
-        );
+        // Generate initial terrain+collision for building placement. The
+        // biome picks its field generator: organic fBm noise (default) or
+        // the designed corridor/room station layout for interiors.
+        let generator = manifest
+            .biomes
+            .get(biome_name)
+            .map(|b| b.generator.as_str())
+            .unwrap_or("organic");
+        let initial_terrain = if generator == "station" {
+            crate::station_layout::generate_station_map(map_w, map_h, N_TERRAIN_TYPES, seed)
+        } else {
+            crate::fbm::generate_terrain_map(
+                map_w,
+                map_h,
+                N_TERRAIN_TYPES,
+                FBM_SCALE,
+                FBM_OCTAVES,
+                FBM_LACUNARITY,
+                FBM_GAIN,
+                seed,
+            )
+        };
 
         // ── Pre-tilemap building placement ─────────────────────────────
         // Find building positions on the initial terrain, then force
         // nearby tiles to walkable terrain and re-clamp before building
         // the tilemap.
-        let building_kinds = building_kinds_for_planet(&planet_name, &item_universe, system_name);
+        let building_kinds =
+            building_kinds_for_planet(&planet_name, &item_universe, system_name, &galaxy);
 
         let initial_col: Vec<u8> = initial_terrain
             .iter()
@@ -1047,13 +1162,13 @@ fn setup_surface(
             std::collections::HashSet::new();
 
         // Template buildings: mark each non-zero tile as solid (except doors).
-        for &(_, bx, by, ti) in &building_assignments {
+        for &(kind, bx, by, ti) in &building_assignments {
             if let Some(tmpl) = templates.get(ti) {
-                let door_set: std::collections::HashSet<(u32, u32)> = tmpl
-                    .entry_points
-                    .iter()
-                    .map(|&(dc, dr)| (bx + dc, by + dr))
-                    .collect();
+                let door_set: std::collections::HashSet<(u32, u32)> =
+                    door_tiles_for(kind, tmpl)
+                        .into_iter()
+                        .map(|(dc, dr)| (bx + dc, by + dr))
+                        .collect();
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
                         let tile_idx = tmpl.tiles[row as usize][col as usize];
@@ -1081,30 +1196,40 @@ fn setup_surface(
             }
         }
 
-        // The repair engine sits front-left of the door, over this 2x2 block of
-        // tiles. Mark them impassable just like the building tiles so character
-        // pathfinding routes around it (it used to carry an ad-hoc collider the
-        // pathfinder couldn't see, so NPCs walked into it and got stuck).
+        // The repair engine sits front-left of the door. Mark its tiles
+        // impassable just like the building tiles so character pathfinding
+        // routes around it. TWO rows: its visible base reaches ~1.6 screen
+        // tiles south of the wall (the gun's plinth is shallower — one row).
         let engine_tiles = [
             (mech_x.saturating_sub(1), mech_y.saturating_sub(1)),
-            (mech_x.saturating_sub(1), mech_y.saturating_sub(2)),
             (mech_x, mech_y.saturating_sub(1)),
+            (mech_x.saturating_sub(1), mech_y.saturating_sub(2)),
             (mech_x, mech_y.saturating_sub(2)),
         ];
         for &t in &engine_tiles {
             solid_building_tiles.insert(t);
         }
 
-        // Apply terrain constraints + ensure connectivity.
+        // The garrison's monument gun (plinth + cannon) blocks a 2x1 row
+        // front-left of its door — too big to walk through, same treatment
+        // (and same one-row depth) as the mechanic's engine.
+        let gun_tiles: Vec<(u32, u32)> = building_assignments
+            .iter()
+            .filter(|(kind, ..)| *kind == BuildingKind::Garrison)
+            .flat_map(|&(_, bx, by, _)| {
+                [(bx, by.saturating_sub(1)), (bx + 1, by.saturating_sub(1))]
+            })
+            .collect();
+        for &t in &gun_tiles {
+            solid_building_tiles.insert(t);
+        }
+
+        // Apply terrain constraints + ensure connectivity, starting from the
+        // same base field used for building placement (organic or station).
         let generated = crate::surface_terrain::generate_constrained_terrain(
             map_w,
             map_h,
-            N_TERRAIN_TYPES,
-            seed,
-            FBM_SCALE,
-            FBM_OCTAVES,
-            FBM_LACUNARITY,
-            FBM_GAIN,
+            initial_terrain.clone(),
             &collision_codes,
             &movement_costs,
             &placed_buildings,
@@ -1325,6 +1450,7 @@ fn setup_surface(
                     fc,
                     scale,
                     tile_px,
+                    &spr.props,
                 );
             }
             // The repair engine sits front-left of the door. Its tiles were marked
@@ -1332,6 +1458,20 @@ fn setup_surface(
             // it; drop a matching per-tile collider on each — exactly like a building
             // tile — so the player is physically blocked where it's solid.
             for &(tx, ty) in &engine_tiles {
+                let wp = tile_to_world(tx, ty, map_w, map_h, tile_px);
+                commands.spawn((
+                    DespawnOnExit(PlayState::Exploring),
+                    RigidBody::Static,
+                    Collider::rectangle(tile_px, tile_px),
+                    CollisionLayers::new(
+                        GameLayer::Surface,
+                        [GameLayer::Surface, GameLayer::Character],
+                    ),
+                    Transform::from_xyz(wp.x, wp.y, 0.0),
+                ));
+            }
+            // The garrison's monument gun blocks like the engine does.
+            for &(tx, ty) in &gun_tiles {
                 let wp = tile_to_world(tx, ty, map_w, map_h, tile_px);
                 commands.spawn((
                     DespawnOnExit(PlayState::Exploring),
@@ -1374,7 +1514,7 @@ fn setup_surface(
                 // from the template's `entry_points` (not tile values), so the
                 // collision matches the floorplan + sprite exactly.
                 let door_set: std::collections::HashSet<(u32, u32)> =
-                    tmpl.entry_points.iter().copied().collect();
+                    door_tiles_for(kind, tmpl).into_iter().collect();
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
                         let tx = anchor_tx + col;
@@ -1432,7 +1572,50 @@ fn setup_surface(
                         fc,
                         scale,
                         tile_px,
+                        &spr.props,
                     );
+                    // The garrison flies the CONTROLLING faction's colors: a
+                    // grayscale cloth sprite tinted at runtime, pinned to the
+                    // baked flagpole (model: pole at (w/2+0.55, -d/2+0.3),
+                    // finial z≈4.2; screen offset = (x, Δdepth·sin50° +
+                    // z·cos50°) in tiles — see build_garrison in
+                    // scripts/ship3d/buildings3d.py).
+                    if kind == BuildingKind::Garrison {
+                        if let Some(color) = crate::galaxy::effective_planet_faction(
+                            &galaxy,
+                            &item_universe,
+                            &planet_name,
+                        )
+                        .and_then(|f| item_universe.factions.get(&f))
+                        .map(|fd| fd.color)
+                        {
+                            let offset = Vec2::new(4.25, 2.61) * tile_px;
+                            commands.spawn((
+                                DespawnOnExit(PlayState::Exploring),
+                                Sprite {
+                                    image: asset_server
+                                        .load(format!("{WORLDS_DIR}/buildings3d/flag.png")),
+                                    color: Color::srgb_u8(color[0], color[1], color[2]),
+                                    custom_size: Some(Vec2::new(1.3, 0.84) * tile_px),
+                                    ..default()
+                                },
+                                // The cloth rides just above the pole, which
+                                // is its own prop object at its own depth.
+                                Transform::from_xyz(
+                                    fc.x + offset.x,
+                                    fc.y + offset.y,
+                                    crate::surface_objects::depth_z(
+                                        fc.y - spr
+                                            .props
+                                            .iter()
+                                            .find(|p| p.name == "flag")
+                                            .map_or(0.0, |p| p.dy)
+                                            * tile_px,
+                                    ) + 0.0004,
+                                ),
+                            ));
+                        }
+                    }
                 }
             } else {
                 let world_pos = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
@@ -1625,12 +1808,7 @@ fn setup_surface(
         }
 
         // ── Setup civilian NPCs ─────────────────────────────────────────
-        crate::surface_civilians::setup_civilians(
-            &mut commands,
-            &asset_server,
-            &mut atlas_layouts,
-            seed,
-        );
+        crate::surface_civilians::setup_civilians(&mut commands, seed);
 
         // ── Spawn landscape objects (plants, creatures, etc.) ─────────
         {
@@ -1701,43 +1879,46 @@ fn setup_surface(
     // Spawn on the landing pad (always at map center).
     let spawn_pos = tile_to_world(map_w / 2, map_h / 2, map_w, map_h, tile_px);
 
-    let walker_sheet = WalkerSheet::load(
-        &asset_server,
-        &mut atlas_layouts,
-        game_state.gender.sprite_dir(),
-    );
-    let initial_index = crate::surface_character::sprite_index(
-        crate::surface_character::Facing::Down,
-        crate::surface_character::WalkFrame::Still,
-    );
+    // Composite the player's avatar sheet (32px, 18-col idle/walk/run).
+    let Some((walker_image, walker_layout)) =
+        character_layers.as_deref_mut().and_then(|layers| {
+            layers
+                .composite(&game_state.avatar, &mut images)
+                .map(|img| (img, layers.layout.clone()))
+        })
+    else {
+        eprintln!("[surface] WARNING: character layers unavailable — no walker spawned");
+        return;
+    };
+    let walker_anim = CharacterAnim::person(0.08);
+    let initial_index = walker_anim.atlas_index();
 
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Walker,
-        CharacterAnim::default(),
+        crate::surface_objects::FootOffset(crate::surface_objects::CHARACTER_FOOT_OFFSET),
+        walker_anim,
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
-        Collider::circle(WALKER_RADIUS),
+        crate::surface_objects::character_foot_collider(WALKER_RADIUS),
         CollisionLayers::new(GameLayer::Character, [GameLayer::Surface]),
         CollisionEventsEnabled,
         LinearDamping(WALKER_DAMPING),
-        MaxLinearSpeed(WALK_SPEED),
+        MaxLinearSpeed(RUN_SPEED),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
-            walker_sheet.image.clone(),
+            walker_image,
             TextureAtlas {
-                layout: walker_sheet.layout.clone(),
+                layout: walker_layout,
                 index: initial_index,
             },
         ),
         Transform::from_xyz(
             spawn_pos.x,
             spawn_pos.y,
-            crate::surface_objects::depth_z(spawn_pos.y - 8.0),
+            crate::surface_objects::depth_z(spawn_pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET),
         ),
     ));
-
-    commands.insert_resource(walker_sheet);
 
     // "Press E" prompt is now shown via the comms ticker (no floating text).
 
@@ -1816,7 +1997,13 @@ fn walker_input(
         dir.x += 1.0;
     }
 
-    let speed = WALK_SPEED / terrain_speed.0;
+    // Hold Shift to run (uses the run animation cycle past 80 u/s).
+    let base = if keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
+        RUN_SPEED
+    } else {
+        WALK_SPEED
+    };
+    let speed = base / terrain_speed.0;
     vel.0 = dir.normalize_or_zero() * speed;
 }
 
@@ -1892,10 +2079,7 @@ fn play_footstep(
         return;
     };
 
-    if !anim.is_moving || !anim.walk_timer.just_finished() {
-        return;
-    }
-    if anim.walk_phase != 1 && anim.walk_phase != 3 {
+    if !anim.just_stepped {
         return;
     }
     if footstep_data.terrains.is_empty() || footstep_data.map_w == 0 {
@@ -2045,6 +2229,19 @@ fn update_interact_prompt(
 /// Render the appropriate egui window based on which building the player is
 /// interacting with. Reuses the extracted tab renderers from planet_ui.rs.
 #[allow(clippy::too_many_arguments)]
+/// Price multiplier for a planet from the player's standing with its
+/// EFFECTIVE faction (the live controller of its system).
+fn planet_markup(
+    standings: &crate::standing::FactionStandings,
+    galaxy: &crate::galaxy::GalaxyControl,
+    iu: &crate::item_universe::ItemUniverse,
+    planet_name: &str,
+) -> f32 {
+    crate::galaxy::effective_planet_faction(galaxy, iu, planet_name)
+        .map(|f| crate::standing::price_markup(standings.get(&f)))
+        .unwrap_or(1.0)
+}
+
 fn surface_building_ui(
     mut egui_contexts: EguiContexts,
     mut active_ui: ResMut<ActiveBuildingUI>,
@@ -2057,6 +2254,8 @@ fn surface_building_ui(
     mission_offers: Res<MissionOffers>,
     mission_catalog: Res<MissionCatalog>,
     unlocks: Res<PlayerUnlocks>,
+    standings: Res<crate::standing::FactionStandings>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     mut accept_writer: MessageWriter<AcceptMission>,
     mut abandon_writer: MessageWriter<AbandonMission>,
     mut next_state: ResMut<NextState<PlayState>>,
@@ -2083,20 +2282,23 @@ fn surface_building_ui(
             match kind {
                 BuildingKind::Market => {
                     if let (Ok(mut ship), Some(pd)) = (player_query.single_mut(), planet_data) {
-                        render_trade_tab(ui, &mut ship, pd, &item_universe);
+                        let markup = planet_markup(&standings, &galaxy, &item_universe, planet_name);
+                        render_trade_tab(ui, &mut ship, pd, &item_universe, markup);
                     } else {
                         ui.label("No commodities available.");
                     }
                 }
                 BuildingKind::Outfitter => {
                     if let (Ok(mut ship), Some(pd)) = (player_query.single_mut(), planet_data) {
-                        render_outfitter_tab(ui, &mut ship, pd, &item_universe, &unlocks);
+                        let markup = planet_markup(&standings, &galaxy, &item_universe, planet_name);
+                        render_outfitter_tab(ui, &mut ship, pd, &item_universe, &unlocks, markup);
                     } else {
                         ui.label("No equipment available.");
                     }
                 }
                 BuildingKind::Shipyard => {
                     if let (Ok(ship), Some(pd)) = (player_query.single(), planet_data) {
+                        let markup = planet_markup(&standings, &galaxy, &item_universe, planet_name);
                         render_shipyard_tab(
                             ui,
                             &ship,
@@ -2104,6 +2306,7 @@ fn surface_building_ui(
                             &item_universe,
                             &unlocks,
                             &mut buy_ship_writer,
+                            markup,
                         );
                     } else {
                         ui.label("No ships for sale.");
@@ -2134,7 +2337,7 @@ fn surface_building_ui(
                 }
                 BuildingKind::MechanicShop => {
                     if let Ok(mut ship) = player_query.single_mut() {
-                        let max_hp = ship.data.max_health;
+                        let max_hp = ship.max_health();
                         let hp = ship.health;
                         ui.label(format!("Hull: {}/{}", hp, max_hp));
 
@@ -2169,8 +2372,58 @@ fn surface_building_ui(
                             ui.label("Hull is at full integrity. No repairs needed.");
                         }
 
+                        // Hull modification bench — the mechanic's trade.
+                        if let Some(pd) = planet_data {
+                            let markup = planet_markup(
+                                &standings,
+                                &galaxy,
+                                &item_universe,
+                                planet_name,
+                            );
+                            render_mods_section(
+                                ui,
+                                &mut ship,
+                                pd,
+                                &item_universe,
+                                &unlocks,
+                                markup,
+                            );
+                        }
+
                         ui.add_space(4.0);
                         ui.label(format!("Credits: {}", ship.credits));
+                    }
+                }
+                BuildingKind::Garrison => {
+                    let faction = crate::galaxy::effective_planet_faction(
+                        &galaxy,
+                        &item_universe,
+                        planet_name,
+                    );
+                    match faction {
+                        Some(f) => {
+                            let standing = standings.get(&f);
+                            ui.label(format!("{} war office.", f));
+                            ui.label(format!("Your standing: {:+.0}", standing));
+                            ui.add_space(6.0);
+                            if standing >= 10.0 {
+                                ui.label(
+                                    "The duty officer posts commissions outside when a \
+                                     front needs freelance pilots. Fight for the flag and \
+                                     the flag remembers.",
+                                );
+                            } else {
+                                ui.colored_label(
+                                    bevy_egui::egui::Color32::from_rgb(230, 160, 100),
+                                    "The duty officer looks through you. War work goes to \
+                                     TRUSTED pilots — run their missions, hunt their \
+                                     enemies, come back at +10.",
+                                );
+                            }
+                        }
+                        None => {
+                            ui.label("The office stands empty — nobody holds this world.");
+                        }
                     }
                 }
                 BuildingKind::FuelStation => {
@@ -2246,4 +2499,43 @@ fn camera_follow_walker(
         return;
     };
     cam_tf.translation = cam_tf.translation.lerp(walker_tf.translation, 0.1);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn universe() -> ItemUniverse {
+        let mut iu: ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        iu
+    }
+
+    /// The garrison follows the LIVE controller: faction worlds have one,
+    /// unaligned freeports don't — until somebody takes the system.
+    #[test]
+    fn garrison_stands_on_faction_worlds_only() {
+        let iu = universe();
+        let mut galaxy = crate::galaxy::GalaxyControl::seeded_from(&iu);
+
+        let kinds = building_kinds_for_planet("earth", &iu, "sol", &galaxy);
+        assert!(kinds.contains(&BuildingKind::Garrison), "Federation garrisons Earth");
+
+        let kinds = building_kinds_for_planet("marches_freeport", &iu, "the_marches", &galaxy);
+        assert!(
+            !kinds.contains(&BuildingKind::Garrison),
+            "no flag flies over an unaligned freeport"
+        );
+
+        // Federation takes the Marches → the garrison (and its flag) appears.
+        // (update_controllers does the recompute every frame in the live game.)
+        galaxy.apply_shift("the_marches", "Federation", 1.0);
+        galaxy.recompute_controller("the_marches");
+        let kinds = building_kinds_for_planet("marches_freeport", &iu, "the_marches", &galaxy);
+        assert!(
+            kinds.contains(&BuildingKind::Garrison),
+            "conquest raises a garrison"
+        );
+    }
 }

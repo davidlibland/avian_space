@@ -6,6 +6,10 @@ pub struct MissionDef {
     pub briefing: String,
     pub success_text: String,
     pub failure_text: String,
+    /// Faction this storyline belongs to (key into factions.yaml). Colors
+    /// the mission in the story chart; None = neutral/unaffiliated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faction: Option<String>,
     #[serde(default)]
     pub preconditions: Vec<Precondition>,
     pub offer: OfferKind,
@@ -19,6 +23,11 @@ pub struct MissionDef {
     pub requires: Vec<CompletionRequirement>,
     #[serde(default)]
     pub completion_effects: Vec<CompletionEffect>,
+    /// Friendly support wing spawned for the player in the mission's battle
+    /// system while the mission is active (squadron escorts: they follow,
+    /// take B/N/M orders, cannot dock, despawn when the mission ends).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub squadron: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
@@ -64,6 +73,10 @@ pub enum OfferKind {
         /// still near the building (`wait`).  Defaults to `wait`.
         #[serde(default)]
         approach: NpcApproach,
+        /// Recurring character id (key in `assets/npcs.yaml`). Gives the
+        /// giver a consistent name + appearance across a storyline.
+        #[serde(default)]
+        npc: Option<String>,
     },
 }
 
@@ -119,6 +132,10 @@ pub enum Objective {
         /// Whether the NPC walks toward the player or waits.
         #[serde(default)]
         approach: NpcApproach,
+        /// Recurring character id (key in `assets/npcs.yaml`) for a
+        /// consistent name + appearance.
+        #[serde(default)]
+        npc: Option<String>,
     },
     /// Player must catch a fleeing NPC on a planet surface.  The NPC runs
     /// away; objective completes when the player gets adjacent.
@@ -129,6 +146,9 @@ pub enum Objective {
         /// Which building the NPC starts near.
         #[serde(default)]
         building: Option<String>,
+        /// Recurring character id (key in `assets/npcs.yaml`).
+        #[serde(default)]
+        npc: Option<String>,
     },
     /// Player must destroy a group of ships in a specific system. The ships
     /// are spawned when the player enters the system with this mission active
@@ -168,10 +188,28 @@ pub enum CompletionEffect {
     /// Add a named unlock flag to `PlayerUnlocks` (e.g. to gate the
     /// shipyard / outfitter on story progress).
     GrantUnlock { name: String },
-    // Future: AdjustFactionStanding, etc.
+    /// Shift the player's standing with a faction (applied by the standing
+    /// module, which watches MissionCompleted — missions stay decoupled).
+    AdjustStanding { faction: String, delta: f32 },
+    /// Shift a faction's influence share in a (contestable) system — the
+    /// galactic-war lever. Applied by the galaxy module, same pattern.
+    ShiftInfluence {
+        system: String,
+        faction: String,
+        delta: f32,
+    },
 }
 
 impl MissionDef {
+    /// The system this mission's ShiftInfluence effect targets, if any
+    /// (used by the war generator to avoid stacking missions on one front).
+    pub fn shift_target(&self) -> Option<&str> {
+        self.completion_effects.iter().find_map(|e| match e {
+            CompletionEffect::ShiftInfluence { system, .. } => Some(system.as_str()),
+            _ => None,
+        })
+    }
+
     /// Total cargo-space units the player needs free at accept time.
     /// Sum of:
     ///   • every `LoadCargo` start effect (loaded the instant you accept)
@@ -202,6 +240,35 @@ impl MissionDef {
 /// Template text fields support the following placeholders:
 ///   {commodity}, {quantity}, {pay}, {planet}, {planet_display},
 ///   {system}, {system_display}
+/// What a covert-ops mission asks of the player (see MissionTemplate::Covert).
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CovertAction {
+    /// Deliver contraband to a landable enemy world.
+    Smuggle { commodity: String, quantity: u16 },
+    /// Meet a contact on an enemy world (they seek you out).
+    MeetContact { npc_name: String },
+    /// Catch a fleeing official on an enemy world.
+    CatchOfficial { npc_name: String },
+    /// Destroy the enemy's supply freighters in the target system — an
+    /// influence shift without a battle, at a cost in Merchant standing.
+    CutSupply { count: u8 },
+    /// Meet the official's bagman on an enemy world and pay them off. The
+    /// template's pay_range is NEGATIVE: the bribe comes out of your pocket.
+    Bribe { npc_name: String },
+    /// Two-stage: meet someone on an enemy world, then carry them (or what
+    /// they know) home — the follow-up mission auto-starts on the first
+    /// meet and completes on landing at the sponsor's front system.
+    Extract { npc_name: String },
+    /// Two-stage: smuggle a cargo onto an enemy world, then meet the cell
+    /// organizer who takes delivery — the meet auto-starts on landing.
+    Propaganda {
+        commodity: String,
+        quantity: u16,
+        npc_name: String,
+    },
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MissionTemplate {
@@ -291,6 +358,80 @@ pub enum MissionTemplate {
         quantity_range: (u16, u16),
         pay_range: (i64, i64),
     },
+    /// A galactic-war battle mission, generated ad-hoc by the front
+    /// generator (src/war.rs) at faction worlds bordering enemy space —
+    /// never offered by the landing rolls. Substitution vars: {faction}
+    /// {enemy} {system_display} {count} {pay}.
+    /// `attack: true` fights in the ENEMY's system, else defends the
+    /// sponsor's own; `squadron_size > 0` musters a support wing of the
+    /// sponsor's fighters. `tier` picks the mission by how contested the
+    /// front is (1 = lopsided → raids, 3 = near the threshold → decisive).
+    War {
+        briefing: String,
+        success_text: String,
+        failure_text: String,
+        attack: bool,
+        #[serde(default)]
+        squadron_size: u8,
+        count_range: (u8, u8),
+        influence_delta: f32,
+        pay_range: (i64, i64),
+        min_standing: f32,
+        tier: u8,
+    },
+    /// A battleless covert-ops mission that shifts system loyalty: smuggle
+    /// arms to partisans, meet a dissident cell, or snatch an official from
+    /// an ENEMY world near the front. Same generator/vars as `War`, plus
+    /// {planet_display} {commodity} {quantity}. Executing it costs standing
+    /// with the target faction (`enemy_standing_penalty`).
+    Covert {
+        briefing: String,
+        success_text: String,
+        failure_text: String,
+        action: CovertAction,
+        influence_delta: f32,
+        pay_range: (i64, i64),
+        min_standing: f32,
+        tier: u8,
+        #[serde(default)]
+        enemy_standing_penalty: f32,
+        /// Standing cost with the Merchant guild (CutSupply's moral price).
+        #[serde(default)]
+        merchant_standing_penalty: f32,
+        /// Stage-2 texts for two-stage actions (Extract, Propaganda).
+        #[serde(default)]
+        stage2_briefing: String,
+        #[serde(default)]
+        stage2_success: String,
+    },
+    /// The arrest flow generated by the standing system when the player lands
+    /// on a world whose faction they've antagonized past the arrest
+    /// threshold. Never offered by the landing rolls — `standing.rs`
+    /// instantiates it ad-hoc, substituting {faction}, {fine},
+    /// {planet_display}, {dest_display}, {count}, {quantity}, {commodity}.
+    /// The meet stage (enforcers seek the player) opens three parallel
+    /// resolution missions: pay the fine, fly a penal bounty, or run a
+    /// community-service delivery. Completing any one closes the case.
+    Arrest {
+        meet_briefing: String,
+        meet_success: String,
+        meet_failure: String,
+        fine_briefing: String,
+        fine_success: String,
+        fine_failure: String,
+        bounty_briefing: String,
+        bounty_success: String,
+        bounty_failure: String,
+        service_briefing: String,
+        service_success: String,
+        service_failure: String,
+        /// Fine = fine_base + fine_per_standing × |standing|.
+        fine_base: i64,
+        fine_per_standing: i64,
+        bounty_count: u8,
+        service_commodity: String,
+        service_quantity: u16,
+    },
 }
 
 impl MissionTemplate {
@@ -301,6 +442,8 @@ impl MissionTemplate {
             MissionTemplate::CollectThenDeliver { preconditions, .. } => preconditions,
             MissionTemplate::BountyHunt { preconditions, .. } => preconditions,
             MissionTemplate::CatchThief { preconditions, .. } => preconditions,
+            MissionTemplate::Arrest { .. } => &[],
+            MissionTemplate::War { .. } | MissionTemplate::Covert { .. } => &[],
         }
     }
 }
@@ -324,6 +467,10 @@ pub enum MissionStatus {
 /// objectives that use it; others stay at 0.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct ObjectiveProgress {
+    /// Whether this mission's support squadron has already mustered
+    /// (never respawned — losses are real).
+    #[serde(default)]
+    pub squadron_spawned: bool,
     #[serde(default)]
     pub collected: u16,
     #[serde(default)]

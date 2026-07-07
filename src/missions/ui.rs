@@ -20,7 +20,11 @@ pub fn render_active_missions(
 ) {
     ui.heading("Active");
     let mut any_active = false;
-    for (id, status) in &log.statuses {
+    // Sort by id: statuses is a HashMap, and unordered iteration made the
+    // mission list shuffle whenever an entry was inserted.
+    let mut entries: Vec<_> = log.statuses.iter().collect();
+    entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+    for (id, status) in entries {
         if let MissionStatus::Active(progress) = status {
             any_active = true;
             let Some(def) = catalog.defs.get(id) else {
@@ -140,9 +144,24 @@ fn format_objective(obj: &Objective, progress: &ObjectiveProgress) -> String {
     }
 }
 
+/// FIFO queue of mission messages to surface to the player. A queue (not a
+/// single slot) because several can land in the same instant — e.g. a mission
+/// completes on landing and its Auto follow-up starts one frame later; with a
+/// single slot the follow-up's briefing would overwrite the completion text
+/// (or vice versa) and the player would never see one of them.
 #[derive(Resource, Default)]
 pub struct MissionToast {
-    pub text: Option<String>,
+    pub queue: std::collections::VecDeque<String>,
+}
+
+impl MissionToast {
+    pub fn push(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        // Dedup back-to-back identical messages (e.g. re-emitted on load).
+        if self.queue.back().map(String::as_str) != Some(text.as_str()) {
+            self.queue.push_back(text);
+        }
+    }
 }
 
 impl crate::session::SessionResource for MissionToast {
@@ -155,13 +174,14 @@ impl crate::session::SessionResource for MissionToast {
 /// Runs every frame in `EguiPrimaryContextPass`; registered only in
 /// non-headless mode (see `missions_ui_plugin`).
 pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionToast>) {
-    let Some(text) = toast.text.clone() else {
+    let Some(text) = toast.queue.front().cloned() else {
         return;
     };
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
     let mut open = true;
+    let remaining = toast.queue.len() - 1;
     egui::Window::new("Mission Update")
         .collapsible(false)
         .resizable(false)
@@ -169,12 +189,20 @@ pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionTo
         .open(&mut open)
         .show(ctx, |ui| {
             ui.label(text);
-            if ui.button("Dismiss").clicked() {
-                toast.text = None;
+            let label = if remaining > 0 {
+                format!("Next ({remaining} more)")
+            } else {
+                "Dismiss".to_string()
+            };
+            // Keyboard focus is globally surrendered outside the main menu
+            // (see drop_egui_keyboard_focus), so Space (= FIRE) can never
+            // "click" this button and swallow unread messages.
+            if ui.button(label).clicked() {
+                toast.queue.pop_front();
             }
         });
     if !open {
-        toast.text = None;
+        toast.queue.pop_front();
     }
 }
 
@@ -182,6 +210,7 @@ pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionTo
 pub enum MissionLogTab {
     #[default]
     Missions,
+    Story,
     Info,
     Cargo,
 }
@@ -198,18 +227,10 @@ impl crate::session::SessionResource for MissionLogOpen {
     fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
 }
 
-fn toggle_mission_log(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<MissionLogOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
-) {
+fn toggle_mission_log(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<MissionLogOpen>) {
+    // Pausing is derived from `open` by sync_ui_pause (main.rs).
     if keyboard.just_pressed(KeyCode::KeyI) {
         state.open = !state.open;
-        if state.open {
-            virtual_time.pause();
-        } else {
-            virtual_time.unpause();
-        }
     }
 }
 
@@ -218,12 +239,13 @@ fn render_mission_log(
     mut state: ResMut<MissionLogOpen>,
     log: Res<MissionLog>,
     catalog: Res<MissionCatalog>,
+    unlocks: Res<super::log::PlayerUnlocks>,
     item_universe: Res<ItemUniverse>,
     game_state: Res<PlayerGameState>,
     mut player_query: Query<(&mut Ship, &Transform), With<Player>>,
     mut abandon: MessageWriter<AbandonMission>,
     mut pickup_drop: MessageWriter<PickupDrop>,
-    mut virtual_time: ResMut<Time<Virtual>>,
+    standings: Res<crate::standing::FactionStandings>,
 ) {
     if !state.open {
         return;
@@ -242,6 +264,7 @@ fn render_mission_log(
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut state.tab, MissionLogTab::Missions, "Missions");
+                ui.selectable_value(&mut state.tab, MissionLogTab::Story, "Story");
                 ui.selectable_value(&mut state.tab, MissionLogTab::Info, "Info");
                 ui.selectable_value(&mut state.tab, MissionLogTab::Cargo, "Cargo");
             });
@@ -250,8 +273,11 @@ fn render_mission_log(
                 MissionLogTab::Missions => {
                     render_active_missions(ui, &log, &catalog, Some(&mut abandon));
                 }
+                MissionLogTab::Story => {
+                    render_story_tab(ui, &log, &unlocks, &item_universe);
+                }
                 MissionLogTab::Info => {
-                    render_info_tab(ui, &ship, &game_state, &item_universe);
+                    render_info_tab(ui, &ship, &game_state, &item_universe, &standings);
                 }
                 MissionLogTab::Cargo => {
                     let forward = (transform.rotation * Vec3::Y).xy();
@@ -267,7 +293,159 @@ fn render_mission_log(
         });
     if close {
         state.open = false;
-        virtual_time.unpause();
+    }
+}
+
+/// Player-facing, partially-obscured storyline flow chart. Faction-colored
+/// layered DAG: completed missions read fully, the next available shows as a
+/// blank in faction color, unmet-requirement missions stay hidden, and closed
+/// branches appear locked. See [`super::story_chart`].
+fn render_story_tab(
+    ui: &mut egui::Ui,
+    log: &MissionLog,
+    unlocks: &super::log::PlayerUnlocks,
+    universe: &ItemUniverse,
+) {
+    use super::story_chart::{build_story_graph, NodeUi};
+
+    let graph = build_story_graph(log, unlocks, universe);
+    if graph.nodes.is_empty() {
+        ui.label("No storylines discovered yet. Take work from the people you\nmeet on planet surfaces to begin a chain.");
+        return;
+    }
+
+    // Legend.
+    ui.horizontal_wrapped(|ui| {
+        let chip = |ui: &mut egui::Ui, label: &str, col: egui::Color32| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 2.0, col);
+            ui.label(label);
+            ui.add_space(8.0);
+        };
+        chip(ui, "done", egui::Color32::from_rgb(90, 170, 100));
+        chip(ui, "active", egui::Color32::from_rgb(230, 200, 90));
+        chip(ui, "next", egui::Color32::from_gray(110));
+        chip(ui, "failed", egui::Color32::from_rgb(170, 70, 70));
+        chip(ui, "closed", egui::Color32::from_gray(60));
+    });
+    ui.separator();
+
+    // Layout metrics (chart-space pixels).
+    const NW: f32 = 128.0;
+    const NH: f32 = 34.0;
+    const COL_GAP: f32 = 40.0;
+    const ROW_GAP: f32 = 10.0;
+    let width = graph.cols as f32 * (NW + COL_GAP) + COL_GAP;
+    let height = graph.rows.max(1) as f32 * (NH + ROW_GAP) + ROW_GAP;
+
+    let node_at = |col: u32, row: u32| -> egui::Rect {
+        let x = COL_GAP + col as f32 * (NW + COL_GAP);
+        let y = ROW_GAP + row as f32 * (NH + ROW_GAP);
+        egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(NW, NH))
+    };
+
+    egui::ScrollArea::both()
+        .max_height(460.0)
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            let (canvas, _) =
+                ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+            let origin = canvas.min.to_vec2();
+            let p = ui.painter_at(canvas);
+
+            // Edges first (under nodes).
+            for e in &graph.edges {
+                let a = node_at(graph.nodes[e.from].col, graph.nodes[e.from].row).translate(origin);
+                let b = node_at(graph.nodes[e.to].col, graph.nodes[e.to].row).translate(origin);
+                let col = if e.satisfied {
+                    egui::Color32::from_gray(130)
+                } else {
+                    egui::Color32::from_gray(70)
+                };
+                p.line_segment(
+                    [egui::pos2(a.max.x, a.center().y), egui::pos2(b.min.x, b.center().y)],
+                    egui::Stroke::new(1.5, col),
+                );
+            }
+
+            // Nodes.
+            for n in &graph.nodes {
+                let rect = node_at(n.col, n.row).translate(origin);
+                let base = egui::Color32::from_rgb(n.color[0], n.color[1], n.color[2]);
+                let (fill, stroke, text_col) = match n.ui {
+                    NodeUi::Completed => (base, egui::Stroke::new(1.0, egui::Color32::from_gray(20)), text_on(base)),
+                    NodeUi::Active => (
+                        base,
+                        egui::Stroke::new(2.5, egui::Color32::from_rgb(240, 210, 90)),
+                        text_on(base),
+                    ),
+                    // Next: faction hue retained but muted + no text.
+                    NodeUi::Next => (
+                        mute(base, 0.32),
+                        egui::Stroke::new(1.0, mute(base, 0.6)),
+                        egui::Color32::TRANSPARENT,
+                    ),
+                    NodeUi::Failed => (
+                        mute(base, 0.4),
+                        egui::Stroke::new(1.5, egui::Color32::from_rgb(150, 60, 60)),
+                        egui::Color32::from_gray(150),
+                    ),
+                    // Closed branch: barely-there hue, locked.
+                    NodeUi::Impossible => (
+                        mute(base, 0.15),
+                        egui::Stroke::new(1.0, egui::Color32::from_gray(70)),
+                        egui::Color32::TRANSPARENT,
+                    ),
+                };
+                p.rect(rect, 5.0, fill, stroke, egui::StrokeKind::Inside);
+
+                if n.ui.shows_name() {
+                    p.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        &n.label,
+                        egui::FontId::proportional(11.0),
+                        text_col,
+                    );
+                    if !n.grants.is_empty() {
+                        let g: Vec<String> = n
+                            .grants
+                            .iter()
+                            .map(|u| u.replace("_license", "").replace('_', " "))
+                            .collect();
+                        p.text(
+                            egui::pos2(rect.center().x, rect.max.y - 5.0),
+                            egui::Align2::CENTER_CENTER,
+                            format!("★ {}", g.join(", ")),
+                            egui::FontId::proportional(8.0),
+                            egui::Color32::from_rgb(240, 210, 110),
+                        );
+                    }
+                } else if matches!(n.ui, NodeUi::Next) {
+                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "?",
+                        egui::FontId::proportional(15.0), mute(base, 0.9));
+                } else if matches!(n.ui, NodeUi::Impossible) {
+                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "\u{1f512}",
+                        egui::FontId::proportional(12.0), egui::Color32::from_gray(90));
+                }
+            }
+        });
+}
+
+/// Desaturate + darken a color toward grey by `1.0 - keep` (keep in [0,1]).
+fn mute(c: egui::Color32, keep: f32) -> egui::Color32 {
+    let grey = 40.0;
+    let mix = |v: u8| (v as f32 * keep + grey * (1.0 - keep)) as u8;
+    egui::Color32::from_rgb(mix(c.r()), mix(c.g()), mix(c.b()))
+}
+
+/// Pick black or white text for contrast against `bg`.
+fn text_on(bg: egui::Color32) -> egui::Color32 {
+    let lum = 0.299 * bg.r() as f32 + 0.587 * bg.g() as f32 + 0.114 * bg.b() as f32;
+    if lum > 140.0 {
+        egui::Color32::from_gray(15)
+    } else {
+        egui::Color32::from_gray(235)
     }
 }
 
@@ -276,7 +454,9 @@ fn render_info_tab(
     ship: &Ship,
     game_state: &PlayerGameState,
     item_universe: &ItemUniverse,
+    standings: &crate::standing::FactionStandings,
 ) {
+    render_standings(ui, standings);
     ui.heading("Pilot");
     egui::Grid::new("pilot_info_grid")
         .num_columns(2)
@@ -300,16 +480,16 @@ fn render_info_tab(
             ui.label(&ship.data.display_name);
             ui.end_row();
             ui.label("Hull:");
-            ui.label(format!("{} / {}", ship.health, ship.data.max_health));
+            ui.label(format!("{} / {}", ship.health, ship.max_health()));
             ui.end_row();
             ui.label("Max speed:");
-            ui.label(format!("{} m/s", ship.data.max_speed as i32));
+            ui.label(format!("{} m/s", (ship.data.max_speed * ship.mod_stats.speed_mult) as i32));
             ui.end_row();
             ui.label("Thrust:");
-            ui.label(format!("{} N", ship.data.thrust as i32));
+            ui.label(format!("{} N", (ship.data.thrust * ship.mod_stats.thrust_mult) as i32));
             ui.end_row();
             ui.label("Turning torque:");
-            ui.label(format!("{} N·m", ship.data.torque as i32));
+            ui.label(format!("{} N·m", (ship.data.torque * ship.mod_stats.torque_mult) as i32));
             ui.end_row();
             ui.label("Cargo space:");
             ui.label(format!(
@@ -446,7 +626,7 @@ pub fn missions_ui_plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                toggle_mission_log.run_if(in_state(crate::PlayState::Flying)),
+                toggle_mission_log.run_if(not(in_state(crate::PlayState::MainMenu))),
                 drain_completion_toasts,
             ),
         )
@@ -454,7 +634,7 @@ pub fn missions_ui_plugin(app: &mut App) {
             EguiPrimaryContextPass,
             (
                 render_toast,
-                render_mission_log.run_if(in_state(crate::PlayState::Flying)),
+                render_mission_log.run_if(not(in_state(crate::PlayState::MainMenu))),
             ),
         );
 }
@@ -462,17 +642,65 @@ pub fn missions_ui_plugin(app: &mut App) {
 pub fn drain_completion_toasts(
     mut completed: MessageReader<MissionCompleted>,
     mut failed: MessageReader<MissionFailed>,
+    mut started: MessageReader<MissionStarted>,
     catalog: Res<MissionCatalog>,
     mut toast: ResMut<MissionToast>,
 ) {
     for MissionCompleted(id) in completed.read() {
         if let Some(def) = catalog.defs.get(id) {
-            toast.text = Some(def.success_text.clone());
+            toast.push(def.success_text.clone());
         }
     }
     for MissionFailed(id) in failed.read() {
         if let Some(def) = catalog.defs.get(id) {
-            toast.text = Some(def.failure_text.clone());
+            toast.push(def.failure_text.clone());
         }
     }
+    // Auto missions start themselves — there is no offer dialog, so unless we
+    // surface the briefing here the player never sees the opening message
+    // (it was previously only visible in the mission log).
+    for MissionStarted(id) in started.read() {
+        if let Some(def) = catalog.defs.get(id) {
+            if matches!(def.offer, OfferKind::Auto) {
+                toast.push(def.briefing.clone());
+            }
+        }
+    }
+}
+
+
+/// Faction standings summary for the info tab.
+fn render_standings(ui: &mut egui::Ui, standings: &crate::standing::FactionStandings) {
+    use crate::standing::{ARREST_THRESHOLD, ENGAGE_THRESHOLD};
+    ui.heading("Faction Standing");
+    if standings.0.is_empty() {
+        ui.label("(No faction has an opinion of you yet.)");
+    } else {
+        let mut entries: Vec<(&String, &f32)> = standings.0.iter().collect();
+        entries.sort_by(|a, b| a.0.cmp(b.0));
+        egui::Grid::new("standings_grid")
+            .num_columns(3)
+            .striped(true)
+            .show(ui, |ui| {
+                for (faction, &value) in entries {
+                    let (label, color) = if value <= ARREST_THRESHOLD {
+                        ("wanted", egui::Color32::from_rgb(235, 60, 60))
+                    } else if value <= ENGAGE_THRESHOLD {
+                        ("hostile", egui::Color32::from_rgb(230, 120, 60))
+                    } else if value < 0.0 {
+                        ("distrusted", egui::Color32::from_rgb(220, 190, 90))
+                    } else if value > 20.0 {
+                        ("trusted", egui::Color32::from_rgb(90, 220, 120))
+                    } else {
+                        ("neutral", egui::Color32::GRAY)
+                    };
+                    ui.label(faction);
+                    ui.label(format!("{value:+.0}"));
+                    ui.colored_label(color, label);
+                    ui.end_row();
+                }
+            });
+    }
+    ui.add_space(6.0);
+    ui.separator();
 }

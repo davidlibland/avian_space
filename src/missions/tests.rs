@@ -20,6 +20,8 @@ fn dummy_def() -> MissionDef {
         },
         requires: Vec::new(),
         completion_effects: Vec::new(),
+        squadron: Vec::new(),
+        faction: None,
     }
 }
 
@@ -420,6 +422,7 @@ fn mission_status_serde_roundtrip() {
         MissionStatus::Active(ObjectiveProgress {
             collected: 3,
             destroyed: 2,
+            squadron_spawned: false,
         }),
         MissionStatus::Completed,
         MissionStatus::Failed,
@@ -454,6 +457,8 @@ fn mission_def_yaml_roundtrip_travel() {
         },
         requires: Vec::new(),
         completion_effects: vec![CompletionEffect::Pay { credits: 1000 }],
+        squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -472,6 +477,7 @@ fn mission_def_yaml_roundtrip_land_with_requires() {
             weight: 0.5,
             building: None,
             approach: Default::default(),
+            npc: None,
         },
         start_effects: vec![StartEffect::LoadCargo {
             commodity: "food".into(),
@@ -495,6 +501,8 @@ fn mission_def_yaml_roundtrip_land_with_requires() {
                 name: "flag".into(),
             },
         ],
+        squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -519,6 +527,8 @@ fn mission_def_yaml_roundtrip_collect() {
         },
         requires: Vec::new(),
         completion_effects: Vec::new(),
+        squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -547,6 +557,8 @@ fn mission_def_yaml_roundtrip_destroy_ships() {
         },
         requires: Vec::new(),
         completion_effects: vec![CompletionEffect::Pay { credits: 10000 }],
+        squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -572,6 +584,8 @@ fn mission_def_yaml_roundtrip_destroy_ships_no_collect() {
         },
         requires: Vec::new(),
         completion_effects: Vec::new(),
+        squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -580,49 +594,6 @@ fn mission_def_yaml_roundtrip_destroy_ships_no_collect() {
 
 // ── Mission state machine scenarios ─────────────────────────────────────────
 
-#[test]
-fn scenario_locked_to_available_to_active_to_completed() {
-    let mut log = MissionLog::default();
-    let unlocks = PlayerUnlocks::default();
-    let mut catalog = MissionCatalog::default();
-
-    let def = MissionDef {
-        briefing: "Intro".into(),
-        success_text: "Done".into(),
-        failure_text: "Fail".into(),
-        preconditions: Vec::new(),
-        offer: OfferKind::Tab { weight: 1.0 },
-        start_effects: Vec::new(),
-        objective: Objective::TravelToSystem {
-            system: "sol".into(),
-        },
-        requires: Vec::new(),
-        completion_effects: Vec::new(),
-    };
-    catalog.defs.insert("m1".into(), def);
-
-    // Initially Locked.
-    assert_eq!(log.status("m1"), MissionStatus::Locked);
-
-    // Preconditions are met (empty) → should become Available.
-    let def = catalog.defs.get("m1").unwrap();
-    assert!(preconditions_met(&def.preconditions, &log, &unlocks));
-
-    // Simulate: set to Available.
-    log.set("m1", MissionStatus::Available);
-    assert_eq!(log.status("m1"), MissionStatus::Available);
-
-    // Accept: set to Active.
-    log.set(
-        "m1",
-        MissionStatus::Active(ObjectiveProgress::default()),
-    );
-    assert!(matches!(log.status("m1"), MissionStatus::Active(_)));
-
-    // Complete.
-    log.set("m1", MissionStatus::Completed);
-    assert_eq!(log.status("m1"), MissionStatus::Completed);
-}
 
 #[test]
 fn scenario_gated_mission_unlocks_after_prerequisite_completes() {
@@ -708,94 +679,7 @@ fn scenario_completion_requirement_prevents_completion() {
     assert!(requirements_met(&def, &ship_sufficient, &unlocks));
 }
 
-#[test]
-fn scenario_destroy_progress_tracking() {
-    let mut log = MissionLog::default();
-    log.set(
-        "bounty",
-        MissionStatus::Active(ObjectiveProgress {
-            destroyed: 0,
-            collected: 0,
-        }),
-    );
 
-    // Simulate killing 1 of 3.
-    let MissionStatus::Active(p) = log.status("bounty") else {
-        panic!();
-    };
-    assert_eq!(p.destroyed, 0);
-
-    log.set(
-        "bounty",
-        MissionStatus::Active(ObjectiveProgress {
-            destroyed: 1,
-            ..p
-        }),
-    );
-    let MissionStatus::Active(p) = log.status("bounty") else {
-        panic!();
-    };
-    assert_eq!(p.destroyed, 1);
-
-    // Kill 2 more.
-    log.set(
-        "bounty",
-        MissionStatus::Active(ObjectiveProgress {
-            destroyed: 3,
-            ..p
-        }),
-    );
-    let MissionStatus::Active(p) = log.status("bounty") else {
-        panic!();
-    };
-    assert_eq!(p.destroyed, 3);
-}
-
-#[test]
-fn scenario_destroy_with_collect_both_must_complete() {
-    let def = MissionDef {
-        objective: Objective::DestroyShips {
-            system: "sol".into(),
-            ship_type: "pirate".into(),
-            count: 2,
-            target_name: "Pirates".into(),
-            hostile: true,
-            collect: Some(CollectRequirement {
-                commodity: "iron".into(),
-                quantity: 5,
-            }),
-        },
-        ..dummy_def()
-    };
-
-    // Kills done but not enough collected.
-    let progress = ObjectiveProgress {
-        destroyed: 2,
-        collected: 3,
-    };
-    let Objective::DestroyShips { count, collect, .. } = &def.objective else {
-        panic!();
-    };
-    let kills_done = progress.destroyed >= *count;
-    let collect_done = collect
-        .as_ref()
-        .map(|req| progress.collected >= req.quantity)
-        .unwrap_or(true);
-    assert!(kills_done);
-    assert!(!collect_done);
-
-    // Now enough collected.
-    let progress2 = ObjectiveProgress {
-        destroyed: 2,
-        collected: 5,
-    };
-    let collect_done2 = collect
-        .as_ref()
-        .map(|req| progress2.collected >= req.quantity)
-        .unwrap_or(true);
-    assert!(kills_done);
-    assert!(collect_done2);
-}
 
 // ── Ship.reserved_cargo integration ─────────────────────────────────────────
 
@@ -846,4 +730,864 @@ fn assets_mission_templates_yaml_parses() {
         !templates.is_empty(),
         "mission_templates.yaml should contain at least one template"
     );
+}
+
+// ── Template instantiation picks fulfillable targets ────────────────────────
+//
+// Regression tests for procedurally-generated missions that could not be
+// completed: destinations on uncolonised (unlandable) planets, and systems /
+// asteroid fields inside the unreachable RL-training systems.
+
+mod template_targets {
+    use super::super::progress::instantiate_template;
+    use super::*;
+    use crate::asteroids::AsteroidFieldData;
+    use crate::item_universe::{ItemUniverse, StarSystem};
+    use crate::planets::PlanetData;
+    use bevy::math::Vec2;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    fn planet(landable: bool) -> PlanetData {
+        PlanetData {
+            display_name: String::new(),
+            planet_type: String::new(),
+            tech_level: 0,
+            explicit_outfitter: Vec::new(),
+            explicit_shipyard: Vec::new(),
+            uncolonized: !landable,
+            faction: String::new(),
+            sprite_handle: Default::default(),
+            location: Vec2::ZERO,
+            description: String::new(),
+            commodities: if landable {
+                HashMap::from([("food".to_string(), 10_i128)])
+            } else {
+                HashMap::new()
+            },
+            outfitter: vec![],
+            shipyard: vec![],
+            radius: 50.0,
+            color: [0.0; 3],
+        }
+    }
+
+    fn system(planets: &[(&str, bool)], field_commodity: Option<&str>) -> StarSystem {
+        StarSystem {
+            faction: String::new(),
+            contestable: false,
+            authored_traffic: false,
+            display_name: String::new(),
+            map_position: Vec2::ZERO,
+            connections: vec![],
+            planets: planets
+                .iter()
+                .map(|(n, landable)| (n.to_string(), planet(*landable)))
+                .collect(),
+            astroid_fields: field_commodity
+                .map(|c| {
+                    vec![AsteroidFieldData {
+                        location: Vec2::ZERO,
+                        radius: 100.0,
+                        number: 5,
+                        commodities: HashMap::from([(c.to_string(), 1.0)]),
+                    }]
+                })
+                .unwrap_or_default(),
+            ships: Default::default(),
+        }
+    }
+
+    /// sol: earth/mars/venus landable + barren unlandable + iron field.
+    /// simulator (a TRAINING system): landable sim_world + a GOLD field —
+    /// gold exists nowhere else, so any "gold" pick means a training leak.
+    pub(super) fn mini_universe() -> ItemUniverse {
+        ItemUniverse {
+            weapons: HashMap::new(),
+            ships: HashMap::new(),
+            star_systems: HashMap::from([
+                (
+                    "sol".to_string(),
+                    system(
+                        &[
+                            ("earth", true),
+                            ("mars", true),
+                            ("venus", true),
+                            ("barren", false),
+                        ],
+                        Some("iron"),
+                    ),
+                ),
+                (
+                    "simulator".to_string(),
+                    system(&[("sim_world", true)], Some("gold")),
+                ),
+            ]),
+            simulator_system: None,
+            escort_system: None,
+            mining_system: None,
+            outfitter_items: HashMap::new(),
+            commodities: HashMap::new(),
+            factions: HashMap::new(),
+            missions: HashMap::new(),
+            mission_templates: HashMap::new(),
+            global_average_price: HashMap::new(),
+            global_minimum_price: HashMap::new(),
+            system_commodity_best_planet_to_sell: HashMap::new(),
+            system_planet_best_commodity_to_buy: HashMap::new(),
+            planet_best_margin: HashMap::new(),
+            planet_has_ammo_for: HashMap::new(),
+            asteroid_field_expected_value: HashMap::new(),
+            ship_credit_scale: HashMap::new(),
+            starting_system: "sol".to_string(),
+            starting_ship: "shuttle".to_string(),
+            enemies: HashMap::new(),
+            allies: HashMap::new(),
+            npcs: HashMap::new(),
+        }
+    }
+
+    fn delivery_template() -> MissionTemplate {
+        MissionTemplate::Delivery {
+            briefing: "take {quantity} {commodity} to {planet_display}".into(),
+            success_text: "ok".into(),
+            failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            commodity_pool: vec!["food".into()],
+            quantity_range: (5, 10),
+            pay_range: (100, 200),
+            reserved: true,
+        }
+    }
+
+    #[test]
+    fn delivery_destination_is_landable_and_reachable() {
+        let iu = mini_universe();
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &delivery_template(), "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 1);
+            let Objective::LandOnPlanet { planet } = &chain[0].1.objective else {
+                panic!("delivery must produce a LandOnPlanet objective");
+            };
+            assert!(
+                planet == "mars" || planet == "venus",
+                "seed {seed}: destination '{planet}' must be a landable, reachable \
+                 planet other than the offer planet (not barren/sim_world/earth)"
+            );
+        }
+    }
+
+    #[test]
+    fn delivery_unsatisfiable_returns_empty_not_panic() {
+        // Only landable planet is the offer planet itself.
+        let mut iu = mini_universe();
+        iu.star_systems.insert(
+            "sol".to_string(),
+            system(&[("earth", true), ("barren", false)], None),
+        );
+        iu.star_systems.remove("simulator");
+        let mut rng = StdRng::seed_from_u64(7);
+        let chain = instantiate_template("t", &delivery_template(), "earth", &iu, &mut rng);
+        assert!(chain.is_empty(), "no valid destination → no mission");
+    }
+
+    #[test]
+    fn collect_field_never_in_training_system() {
+        let iu = mini_universe();
+        let template = MissionTemplate::CollectFromAsteroidField {
+            briefing: "mine {quantity} {commodity} in {system_display}".into(),
+            success_text: "ok".into(),
+            failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            quantity_range: (3, 6),
+            pay_range: (100, 200),
+        };
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &template, "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 1);
+            let Objective::CollectPickups {
+                system, commodity, ..
+            } = &chain[0].1.objective
+            else {
+                panic!("collect template must produce CollectPickups");
+            };
+            assert_eq!(system, "sol", "seed {seed}: unreachable training system picked");
+            assert_eq!(commodity, "iron", "seed {seed}: training-only commodity picked");
+        }
+    }
+
+    #[test]
+    fn bounty_system_is_reachable() {
+        let iu = mini_universe();
+        let template = MissionTemplate::BountyHunt {
+            briefing: "kill {count} {target_name} in {system_display}".into(),
+            success_text: "ok".into(),
+            failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            ship_type_pool: vec!["pirate".into()],
+            count_range: (1, 3),
+            pay_range: (100, 200),
+            target_name: "Pirates".into(),
+        };
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &template, "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 1);
+            let Objective::DestroyShips { system, .. } = &chain[0].1.objective else {
+                panic!("bounty template must produce DestroyShips");
+            };
+            assert_eq!(system, "sol", "seed {seed}: bounty sent to training system");
+        }
+    }
+
+    #[test]
+    fn catch_thief_planets_landable_distinct_and_chained() {
+        let iu = mini_universe();
+        let template = MissionTemplate::CatchThief {
+            stage1_briefing: "s1".into(),
+            stage1_success_text: "ok".into(),
+            stage1_failure_text: "fail".into(),
+            stage2_briefing: "s2".into(),
+            stage2_success_text: "ok".into(),
+            stage2_failure_text: "fail".into(),
+            stage3_briefing: "s3".into(),
+            stage3_success_text: "ok".into(),
+            stage3_failure_text: "fail".into(),
+            offer: OfferKind::Tab { weight: 1.0 },
+            preconditions: vec![],
+            ship_type_pool: vec!["pirate".into()],
+            target_name: "The Thief".into(),
+            commodity_pool: vec!["food".into()],
+            quantity_range: (2, 4),
+            pay_range: (100, 200),
+        };
+        for seed in 0..200 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let chain = instantiate_template("t", &template, "earth", &iu, &mut rng);
+            assert_eq!(chain.len(), 3);
+            let (s1_id, s1) = &chain[0];
+            let (s2_id, s2) = &chain[1];
+            let (_s3_id, s3) = &chain[2];
+
+            let Objective::DestroyShips { system, .. } = &s1.objective else {
+                panic!("stage 1 must be DestroyShips");
+            };
+            assert_eq!(system, "sol");
+
+            let Objective::LandOnPlanet { planet: deliver } = &s2.objective else {
+                panic!("stage 2 must be LandOnPlanet");
+            };
+            let Objective::CatchNpc { planet: chase, .. } = &s3.objective else {
+                panic!("stage 3 must be CatchNpc");
+            };
+            for p in [deliver, chase] {
+                assert!(
+                    p == "mars" || p == "venus",
+                    "seed {seed}: '{p}' must be landable, reachable, != offer planet"
+                );
+            }
+            assert_ne!(deliver, chase, "seed {seed}: deliver/chase must differ");
+
+            // Follow-ups gate on the previous stage's generated id.
+            assert_eq!(
+                s2.preconditions,
+                vec![Precondition::Completed {
+                    mission: s1_id.clone()
+                }]
+            );
+            assert_eq!(
+                s3.preconditions,
+                vec![Precondition::Completed {
+                    mission: s2_id.clone()
+                }]
+            );
+        }
+    }
+}
+
+// ── Toast queue ──────────────────────────────────────────────────────────────
+
+mod toast_queue {
+    use super::super::ui::MissionToast;
+
+    #[test]
+    fn queue_preserves_order_no_overwrite() {
+        // Regression: a single-slot toast dropped one message whenever a
+        // completion and an auto-start briefing landed in the same instant.
+        let mut toast = MissionToast::default();
+        toast.push("mission complete");
+        toast.push("new mission briefing");
+        assert_eq!(toast.queue.len(), 2);
+        assert_eq!(toast.queue.front().map(String::as_str), Some("mission complete"));
+        toast.queue.pop_front();
+        assert_eq!(
+            toast.queue.front().map(String::as_str),
+            Some("new mission briefing")
+        );
+    }
+
+    #[test]
+    fn back_to_back_duplicates_dedup() {
+        let mut toast = MissionToast::default();
+        toast.push("same");
+        toast.push("same");
+        assert_eq!(toast.queue.len(), 1);
+        toast.push("other");
+        toast.push("same");
+        assert_eq!(toast.queue.len(), 3, "only adjacent duplicates dedup");
+    }
+}
+
+// ── Mission runtime: drive the REAL systems through messages ────────────────
+//
+// These exercise the actual Update-chain systems (accept flow, start effects,
+// objective advancement, completion/failure effects) in a minimal App — not
+// hand-mutated `log.set` reproductions of their logic.
+
+pub(super) mod runtime {
+    use super::super::events::*;
+    use super::super::log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
+    use super::super::progress;
+    use super::*;
+    use crate::Player;
+    use bevy::prelude::*;
+
+    /// App wired with the mission chain (same order as `missions_plugin`) and
+    /// a player ship with the given cargo space.
+    pub(super) fn missions_app(cargo_space: u16) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<MissionLog>()
+            .init_resource::<MissionCatalog>()
+            .init_resource::<MissionOffers>()
+        .init_resource::<crate::missions::OfferBackoff>()
+            .init_resource::<PlayerUnlocks>()
+            .add_message::<PlayerLandedOnPlanet>()
+            .add_message::<PlayerEnteredSystem>()
+            .add_message::<PickupCollected>()
+            .add_message::<ShipDestroyed>()
+            .add_message::<AcceptMission>()
+            .add_message::<DeclineMission>()
+            .add_message::<AbandonMission>()
+            .add_message::<MissionStarted>()
+            .add_message::<MissionCompleted>()
+            .add_message::<MissionFailed>()
+            .add_message::<NpcMet>()
+            .add_message::<NpcCaught>()
+            .add_systems(
+                Update,
+                (
+                    progress::update_locked_to_available,
+                    progress::handle_ui_actions,
+                    progress::apply_start_effects,
+                    progress::advance_travel_objectives,
+                    progress::advance_land_objectives,
+                    progress::advance_destroy_objectives,
+                    progress::advance_destroy_collect,
+                    progress::finalize_completions,
+                    progress::finalize_failures,
+                )
+                    .chain(),
+            );
+        let player = app
+            .world_mut()
+            .spawn((ship_with_cargo(cargo_space, &[]), Player))
+            .id();
+        (app, player)
+    }
+
+    fn insert_mission(app: &mut App, id: &str, def: MissionDef) {
+        app.world_mut()
+            .resource_mut::<MissionCatalog>()
+            .defs
+            .insert(id.to_string(), def);
+    }
+
+    fn status(app: &mut App, id: &str) -> MissionStatus {
+        app.world().resource::<MissionLog>().status(id)
+    }
+
+    pub(super) fn delivery_def_pub() -> MissionDef {
+        delivery_def()
+    }
+
+    fn delivery_def() -> MissionDef {
+        MissionDef {
+            briefing: "b".into(),
+            success_text: "s".into(),
+            failure_text: "f".into(),
+            preconditions: vec![],
+            offer: OfferKind::Tab { weight: 1.0 },
+            start_effects: vec![StartEffect::LoadCargo {
+                commodity: "food".into(),
+                quantity: 10,
+                reserved: true,
+            }],
+            objective: Objective::LandOnPlanet {
+                planet: "mars".into(),
+            },
+            requires: vec![CompletionRequirement::HasCargo {
+                commodity: "food".into(),
+                quantity: 10,
+            }],
+            completion_effects: vec![
+                CompletionEffect::RemoveCargo {
+                    commodity: "food".into(),
+                    quantity: 10,
+                },
+                CompletionEffect::Pay { credits: 5000 },
+                CompletionEffect::GrantUnlock {
+                    name: "test_license".into(),
+                },
+            ],
+            squadron: Vec::new(),
+            faction: None,
+        }
+    }
+
+    #[test]
+    fn accept_starts_mission_and_loads_reserved_cargo() {
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        app.update(); // update_locked_to_available flips Locked → Available
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Available));
+
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Active(_)));
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert_eq!(ship.cargo.get("food"), Some(&10), "start effect loads cargo");
+        assert_eq!(
+            ship.reserved_cargo.get("food"),
+            Some(&10),
+            "mission cargo is reserved (unsellable)"
+        );
+    }
+
+    #[test]
+    fn accept_refused_when_hold_too_small() {
+        // The defence-in-depth cargo gate in handle_ui_actions, not the UI.
+        let (mut app, player) = missions_app(5); // < the 10 the mission loads
+        insert_mission(&mut app, "m", delivery_def());
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Available),
+            "accept must be refused — the hold cannot fit the start cargo"
+        );
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert!(ship.cargo.is_empty(), "no cargo may be loaded on refusal");
+    }
+
+    #[test]
+    fn landing_completes_delivery_and_applies_all_effects() {
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "mars".into(),
+        });
+        app.update();
+
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Completed));
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert_eq!(ship.cargo.get("food"), None, "delivered cargo removed");
+        assert_eq!(ship.reserved_cargo.get("food"), None, "reservation cleared");
+        // from_ship_data starts ships at 10_000 credits; the mission pays 5_000.
+        assert_eq!(ship.credits, 15_000, "payment applied on top of starting credits");
+        assert!(
+            app.world().resource::<PlayerUnlocks>().has("test_license"),
+            "grant_unlock applied"
+        );
+    }
+
+    #[test]
+    fn landing_without_cargo_fails_the_delivery() {
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update();
+        // Lose the cargo (jettison/sell equivalent), then land.
+        app.world_mut().get_mut::<Ship>(player).unwrap().cargo.clear();
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "mars".into(),
+        });
+        app.update();
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Failed),
+            "landing at the destination without the goods fails the mission"
+        );
+    }
+
+    #[test]
+    fn abandon_strips_mission_cargo_but_keeps_own() {
+        // Anti-exploit: accept a delivery, abandon it, keep the free cargo.
+        let (mut app, player) = missions_app(20);
+        insert_mission(&mut app, "m", delivery_def());
+        // Player already owns 3 food of their own.
+        app.world_mut()
+            .get_mut::<Ship>(player)
+            .unwrap()
+            .cargo
+            .insert("food".into(), 3);
+        app.update();
+        app.world_mut().write_message(AcceptMission("m".into()));
+        app.update(); // now holds 3 own + 10 mission food
+
+        app.world_mut().write_message(AbandonMission("m".into()));
+        app.update();
+
+        assert!(matches!(status(&mut app, "m"), MissionStatus::Failed));
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert_eq!(
+            ship.cargo.get("food"),
+            Some(&3),
+            "mission cargo stripped, player's own 3 kept"
+        );
+        assert!(
+            ship.reserved_cargo.get("food").is_none(),
+            "reservation fully cleared"
+        );
+    }
+
+    #[test]
+    fn auto_chain_cascades_through_real_transitions() {
+        // A completed prerequisite must flip an unlock-gated mission to
+        // Available and an Auto follow-up to Active (with MissionStarted) —
+        // via update_locked_to_available's fixpoint, not hand-set statuses.
+        let (mut app, _player) = missions_app(20);
+        let mut auto_follow = dummy_def();
+        auto_follow.preconditions = vec![Precondition::Completed {
+            mission: "first".into(),
+        }];
+        auto_follow.offer = OfferKind::Auto;
+        let mut offered_follow = dummy_def();
+        offered_follow.preconditions = vec![Precondition::Completed {
+            mission: "first".into(),
+        }];
+        offered_follow.offer = OfferKind::Tab { weight: 1.0 };
+
+        let mut first = delivery_def();
+        first.requires.clear();
+        first.start_effects.clear();
+        first.completion_effects.clear();
+        insert_mission(&mut app, "first", first);
+        insert_mission(&mut app, "auto_follow", auto_follow);
+        insert_mission(&mut app, "offered_follow", offered_follow);
+
+        app.update();
+        assert!(matches!(status(&mut app, "auto_follow"), MissionStatus::Locked));
+
+        app.world_mut().write_message(AcceptMission("first".into()));
+        app.update();
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "mars".into(),
+        });
+        app.update(); // completes "first"
+        app.update(); // next pass flips the followups
+
+        assert!(
+            matches!(status(&mut app, "auto_follow"), MissionStatus::Active(_)),
+            "Auto follow-up must self-start once its prerequisite completes"
+        );
+        assert!(
+            matches!(status(&mut app, "offered_follow"), MissionStatus::Available),
+            "offered follow-up becomes Available (not started)"
+        );
+    }
+
+    #[test]
+    fn destroy_with_collect_requires_both() {
+        // Replaces the old tautological scenario test: this drives
+        // advance_destroy_objectives / advance_destroy_collect with real
+        // ShipDestroyed / PickupCollected messages.
+        let (mut app, _player) = missions_app(20);
+        let mut def = dummy_def();
+        def.objective = Objective::DestroyShips {
+            system: "sol".into(),
+            ship_type: "pirate".into(),
+            count: 2,
+            target_name: "Raiders".into(),
+            hostile: true,
+            collect: Some(CollectRequirement {
+                commodity: "iron".into(),
+                quantity: 3,
+            }),
+        };
+        def.offer = OfferKind::Auto;
+        insert_mission(&mut app, "m", def);
+        app.update(); // auto-starts
+
+        let kill = |app: &mut App| {
+            let e = Entity::PLACEHOLDER;
+            app.world_mut().write_message(ShipDestroyed {
+                entity: e,
+                mission_target: Some(MissionTarget {
+                    mission_id: "m".into(),
+                    display_name: "Raider".into(),
+                    always_targets_player: true,
+                }),
+            });
+            app.update();
+        };
+        let collect = |app: &mut App, qty: u16| {
+            app.world_mut().write_message(PickupCollected {
+                commodity: "iron".into(),
+                quantity: qty,
+                system: "sol".into(),
+            });
+            app.update();
+        };
+
+        kill(&mut app);
+        kill(&mut app);
+        match status(&mut app, "m") {
+            MissionStatus::Active(p) => {
+                assert_eq!(p.destroyed, 2, "kills tracked");
+                assert_eq!(p.collected, 0);
+            }
+            s => panic!("kills alone must not complete the mission: {s:?}"),
+        }
+
+        collect(&mut app, 2);
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Active(_)),
+            "partial collect must not complete"
+        );
+        collect(&mut app, 1);
+        assert!(
+            matches!(status(&mut app, "m"), MissionStatus::Completed),
+            "kills + full collect completes"
+        );
+    }
+
+    #[test]
+    fn new_offer_rolls_mid_visit_exactly_once() {
+        // roll_new_offers_while_landed: a mission that becomes Available
+        // while the player is landed gets one roll on the spot (weight 1.0 →
+        // guaranteed offer) and is not re-added on later frames.
+        let mut app = App::new();
+        let mut app_galaxy: Option<crate::galaxy::GalaxyControl> = None;
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<MissionLog>()
+            .init_resource::<MissionCatalog>()
+            .init_resource::<MissionOffers>()
+        .init_resource::<crate::missions::OfferBackoff>()
+            .init_resource::<PlayerUnlocks>()
+            .init_resource::<crate::standing::FactionStandings>()
+            .insert_resource({
+                let mut iu = crate::item_universe::parse_dir::<crate::item_universe::ItemUniverse>(
+                    std::path::Path::new("assets"),
+                )
+                .expect("assets/ must parse");
+                iu.finalize();
+                app_galaxy = Some(crate::galaxy::GalaxyControl::seeded_from(&iu));
+                iu
+            })
+            .insert_resource(crate::planet_ui::LandedContext {
+                planet_name: Some("earth".into()),
+            })
+            .add_systems(Update, progress::roll_new_offers_while_landed);
+        app.insert_resource(app_galaxy.take().unwrap());
+
+        let mut def = dummy_def();
+        def.offer = OfferKind::NpcOffer {
+            planet: "earth".into(),
+            weight: 1.0,
+            building: None,
+            approach: NpcApproach::Wait,
+            npc: None,
+        };
+        app.world_mut()
+            .resource_mut::<MissionCatalog>()
+            .defs
+            .insert("m".into(), def);
+        app.world_mut()
+            .resource_mut::<MissionLog>()
+            .set("m", MissionStatus::Available);
+
+        app.update();
+        let offers = app.world().resource::<MissionOffers>();
+        assert_eq!(
+            offers.npc.get("earth").map(|v| v.as_slice()),
+            Some(&["m".to_string()][..]),
+            "newly Available NpcOffer must appear without re-landing"
+        );
+
+        app.update();
+        app.update();
+        let offers = app.world().resource::<MissionOffers>();
+        assert_eq!(
+            offers.npc.get("earth").map(|v| v.len()),
+            Some(1),
+            "one roll per visit — never duplicated on later frames"
+        );
+    }
+}
+
+// ── Tutorial chain + offer backoff ────────────────────────────────────────────
+
+mod tutorial {
+    use super::super::events::{AbandonMission, DeclineMission};
+    use super::super::log::{MissionCatalog, OfferBackoff};
+    use super::*;
+    use crate::session::SessionResource;
+
+    fn real_catalog() -> MissionCatalog {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        MissionCatalog::new_session(&iu)
+    }
+
+    /// The tutorial auto-starts for a fresh pilot, and abandoning any stage
+    /// ends the whole storyline: the rest stays Locked forever.
+    #[test]
+    fn tutorial_auto_starts_and_abandon_ends_the_chain() {
+        let (mut app, _player) = super::runtime::missions_app(20);
+        let catalog = real_catalog();
+        assert!(catalog.defs.contains_key("tutorial_flight"));
+        app.insert_resource(catalog);
+
+        app.update();
+        assert!(
+            matches!(
+                app.world().resource::<MissionLog>().status("tutorial_flight"),
+                MissionStatus::Active(_)
+            ),
+            "the tutorial greets a fresh pilot unprompted"
+        );
+        assert!(matches!(
+            app.world().resource::<MissionLog>().status("tutorial_mining"),
+            MissionStatus::Locked
+        ));
+
+        // An experienced pilot bails out at stage one.
+        app.world_mut()
+            .write_message(AbandonMission("tutorial_flight".to_string()));
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(matches!(
+            app.world().resource::<MissionLog>().status("tutorial_flight"),
+            MissionStatus::Failed
+        ));
+        for stage in ["tutorial_mining", "tutorial_jump", "tutorial_trade"] {
+            assert!(
+                matches!(
+                    app.world().resource::<MissionLog>().status(stage),
+                    MissionStatus::Locked
+                ),
+                "{stage} never surfaces after the bail-out"
+            );
+        }
+    }
+
+    #[test]
+    fn declining_backs_off_exponentially_with_a_floor() {
+        let mut b = OfferBackoff::default();
+        assert_eq!(b.effective_weight("m", 1.0), 1.0);
+        b.record_decline("m");
+        assert!((b.effective_weight("m", 1.0) - 0.5).abs() < 1e-6);
+        b.record_decline("m");
+        assert!((b.effective_weight("m", 1.0) - 0.25).abs() < 1e-6);
+        for _ in 0..10 {
+            b.record_decline("m");
+        }
+        assert!(
+            (b.effective_weight("m", 1.0) - OfferBackoff::FLOOR).abs() < 1e-6,
+            "a storyline is never lost, only quieted"
+        );
+        // Missions rarer than the floor keep their own base rate.
+        assert!((b.effective_weight("m", 0.01) - 0.01).abs() < 1e-6);
+    }
+
+    /// Declining through the real UI-action system records backoff for
+    /// static missions only (template instances get fresh ids per roll).
+    #[test]
+    fn decline_records_backoff_for_static_missions() {
+        let (mut app, _player) = super::runtime::missions_app(20);
+        let mut catalog = real_catalog();
+        catalog
+            .defs
+            .insert("proc__one_off".into(), super::runtime::delivery_def_pub());
+        app.insert_resource(catalog);
+        app.update();
+        app.world_mut()
+            .write_message(DeclineMission("deliver_wheat_intro".to_string()));
+        app.world_mut()
+            .write_message(DeclineMission("proc__one_off".to_string()));
+        app.update();
+        let b = app.world().resource::<OfferBackoff>();
+        assert_eq!(b.0.get("deliver_wheat_intro"), Some(&1));
+        assert_eq!(b.0.get("proc__one_off"), None, "procedural ids don't accumulate");
+    }
+
+    // ── Story-chart fog of war ──────────────────────────────────────────
+    #[test]
+    fn story_chart_fog_of_war() {
+        use crate::missions::story_chart::{build_story_graph, NodeUi};
+        use crate::missions::PlayerUnlocks;
+
+        // Chain a1 -> a2 -> a3 (faction Fed), plus a branch b (needs a2 FAILED).
+        let chain = |after: Option<&str>, needs_fail: Option<&str>| {
+            let mut d = dummy_def();
+            d.faction = Some("Federation".into());
+            if let Some(prev) = after {
+                d.preconditions
+                    .push(Precondition::Completed { mission: prev.into() });
+            }
+            if let Some(f) = needs_fail {
+                d.preconditions
+                    .push(Precondition::Failed { mission: f.into() });
+            }
+            d
+        };
+        let mut iu = template_targets::mini_universe();
+        iu.missions.insert("a1".into(), chain(None, None));
+        iu.missions.insert("a2".into(), chain(Some("a1"), None));
+        iu.missions.insert("a3".into(), chain(Some("a2"), None));
+        iu.missions.insert("b".into(), chain(Some("a1"), Some("a2")));
+        // A non-story mission (no faction) must be excluded.
+        iu.missions.insert("side".into(), dummy_def());
+
+        let mut log = MissionLog::default();
+        log.set("a1", MissionStatus::Completed);
+        log.set("a2", MissionStatus::Available); // next
+        // a3 Locked (needs a2 completed) → hidden. b needs a2 failed but a2 is
+        // Available (not failed) → not yet impossible, unmet → hidden.
+        let unlocks = PlayerUnlocks::default();
+
+        let g = build_story_graph(&log, &unlocks, &iu);
+        let ui_of = |id: &str| g.nodes.iter().find(|n| n.id == id).map(|n| n.ui);
+        assert_eq!(ui_of("a1"), Some(NodeUi::Completed));
+        assert_eq!(ui_of("a2"), Some(NodeUi::Next));
+        assert_eq!(ui_of("a3"), None, "a3 requirements unmet → hidden");
+        assert_eq!(ui_of("b"), None, "b requirements unmet → hidden");
+        assert_eq!(ui_of("side"), None, "non-story mission excluded");
+        assert!(ui_of("a2").unwrap().shows_name() == false, "next hides its name");
+
+        // Now complete a2: a3 becomes Next; branch b becomes Impossible
+        // (needs a2 FAILED, but a2 is Completed) and is revealed at its
+        // known branch point.
+        log.set("a2", MissionStatus::Completed);
+        let g = build_story_graph(&log, &unlocks, &iu);
+        let ui_of = |id: &str| g.nodes.iter().find(|n| n.id == id).map(|n| n.ui);
+        assert_eq!(ui_of("a2"), Some(NodeUi::Completed));
+        assert_eq!(ui_of("a3"), Some(NodeUi::Next));
+        assert_eq!(ui_of("b"), Some(NodeUi::Impossible));
+        // Columns follow dependency depth.
+        let col = |id: &str| g.nodes.iter().find(|n| n.id == id).unwrap().col;
+        assert!(col("a1") < col("a2") && col("a2") < col("a3"));
+    }
 }

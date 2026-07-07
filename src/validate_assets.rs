@@ -14,10 +14,11 @@ use crate::missions::types::{
     Precondition, StartEffect,
 };
 use crate::planets::PlanetData;
-use crate::ship::Personality;
+use crate::ship::{Personality, ShipData};
 
 /// Run every validation pass and log warnings for anything broken.
 pub fn validate(iu: &ItemUniverse) {
+    validate_faction_references(iu);
     validate_ship_weapon_space(iu);
     validate_uncolonized_planets(iu);
     validate_star_system_references(iu);
@@ -51,6 +52,43 @@ fn validate_ship_steering(iu: &ItemUniverse) {
                  budget — raise angular_drag in assets/ships.yaml",
                 ship_data.torque, ship_data.angular_drag,
             );
+        }
+    }
+}
+
+/// Every faction named by a planet, system, ship, or enemies/allies entry
+/// must exist in the faction registry (assets/factions.yaml) — a typo'd
+/// faction silently behaves like a real (unknown) territorial power.
+fn validate_faction_references(iu: &ItemUniverse) {
+    let check = |kind: &str, whom: &str, f: &str| {
+        if !f.is_empty() && !iu.factions.contains_key(f) {
+            warn!("{kind} \"{whom}\" references faction \"{f}\" missing from factions.yaml");
+        }
+    };
+    for (sys_name, sys) in &iu.star_systems {
+        check("system", sys_name, &sys.faction);
+        for (p_name, p) in &sys.planets {
+            check("planet", p_name, &p.faction);
+        }
+    }
+    for (ship_name, ship) in &iu.ships {
+        if let Some(f) = &ship.faction {
+            check("ship", ship_name, f);
+        }
+        for f in &ship.sold_by {
+            check("ship sold_by", ship_name, f);
+        }
+    }
+    for (f, enemies) in &iu.enemies {
+        check("enemies.yaml", f, f);
+        for e in enemies {
+            check("enemies.yaml", f, e);
+        }
+    }
+    for (f, allies) in &iu.allies {
+        check("allies.yaml", f, f);
+        for a in allies {
+            check("allies.yaml", f, a);
         }
     }
 }
@@ -186,6 +224,7 @@ fn validate_outfitter_items_reference_weapons(iu: &ItemUniverse) {
         let wtype = match item {
             OutfitterItem::PrimaryWeapon { weapon_type, .. } => weapon_type,
             OutfitterItem::SecondaryWeapon { weapon_type, .. } => weapon_type,
+            OutfitterItem::ShipMod { .. } => continue, // no projectile weapon
         };
         if !iu.weapons.contains_key(wtype) {
             warn!(
@@ -218,13 +257,13 @@ fn validate_ship_base_weapons(iu: &ItemUniverse) {
     }
 }
 
-/// Weapons with carrier_bay must reference a valid ship type.
+/// Weapons with carrier-bay behavior must reference a valid ship type.
 fn validate_weapon_carrier_bays(iu: &ItemUniverse) {
     for (weapon_name, weapon) in &iu.weapons {
-        if let Some(ref bay_ship) = weapon.carrier_bay {
+        if let Some(bay_ship) = weapon.carrier_bay() {
             if !iu.ships.contains_key(bay_ship) {
                 warn!(
-                    "Weapon \"{weapon_name}\" has carrier_bay \"{bay_ship}\" \
+                    "Weapon \"{weapon_name}\" has carrier bay ship \"{bay_ship}\" \
                      which is not defined in ships.yaml"
                 );
             }
@@ -241,6 +280,14 @@ fn validate_missions(iu: &ItemUniverse) {
 
     for (mission_id, def) in &iu.missions {
         validate_preconditions(&def.preconditions, mission_id, "mission", iu);
+        for ship in &def.squadron {
+            if !iu.ships.contains_key(ship) {
+                warn!(
+                    "mission \"{mission_id}\" squadron references ship type \"{ship}\" \
+                     which is not defined in ships.yaml"
+                );
+            }
+        }
         validate_offer(&def.offer, mission_id, "mission", &planets);
         validate_objective(&def.objective, mission_id, "mission", iu, &planets);
         validate_start_effects(&def.start_effects, mission_id, "mission", iu);
@@ -293,6 +340,27 @@ fn validate_mission_templates(iu: &ItemUniverse) {
                              \"{s}\" which is not defined in ships.yaml"
                         );
                     }
+                }
+            }
+            MissionTemplate::War { .. } => {}
+            MissionTemplate::Covert { action, .. } => {
+                if let crate::missions::types::CovertAction::Smuggle { commodity, .. } = action {
+                    if !iu.commodities.contains_key(commodity) {
+                        warn!(
+                            "Mission template \"{tmpl_id}\" smuggle commodity \
+                             \"{commodity}\" is not defined in commodities.yaml"
+                        );
+                    }
+                }
+            }
+            MissionTemplate::Arrest {
+                service_commodity, ..
+            } => {
+                if !iu.commodities.contains_key(service_commodity) {
+                    warn!(
+                        "Mission template \"{tmpl_id}\" service_commodity \"{service_commodity}\" \
+                         is not defined in commodities.yaml"
+                    );
                 }
             }
             MissionTemplate::CatchThief {
@@ -521,7 +589,17 @@ fn validate_completion_effects(
                     );
                 }
             }
-            CompletionEffect::Pay { .. } | CompletionEffect::GrantUnlock { .. } => {}
+            CompletionEffect::Pay { .. }
+            | CompletionEffect::GrantUnlock { .. }
+            | CompletionEffect::AdjustStanding { .. } => {}
+            CompletionEffect::ShiftInfluence { system, .. } => {
+                if !iu.star_systems.contains_key(system) {
+                    warn!(
+                        "{label} \"{id}\" ShiftInfluence references system \"{system}\" \
+                         which is not defined in star_systems.yaml"
+                    );
+                }
+            }
         }
     }
 }
@@ -542,7 +620,7 @@ fn validate_completion_effects(
 /// Training-only systems folded in by `materialize_training_systems`; they are
 /// intentionally disconnected from the campaign jump graph, so skip them in the
 /// reachability check.
-const TRAINING_SYSTEMS: &[&str] = &["simulator", "escort", "mining"];
+const TRAINING_SYSTEMS: &[&str] = &ItemUniverse::TRAINING_SYSTEM_KEYS;
 
 /// A planet is "landable" (has a surface with buildings) iff it is colonised,
 /// which the data models as having a non-empty commodity market.
@@ -556,6 +634,9 @@ fn is_landable(pd: &PlanetData) -> bool {
 fn planet_has_building(pd: &PlanetData, building: &str) -> bool {
     match building {
         "market" | "bar" | "fuel_station" | "mechanicshop" => is_landable(pd),
+        // The garrison exists only on faction-held worlds (live controller),
+        // so static content should use it sparingly; landable is the floor.
+        "garrison" => is_landable(pd),
         "outfitter" => !pd.outfitter.is_empty(),
         "shipyard" => !pd.shipyard.is_empty(),
         _ => false, // unknown building name => typo
@@ -563,20 +644,172 @@ fn planet_has_building(pd: &PlanetData, building: &str) -> bool {
 }
 
 fn find_planet<'a>(iu: &'a ItemUniverse, name: &str) -> Option<&'a PlanetData> {
-    iu.star_systems.values().find_map(|s| s.planets.get(name))
+    iu.find_gameplay_planet(name).map(|(_, p)| p)
 }
 
 /// Run all strict checks and collect human-readable problems (empty == good).
 pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     let mut p = Vec::new();
+    check_base_weapons_fit_mounts(iu, &mut p);
+    check_base_weapons_fit_item_space(iu, &mut p);
     check_trade_routes(iu, &mut p);
     check_sprites_exist(iu, &mut p);
     check_reachability(iu, &mut p);
     check_mission_coherence(iu, &mut p);
     check_unlock_obtainability(iu, &mut p);
     check_ship_weapons_buyable(iu, &mut p);
+    check_everything_sold_somewhere(iu, &mut p);
+    check_fenced_carrier_items(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
+}
+
+/// Every hull's factory loadout must fit its own item space (test-enforced
+/// twin of the validate_ship_weapon_space startup warning).
+fn check_base_weapons_fit_item_space(iu: &ItemUniverse, p: &mut Vec<String>) {
+    use crate::weapons::WeaponSystems;
+    for (ship_name, data) in &iu.ships {
+        let used: i32 = WeaponSystems::build(&data.base_weapons, iu)
+            .iter_all()
+            .map(|(_, s)| s.space_consumed())
+            .sum();
+        if used > data.item_space as i32 {
+            p.push(format!(
+                "ship '{ship_name}': base loadout uses {used} item space but the hull has {}",
+                data.item_space
+            ));
+        }
+    }
+}
+
+/// Every hull's factory loadout must fit its own gun/turret mounts —
+/// otherwise the limits would be a lie the moment an AI ship spawns.
+fn check_base_weapons_fit_mounts(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (ship_name, data) in &iu.ships {
+        let mut guns = 0u32;
+        let mut turrets = 0u32;
+        for (weapon_name, (count, _)) in &data.base_weapons {
+            let Some(w) = iu.weapons.get(weapon_name) else {
+                continue; // dangling reference — validate_ship_base_weapons reports it
+            };
+            if !w.uses_mount() {
+                continue;
+            }
+            if w.is_turret() {
+                turrets += *count as u32;
+            } else {
+                guns += *count as u32;
+            }
+        }
+        if guns > data.gun_mounts as u32 {
+            p.push(format!(
+                "ship '{ship_name}': base loadout uses {guns} gun mounts but the hull has {}",
+                data.gun_mounts
+            ));
+        }
+        if turrets > data.turret_mounts as u32 {
+            p.push(format!(
+                "ship '{ship_name}': base loadout uses {turrets} turret mounts but the hull has {}",
+                data.turret_mounts
+            ));
+        }
+    }
+}
+
+/// An outfitter item sold UNIVERSALLY (empty `factions`) whose only carriers
+/// are faction-fenced hulls is almost certainly a mistake — e.g. the pirate
+/// corvette bay on sale at Earth while the corvettes themselves are fenced
+/// through rebel yards. Warn so the item gets fenced like its carriers.
+fn check_fenced_carrier_items(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (item_name, item) in &iu.outfitter_items {
+        if !item.factions().is_empty() {
+            continue; // already fenced
+        }
+        let carriers: Vec<&ShipData> = iu
+            .ships
+            .values()
+            .filter(|d| d.base_weapons.contains_key(item_name))
+            .collect();
+        if carriers.is_empty() {
+            continue; // generic gear nobody ships with — universal is fine
+        }
+        let planet_factions: HashSet<&str> = iu
+            .star_systems
+            .values()
+            .flat_map(|s| s.planets.values())
+            .map(|pd| pd.faction.as_str())
+            .filter(|f| iu.faction_takes_sides(f))
+            .collect();
+        let all_fenced = carriers.iter().all(|d| {
+            if !d.sold_by.is_empty() {
+                return true;
+            }
+            d.faction
+                .as_deref()
+                .is_some_and(|f| planet_factions.contains(f))
+        });
+        if !all_fenced {
+            continue;
+        }
+        let fences: HashSet<&str> = carriers
+            .iter()
+            .flat_map(|d| {
+                if d.sold_by.is_empty() {
+                    d.faction.iter().map(String::as_str).collect::<Vec<_>>()
+                } else {
+                    d.sold_by.iter().map(String::as_str).collect()
+                }
+            })
+            .collect();
+        // Only the unambiguous case: every carrier is fenced to ONE faction.
+        // Gear spanning several factions' hulls is genuinely generic.
+        if fences.len() == 1 {
+            p.push(format!(
+                "outfitter item '{item_name}' is sold universally but only \
+                 {fences:?}-fenced hulls carry it — fence the item's \
+                 `factions` to match its carriers"
+            ));
+        }
+    }
+}
+
+/// Every ship and outfitter item must be purchasable SOMEWHERE: stocked on at
+/// least one landable planet, in a reachable (non-training) system, at a
+/// planet that actually has the right building (a non-empty shipyard/outfitter
+/// list IS the building, per `planet_has_building`). Licences may still gate
+/// the purchase — obtainability of those is checked separately. Run after
+/// `derive_market_catalogs`, so tech-level/faction coverage gaps surface here.
+fn check_everything_sold_somewhere(iu: &ItemUniverse, p: &mut Vec<String>) {
+    let mut sold_ships: HashSet<&str> = HashSet::new();
+    let mut sold_items: HashSet<&str> = HashSet::new();
+    for (sys_name, sys) in &iu.star_systems {
+        if TRAINING_SYSTEMS.contains(&sys_name.as_str()) {
+            continue;
+        }
+        for pd in sys.planets.values() {
+            if !is_landable(pd) {
+                continue;
+            }
+            sold_ships.extend(pd.shipyard.iter().map(String::as_str));
+            sold_items.extend(pd.outfitter.iter().map(String::as_str));
+        }
+    }
+    for name in iu.ships.keys() {
+        if !sold_ships.contains(name.as_str()) {
+            p.push(format!(
+                "ship '{name}' is sold nowhere — no landable planet's tech level \
+                 + faction stocks it (check tech_level/sold_by in ships.yaml)"
+            ));
+        }
+    }
+    for name in iu.outfitter_items.keys() {
+        if !sold_items.contains(name.as_str()) {
+            p.push(format!(
+                "outfitter item '{name}' is sold nowhere — no landable planet's \
+                 tech level + faction stocks it (check tech_level/factions)"
+            ));
+        }
+    }
 }
 
 /// Buying a ship must imply being able to buy every weapon it spawns with.

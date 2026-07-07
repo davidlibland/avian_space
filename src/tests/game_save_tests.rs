@@ -5,6 +5,7 @@ fn sample_save() -> PilotSave {
     PilotSave {
         pilot_name: "Zara".to_string(),
         gender: Gender::default(),
+        avatar: None, // legacy save shape — resolved from gender on load
         current_star_system: "sol".to_string(),
         ship_type: "shuttle".to_string(),
         health: 75,
@@ -16,6 +17,7 @@ fn sample_save() -> PilotSave {
         enemies: HashMap::from([("Trader".to_string(), 1.0)]),
         visited_systems: HashSet::new(),
         reserved_cargo: HashMap::new(),
+        mods: HashMap::new(),
         resources: HashMap::new(),
         fuel: Some(4),
     }
@@ -26,6 +28,11 @@ fn basic_item_universe() -> ItemUniverse {
     use crate::ship::{Personality, ShipData};
     let shuttle = ShipData {
         display_name: String::new(),
+        tech_level: 1,
+        gun_mounts: 2,
+        turret_mounts: 0,
+        sold_by: Vec::new(),
+        aura: None,
         thrust: 200.0,
         max_speed: 300.0,
         torque: 20.0,
@@ -54,6 +61,9 @@ fn basic_item_universe() -> ItemUniverse {
         star_systems: HashMap::from([(
             "sol".to_string(),
             StarSystem {
+                faction: String::new(),
+                contestable: false,
+                authored_traffic: false,
                 display_name: String::new(),
                 map_position: Vec2::ZERO,
                 connections: vec![],
@@ -67,6 +77,7 @@ fn basic_item_universe() -> ItemUniverse {
         mining_system: None,
         outfitter_items: HashMap::new(),
         commodities: HashMap::new(),
+        factions: HashMap::new(),
         missions: HashMap::new(),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),
@@ -81,6 +92,7 @@ fn basic_item_universe() -> ItemUniverse {
         starting_ship: "shuttle".to_string(),
         enemies: HashMap::new(),
         allies: HashMap::new(),
+        npcs: HashMap::new(),
     }
 }
 

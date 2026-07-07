@@ -13,6 +13,43 @@ use serde::de::DeserializeOwned;
 use serde_yaml::{Mapping, Value};
 use std::path::Path;
 
+/// A recurring NPC character (assets/npcs.yaml): a consistent name and
+/// appearance for storyline mission givers / objective NPCs. Referenced by
+/// id from missions.yaml (`npc:` on npc_offer / meet_npc / catch_npc).
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct NpcDef {
+    /// Display name shown as the conversation title (e.g. "Foreman Okafor").
+    pub name: String,
+    /// Authored look. When absent, a deterministic appearance is derived
+    /// from the npc id, so the character still looks the same everywhere.
+    #[serde(default)]
+    pub avatar: Option<crate::character_compositor::AvatarSpec>,
+    /// Outfit bias for the derived appearance ("civilian", "guard", "miner",
+    /// "merchant", "alien", ...). Ignored when `avatar` is authored.
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+/// A faction's identity and traits (assets/factions.yaml) — the single
+/// source of truth game logic keys on, instead of hardcoded faction names.
+#[derive(Deserialize, Serialize, Clone, Default)]
+pub struct FactionData {
+    #[serde(default)]
+    pub display_name: String,
+    /// Star-map colour (0–255 RGB).
+    #[serde(default)]
+    pub color: [u8; 3],
+    /// Fighters follow wealth, not territory (pirates).
+    #[serde(default)]
+    pub lawless: bool,
+    /// A guild, not a government: universal logistics, holds no systems.
+    #[serde(default)]
+    pub stateless: bool,
+    /// Unaligned: never takes a side, restricts markets, or tracks standing.
+    #[serde(default)]
+    pub neutral: bool,
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct CommodityData {
     pub color: [f32; 3],
@@ -59,10 +96,17 @@ pub struct ItemUniverse {
     pub starting_system: String,
     #[serde(default)]
     pub commodities: HashMap<String, CommodityData>,
+    /// Faction registry (assets/factions.yaml).
+    #[serde(default)]
+    pub factions: HashMap<String, FactionData>,
     #[serde(default)]
     pub missions: HashMap<String, MissionDef>,
     #[serde(default)]
     pub mission_templates: HashMap<String, MissionTemplate>,
+    /// Recurring NPC characters (assets/npcs.yaml): consistent names +
+    /// appearances for storyline mission givers and objective NPCs.
+    #[serde(default)]
+    pub npcs: HashMap<String, NpcDef>,
     /// Average price of each commodity across all planets in all star systems.
     #[serde(skip)]
     pub global_average_price: HashMap<String, f64>,
@@ -114,6 +158,9 @@ impl ItemUniverse {
         for (k, v) in &mut self.commodities {
             fill(&mut v.display_name, k);
         }
+        for (k, v) in &mut self.factions {
+            fill(&mut v.display_name, k);
+        }
         for (k, v) in &mut self.outfitter_items {
             fill(v.display_name_mut(), k);
         }
@@ -157,6 +204,362 @@ impl ItemUniverse {
             }
             self.star_systems.insert(key.to_string(), s);
         }
+    }
+
+    /// Whether a faction name is "real" for territorial purposes: known,
+    /// non-empty, and not flagged neutral. Unknown names count as real so a
+    /// typo shows up as odd behavior + a validator warning, not silence.
+    pub fn faction_takes_sides(&self, name: &str) -> bool {
+        if name.is_empty() {
+            return false;
+        }
+        self.factions.get(name).map(|f| !f.neutral).unwrap_or(true)
+    }
+    pub fn faction_is_lawless(&self, name: &str) -> bool {
+        self.factions.get(name).map(|f| f.lawless).unwrap_or(false)
+    }
+    pub fn faction_is_stateless(&self, name: &str) -> bool {
+        self.factions.get(name).map(|f| f.stateless).unwrap_or(false)
+    }
+
+    /// Find a planet by name across GAMEPLAY systems only. The RL-training
+    /// systems clone real planets (the simulator is a copy of Sol), so any
+    /// name-based scan that included them would nondeterministically resolve
+    /// to a world outside the live galaxy.
+    pub fn find_gameplay_planet(&self, name: &str) -> Option<(&str, &PlanetData)> {
+        self.star_systems
+            .iter()
+            .filter(|(sys, _)| !Self::TRAINING_SYSTEM_KEYS.contains(&sys.as_str()))
+            .find_map(|(sys, s)| s.planets.get(name).map(|p| (sys.as_str(), p)))
+    }
+
+    /// The static (asset-authored) faction of a system: its explicit
+    /// `faction:` or the majority faction among its planets. Used to seed
+    /// GalaxyControl and for the initial market/traffic derivation.
+    pub fn static_system_faction(iu: &ItemUniverse, system: &str) -> Option<String> {
+        let sys = iu.star_systems.get(system)?;
+        if iu.faction_takes_sides(&sys.faction) {
+            return Some(sys.faction.clone());
+        }
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for planet in sys.planets.values() {
+            if iu.faction_takes_sides(&planet.faction) {
+                *counts.entry(planet.faction.as_str()).or_insert(0) += 1;
+            }
+        }
+        counts
+            .into_iter()
+            .max_by_key(|(_, n)| *n)
+            .map(|(f, _)| f.to_string())
+    }
+
+    /// Factions that own at least one planet: only these can restrict a
+    /// ship's default sale territory. Landless factions (Merchant, Pirate,
+    /// Precursor) can't — their unannotated hulls sell universally.
+    fn planet_owning_factions(&self) -> std::collections::HashSet<String> {
+        self.star_systems
+            .values()
+            .flat_map(|s| s.planets.values())
+            .map(|p| p.faction.clone())
+            .filter(|f| self.faction_takes_sides(f))
+            .collect()
+    }
+
+    /// Fill one planet's catalogs from its stashed explicit entries plus
+    /// everything its tech level + `seller` faction admits. The single rule
+    /// both the initial derivation and runtime re-derivation go through.
+    fn derive_planet_market(
+        planet: &mut PlanetData,
+        seller: Option<&str>,
+        items: &HashMap<String, OutfitterItem>,
+        ships: &HashMap<String, ShipData>,
+        planet_factions: &std::collections::HashSet<String>,
+    ) {
+        planet.outfitter = planet.explicit_outfitter.clone();
+        planet.shipyard = planet.explicit_shipyard.clone();
+        if planet.tech_level == 0 || planet.uncolonized {
+            return;
+        }
+        let faction_ok = |factions: &[String]| {
+            factions.is_empty() || seller.is_some_and(|f| factions.iter().any(|x| x == f))
+        };
+        for (name, item) in items {
+            if item.tech_level() <= planet.tech_level
+                && faction_ok(item.factions())
+                && !planet.outfitter.contains(name)
+            {
+                planet.outfitter.push(name.clone());
+            }
+        }
+        for (name, ship) in ships {
+            let sellers: &[String] = if ship.sold_by.is_empty() {
+                match &ship.faction {
+                    Some(f) if planet_factions.contains(f) => std::slice::from_ref(f),
+                    _ => &[],
+                }
+            } else {
+                &ship.sold_by
+            };
+            if ship.tech_level <= planet.tech_level
+                && faction_ok(sellers)
+                && !planet.shipyard.contains(name)
+            {
+                planet.shipyard.push(name.clone());
+            }
+        }
+        planet.outfitter.sort();
+        planet.shipyard.sort();
+    }
+
+    /// Initial market derivation (at load): stash the YAML lists as the
+    /// explicit extras, then derive with each planet's own faction as the
+    /// seller (planets and their systems agree in the shipped assets).
+    /// tech_level 0 (the default) = no trade buildings at all.
+    fn derive_market_catalogs(&mut self) {
+        let planet_factions = self.planet_owning_factions();
+        let neutral: std::collections::HashSet<String> = self
+            .factions
+            .iter()
+            .filter(|(_, f)| f.neutral)
+            .map(|(n, _)| n.clone())
+            .collect();
+        let takes_sides = |f: &str| !f.is_empty() && !neutral.contains(f);
+        for sys in self.star_systems.values_mut() {
+            let system_faction = sys.faction.clone();
+            for planet in sys.planets.values_mut() {
+                planet.explicit_outfitter = planet.outfitter.clone();
+                planet.explicit_shipyard = planet.shipyard.clone();
+                let seller: Option<String> = [planet.faction.as_str(), system_faction.as_str()]
+                    .iter()
+                    .find(|f| !f.is_empty())
+                    .filter(|f| takes_sides(f))
+                    .map(|f| f.to_string());
+                Self::derive_planet_market(
+                    planet,
+                    seller.as_deref(),
+                    &self.outfitter_items,
+                    &self.ships,
+                    &planet_factions,
+                );
+            }
+        }
+    }
+
+    /// Runtime re-derivation when a system changes hands: every planet in it
+    /// now sells the new `controller`'s gear (None = contested → universal
+    /// stock only). Independent enclaves stay independent.
+    pub fn rederive_system_market(&mut self, system: &str, controller: Option<&str>) {
+        let planet_factions = self.planet_owning_factions();
+        let neutral: std::collections::HashSet<String> = self
+            .factions
+            .iter()
+            .filter(|(_, f)| f.neutral)
+            .map(|(n, _)| n.clone())
+            .collect();
+        let Some(sys) = self.star_systems.get_mut(system) else {
+            return;
+        };
+        for planet in sys.planets.values_mut() {
+            let seller = if neutral.contains(&planet.faction) {
+                None
+            } else {
+                controller
+            };
+            Self::derive_planet_market(
+                planet,
+                seller,
+                &self.outfitter_items,
+                &self.ships,
+                &planet_factions,
+            );
+        }
+    }
+
+    // ── Derived ship traffic ─────────────────────────────────────────────
+    // Replaces hand-authored per-system `ships:` maps (kept verbatim where
+    // declared — training worlds, the precursor rift). Constants tuned for
+    // lively skies: a typical core system carries ~6-8 ships with combat
+    // hulls the biggest bucket, so border systems see real skirmishes.
+
+    /// Population: how many AI ships a system sustains.
+    const TRAFFIC_PER_TECH: f32 = 0.35;
+    const TRAFFIC_PER_FIELD: f32 = 0.9;
+    const TRAFFIC_PER_CONNECTION: f32 = 0.45;
+    /// Role mix.
+    const MERCHANTS_BASE: f32 = 1.0;
+    const MERCHANTS_PER_LANDABLE: f32 = 0.6;
+    const MERCHANTS_PER_CONNECTION: f32 = 0.25;
+    const MINERS_PER_FIELD: f32 = 1.2;
+    /// Pirates follow wealth, scaled by how unaligned the system is.
+    const PIRATE_SHARE_OF_MERCHANTS: f32 = 0.5;
+    /// Combat presence multiplier per faction influence share.
+    const COMBAT_PER_PRESENCE: f32 = 3.5;
+    /// Unfactioned fighters (mercenaries) drift everywhere lightly.
+    const MERCENARY_SHARE: f32 = 0.3;
+
+    /// Re-derive every non-authored system's ship distribution from the live
+    /// influence simplex. Faction presence propagates λ-per-jump from
+    /// neighbors, so a war next door bleeds patrols across the border.
+    pub fn rederive_ship_presence(&mut self, galaxy: &crate::galaxy::GalaxyControl) {
+        use crate::ship::Personality;
+        let lambda = crate::galaxy::PRESENCE_LAMBDA;
+
+        // neighbor lists (1 and 2 jumps), from the static jump graph
+        let neighbors: HashMap<String, Vec<String>> = self
+            .star_systems
+            .iter()
+            .map(|(k, s)| (k.clone(), s.connections.clone()))
+            .collect();
+
+        let system_names: Vec<String> = self.star_systems.keys().cloned().collect();
+        for name in &system_names {
+            if self.star_systems[name].authored_traffic
+                || Self::TRAINING_SYSTEM_KEYS.contains(&name.as_str())
+            {
+                continue;
+            }
+            // presence(F) = local + λ·1-jump + λ²·2-jump influence
+            let mut presence: HashMap<String, f32> = HashMap::new();
+            let mut add = |map: &mut HashMap<String, f32>, sys: &str, w: f32| {
+                if let Some(inf) = galaxy.influence.get(sys) {
+                    for (f, v) in inf {
+                        *map.entry(f.clone()).or_insert(0.0) += v * w;
+                    }
+                }
+            };
+            add(&mut presence, name, 1.0);
+            let hop1: &[String] = neighbors.get(name).map(Vec::as_slice).unwrap_or(&[]);
+            let mut seen: std::collections::HashSet<&str> =
+                std::collections::HashSet::from([name.as_str()]);
+            for n1 in hop1 {
+                if seen.insert(n1) {
+                    add(&mut presence, n1, lambda);
+                }
+            }
+            for n1 in hop1 {
+                for n2 in neighbors.get(n1).map(Vec::as_slice).unwrap_or(&[]) {
+                    if seen.insert(n2) {
+                        add(&mut presence, n2, lambda * lambda);
+                    }
+                }
+            }
+            let total_presence: f32 = presence.values().sum();
+            if total_presence > 0.0 {
+                for v in presence.values_mut() {
+                    *v /= total_presence.max(1.0);
+                }
+            }
+            let local_unaligned =
+                1.0 - galaxy.influence.get(name).map(|m| m.values().sum()).unwrap_or(0.0);
+
+            let sys = &self.star_systems[name];
+            let tech: f32 = sys.planets.values().map(|p| p.tech_level as f32).sum();
+            let landable = sys
+                .planets
+                .values()
+                .filter(|p| !p.commodities.is_empty())
+                .count() as f32;
+            let fields = sys.astroid_fields.len() as f32;
+            let conn = sys.connections.len() as f32;
+
+            let population = (1.2
+                + Self::TRAFFIC_PER_TECH * tech
+                + Self::TRAFFIC_PER_FIELD * fields
+                + Self::TRAFFIC_PER_CONNECTION * conn)
+                .round()
+                .clamp(4.0, 10.0) as usize;
+
+            // Traders only loiter where a within-system route exists (≥2
+            // colonised planets) — matches the trade-route validator.
+            let merchants_w = if landable >= 2.0 {
+                Self::MERCHANTS_BASE
+                    + Self::MERCHANTS_PER_LANDABLE * landable
+                    + Self::MERCHANTS_PER_CONNECTION * conn
+            } else {
+                0.0
+            };
+            let miners_w = Self::MINERS_PER_FIELD * fields;
+            // Pirates follow wealth but never vanish: lawless transit systems
+            // are exactly where they lurk.
+            let pirates_w = Self::PIRATE_SHARE_OF_MERCHANTS
+                * merchants_w.max(1.5)
+                * (0.4 + local_unaligned);
+
+            // tech-weighted share within a role bucket: small ships common.
+            let techw = |t: u8| 1.0 / f32::powi(2.0, t.saturating_sub(1) as i32);
+
+            let mut types: HashMap<String, f32> = HashMap::new();
+            for (ship_name, ship) in &self.ships {
+                // Faction TRAITS (assets/factions.yaml) drive the buckets —
+                // no faction names are special-cased in code.
+                let f = ship
+                    .faction
+                    .as_deref()
+                    .filter(|f| !self.faction_is_stateless(f));
+                let lawless = f.is_some_and(|f| self.faction_is_lawless(f));
+                let w = match (&ship.personality, f) {
+                    // Traders/miners: stateless/unfactioned hulls at the
+                    // universal base rate; a faction's own logistics scale
+                    // with its presence.
+                    (Personality::Trader, None) => merchants_w,
+                    (Personality::Trader, Some(f)) => {
+                        2.0 * merchants_w * presence.get(f).copied().unwrap_or(0.0)
+                    }
+                    (Personality::Miner, None) => miners_w,
+                    (Personality::Miner, Some(f)) => {
+                        2.0 * miners_w * presence.get(f).copied().unwrap_or(0.0)
+                    }
+                    // Combat: LAWLESS fighters follow wealth; faction patrols
+                    // follow propagated presence (they roam borders); CAPITAL
+                    // ships (tech 4+) deploy only where their faction holds
+                    // actual ground — a titan doesn't wander far from home.
+                    (Personality::Fighter, Some(_)) if lawless => pirates_w,
+                    (Personality::Fighter, Some(f)) if ship.tech_level >= 4 => {
+                        Self::COMBAT_PER_PRESENCE
+                            * galaxy
+                                .influence
+                                .get(name.as_str())
+                                .and_then(|m| m.get(f))
+                                .copied()
+                                .unwrap_or(0.0)
+                    }
+                    (Personality::Fighter, Some(f)) => {
+                        Self::COMBAT_PER_PRESENCE * presence.get(f).copied().unwrap_or(0.0)
+                    }
+                    (Personality::Fighter, None) => Self::MERCENARY_SHARE,
+                };
+                let w = w * techw(ship.tech_level);
+                // Cutoff prunes trace-level presence (a distant faction's
+                // capital ships shouldn't appear 2 jumps from home on 5%
+                // spillover).
+                if w > 0.02 {
+                    types.insert(ship_name.clone(), w);
+                }
+            }
+
+            let sys = self.star_systems.get_mut(name).unwrap();
+            sys.ships.types = types;
+            sys.ships.max = population;
+            sys.ships.min = (population / 2).max(1);
+        }
+    }
+
+    /// All post-parse processing, in dependency order. Call after `parse_dir`
+    /// (the plugin does; tests that need derived catalogs must too).
+    pub fn finalize(&mut self) {
+        self.fill_display_names();
+        self.materialize_training_systems();
+        for sys in self.star_systems.values_mut() {
+            sys.authored_traffic = !sys.ships.types.is_empty();
+        }
+        self.derive_market_catalogs();
+        let seed = crate::galaxy::GalaxyControl::seeded_from(self);
+        self.rederive_ship_presence(&seed);
+        self.compute_global_averages();
+        self.compute_trade_maps();
+        self.compute_planet_ammo();
+        self.compute_asteroid_values();
+        self.compute_ship_credit_scales();
     }
 
     fn compute_global_averages(&mut self) {
@@ -402,6 +805,12 @@ pub enum OutfitterItem {
         display_name: String,
         #[serde(default)]
         required_unlocks: Vec<String>,
+        /// Outfitter tech level required to stock this item (1 = anywhere).
+        #[serde(default = "default_item_tech")]
+        tech_level: u8,
+        /// Factions whose outfitters stock it. Empty = sold universally.
+        #[serde(default)]
+        factions: Vec<String>,
     },
     SecondaryWeapon {
         price: i128,
@@ -413,6 +822,30 @@ pub enum OutfitterItem {
         display_name: String,
         #[serde(default)]
         required_unlocks: Vec<String>,
+        /// Outfitter tech level required to stock this item (1 = anywhere).
+        #[serde(default = "default_item_tech")]
+        tech_level: u8,
+        /// Factions whose outfitters stock it. Empty = sold universally.
+        #[serde(default)]
+        factions: Vec<String>,
+    },
+    /// A passive ship modification (engine tune, armor plating, repair bot).
+    /// Occupies item space like a weapon; its `effect` is folded into the
+    /// ship's cached `ModStats` on buy/sell/load.
+    ShipMod {
+        price: i128,
+        space: u16,
+        effect: ModEffect,
+        #[serde(default)]
+        display_name: String,
+        #[serde(default)]
+        required_unlocks: Vec<String>,
+        /// Outfitter tech level required to stock this item (1 = anywhere).
+        #[serde(default = "default_item_tech")]
+        tech_level: u8,
+        /// Factions whose outfitters stock it. Empty = sold universally.
+        #[serde(default)]
+        factions: Vec<String>,
     },
 }
 
@@ -421,32 +854,86 @@ impl OutfitterItem {
         match self {
             OutfitterItem::PrimaryWeapon { price, .. } => *price,
             OutfitterItem::SecondaryWeapon { price, .. } => *price,
+            OutfitterItem::ShipMod { price, .. } => *price,
         }
     }
     pub fn space(&self) -> u16 {
         match self {
             OutfitterItem::PrimaryWeapon { space, .. } => *space,
             OutfitterItem::SecondaryWeapon { space, .. } => *space,
+            OutfitterItem::ShipMod { space, .. } => *space,
         }
     }
     pub fn display_name(&self) -> &str {
         match self {
             OutfitterItem::PrimaryWeapon { display_name, .. } => display_name,
             OutfitterItem::SecondaryWeapon { display_name, .. } => display_name,
+            OutfitterItem::ShipMod { display_name, .. } => display_name,
         }
     }
     pub fn required_unlocks(&self) -> &[String] {
         match self {
             OutfitterItem::PrimaryWeapon { required_unlocks, .. } => required_unlocks,
             OutfitterItem::SecondaryWeapon { required_unlocks, .. } => required_unlocks,
+            OutfitterItem::ShipMod { required_unlocks, .. } => required_unlocks,
+        }
+    }
+    pub fn tech_level(&self) -> u8 {
+        match self {
+            OutfitterItem::PrimaryWeapon { tech_level, .. } => *tech_level,
+            OutfitterItem::SecondaryWeapon { tech_level, .. } => *tech_level,
+            OutfitterItem::ShipMod { tech_level, .. } => *tech_level,
+        }
+    }
+    pub fn factions(&self) -> &[String] {
+        match self {
+            OutfitterItem::PrimaryWeapon { factions, .. } => factions,
+            OutfitterItem::SecondaryWeapon { factions, .. } => factions,
+            OutfitterItem::ShipMod { factions, .. } => factions,
+        }
+    }
+    /// The mod effect, when this item is a ship mod.
+    pub fn mod_effect(&self) -> Option<&ModEffect> {
+        match self {
+            OutfitterItem::ShipMod { effect, .. } => Some(effect),
+            _ => None,
         }
     }
     fn display_name_mut(&mut self) -> &mut String {
         match self {
             OutfitterItem::PrimaryWeapon { display_name, .. } => display_name,
             OutfitterItem::SecondaryWeapon { display_name, .. } => display_name,
+            OutfitterItem::ShipMod { display_name, .. } => display_name,
         }
     }
+}
+
+/// What a ship mod does. One variant per mod family keeps every effect's
+/// parameters together and makes `Ship::recompute_mod_stats` a single match.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub enum ModEffect {
+    /// Multipliers on the drive train: top speed, acceleration (thrust) and
+    /// turn rate. Stacks multiplicatively across copies.
+    Engine {
+        #[serde(default = "one")]
+        speed: f32,
+        #[serde(default = "one")]
+        thrust: f32,
+        #[serde(default = "one")]
+        torque: f32,
+    },
+    /// Flat bonus hull points on top of the hull's max_health. Stacks.
+    Armor { bonus_hp: i32 },
+    /// Passive in-flight repair, hull points per second. Stacks additively.
+    RepairBot { hp_per_sec: f32 },
+}
+
+fn one() -> f32 {
+    1.0
+}
+
+fn default_item_tech() -> u8 {
+    1
 }
 
 /// Probability distribution + population limits for ships in a star system.
@@ -491,6 +978,21 @@ impl ShipDistribution {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct StarSystem {
+    /// Controlling faction of the whole system — the seller faction for
+    /// planets that don't declare their own, and the standing system's
+    /// controller. Empty = derived from the majority of planet factions.
+    #[serde(default)]
+    pub faction: String,
+    /// Whether galactic-war influence shifts may contest this system.
+    /// Story-critical systems (Sol, faction capitals) stay false so their
+    /// planets can never change hands. See docs/galactic_war_design.md.
+    #[serde(default)]
+    pub contestable: bool,
+    /// True when the YAML declares an explicit `ships:` distribution — such
+    /// systems (RL training worlds, the precursor rift) keep it verbatim and
+    /// are skipped by the traffic derivation.
+    #[serde(skip)]
+    pub authored_traffic: bool,
     #[serde(default)]
     pub map_position: Vec2,
     #[serde(default)]
@@ -510,13 +1012,7 @@ pub fn item_universe_plugin(app: &mut App) {
             "failed to parse asset config — check that all .yaml files in assets/ are valid",
         );
 
-    item_universe.fill_display_names();
-    item_universe.materialize_training_systems();
-    item_universe.compute_global_averages();
-    item_universe.compute_trade_maps();
-    item_universe.compute_planet_ammo();
-    item_universe.compute_asteroid_values();
-    item_universe.compute_ship_credit_scales();
+    item_universe.finalize();
     item_universe.validate();
     app.insert_resource::<ItemUniverse>(item_universe);
     app.add_systems(Startup, preload_sprites);

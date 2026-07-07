@@ -90,7 +90,7 @@ catch_thief:
   target_name: "the thief"
   commodity_pool: [electronics, exotic_matter, weapons_parts]
   quantity_range: [3, 8]
-  pay_range: [10000, 30000]
+  pay_range: [8000, 20000]
 
 federation_bounty:
   kind: bounty_hunt
@@ -105,5 +105,250 @@ federation_bounty:
       name: bounty_hunter_license
   ship_type_pool: [pirate_corvette, pirate_missile_boat, pirate_carrier]
   count_range: [1, 3]
-  pay_range: [8000, 45000]
+  pay_range: [6000, 30000]
   target_name: Pirate Hostiles
+
+# ── Arrest flow ──────────────────────────────────────────────────────────────
+# Generated ad-hoc by the standing system when the player lands on a world
+# whose faction they've antagonized past the arrest threshold (never offered
+# by the landing rolls). Vars: {faction} {fine} {planet_display}
+# {dest_display} {count} {quantity} {commodity}.
+arrest:
+  kind: arrest
+  meet_briefing: "Dock control is moving to impound your ship. {faction} enforcement has flagged you as hostile — officers are crossing the pad to arrest you. Face them, or run before the clamps lock."
+  meet_success: "The {faction} sergeant reads the charges and offers terms: pay the fine ({fine} credits) at the clerk, serve a warrant against raiders preying on {faction} space, or run relief supplies where they're needed. Settle ANY one and your record is wiped back to merely watched."
+  meet_failure: "You slipped {faction} enforcement — this time."
+  fine_briefing: "Settle your {faction} charges the simple way: pay the {fine}-credit fine at the fines clerk by the market."
+  fine_success: "{fine} credits, gone. 'Keep your nose clean,' the clerk says, stamping your {faction} record back to merely watched."
+  fine_failure: "The {faction} fine remains unpaid."
+  bounty_briefing: "Work off your {faction} charges in the cockpit: a warrant for {count} hostile ships raiding this system. No pay — your record is the payment."
+  bounty_success: "The wrecks are logged against your warrant. {faction} enforcement wipes your record back to merely watched. Cheaper than the fine — if you don't count the hull damage."
+  bounty_failure: "The {faction} warrant expires unserved."
+  service_briefing: "Community service, {faction} style: source {quantity} units of {commodity} AT YOUR OWN EXPENSE and deliver them to {dest_display}."
+  service_success: "The relief supplies are signed for on {dest_display}. Word gets back: {faction} wipes your record back to merely watched, and the medics don't care what you did."
+  service_failure: "The {faction} relief run never arrived."
+  fine_base: 3000
+  fine_per_standing: 50
+  bounty_count: 2
+  service_commodity: medical_supplies
+  service_quantity: 8
+
+# ── Galactic war (docs/galactic_war_design.md) ───────────────────────────────
+# Generated ad-hoc by the front generator at faction worlds bordering enemy
+# space, tiered by how contested the target is (1 = raids/covert softening,
+# 2 = squadron battles, 3 = the decisive push). Vars: {faction} {enemy}
+# {system_display} {planet_display} {count} {pay} {commodity} {quantity}.
+war_raid:
+  kind: war
+  briefing: "A {faction} wing commander wants freelance teeth: raid {enemy} patrols in {system_display} — {count} kills, no support, in and out. {pay} on confirmation."
+  success_text: "{count} {enemy} wrecks confirmed. The {system_display} garrison felt that. {pay} credits."
+  failure_text: "The raid never bit. {enemy}'s grip on {system_display} holds."
+  attack: true
+  squadron_size: 0
+  count_range: [2, 3]
+  influence_delta: 0.08
+  pay_range: [12000, 18000]
+  min_standing: 10.0
+  tier: 1
+war_rapid_defense:
+  kind: war
+  briefing: "Sirens on every {faction} channel: an {enemy} raid is hitting THIS system now. No time to scramble support — get up there and break it. {count} raiders. {pay}."
+  success_text: "The raid breaks against your guns alone. {faction} command signs off {pay} credits with something like respect."
+  failure_text: "The raiders hit their marks and jumped out. It will cost {faction} here."
+  attack: false
+  squadron_size: 0
+  count_range: [2, 3]
+  influence_delta: 0.08
+  pay_range: [12000, 18000]
+  min_standing: 10.0
+  tier: 1
+war_battle_defense:
+  kind: war
+  briefing: "{enemy} is committing real strength against this system — an invasion force, {count} hulls. {faction} is scrambling a wing to fly at your side. Hold the line. {pay}."
+  success_text: "The invasion force is wreckage and the line held. Your wing peels off with a salute. {pay} credits, and {faction}'s grip here tightens."
+  failure_text: "The line broke. {enemy} owns a little more of this system tonight."
+  attack: false
+  squadron_size: 3
+  count_range: [4, 6]
+  influence_delta: 0.15
+  pay_range: [30000, 42000]
+  min_standing: 10.0
+  tier: 2
+war_battle_offense:
+  kind: war
+  briefing: "{faction} is taking the war to {enemy} space: a strike on {system_display}, {count} defenders on the board. You lead; a {faction} wing flies with you. {pay}."
+  success_text: "{system_display}'s defense is shattered. {faction} banners follow where your guns led. {pay} credits."
+  failure_text: "The strike on {system_display} fell apart. {enemy} still holds it."
+  attack: true
+  squadron_size: 3
+  count_range: [4, 6]
+  influence_delta: 0.15
+  pay_range: [30000, 42000]
+  min_standing: 10.0
+  tier: 2
+war_decisive_push:
+  kind: war
+  briefing: "This is the one, Captain. {enemy}'s hold on {system_display} is cracking — one decisive blow and it falls to {faction}. They're throwing everything into the defense: {count} hulls. Your wing is the tip of the spear. {pay}."
+  success_text: "{system_display} falls. {faction} takes the system your guns opened. {pay} credits — and a line in somebody's history book."
+  failure_text: "The push stalled short of the prize. {system_display} still flies {enemy} colors."
+  attack: true
+  squadron_size: 4
+  count_range: [6, 8]
+  influence_delta: 0.25
+  pay_range: [55000, 75000]
+  min_standing: 10.0
+  tier: 3
+covert_smuggle_arms:
+  kind: covert
+  briefing: "A {faction} quartermaster slides a manifest over: {quantity} units of {commodity} for the partisans on {planet_display}. {enemy} customs will not be sympathetic. {pay} on delivery."
+  success_text: "The partisans on {planet_display} melt into the dark with their new teeth. {enemy}'s grip slips a little. {pay} credits."
+  failure_text: "The partisans on {planet_display} wait for guns that never came."
+  action:
+    kind: smuggle
+    commodity: weapons_parts
+    quantity: 8
+  influence_delta: 0.1
+  pay_range: [14000, 20000]
+  min_standing: 10.0
+  tier: 1
+  enemy_standing_penalty: 4.0
+covert_meet_dissidents:
+  kind: covert
+  briefing: "{faction} intelligence has a friendly cell on {planet_display} — {enemy} space. Meet their organizer, take their reports, leave no trace. {pay}."
+  success_text: "The organizer talks fast and vanishes faster. What they carried is worth divisions. {pay} credits."
+  failure_text: "The cell on {planet_display} went quiet."
+  action:
+    kind: meet_contact
+    npc_name: "the dissident organizer"
+  influence_delta: 0.08
+  pay_range: [10000, 15000]
+  min_standing: 10.0
+  tier: 1
+  enemy_standing_penalty: 2.0
+covert_snatch_official:
+  kind: covert
+  briefing: "{enemy}'s garrison commander on {planet_display} runs the whole sector's defense. {faction} wants them — alive, aboard, gone. They will run. {pay}."
+  success_text: "The commander is in your hold and {enemy}'s defense plans are in {faction}'s hands. {system_display} just got softer. {pay} credits."
+  failure_text: "The commander slipped the net on {planet_display}."
+  action:
+    kind: catch_official
+    npc_name: "the garrison commander"
+  influence_delta: 0.12
+  pay_range: [22000, 32000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 6.0
+covert_hearts_minds:
+  kind: covert
+  briefing: "{faction} civil affairs wants {system_display} to remember who fed them when the war passed through: {quantity} units of {commodity} for {planet_display}, no questions, no escort. {pay} for the run."
+  success_text: "Dockhands on {planet_display} unload the crates in silence, but the silence is warmer than it was. {faction}'s name is on every manifest. {pay} credits."
+  failure_text: "The relief crates never reached {planet_display}. Somebody else will feed them — and be remembered for it."
+  action:
+    kind: smuggle
+    commodity: medical_supplies
+    quantity: 10
+  influence_delta: 0.08
+  pay_range: [8000, 12000]
+  min_standing: 10.0
+  tier: 1
+covert_propaganda:
+  kind: covert
+  briefing: "A {faction} political officer hands you a crate that is very much not on the manifest: {quantity} units of {commodity} — broadcast rigs, pamphlet presses. Land them on {planet_display} and meet the cell organizer. {pay}."
+  success_text: "You put the crate on the ground on {planet_display}."
+  failure_text: "The presses never printed a word on {planet_display}."
+  stage2_briefing: "The rigs are down. Now find the organizer before {enemy} counter-intelligence finds either of you."
+  stage2_success: "The organizer signs nothing and thanks no one, but within a week {planet_display}'s night channels are full of a new voice. {pay} credits."
+  action:
+    kind: propaganda
+    commodity: electronics
+    quantity: 6
+    npc_name: "the cell organizer"
+  influence_delta: 0.1
+  pay_range: [12000, 18000]
+  min_standing: 10.0
+  tier: 1
+  enemy_standing_penalty: 3.0
+covert_steal_docs:
+  kind: covert
+  briefing: "{faction} intelligence has a mole in {enemy}'s defense ministry on {planet_display}. Their courier rotation was burned. You're the new courier: meet the mole, take the defense schematics, walk away slowly. {pay}."
+  success_text: "The mole's chip holds {enemy}'s garrison rotations for the whole sector. {faction} planners start smiling in a way that worries you. {pay} credits."
+  failure_text: "The mole waited at the dead drop on {planet_display}. Nobody came."
+  action:
+    kind: meet_contact
+    npc_name: "the ministry mole"
+  influence_delta: 0.1
+  pay_range: [16000, 24000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 4.0
+covert_cut_supply:
+  kind: covert
+  briefing: "{enemy}'s push into {system_display} runs on freighters, not fleets. {faction} wants {count} of them on the bottom. The Merchant Guild will notice — {faction} is paying you enough not to care. {pay}."
+  success_text: "{count} supply hulls gone. {enemy}'s garrisons in {system_display} start rationing within days. The Guild quietly notes your name. {pay} credits."
+  failure_text: "The convoys got through. {enemy}'s garrisons eat well."
+  action:
+    kind: cut_supply
+    count: 3
+  influence_delta: 0.12
+  pay_range: [22000, 32000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 5.0
+  merchant_standing_penalty: 3.0
+covert_extract_defector:
+  kind: covert
+  briefing: "A {enemy} fleet officer on {planet_display} wants out, and what's in their head is worth a carrier group. Meet them quietly and bring them to {dest_display}. {pay} on delivery — alive."
+  success_text: "The officer boards without a word, carrying nothing. People who carry nothing know everything."
+  failure_text: "The defector's window closed. {enemy} counter-intelligence doesn't give second chances."
+  stage2_briefing: "The defector is aboard and {enemy} traffic control is asking polite questions. Get them to {dest_display}."
+  stage2_success: "Debriefers meet you at the pad on {dest_display}. Within hours, {faction} knows every hole in {enemy}'s line. {pay} credits."
+  action:
+    kind: extract
+    npc_name: "the defecting officer"
+  influence_delta: 0.14
+  pay_range: [26000, 38000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 6.0
+covert_plant_intel:
+  kind: covert
+  briefing: "{faction} forgery is an art form: {quantity} units of {commodity} loaded with beautifully wrong fleet movements. Get them into circulation on {planet_display}. {pay}, and {enemy} chases shadows for a month."
+  success_text: "The forged data is in {enemy}'s pipeline on {planet_display}. Somewhere, a staff officer is redeploying a garrison to defend nothing. {pay} credits."
+  failure_text: "The forgeries never entered circulation. {enemy}'s picture of the front stays honest."
+  action:
+    kind: smuggle
+    commodity: electronics
+    quantity: 2
+  influence_delta: 0.12
+  pay_range: [18000, 26000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 4.0
+covert_bribe_governor:
+  kind: covert
+  briefing: "{enemy}'s governor on {planet_display} has a price, and {faction} knows it: {cost} credits, yours to front, off any book that exists. Meet the bagman. What you buy is a garrison that looks the other way."
+  success_text: "The bagman counts nothing and confirms nothing. But {enemy}'s patrols in {system_display} start finding reasons to be elsewhere. Money well spent."
+  failure_text: "The bagman on {planet_display} stopped answering. The price may have gone up."
+  action:
+    kind: bribe
+    npc_name: "the governor's bagman"
+  influence_delta: 0.2
+  pay_range: [-40000, -30000]
+  min_standing: 10.0
+  tier: 3
+  enemy_standing_penalty: 1.0
+covert_rescue_pows:
+  kind: covert
+  briefing: "{enemy} holds {faction} prisoners in a labor compound on {planet_display}. Their senior officer has an escape window and needs a ship. Meet them, load everyone you can, and run for {dest_display}. {pay} — and {faction} does not forget this kind of thing."
+  success_text: "Gaunt faces file aboard in silence. The senior officer is the last one on."
+  failure_text: "The escape window on {planet_display} closed with everyone still inside."
+  stage2_briefing: "Your hold is full of escaped {faction} prisoners and {enemy} is scrambling patrols. Get them home to {dest_display}."
+  stage2_success: "On {dest_display} the prisoners walk down the ramp into a wall of families and cameras. {faction} broadcasts it for a week. {pay} credits."
+  action:
+    kind: extract
+    npc_name: "the senior POW officer"
+  influence_delta: 0.18
+  pay_range: [36000, 50000]
+  min_standing: 10.0
+  tier: 3
+  enemy_standing_penalty: 8.0

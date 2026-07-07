@@ -1,26 +1,33 @@
 //! Shared character animation for the planet surface.
 //!
-//! Both the player's walker and civilian NPCs use the same RPG Maker VX
-//! sprite sheet layout (3 cols × 4 rows, 16×16px) and the same
-//! still→w1→still→w2 walk cycle.  This module provides:
+//! Two sheet layouts share one animation system:
 //!
-//! - [`CharacterAnim`] component: facing, walk phase, timer
-//! - [`animate_characters`] system: velocity → facing → walk phase → atlas index
+//! - **People** (player + NPCs, composited by `character_compositor`):
+//!   18 cols × 4 rows of 32×32 — per facing row: 2 idle (breathing) +
+//!   8 walk cycle + 8 run cycle. Gait is chosen from speed.
+//! - **Legacy RPG** (fauna sheets): 3 cols (still, w1, w2) × 4 rows with the
+//!   classic still→w1→still→w2 ping-pong.
 //!
-//! Control logic (keyboard input vs path-following) stays in the
-//! respective modules (`surface.rs` for the walker, `surface_civilians.rs`
-//! for NPCs).  Both just set `LinearVelocity`; this module handles the rest.
+//! [`CharacterAnim`] carries the layout as frame *sequences* (atlas column
+//! indices), so [`animate_characters`] is agnostic: velocity → facing →
+//! gait → next frame → atlas index. Control logic (keyboard vs pathing)
+//! stays in the respective modules; both just set `LinearVelocity`.
 
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-/// Sprite sheet: 3 columns (still, w1, w2) × 4 rows (down, left, right, up).
-pub const SPRITE_COLS: usize = 3;
+/// People sheet: columns per facing row (2 idle + 8 walk + 8 run).
+pub const PERSON_COLS: usize = 18;
 
 /// Velocity magnitude below which a character is considered stationary.
 pub const MOVE_THRESHOLD: f32 = 5.0;
+
+/// Speed at which a person switches from the walk cycle to the run cycle.
+/// (NPC civilians walk at 40; the player walks at 70 and runs at 120 while
+/// holding Shift — terrain slowdowns naturally drop a runner back to a walk.)
+pub const RUN_THRESHOLD: f32 = 80.0;
 
 // ── Facing ───────────────────────────────────────────────────────────────
 
@@ -45,105 +52,157 @@ impl Facing {
     }
 }
 
-// ── Walk frame ───────────────────────────────────────────────────────────
+// ── Gait ─────────────────────────────────────────────────────────────────
 
-/// Which animation frame to display.  Column index in the sprite sheet.
-#[derive(Clone, Copy, Default, Debug)]
-pub enum WalkFrame {
+/// Which frame sequence is currently playing.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub enum Gait {
     #[default]
-    Still = 0,
-    W1 = 1,
-    W2 = 2,
+    Idle,
+    Walk,
+    Run,
 }
 
-/// Compute the texture atlas index from facing direction and walk frame.
-#[inline]
-pub fn sprite_index(facing: Facing, frame: WalkFrame) -> usize {
-    facing as usize * SPRITE_COLS + frame as usize
+/// One animation cycle: atlas column indices + seconds per frame.
+#[derive(Clone, Debug)]
+pub struct FrameSeq {
+    pub cols: Vec<usize>,
+    pub interval: f32,
+    /// Positions within `cols` where a foot hits the ground (for footsteps).
+    pub footfalls: Vec<usize>,
 }
 
 // ── CharacterAnim component ──────────────────────────────────────────────
 
-/// Shared animation state for any character on the surface (walker or NPC).
+/// Shared animation state for any character on the surface.
 ///
-/// Attach this alongside `LinearVelocity` and a `Sprite` with a
-/// `TextureAtlas`.  The [`animate_characters`] system will automatically
-/// update facing, walk phase, and atlas index based on the velocity.
+/// Attach alongside `LinearVelocity` and a `Sprite` with a `TextureAtlas`;
+/// [`animate_characters`] updates facing, gait, frame, and atlas index.
 #[derive(Component)]
 pub struct CharacterAnim {
     pub facing: Facing,
-    /// Walk cycle phase: 0=still, 1=w1, 2=still, 3=w2.
-    pub walk_phase: u8,
-    pub walk_timer: Timer,
+    pub gait: Gait,
+    /// Index into the active sequence's `cols`.
+    pub frame: usize,
+    pub timer: Timer,
     pub is_moving: bool,
+    /// True on the frame(s) where a footfall lands (consumed by sfx).
+    pub just_stepped: bool,
+    /// Total columns per facing row in the atlas.
+    pub sheet_cols: usize,
+    pub idle: FrameSeq,
+    pub walk: FrameSeq,
+    /// `None` = no run cycle (legacy sheets); walk is used at any speed.
+    pub run: Option<FrameSeq>,
 }
 
 impl Default for CharacterAnim {
     fn default() -> Self {
-        Self {
-            facing: Facing::Down,
-            walk_phase: 0,
-            walk_timer: Timer::from_seconds(0.15, TimerMode::Repeating),
-            is_moving: false,
-        }
+        Self::person(0.10)
     }
 }
 
 impl CharacterAnim {
-    /// Create with a custom timer interval (for variation between NPCs).
-    pub fn with_interval(interval: f32) -> Self {
+    /// Composited people sheet (18 cols): idle breathing + walk + run.
+    /// `interval` is seconds per walk frame (run plays 25% faster).
+    pub fn person(interval: f32) -> Self {
         Self {
-            walk_timer: Timer::from_seconds(interval, TimerMode::Repeating),
-            ..default()
+            facing: Facing::Down,
+            gait: Gait::Idle,
+            frame: 0,
+            timer: Timer::from_seconds(0.6, TimerMode::Repeating),
+            is_moving: false,
+            just_stepped: false,
+            sheet_cols: PERSON_COLS,
+            idle: FrameSeq { cols: vec![0, 1], interval: 0.6, footfalls: vec![] },
+            // LPC 8-frame walk: feet plant around frames 1 and 5 of the cycle.
+            walk: FrameSeq {
+                cols: (2..10).collect(),
+                interval,
+                footfalls: vec![1, 5],
+            },
+            run: Some(FrameSeq {
+                cols: (10..18).collect(),
+                interval: interval * 0.75,
+                footfalls: vec![1, 5],
+            }),
         }
     }
 
-    /// Current walk frame from the phase.
-    pub fn current_frame(&self) -> WalkFrame {
-        if !self.is_moving {
-            WalkFrame::Still
-        } else {
-            match self.walk_phase {
-                1 => WalkFrame::W1,
-                3 => WalkFrame::W2,
-                _ => WalkFrame::Still,
-            }
+    /// Legacy 3-col RPG sheet (fauna): still, w1, w2 with the classic
+    /// still→w1→still→w2 ping-pong at `interval` seconds per phase.
+    pub fn legacy_rpg(interval: f32) -> Self {
+        Self {
+            facing: Facing::Down,
+            gait: Gait::Idle,
+            frame: 0,
+            timer: Timer::from_seconds(interval, TimerMode::Repeating),
+            is_moving: false,
+            just_stepped: false,
+            sheet_cols: 3,
+            idle: FrameSeq { cols: vec![0], interval, footfalls: vec![] },
+            walk: FrameSeq {
+                cols: vec![0, 1, 0, 2],
+                interval,
+                footfalls: vec![1, 3],
+            },
+            run: None,
+        }
+    }
+
+    fn seq(&self) -> &FrameSeq {
+        match self.gait {
+            Gait::Idle => &self.idle,
+            Gait::Walk => &self.walk,
+            Gait::Run => self.run.as_ref().unwrap_or(&self.walk),
         }
     }
 
     /// Atlas index for the current facing + frame.
     pub fn atlas_index(&self) -> usize {
-        sprite_index(self.facing, self.current_frame())
+        let seq = self.seq();
+        self.facing as usize * self.sheet_cols + seq.cols[self.frame.min(seq.cols.len() - 1)]
     }
 }
 
 // ── System ───────────────────────────────────────────────────────────────
 
-/// Update facing, walk phase, and atlas index for all entities that have
+/// Update facing, gait, frame, and atlas index for all entities with
 /// `CharacterAnim` + `LinearVelocity` + `Sprite`.
-///
-/// This is the single animation system for both the player walker and
-/// civilian NPCs.  Control systems only need to set `LinearVelocity`;
-/// this system handles the visual side.
 pub fn animate_characters(
     time: Res<Time>,
     mut query: Query<(&LinearVelocity, &mut CharacterAnim, &mut Sprite)>,
 ) {
     for (vel, mut anim, mut sprite) in &mut query {
         let speed = vel.0.length();
+        anim.just_stepped = false;
 
-        if speed > MOVE_THRESHOLD {
-            anim.is_moving = true;
-            anim.facing = Facing::from_velocity(vel.0);
-
-            anim.walk_timer.tick(time.delta());
-            if anim.walk_timer.just_finished() {
-                anim.walk_phase = (anim.walk_phase + 1) % 4;
-            }
+        let target_gait = if speed <= MOVE_THRESHOLD {
+            Gait::Idle
+        } else if speed >= RUN_THRESHOLD && anim.run.is_some() {
+            Gait::Run
         } else {
-            anim.is_moving = false;
-            anim.walk_phase = 0;
-            anim.walk_timer.reset();
+            Gait::Walk
+        };
+        anim.is_moving = target_gait != Gait::Idle;
+        if anim.is_moving {
+            anim.facing = Facing::from_velocity(vel.0);
+        }
+
+        if target_gait != anim.gait {
+            anim.gait = target_gait;
+            anim.frame = 0;
+            let interval = anim.seq().interval;
+            anim.timer = Timer::from_seconds(interval, TimerMode::Repeating);
+        } else {
+            anim.timer.tick(time.delta());
+            if anim.timer.just_finished() {
+                let seq_len = anim.seq().cols.len();
+                anim.frame = (anim.frame + 1) % seq_len;
+                if anim.seq().footfalls.contains(&anim.frame) {
+                    anim.just_stepped = true;
+                }
+            }
         }
 
         if let Some(atlas) = &mut sprite.texture_atlas {

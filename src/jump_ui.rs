@@ -20,32 +20,33 @@ const MAP_PAD: f32 = 120.0;
 const NODE_R: f32 = 3.5;   // visual dot radius
 const CLICK_R: f32 = 12.0; // invisible click hit radius
 
-/// Map factions shown on the star map (Free Frontier's spaced label, others as-is).
-const LEGEND_FACTIONS: &[&str] = &[
-    "Federation", "Rebel", "FreeFrontier", "Helios", "Bastion", "Order", "Precursor",
-];
-
-/// A faction's signature colour on the star map. Keep in sync with the design
-/// bible / faction palette. Unknown or contested space reads as neutral grey.
-fn faction_color(faction: &str) -> Color32 {
-    match faction {
-        "Federation" => Color32::from_rgb(78, 120, 196),
-        "Rebel" => Color32::from_rgb(90, 190, 110),
-        "FreeFrontier" => Color32::from_rgb(228, 198, 92),
-        "Helios" => Color32::from_rgb(84, 200, 230),
-        "Bastion" => Color32::from_rgb(188, 64, 56),
-        "Order" => Color32::from_rgb(162, 110, 214),
-        "Precursor" => Color32::from_rgb(196, 84, 206),
-        "Independent" => Color32::from_rgb(176, 166, 150),
-        _ => Color32::from_rgb(120, 125, 140), // contested / unknown
-    }
+/// Map factions shown in the legend: the territorial powers, from the
+/// faction registry (assets/factions.yaml), sorted for stability.
+fn legend_factions(iu: &ItemUniverse) -> Vec<String> {
+    let mut names: Vec<String> = iu
+        .factions
+        .iter()
+        .filter(|(_, f)| !f.lawless && !f.stateless && !f.neutral)
+        .map(|(n, _)| n.clone())
+        .collect();
+    names.sort();
+    names
 }
 
-fn faction_label(faction: &str) -> &str {
-    match faction {
-        "FreeFrontier" => "Free Frontier",
-        other => other,
-    }
+/// A faction's signature colour, from the registry. Unknown or contested
+/// space reads as neutral grey.
+fn faction_color(faction: &str, iu: &ItemUniverse) -> Color32 {
+    iu.factions
+        .get(faction)
+        .map(|f| Color32::from_rgb(f.color[0], f.color[1], f.color[2]))
+        .unwrap_or(Color32::from_rgb(120, 125, 140))
+}
+
+fn faction_label<'a>(faction: &'a str, iu: &'a ItemUniverse) -> &'a str {
+    iu.factions
+        .get(faction)
+        .map(|f| f.display_name.as_str())
+        .unwrap_or(faction)
 }
 
 /// Lerp a colour toward the map void — used to dim discovered-but-unvisited systems.
@@ -54,10 +55,21 @@ fn dim(c: Color32, t: f32) -> Color32 {
     Color32::from_rgb(l(c.r(), 4), l(c.g(), 4), l(c.b(), 18))
 }
 
-/// The controlling faction of a system: the faction holding its planets, or — for
-/// uninhabited systems — the single faction that dominates its spawns (so the
-/// Precursor deep reads Precursor). Contested borderlands (e.g. the Drift, an even
-/// Federation/Rebel split) return "" and read neutral.
+/// The faction a system reads as on the map. The LIVE controller wins (so
+/// war fronts recolor as they flip, and contested systems read neutral);
+/// systems outside the galaxy sim (the Precursor deep) fall back to the
+/// faction dominating their spawns.
+fn map_faction(sys: &StarSystem, iu: &ItemUniverse, live: Option<Option<&str>>) -> String {
+    match live {
+        Some(Some(f)) => return f.to_string(),
+        Some(None) => return String::new(), // contested → neutral
+        None => {}
+    }
+    system_faction(sys, iu)
+}
+
+/// Static fallback: the faction holding a system's planets, or — for
+/// uninhabited systems — the single faction that dominates its spawns.
 fn system_faction(sys: &StarSystem, iu: &ItemUniverse) -> String {
     use std::collections::HashMap;
     let mut by: HashMap<&str, f32> = HashMap::new();
@@ -90,7 +102,7 @@ fn system_faction(sys: &StarSystem, iu: &ItemUniverse) -> String {
 
 #[derive(Resource, Default)]
 pub struct JumpUiOpen {
-    open: bool,
+    pub open: bool,
     scroll_initialized: bool,
 }
 
@@ -115,18 +127,12 @@ pub fn jump_ui_plugin(app: &mut App) {
         );
 }
 
-fn toggle_jump_ui(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut state: ResMut<JumpUiOpen>,
-    mut virtual_time: ResMut<Time<Virtual>>,
-) {
+fn toggle_jump_ui(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<JumpUiOpen>) {
+    // Pausing is derived from `open` by sync_ui_pause (main.rs).
     if keyboard.just_pressed(KeyCode::KeyJ) {
         state.open = !state.open;
         if state.open {
             state.scroll_initialized = false;
-            virtual_time.pause();
-        } else {
-            virtual_time.unpause();
         }
     }
 }
@@ -197,6 +203,7 @@ fn jump_ui(
     mut travel_ctx: ResMut<TravelContext>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     game_state: Res<PlayerGameState>,
     mission_log: Res<MissionLog>,
     mission_catalog: Res<MissionCatalog>,
@@ -371,7 +378,11 @@ fn jump_ui(
                         }
                     }
 
-                    let base = faction_color(&system_faction(sys, &item_universe));
+                    let live = galaxy
+                        .influence
+                        .contains_key(sys_name.as_str())
+                        .then(|| galaxy.controller(sys_name.as_str()));
+                    let base = faction_color(&map_faction(sys, &item_universe, live), &item_universe);
                     let fill = if is_current || is_visited {
                         base
                     } else {
@@ -453,15 +464,15 @@ fn jump_ui(
             ui.separator();
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 12.0;
-                for fac in LEGEND_FACTIONS {
-                    ui.colored_label(faction_color(fac), faction_label(fac));
+                for fac in &legend_factions(&item_universe) {
+                    ui.colored_label(faction_color(fac, &item_universe), faction_label(fac, &item_universe));
                 }
             });
             ui.label(format!("Fuel: {fuel}/{fuel_cap} jumps"));
             if fuel == 0 {
                 ui.colored_label(
                     Color32::from_rgb(220, 80, 80),
-                    "Out of fuel — land at a mechanic to refuel.",
+                    "Out of fuel — land and refuel at the fuel station.",
                 );
             }
             if ui.button("Close  [J]").clicked() {
@@ -478,11 +489,9 @@ fn jump_ui(
             travel_ctx.destination = dest;
             travel_ctx.phase = TravelPhase::Accelerating;
             ui_state.open = false;
-            virtual_time.unpause();
         }
     }
     if close {
         ui_state.open = false;
-        virtual_time.unpause();
     }
 }

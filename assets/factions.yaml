@@ -1,0 +1,35 @@
+# ── Faction registry ─────────────────────────────────────────────────────────
+# The single source of truth for faction identity and TRAITS. Game logic keys
+# on the traits, never on faction names:
+#   lawless:   fighters follow wealth instead of territory (spawn wherever
+#              merchants are, scaled by the unaligned share) and never patrol
+#              for a state.
+#   stateless: a guild, not a government — its trader/miner hulls are the
+#              universal baseline everywhere; it can't hold systems.
+#   neutral:   unaligned worlds; planets flagged with this faction never take
+#              a side, restrict markets, or track standing.
+# `color` is the star-map palette; `display_name` defaults to the key.
+Federation:
+  color: [78, 120, 196]
+Rebel:
+  color: [90, 190, 110]
+FreeFrontier:
+  display_name: Free Frontier
+  color: [228, 198, 92]
+Helios:
+  color: [84, 200, 230]
+Bastion:
+  color: [188, 64, 56]
+Order:
+  color: [162, 110, 214]
+Precursor:
+  color: [196, 84, 206]
+Pirate:
+  lawless: true
+  color: [214, 116, 40]
+Merchant:
+  stateless: true
+  color: [150, 150, 150]
+Independent:
+  neutral: true
+  color: [176, 166, 150]

@@ -295,6 +295,7 @@
         "interior": (
             atlas: "interior_atlas.png",
             soft_boundaries: false,
+            generator: "station",
             terrains: [
                 (
                     name: "floor",

@@ -8,3 +8,7 @@ assets/sounds/kenney_impact-sounds/
 dev_catalog/.venv-sprites/
 __pycache__/
 scripts/ship3d/out/
+.venv-bpy/
+scripts/lpc/
+logs/
+backups/

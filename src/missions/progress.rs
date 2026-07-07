@@ -23,12 +23,8 @@ pub fn update_locked_to_available(
 ) {
     loop {
         let mut changed = false;
-        let ids: Vec<String> = catalog.defs.keys().cloned().collect();
-        for id in ids {
-            let Some(def) = catalog.defs.get(&id) else {
-                continue;
-            };
-            let status = log.status(&id);
+        for (id, def) in &catalog.defs {
+            let status = log.status(id);
             if matches!(
                 status,
                 MissionStatus::Available
@@ -43,12 +39,12 @@ pub fn update_locked_to_available(
             }
             match def.offer {
                 OfferKind::Auto => {
-                    log.set(&id, MissionStatus::Active(initial_progress(&def.objective)));
+                    log.set(id, MissionStatus::Active(initial_progress(&def.objective)));
                     started.write(MissionStarted(id.clone()));
                     changed = true;
                 }
                 _ => {
-                    log.set(&id, MissionStatus::Available);
+                    log.set(id, MissionStatus::Available);
                     changed = true;
                 }
             }
@@ -118,6 +114,7 @@ pub fn handle_ui_actions(
     mut log: ResMut<MissionLog>,
     catalog: Res<MissionCatalog>,
     mut offers: ResMut<MissionOffers>,
+    mut backoff: ResMut<super::OfferBackoff>,
     mut started: MessageWriter<MissionStarted>,
     mut failed: MessageWriter<MissionFailed>,
     player_q: Query<&Ship, With<Player>>,
@@ -144,6 +141,12 @@ pub fn handle_ui_actions(
     }
     for DeclineMission(id) in decline.read() {
         remove_from_offers(&mut offers, id);
+        // Static (storyline) missions back off exponentially when declined.
+        // Template instances get a fresh id per roll, so counting them would
+        // only leak entries into the save.
+        if catalog.base_keys.contains(id) {
+            backoff.record_decline(id);
+        }
     }
     for AbandonMission(id) in abandon.read() {
         if matches!(log.status(id), MissionStatus::Active(_)) {
@@ -420,6 +423,10 @@ pub fn finalize_completions(
                 CompletionEffect::Pay { credits } => {
                     ship.credits = ship.credits.saturating_add(*credits as i128);
                 }
+                // Applied by the standing/galaxy modules (they watch
+                // MissionCompleted), keeping mission logic decoupled.
+                CompletionEffect::AdjustStanding { .. } => {}
+                CompletionEffect::ShiftInfluence { .. } => {}
                 CompletionEffect::GrantUnlock { name } => {
                     unlocks.0.insert(name.clone());
                 }
@@ -443,6 +450,7 @@ pub fn spawn_mission_targets(
     current: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
     existing: Query<&MissionTarget>,
+    mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
 ) {
     let mut rng = rand::thread_rng();
     for (id, def) in &catalog.defs {
@@ -492,10 +500,13 @@ pub fn spawn_mission_targets(
             (0, 0)
         };
         for i in 0..need {
-            let pos = bevy::math::Vec2::new(
-                rng.gen_range(-3000.0..3000.0),
-                rng.gen_range(-3000.0..3000.0),
-            );
+            // Targets arrive from hyperspace like ambient traffic — no ship
+            // ever silently pops into existence mid-mission.
+            let (pos, vel) = crate::ai_ships::jump_in_entry(&mut rng);
+            jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
+                location: pos,
+                size: 8.0,
+            });
             let mut bundle = ship_bundle(ship_type, &item_universe, system, pos);
             if let Some(req) = collect {
                 // First `collect_remainder` ships carry an extra unit so the
@@ -504,7 +515,13 @@ pub fn spawn_mission_targets(
                 bundle.set_mission_cargo(req.commodity.clone(), collect_per_ship + extra);
             }
             let personality = bundle.get_personality();
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            let radius = item_universe
+                .ships
+                .get(ship_type)
+                .map(|s| s.radius)
+                .unwrap_or(20.0);
+            // Face the direction of travel (ship forward is +Y).
+            let angle = vel.y.atan2(vel.x) - std::f32::consts::FRAC_PI_2;
             commands
                 .spawn((
                     DespawnOnExit(crate::PlayState::Flying),
@@ -517,12 +534,14 @@ pub fn spawn_mission_targets(
                         display_name: target_name.clone(),
                         always_targets_player: *hostile,
                     },
+                    crate::ai_ships::jump_in_markers(radius),
                     bundle,
                 ))
-                .insert(
+                .insert((
                     Transform::from_xyz(pos.x, pos.y, 0.0)
                         .with_rotation(Quat::from_rotation_z(angle)),
-                )
+                    avian2d::prelude::LinearVelocity(vel),
+                ))
                 .with_child((
                     Collider::circle(DETECTION_RADIUS),
                     Sensor,
@@ -603,11 +622,7 @@ pub fn advance_destroy_collect(
 ) {
     let ship = player_q.single().ok();
     for event in reader.read() {
-        let ids: Vec<String> = catalog.defs.keys().cloned().collect();
-        for id in ids {
-            let Some(def) = catalog.defs.get(&id) else {
-                continue;
-            };
+        for (id, def) in &catalog.defs {
             let Objective::DestroyShips {
                 system,
                 count,
@@ -620,7 +635,7 @@ pub fn advance_destroy_collect(
             if &event.commodity != &req.commodity || &event.system != system {
                 continue;
             }
-            let MissionStatus::Active(progress) = log.status(&id) else {
+            let MissionStatus::Active(progress) = log.status(id) else {
                 continue;
             };
             let new_collected = progress.collected.saturating_add(event.quantity);
@@ -628,7 +643,7 @@ pub fn advance_destroy_collect(
             let collect_done = new_collected >= req.quantity;
             if kills_done && collect_done {
                 resolve_active_mission(
-                    &id,
+                    id,
                     def,
                     ship,
                     &unlocks,
@@ -638,7 +653,7 @@ pub fn advance_destroy_collect(
                 );
             } else {
                 log.set(
-                    &id,
+                    id,
                     MissionStatus::Active(ObjectiveProgress {
                         collected: new_collected,
                         ..progress
@@ -730,18 +745,35 @@ pub fn force_target_player(
     }
 }
 
-/// Despawn leftover `MissionTarget` entities when a mission is abandoned
-/// or fails.
+/// Despawn leftover `MissionTarget` entities when their mission ends —
+/// failed, abandoned, OR completed. Completion can leave live targets too:
+/// a DestroyShips+collect mission resolves on the last cargo pickup while a
+/// replacement "scavenger" target is still alive, and `force_target_player`
+/// would keep it permanently hostile after the mission is done.
 pub fn despawn_targets_on_failure(
-    mut reader: MessageReader<MissionFailed>,
+    mut failed: MessageReader<MissionFailed>,
+    mut completed: MessageReader<MissionCompleted>,
     targets: Query<(Entity, &MissionTarget)>,
+    squadrons: Query<(Entity, &crate::carrier::MissionSquadron)>,
     mut commands: Commands,
 ) {
-    for MissionFailed(id) in reader.read() {
-        for (entity, mt) in &targets {
-            if mt.mission_id == *id {
-                crate::utils::safe_despawn(&mut commands, entity);
-            }
+    let ended: Vec<&String> = failed
+        .read()
+        .map(|MissionFailed(id)| id)
+        .chain(completed.read().map(|MissionCompleted(id)| id))
+        .collect();
+    if ended.is_empty() {
+        return;
+    }
+    for (entity, mt) in &targets {
+        if ended.iter().any(|id| mt.mission_id == **id) {
+            crate::utils::safe_despawn(&mut commands, entity);
+        }
+    }
+    // The support wing stands down with the mission (win or lose).
+    for (entity, sq) in &squadrons {
+        if ended.iter().any(|id| sq.0 == **id) {
+            crate::utils::safe_despawn(&mut commands, entity);
         }
     }
 }
@@ -755,12 +787,28 @@ pub fn roll_offers_on_land(
     universe: Res<ItemUniverse>,
     mut catalog: ResMut<MissionCatalog>,
     mut offers: ResMut<MissionOffers>,
+    standings: Res<crate::standing::FactionStandings>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
+    backoff: Res<super::OfferBackoff>,
 ) {
     let mut rng = rand::thread_rng();
     for PlayerLandedOnPlanet { planet } in reader.read() {
         // Remove procedural defs (and their log entries) that are no longer
         // part of any active chain.
         catalog.prune_dead_chains(&mut log);
+
+        // New visit: every Available mission gets a fresh roll.
+        offers.considered.clear();
+
+        // Nobody offers work to an outlaw: a faction's planets post no
+        // missions (story or procedural) while the player's standing with
+        // that faction is negative. Auto missions (story follow-ups, arrest
+        // flows) are unaffected — they don't go through the offer rolls.
+        if !offers_allowed(&standings, &galaxy, &universe, planet) {
+            offers.tab = Vec::new();
+            offers.npc.insert(planet.clone(), Vec::new());
+            continue;
+        }
 
         // Static missions currently Available.
         let mut tab: Vec<(String, f32)> = Vec::new();
@@ -770,13 +818,20 @@ pub fn roll_offers_on_land(
                 continue;
             }
             match &def.offer {
-                OfferKind::Tab { weight } => tab.push((id.clone(), *weight)),
+                OfferKind::Tab { weight } => {
+                    tab.push((id.clone(), backoff.effective_weight(id, *weight)))
+                }
                 OfferKind::NpcOffer {
                     planet: p, weight, ..
-                } if p == planet => npc.push((id.clone(), *weight)),
+                } if p == planet => {
+                    npc.push((id.clone(), backoff.effective_weight(id, *weight)))
+                }
                 _ => {}
             }
         }
+        offers
+            .considered
+            .extend(tab.iter().chain(npc.iter()).map(|(id, _)| id.clone()));
         let mut rolled_tab = roll(&tab, &mut rng);
         let mut rolled_npc = roll(&npc, &mut rng);
 
@@ -831,11 +886,139 @@ pub fn roll_offers_on_land(
     }
 }
 
+/// Mission offers require non-negative standing with the planet's EFFECTIVE
+/// faction — its system's live controller (independent or contested worlds
+/// don't care).
+pub(crate) fn offers_allowed(
+    standings: &crate::standing::FactionStandings,
+    galaxy: &crate::galaxy::GalaxyControl,
+    universe: &ItemUniverse,
+    planet: &str,
+) -> bool {
+    crate::galaxy::effective_planet_faction(galaxy, universe, planet)
+        .map(|f| standings.get(&f) >= 0.0)
+        .unwrap_or(true)
+}
+
 fn roll(candidates: &[(String, f32)], rng: &mut impl Rng) -> Vec<String> {
     candidates
         .iter()
         .filter(|(_, w)| rng.gen_range(0.0..1.0) < w.clamp(0.0, 1.0))
         .map(|(id, _)| id.clone())
+        .collect()
+}
+
+/// Missions that become Available while the player is already down on a
+/// planet (a follow-up unlocked by a mission that completed on this very
+/// landing) get their offer roll immediately, so the giver NPC / tab entry
+/// appears without taking off and re-landing. Each id is rolled at most once
+/// per visit (tracked in `MissionOffers::considered`); the idempotent
+/// `spawn_mission_npcs` then puts the NPC on the surface the next frame.
+pub fn roll_new_offers_while_landed(
+    log: Res<MissionLog>,
+    catalog: Res<MissionCatalog>,
+    mut offers: ResMut<MissionOffers>,
+    landed: Res<crate::planet_ui::LandedContext>,
+    standings: Res<crate::standing::FactionStandings>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
+    universe: Res<ItemUniverse>,
+    backoff: Res<super::OfferBackoff>,
+) {
+    let Some(planet) = landed.planet_name.clone() else {
+        return;
+    };
+    if !offers_allowed(&standings, &galaxy, &universe, &planet) {
+        return;
+    }
+    // Collect unrolled Available offers for this visit: (id, weight, is_tab).
+    let candidates: Vec<(String, f32, bool)> = catalog
+        .defs
+        .iter()
+        .filter(|(id, _)| !offers.considered.contains(*id))
+        .filter(|(id, _)| matches!(log.status(id), MissionStatus::Available))
+        .filter_map(|(id, def)| match &def.offer {
+            OfferKind::Tab { weight } => Some((id.clone(), *weight, true)),
+            OfferKind::NpcOffer {
+                planet: p, weight, ..
+            } if *p == planet => Some((id.clone(), *weight, false)),
+            _ => None,
+        })
+        .collect();
+    if candidates.is_empty() {
+        return;
+    }
+    let mut rng = rand::thread_rng();
+    for (id, weight, is_tab) in candidates {
+        let weight = backoff.effective_weight(&id, weight);
+        let hit = rng.gen_range(0.0..1.0) < weight.clamp(0.0, 1.0);
+        offers.considered.insert(id.clone());
+        if hit {
+            if is_tab {
+                offers.tab.push(id);
+            } else {
+                offers.npc.entry(planet.clone()).or_default().push(id);
+            }
+        }
+    }
+}
+
+// ── Template world-pickers ──────────────────────────────────────────────────
+// All template instantiation draws destinations/systems through these helpers
+// so a generated mission is always FULFILLABLE:
+//   * training systems (simulator/escort/mining) are folded into star_systems
+//     but are intentionally unreachable — never pick anything in them;
+//   * "land on"/"catch on" targets must be landable (colonised) planets, or
+//     the objective can never be completed.
+
+fn is_gameplay_system(sys_id: &str) -> bool {
+    !ItemUniverse::TRAINING_SYSTEM_KEYS.contains(&sys_id)
+}
+
+/// A planet is landable (has a surface the player can set down on) iff it is
+/// colonised, which the data models as a non-empty commodity market — the same
+/// rule as `validate_assets::is_landable`.
+fn landable_destinations(universe: &ItemUniverse, exclude_planet: &str) -> Vec<(String, String)> {
+    universe
+        .star_systems
+        .iter()
+        .filter(|(sys_id, _)| is_gameplay_system(sys_id))
+        .flat_map(|(_, sys)| {
+            sys.planets
+                .iter()
+                .filter(|(_, p)| !p.commodities.is_empty())
+                .map(|(pid, p)| (pid.clone(), p.display_name.clone()))
+        })
+        .filter(|(pid, _)| pid != exclude_planet)
+        .collect()
+}
+
+/// (system_id, system_display, commodity) tuples from asteroid fields in
+/// reachable systems, deduped per system.
+fn asteroid_candidates(universe: &ItemUniverse) -> Vec<(String, String, String)> {
+    let mut candidates = Vec::new();
+    for (sys_id, sys) in &universe.star_systems {
+        if !is_gameplay_system(sys_id) {
+            continue;
+        }
+        let mut seen: std::collections::HashSet<&String> = std::collections::HashSet::new();
+        for field in &sys.astroid_fields {
+            for commodity in field.commodities.keys() {
+                if seen.insert(commodity) {
+                    candidates.push((sys_id.clone(), sys.display_name.clone(), commodity.clone()));
+                }
+            }
+        }
+    }
+    candidates
+}
+
+/// Reachable systems with at least one planet (combat-mission venues).
+fn combat_systems(universe: &ItemUniverse) -> Vec<(String, String)> {
+    universe
+        .star_systems
+        .iter()
+        .filter(|(sys_id, sys)| is_gameplay_system(sys_id) && !sys.planets.is_empty())
+        .map(|(id, sys)| (id.clone(), sys.display_name.clone()))
         .collect()
 }
 
@@ -845,7 +1028,7 @@ fn roll(candidates: &[(String, f32)], rng: &mut impl Rng) -> Vec<String> {
 /// preconditions (referencing earlier stages' ids) are met.
 /// Returns an empty vec if the template can't be satisfied (e.g. no
 /// eligible destination / system in the universe).
-fn instantiate_template(
+pub(super) fn instantiate_template(
     template_id: &str,
     template: &MissionTemplate,
     offer_planet: &str,
@@ -871,17 +1054,8 @@ fn instantiate_template(
             let quantity = rand_in_range_u16(rng, *quantity_range);
             let pay = rand_in_range_i128(rng, *pay_range);
 
-            // Pick a destination planet from the whole universe, != offer_planet.
-            let destinations: Vec<(String, String)> = universe
-                .star_systems
-                .iter()
-                .flat_map(|(_sys_id, sys)| {
-                    sys.planets
-                        .iter()
-                        .map(|(pid, p)| (pid.clone(), p.display_name.clone()))
-                })
-                .filter(|(pid, _)| pid != offer_planet)
-                .collect();
+            // Pick a landable destination planet, != offer_planet.
+            let destinations = landable_destinations(universe, offer_planet);
             if destinations.is_empty() {
                 return Vec::new();
             }
@@ -920,6 +1094,8 @@ fn instantiate_template(
                     },
                     CompletionEffect::Pay { credits: pay },
                 ],
+                squadron: Vec::new(),
+                faction: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -932,23 +1108,8 @@ fn instantiate_template(
             quantity_range,
             pay_range,
         } => {
-            // Collect all (system_id, system_display, commodity) tuples drawn
-            // from asteroid fields across the universe, dedup by pair.
-            let mut candidates: Vec<(String, String, String)> = Vec::new();
-            for (sys_id, sys) in &universe.star_systems {
-                let mut seen: std::collections::HashSet<&String> = std::collections::HashSet::new();
-                for field in &sys.astroid_fields {
-                    for commodity in field.commodities.keys() {
-                        if seen.insert(commodity) {
-                            candidates.push((
-                                sys_id.clone(),
-                                sys.display_name.clone(),
-                                commodity.clone(),
-                            ));
-                        }
-                    }
-                }
-            }
+            // (system, commodity) pairs from asteroid fields in reachable systems.
+            let candidates = asteroid_candidates(universe);
             if candidates.is_empty() {
                 return Vec::new();
             }
@@ -978,6 +1139,8 @@ fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+                squadron: Vec::new(),
+                faction: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -993,30 +1156,10 @@ fn instantiate_template(
             quantity_range,
             pay_range,
         } => {
-            // Pick a (system, commodity) from asteroid fields.
-            let mut candidates: Vec<(String, String, String)> = Vec::new();
-            for (sys_id, sys) in &universe.star_systems {
-                let mut seen: std::collections::HashSet<&String> = std::collections::HashSet::new();
-                for field in &sys.astroid_fields {
-                    for c in field.commodities.keys() {
-                        if seen.insert(c) {
-                            candidates.push((sys_id.clone(), sys.display_name.clone(), c.clone()));
-                        }
-                    }
-                }
-            }
-            // Pick a destination planet != the collection system's planets
-            // is not essential; any planet across the universe is fine.
-            let destinations: Vec<(String, String)> = universe
-                .star_systems
-                .iter()
-                .flat_map(|(_sys_id, sys)| {
-                    sys.planets
-                        .iter()
-                        .map(|(pid, p)| (pid.clone(), p.display_name.clone()))
-                })
-                .filter(|(pid, _)| pid != offer_planet)
-                .collect();
+            // Pick a (system, commodity) from asteroid fields, and a landable
+            // delivery planet != offer_planet.
+            let candidates = asteroid_candidates(universe);
+            let destinations = landable_destinations(universe, offer_planet);
             if candidates.is_empty() || destinations.is_empty() {
                 return Vec::new();
             }
@@ -1054,6 +1197,8 @@ fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: Vec::new(),
+                squadron: Vec::new(),
+                faction: None,
             };
             let stage2 = MissionDef {
                 briefing: subst(stage2_briefing, &vars),
@@ -1080,6 +1225,8 @@ fn instantiate_template(
                     },
                     CompletionEffect::Pay { credits: pay },
                 ],
+                squadron: Vec::new(),
+                faction: None,
             };
             vec![(stage1_id, stage1), (stage2_id, stage2)]
         }
@@ -1097,13 +1244,8 @@ fn instantiate_template(
             if ship_type_pool.is_empty() {
                 return Vec::new();
             }
-            // Pick a random system that has at least one planet.
-            let systems: Vec<(String, String)> = universe
-                .star_systems
-                .iter()
-                .filter(|(_, sys)| !sys.planets.is_empty())
-                .map(|(id, sys)| (id.clone(), sys.display_name.clone()))
-                .collect();
+            // Pick a random reachable system that has at least one planet.
+            let systems = combat_systems(universe);
             if systems.is_empty() {
                 return Vec::new();
             }
@@ -1137,6 +1279,8 @@ fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+                squadron: Vec::new(),
+                faction: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1161,13 +1305,8 @@ fn instantiate_template(
             if ship_type_pool.is_empty() || commodity_pool.is_empty() {
                 return Vec::new();
             }
-            // Pick system with planets.
-            let systems: Vec<(String, String)> = universe
-                .star_systems
-                .iter()
-                .filter(|(_, sys)| !sys.planets.is_empty())
-                .map(|(id, sys)| (id.clone(), sys.display_name.clone()))
-                .collect();
+            // Pick a reachable system with planets.
+            let systems = combat_systems(universe);
             if systems.is_empty() {
                 return Vec::new();
             }
@@ -1178,17 +1317,9 @@ fn instantiate_template(
             let quantity = rand_in_range_u16(rng, *quantity_range);
             let pay = rand_in_range_i128(rng, *pay_range);
 
-            // Pick two distinct planets: one to deliver goods, one for the chase.
-            let all_planets: Vec<(String, String)> = universe
-                .star_systems
-                .iter()
-                .flat_map(|(_, sys)| {
-                    sys.planets
-                        .iter()
-                        .map(|(pid, p)| (pid.clone(), p.display_name.clone()))
-                })
-                .filter(|(pid, _)| pid != offer_planet)
-                .collect();
+            // Pick two distinct landable planets: one to deliver goods, one for
+            // the chase (both have land/catch objectives on their surfaces).
+            let all_planets = landable_destinations(universe, offer_planet);
             if all_planets.len() < 2 {
                 return Vec::new();
             }
@@ -1239,6 +1370,8 @@ fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: Vec::new(),
+                squadron: Vec::new(),
+                faction: None,
             };
 
             // Stage 2: Deliver the stolen goods.
@@ -1262,6 +1395,8 @@ fn instantiate_template(
                     commodity,
                     quantity,
                 }],
+                squadron: Vec::new(),
+                faction: None,
             };
 
             // Stage 3: Catch the thief on a planet.
@@ -1278,13 +1413,20 @@ fn instantiate_template(
                     planet: chase_planet,
                     npc_name: target_name.clone(),
                     building: None,
+                    npc: None,
                 },
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+                squadron: Vec::new(),
+                faction: None,
             };
 
             vec![(stage1_id, s1), (stage2_id, s2), (stage3_id, s3)]
         }
+        // Instantiated ad-hoc (arrests by the standing system, war/covert by
+        // the front generator), never by the offer rolls.
+        MissionTemplate::Arrest { .. } => Vec::new(),
+        MissionTemplate::War { .. } | MissionTemplate::Covert { .. } => Vec::new(),
     }
 }
 

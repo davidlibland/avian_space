@@ -527,8 +527,8 @@ pub fn select_secondary_weapon<'a>(ship: &'a Ship, target_is_ship: bool) -> Opti
             ws.ammo_quantity.map(|a| a > 0).unwrap_or(false) && ws.cooldown.is_finished()
         })
         .max_by_key(|(_, ws)| {
-            let is_bay = ws.weapon.carrier_bay.is_some() as u8;
-            let is_guided = (ws.weapon.guided && target_is_ship) as u8;
+            let is_bay = ws.weapon.carrier_bay().is_some() as u8;
+            let is_guided = (ws.weapon.is_guided() && target_is_ship) as u8;
             let range = ws.weapon.range() as u32;
             (is_bay, is_guided, range)
         })

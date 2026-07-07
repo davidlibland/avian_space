@@ -398,22 +398,32 @@ pub fn spawn_ppo_training_thread(
             }
 
             // ── Finalization anneal ──────────────────────────────────────
-            // Two-phase decay toward a sharp, frozen final policy (off when
-            // finalize_start_cycle == 0). Phase A: bc_coeff → 0 (RL off the BC
-            // leash). Phase B: policy_lr + entropy_coeff → 0 (anneal to a
-            // low-noise optimum). Effective values are held constant per cycle.
+            // Two-phase decay toward a sharp final policy (off when
+            // finalize_start_cycle == 0). Phase A: bc_coeff → finalize_bc_floor
+            // over finalize_bc_decay_cycles (NOT →0: weaning bc below ~0.10
+            // collapses the fighter policy, whose per-step RL reward is too
+            // small to hold combat without the BC leash — so we floor it).
+            // Phase B: hold bc at the floor while policy_lr + entropy_coeff → 0
+            // over finalize_lr_decay_cycles. finalize_lr_decay_cycles == 0 means
+            // "hold at the floor indefinitely with full lr" — used to settle at
+            // a candidate floor and compare before committing to the lr decay.
             let (eff_bc_coeff, eff_policy_lr, eff_entropy_coeff) = {
                 let start = ppo.finalize_start_cycle;
+                let floor = ppo.finalize_bc_floor;
                 if start > 0 && update_cycle >= start {
                     let c = update_cycle - start;
                     if c < ppo.finalize_bc_decay_cycles {
                         let p = c as f64 / ppo.finalize_bc_decay_cycles.max(1) as f64;
-                        (ppo.bc_coeff * (1.0 - p as f32), ppo.policy_lr, ppo.entropy_coeff)
+                        let bc = ppo.bc_coeff + (floor - ppo.bc_coeff) * p as f32;
+                        (bc, ppo.policy_lr, ppo.entropy_coeff)
+                    } else if ppo.finalize_lr_decay_cycles == 0 {
+                        // Hold at the floor; keep lr/entropy full (compare mode).
+                        (floor, ppo.policy_lr, ppo.entropy_coeff)
                     } else {
-                        let lr_len = ppo.finalize_lr_decay_cycles.max(1);
+                        let lr_len = ppo.finalize_lr_decay_cycles;
                         let p =
                             ((c - ppo.finalize_bc_decay_cycles) as f64 / lr_len as f64).min(1.0);
-                        (0.0, ppo.policy_lr * (1.0 - p), ppo.entropy_coeff * (1.0 - p as f32))
+                        (floor, ppo.policy_lr * (1.0 - p), ppo.entropy_coeff * (1.0 - p as f32))
                     }
                 } else {
                     (ppo.bc_coeff, ppo.policy_lr, ppo.entropy_coeff)

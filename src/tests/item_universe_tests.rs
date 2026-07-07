@@ -12,6 +12,9 @@ fn test_universe() -> ItemUniverse {
         PlanetData {
             display_name: String::new(),
             planet_type: String::new(),
+            tech_level: 0,
+            explicit_outfitter: Vec::new(),
+            explicit_shipyard: Vec::new(),
             uncolonized: false,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -32,6 +35,9 @@ fn test_universe() -> ItemUniverse {
         PlanetData {
             display_name: String::new(),
             planet_type: String::new(),
+            tech_level: 0,
+            explicit_outfitter: Vec::new(),
+            explicit_shipyard: Vec::new(),
             uncolonized: false,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -67,6 +73,9 @@ fn test_universe() -> ItemUniverse {
     );
 
     let system = StarSystem {
+        faction: String::new(),
+        contestable: false,
+        authored_traffic: false,
         display_name: String::new(),
         map_position: Vec2::ZERO,
         connections: vec![],
@@ -88,6 +97,8 @@ fn test_universe() -> ItemUniverse {
         OutfitterItem::SecondaryWeapon {
             display_name: String::new(),
             required_unlocks: Vec::new(),
+            tech_level: 1,
+            factions: Vec::new(),
             price: 1000,
             space: 2,
             weapon_type: "missile".to_string(),
@@ -108,6 +119,7 @@ fn test_universe() -> ItemUniverse {
         starting_ship: "shuttle".to_string(),
         starting_system: "sol".to_string(),
         commodities: HashMap::new(),
+        factions: HashMap::new(),
         missions: HashMap::new(),
         mission_templates: HashMap::new(),
         global_average_price: HashMap::new(),
@@ -119,6 +131,7 @@ fn test_universe() -> ItemUniverse {
         asteroid_field_expected_value: HashMap::new(),
         ship_credit_scale: HashMap::new(),
         allies: HashMap::new(),
+        npcs: HashMap::new(),
     };
     iu.compute_global_averages();
     iu.compute_trade_maps();
@@ -230,14 +243,56 @@ fn test_full_assets_parse_like_the_game() {
     }
 }
 
+/// Every `npc:` reference in missions.yaml must resolve to a character in
+/// npcs.yaml. This also guards the file→field wiring: npcs.yaml is keyed by
+/// its stem, so if the file is misnamed or wrapped, `iu.npcs` comes back
+/// empty and every reference fails here (the bug this test was added for).
+#[test]
+fn story_npc_references_resolve() {
+    use crate::missions::{Objective, OfferKind};
+    use std::path::Path;
+    let iu: ItemUniverse =
+        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse");
+
+    assert!(
+        !iu.npcs.is_empty(),
+        "npcs.yaml did not load into ItemUniverse.npcs — check the file is \
+         named `npcs.yaml` (stem must match the field) with entries at the top \
+         level (no `npcs:` wrapper)"
+    );
+
+    let mut missing = Vec::new();
+    for (mid, def) in &iu.missions {
+        let mut refs = Vec::new();
+        if let OfferKind::NpcOffer { npc, .. } = &def.offer {
+            refs.push(npc);
+        }
+        match &def.objective {
+            Objective::MeetNpc { npc, .. } | Objective::CatchNpc { npc, .. } => refs.push(npc),
+            _ => {}
+        }
+        for npc in refs.into_iter().flatten() {
+            if !iu.npcs.contains_key(npc) {
+                missing.push(format!("{mid} → {npc:?}"));
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "missions reference npc ids absent from npcs.yaml:\n  - {}",
+        missing.join("\n  - ")
+    );
+}
+
 /// Strict, enforced asset invariants (trade routes, sprites, reachability,
 /// mission coherence). See `validate_assets::collect_problems`. This FAILS the
 /// build if any are violated, unlike the advisory `warn!` passes.
 #[test]
 fn test_asset_validators_pass() {
     use std::path::Path;
-    let iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
+    let mut iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
         .expect("assets/ must parse");
+    iu.finalize();
     let problems = crate::validate_assets::collect_problems(&iu);
     assert!(
         problems.is_empty(),
@@ -245,4 +300,74 @@ fn test_asset_validators_pass() {
         problems.len(),
         problems.join("\n  - ")
     );
+}
+
+/// The tech-level/faction market derivation: planets stock everything their
+/// tech level + faction admits; tech 0 = no trade buildings; Independent
+/// worlds stock only universal gear; landless factions (Merchant/Pirate/
+/// Precursor without sold_by) sell universally; explicit entries survive.
+#[test]
+fn market_catalogs_derive_from_tech_and_faction() {
+    let mut iu: ItemUniverse = crate::item_universe::parse_dir(std::path::Path::new("assets"))
+        .expect("assets/ must parse");
+    iu.finalize();
+
+    let planet =
+        |name: &str| iu.find_gameplay_planet(name).unwrap_or_else(|| panic!("planet {name}")).1;
+
+    // Earth: Federation tech 4 — universal + Federation gear, all tech.
+    let earth = planet("earth");
+    assert!(earth.outfitter.contains(&"laser".to_string()));
+    assert!(earth.outfitter.contains(&"proton_beam_turret".to_string()));
+    assert!(earth.outfitter.contains(&"fed_fighter_bay".to_string()));
+    assert!(
+        !earth.outfitter.contains(&"helios_lance".to_string()),
+        "faction gear stays in faction space"
+    );
+    assert!(
+        earth.outfitter.contains(&"javelin".to_string()),
+        "explicit exceptions survive derivation"
+    );
+    assert!(earth.shipyard.contains(&"fed_carrier".to_string()));
+    assert!(
+        earth.shipyard.contains(&"shuttle".to_string()),
+        "landless-faction (Merchant) hulls sell universally"
+    );
+    assert!(
+        earth.shipyard.contains(&"rebel_fighter".to_string()),
+        "espionage licensed copies: fed yards build rebel fighters"
+    );
+    assert!(
+        !earth.shipyard.contains(&"rebel_frigate".to_string()),
+        "the frigate stays rebel-only"
+    );
+
+    // Moon: Federation tech 1 — basics only.
+    let moon = planet("moon");
+    assert!(moon.outfitter.contains(&"laser".to_string()));
+    assert!(
+        !moon.outfitter.contains(&"ir_missile".to_string()),
+        "tech 3 gear must not reach a tech 1 outpost"
+    );
+    assert!(!moon.shipyard.contains(&"fed_carrier".to_string()));
+
+    // Deneb Prime: Rebel tech 4 — the rebel capital yards.
+    let deneb = planet("deneb_prime");
+    assert!(deneb.shipyard.contains(&"rebel_carrier".to_string()));
+    assert!(
+        deneb.shipyard.contains(&"pirate_carrier".to_string()),
+        "pirate hulls are fenced through rebel yards"
+    );
+    assert!(deneb.outfitter.contains(&"rebel_chaff".to_string()));
+    assert!(!deneb.shipyard.contains(&"fed_carrier".to_string()));
+
+    // Sanctum: Order tech 4 — recovered precursor hulls sold by the Order.
+    let sanctum = planet("sanctum");
+    assert!(sanctum.shipyard.contains(&"precursor_sleeper".to_string()));
+    assert!(sanctum.outfitter.contains(&"precursor_beam".to_string()));
+
+    // Tech 0 planets have no trade buildings at all.
+    let mars = planet("mars");
+    assert_eq!(mars.tech_level, 0);
+    assert!(mars.outfitter.is_empty() && mars.shipyard.is_empty());
 }

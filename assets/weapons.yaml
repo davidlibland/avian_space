@@ -14,11 +14,16 @@ goose:
     cooldown: 8.0
     color: [0.9, 0.4, 0.1]
     damage: 20
-    guided: true
-    turn_rate: 2.0
+    behavior: !Guided { turn_rate: 2.0 }
     sprite_path: sprites/weapons/goose.png
     sound_path: sounds/weapons/goose.ogg
     display_name: "Goose Missile"
+    particles:
+        rate: 34.0
+        particle_lifetime: 0.35
+        speed: 9.0
+        size: 1.3
+        color: [1.0, 0.6, 0.25]
     ammo:
         !Ammo:
             space: 2
@@ -69,10 +74,15 @@ ir_missile:
     cooldown: 9.0
     color: [1.0, 0.55, 0.0]
     damage: 40
-    guided: true
-    turn_rate: 2.5
+    behavior: !Guided { turn_rate: 2.5 }
     sprite_path: sprites/weapons/ir_missile.png
     sound_path: sounds/weapons/ir_missile.ogg
+    particles:
+        rate: 40.0
+        particle_lifetime: 0.3
+        speed: 8.0
+        size: 1.2
+        color: [0.8, 0.85, 0.95]
     ammo:
         !Ammo:
             space: 2
@@ -83,10 +93,15 @@ javelin:
     cooldown: 9.0
     color: [0.4, 0.8, 1.0]
     damage: 20
-    guided: true
-    turn_rate: 1.25
+    behavior: !Guided { turn_rate: 1.25 }
     sprite_path: sprites/weapons/javelin.png
     sound_path: sounds/weapons/javelin.ogg
+    particles:
+        rate: 44.0
+        particle_lifetime: 0.32
+        speed: 8.0
+        size: 1.2
+        color: [1.0, 0.45, 0.35]
     ammo:
         !Ammo:
             space: 1
@@ -97,11 +112,16 @@ space_mine:
     cooldown: 15.0
     color: [0.8, 0.2, 0.2]
     damage: 80
-    guided: true
-    turn_rate: 1.0
+    behavior: !Guided { turn_rate: 1.0 }
     aimable_arc: 180
     sprite_path: sprites/weapons/space_mine.png
     sound_path: sounds/weapons/space_mine.ogg
+    particles:
+        rate: 4.0
+        particle_lifetime: 0.5
+        speed: 5.0
+        size: 1.2
+        color: [1.0, 0.3, 0.2]
     ammo:
         !Ammo:
             space: 2
@@ -113,7 +133,7 @@ fighter_bay:
     color: [0.0, 0.8, 0.3]
     damage: 0
     display_name: "Fighter Bay"
-    carrier_bay: fighter
+    behavior: !CarrierBay { ship_type: fighter }
     ammo:
         !Ammo:
             space: 4
@@ -125,7 +145,7 @@ fed_fighter_bay:
     color: [0.0, 0.8, 0.3]
     damage: 0
     display_name: "Patrol Bay"
-    carrier_bay: fed_patrol
+    behavior: !CarrierBay { ship_type: fed_patrol }
     ammo:
         !Ammo:
             space: 4
@@ -137,7 +157,7 @@ shuttle_bay:
     color: [0.3, 0.6, 0.8]
     damage: 0
     display_name: "Shuttle Bay"
-    carrier_bay: shuttle
+    behavior: !CarrierBay { ship_type: shuttle }
     ammo:
         !Ammo:
             space: 3
@@ -149,7 +169,7 @@ rebel_fighter_bay:
     color: [0.8, 0.3, 0.0]
     damage: 0
     display_name: "Rebel Fighter Bay"
-    carrier_bay: rebel_fighter
+    behavior: !CarrierBay { ship_type: rebel_fighter }
     ammo:
         !Ammo:
             space: 4
@@ -161,7 +181,7 @@ pirate_corvette_bay:
     color: [0.6, 0.0, 0.0]
     damage: 0
     display_name: "Pirate Corvette Bay"
-    carrier_bay: pirate_corvette
+    behavior: !CarrierBay { ship_type: pirate_corvette }
     ammo:
         !Ammo:
             space: 3
@@ -193,12 +213,17 @@ prox_mine:
     cooldown: 10.0
     color: [0.9, 0.8, 0.4]
     damage: 60
-    guided: true
-    turn_rate: 1.0
+    behavior: !Guided { turn_rate: 1.0 }
     aimable_arc: 180
     sprite_path: sprites/weapons/prox_mine.png
     sound_path: sounds/weapons/prox_mine.ogg
     display_name: "Proximity Mine"
+    particles:
+        rate: 4.0
+        particle_lifetime: 0.5
+        speed: 5.0
+        size: 1.1
+        color: [1.0, 0.7, 0.2]
     ammo:
         !Ammo:
             space: 2
@@ -220,11 +245,16 @@ seeker:
     cooldown: 5.0
     color: [0.4, 0.9, 1.0]
     damage: 18
-    guided: true
-    turn_rate: 3.0
+    behavior: !Guided { turn_rate: 3.0 }
     sprite_path: sprites/weapons/seeker.png
     sound_path: sounds/weapons/seeker.ogg
     display_name: "Seeker Drone-Missile"
+    particles:
+        rate: 36.0
+        particle_lifetime: 0.28
+        speed: 7.0
+        size: 1.1
+        color: [0.5, 0.9, 1.0]
     ammo:
         !Ammo:
             space: 1
@@ -278,11 +308,16 @@ censer_charge:
     cooldown: 11.0
     color: [0.6, 0.3, 0.9]
     damage: 70
-    guided: true
-    turn_rate: 1.5
+    behavior: !Guided { turn_rate: 1.5 }
     sprite_path: sprites/weapons/censer_charge.png
     sound_path: sounds/weapons/censer_charge.ogg
     display_name: "Censer Charge"
+    particles:
+        rate: 22.0
+        particle_lifetime: 0.9
+        speed: 12.0
+        size: 1.8
+        color: [0.75, 0.85, 0.7]
     ammo:
         !Ammo:
             space: 2
@@ -307,6 +342,12 @@ precursor_beam:
     aimable_arc: 180
     display_name: "Precursor Beam"
     sound_path: sounds/weapons/exotic_beam.ogg
+    particles:
+        rate: 30.0
+        particle_lifetime: 0.25
+        speed: 6.0
+        size: 1.3
+        color: [0.75, 0.5, 1.0]
 flak_turret:
     name: flak_turret
     lifetime: 0.32
@@ -346,7 +387,80 @@ drone_bay:
     color: [0.4, 0.9, 1.0]
     damage: 0
     display_name: "Drone Bay"
-    carrier_bay: helios_drone
+    behavior: !CarrierBay { ship_type: helios_drone }
     ammo:
         !Ammo:
             space: 6
+flare_pod:
+    name: flare_pod
+    lifetime: 5.0
+    speed: 45.0
+    cooldown: 4.0
+    color: [1.0, 0.9, 0.45]
+    damage: 0
+    display_name: "Decoy Flares"
+    behavior: !Decoy { strength: 0.7 }
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 26.0
+        particle_lifetime: 1.4
+        speed: 22.0
+        size: 2.0
+        replace_sprite: true
+    ammo:
+        !Ammo:
+            space: 1
+helios_lure:
+    name: helios_lure
+    lifetime: 6.0
+    speed: 40.0
+    cooldown: 4.0
+    color: [0.45, 0.95, 1.0]
+    damage: 0
+    display_name: "Helios Holo-Lure"
+    behavior: !Decoy { strength: 0.85 }
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 34.0
+        particle_lifetime: 1.6
+        speed: 18.0
+        size: 2.2
+        replace_sprite: true
+    ammo:
+        !Ammo:
+            space: 1
+rebel_chaff:
+    name: rebel_chaff
+    lifetime: 4.0
+    speed: 50.0
+    cooldown: 4.0
+    color: [1.0, 0.5, 0.2]
+    damage: 0
+    display_name: "Surplus Chaff Pod"
+    behavior: !Decoy { strength: 0.55 }
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 20.0
+        particle_lifetime: 1.1
+        speed: 28.0
+        size: 1.7
+        replace_sprite: true
+    ammo:
+        !Ammo:
+            space: 1
+precursor_lure:
+    name: precursor_lure
+    lifetime: 3.0
+    speed: 35.0
+    cooldown: 2.0
+    color: [0.75, 0.5, 1.0]
+    damage: 0
+    display_name: "Precursor Lure"
+    behavior: !Decoy { strength: 0.95 }
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 40.0
+        particle_lifetime: 1.2
+        speed: 16.0
+        size: 2.4
+        replace_sprite: true

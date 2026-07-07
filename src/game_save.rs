@@ -17,15 +17,6 @@ pub enum Gender {
     Girl,
 }
 
-impl Gender {
-    /// Sprite directory name under `assets/people/`.
-    pub fn sprite_dir(&self) -> &'static str {
-        match self {
-            Gender::Boy => "boy",
-            Gender::Girl => "girl",
-        }
-    }
-}
 
 // ── Serialisable save ────────────────────────────────────────────────────────
 
@@ -39,6 +30,9 @@ pub struct PilotSave {
     pub pilot_name: String,
     #[serde(default)]
     pub gender: Gender,
+    /// Composited character look. `None` in old saves → derived from gender.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<crate::character_compositor::AvatarSpec>,
     pub current_star_system: String,
     pub ship_type: String,
     pub health: i32,
@@ -54,6 +48,9 @@ pub struct PilotSave {
     pub visited_systems: HashSet<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub reserved_cargo: HashMap<String, u16>,
+    /// Installed ship mods: item name → count. Empty for old saves.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub mods: HashMap<String, u8>,
     /// Per-resource save data, keyed by `SessionResource::SAVE_KEY`.
     /// Populated automatically by the session-resource infrastructure.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -69,6 +66,7 @@ pub struct PilotSave {
 pub struct PlayerGameState {
     pub pilot_name: String,
     pub gender: Gender,
+    pub avatar: crate::character_compositor::AvatarSpec,
     pub current_star_system: String,
     pub player_ship: Ship,
     pub weapon_loadout: HashMap<String, (u8, Option<u32>)>,
@@ -87,6 +85,7 @@ impl PlayerGameState {
         Self {
             pilot_name: name.to_string(),
             gender,
+            avatar: crate::character_compositor::AvatarSpec::for_gender(gender),
             current_star_system: item_universe.starting_system.clone(),
             player_ship: Ship::from_ship_data(starting_ship_data, &starting_ship),
             weapon_loadout: HashMap::new(),
@@ -147,6 +146,9 @@ impl PlayerGameState {
             cargo: save.cargo.clone(),
             cargo_cost: HashMap::new(),
             reserved_cargo: save.reserved_cargo.clone(),
+            mods: save.mods.clone(),
+            mod_stats: Default::default(),
+            mod_space: 0,
             recent_landings: HashMap::new(),
             credits: save.credits,
             fuel,
@@ -161,6 +163,10 @@ impl PlayerGameState {
         Self {
             pilot_name: save.pilot_name.clone(),
             gender: save.gender,
+            avatar: save
+                .avatar
+                .clone()
+                .unwrap_or_else(|| crate::character_compositor::AvatarSpec::for_gender(save.gender)),
             current_star_system: save.current_star_system.clone(),
             player_ship: ship,
             weapon_loadout: save.weapon_loadout.clone(),
@@ -176,6 +182,7 @@ impl PlayerGameState {
         PilotSave {
             pilot_name: self.pilot_name.clone(),
             gender: self.gender,
+            avatar: Some(self.avatar.clone()),
             current_star_system: self.current_star_system.clone(),
             ship_type: self.player_ship.ship_type.clone(),
             health: self.player_ship.health,
@@ -186,6 +193,7 @@ impl PlayerGameState {
             enemies: self.player_ship.enemies.clone(),
             visited_systems: self.visited_systems.clone(),
             reserved_cargo: self.player_ship.reserved_cargo.clone(),
+            mods: self.player_ship.mods.clone(),
             resources: session_data.resources.clone(),
         }
     }
@@ -255,9 +263,11 @@ pub fn load_save(pilot_name: &str) -> Option<PilotSave> {
 
 // ── Systems ──────────────────────────────────────────────────────────────────
 
-/// Syncs the live ECS Ship component → PlayerGameState each frame.
+/// Syncs the live ECS Ship component → PlayerGameState. `Changed<Ship>` gates
+/// the deep clone (five maps + weapon systems): saves only read this snapshot
+/// on land/take-off, so re-cloning on frames where nothing changed was waste.
 fn sync_player_state(
-    player_query: Query<&Ship, With<Player>>,
+    player_query: Query<&Ship, (With<Player>, Changed<Ship>)>,
     mut game_state: ResMut<PlayerGameState>,
     current_system: Res<CurrentStarSystem>,
 ) {
@@ -269,8 +279,10 @@ fn sync_player_state(
             .collect();
         game_state.player_ship = ship.clone();
     }
-    game_state.current_star_system = current_system.0.clone();
-    game_state.visited_systems.insert(current_system.0.clone());
+    if game_state.current_star_system != current_system.0 {
+        game_state.current_star_system = current_system.0.clone();
+        game_state.visited_systems.insert(current_system.0.clone());
+    }
 }
 
 /// Spawns the player ship on the first entry into Flying (from the main menu).
@@ -306,12 +318,18 @@ fn cleanup_on_enter_menu(
     player_query: Query<Entity, With<Player>>,
     mut game_state: ResMut<PlayerGameState>,
     mut session_data: ResMut<SessionSaveData>,
+    mut travel: ResMut<crate::TravelContext>,
 ) {
     for entity in &player_query {
         crate::utils::safe_despawn(&mut commands, entity);
     }
     *game_state = PlayerGameState::default();
     session_data.resources.clear();
+    // A mid-jump escape (or death) would otherwise leak the Accelerating
+    // phase, saved speed cap, and old destination into the next session —
+    // the fresh pilot would spawn already boosting toward the previous
+    // pilot's jump target.
+    *travel = crate::TravelContext::default();
 }
 
 /// Remove the `PendingSessionLoad` resource after session resources have

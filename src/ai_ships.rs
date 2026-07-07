@@ -26,7 +26,7 @@ const JUMP_OUT_ACCEL: f32 = 2500.0;
 /// Radius (units) at which a jumping-in ship is placed at the system edge.
 const JUMP_IN_RADIUS: f32 = 6000.0;
 /// How often (seconds) to check whether ship population needs adjusting.
-const POPULATION_CHECK_INTERVAL: f32 = 5.0;
+const POPULATION_CHECK_INTERVAL: f32 = 4.0;
 
 #[derive(Component)]
 pub struct AIShip {
@@ -277,14 +277,9 @@ fn spawn_ai_ship_at(
 /// The ship appears at a random point on a circle of radius `JUMP_IN_RADIUS`,
 /// moving at `JUMP_SPEED` toward the origin, and carries `JumpingIn` until it
 /// decelerates to its normal maximum speed.
-fn spawn_ai_ship_jumping_in(
-    commands: &mut Commands,
-    item_universe: &Res<ItemUniverse>,
-    jump_flash_writer: &mut MessageWriter<crate::explosions::TriggerJumpFlash>,
-    system_name: &str,
-    ship_type: &str,
-) {
-    let mut rng = rand::thread_rng();
+/// Entry point + inbound velocity for a hyperspace arrival: a random spot on
+/// the system edge, moving roughly toward the center at jump speed.
+pub fn jump_in_entry(rng: &mut impl Rng) -> (Vec2, Vec2) {
     let theta = rng.gen_range(0.0_f32..(2.0 * PI));
     let edge_pos = Vec2::new(theta.cos(), theta.sin()) * JUMP_IN_RADIUS;
     // Velocity points roughly toward the system center with a small random spread.
@@ -295,7 +290,25 @@ fn spawn_ai_ship_jumping_in(
         inbound_dir.x * ca - inbound_dir.y * sa,
         inbound_dir.x * sa + inbound_dir.y * ca,
     );
-    let vel = dir * JUMP_SPEED;
+    (edge_pos, dir * JUMP_SPEED)
+}
+
+/// Marker bundle for a ship arriving from hyperspace — `jump_in_system`
+/// decelerates it and strips these once it reaches cruise speed.
+pub fn jump_in_markers(radius: f32) -> (JumpingIn, Sensor, Mass, AngularInertia) {
+    let (mass, inertia) = sensor_mass_for_ship(radius);
+    (JumpingIn, Sensor, mass, inertia)
+}
+
+fn spawn_ai_ship_jumping_in(
+    commands: &mut Commands,
+    item_universe: &Res<ItemUniverse>,
+    jump_flash_writer: &mut MessageWriter<crate::explosions::TriggerJumpFlash>,
+    system_name: &str,
+    ship_type: &str,
+) {
+    let mut rng = rand::thread_rng();
+    let (edge_pos, vel) = jump_in_entry(&mut rng);
 
     // Small flash at entry point.
     jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
@@ -310,7 +323,6 @@ fn spawn_ai_ship_jumping_in(
         .get(ship_type)
         .map(|s| s.radius)
         .unwrap_or(20.0);
-    let (mass, inertia) = sensor_mass_for_ship(radius);
     commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
@@ -318,10 +330,7 @@ fn spawn_ai_ship_jumping_in(
                 personality: personality.clone(),
             },
             RLAgent::new(personality),
-            JumpingIn,
-            Sensor,
-            mass,
-            inertia,
+            jump_in_markers(radius),
             bundle,
         ))
         .insert(LinearVelocity(vel))
@@ -449,7 +458,19 @@ fn manage_ship_population(
     star_system: Res<CurrentStarSystem>,
     time: Res<Time>,
     mut timer: ResMut<ShipPopulationTimer>,
-    ai_ships: Query<(Entity, &Ship), (With<AIShip>, Without<JumpingOut>)>,
+    // Escorts and mission targets are never cull candidates: an escort
+    // jumping out deserts the player, and a mission target that leaves
+    // isn't a kill — spawn_mission_targets would just conjure a replacement
+    // mid-mission.
+    ai_ships: Query<
+        (Entity, &Ship),
+        (
+            With<AIShip>,
+            Without<JumpingOut>,
+            Without<crate::carrier::Escort>,
+            Without<crate::missions::MissionTarget>,
+        ),
+    >,
     all_ai_ships: Query<Entity, With<AIShip>>,
     mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
 ) {
@@ -579,7 +600,7 @@ pub fn compute_ai_action(
                 .weapon_systems
                 .iter_all()
                 .filter_map(|(wt, _)| item_universe.weapons.get(wt))
-                .filter(|w| !w.guided)
+                .filter(|w| !w.is_guided())
                 .collect();
             let median_range =
                 median_sorted(unguided.iter().map(|w| w.range()).collect()).unwrap_or(0.0);
@@ -641,7 +662,7 @@ pub fn compute_ai_action(
                             let wrapped = (a + PI).rem_euclid(2.0 * PI) - PI;
                             wrapped - wrapped.clamp(-weapon.aimable_arc, weapon.aimable_arc)
                         });
-                        if weapon.guided || angle_indicator(residual) > 0.5 {
+                        if weapon.is_guided() || angle_indicator(residual) > 0.5 {
                             weapons_to_fire.push((weapon_type.clone(), Some(*target_e)));
                         }
                     }
@@ -904,9 +925,13 @@ fn finish_ai_landing(
 
         if let Some(planet_data) = planet_data {
             let credits_before = ship.credits;
-            for (commodity, qty) in ship.clone().cargo.iter() {
-                if let Some(&price) = planet_data.commodities.get(commodity) {
-                    ship.sell_cargo(commodity, *qty, price);
+            // Snapshot just the (commodity, qty) pairs — cloning the whole
+            // Ship (weapon systems, five maps) per landing was wasteful.
+            let holdings: Vec<(String, u16)> =
+                ship.cargo.iter().map(|(c, q)| (c.clone(), *q)).collect();
+            for (commodity, qty) in holdings {
+                if let Some(&price) = planet_data.commodities.get(&commodity) {
+                    ship.sell_cargo(&commodity, qty, price);
                 }
             }
             let credits_earned = (ship.credits - credits_before).max(0) as f32;
@@ -964,10 +989,15 @@ fn finish_ai_landing(
                     }
                 }
             }
-            for weapon_type in ship.clone().weapon_systems.secondary.keys() {
-                if planet_data.outfitter.contains(weapon_type) {
-                    ship.buy_max_ammo(weapon_type, &item_universe);
-                }
+            let restock: Vec<String> = ship
+                .weapon_systems
+                .secondary
+                .keys()
+                .filter(|w| planet_data.outfitter.contains(*w))
+                .cloned()
+                .collect();
+            for weapon_type in &restock {
+                ship.buy_max_ammo(weapon_type, &item_universe, 1.0);
             }
         }
 
@@ -1007,7 +1037,10 @@ fn tick_ai_landed(
 /// or resume flying.
 fn finish_ai_takeoff(
     mut reader: MessageReader<ScaleUpFinished>,
-    ships: Query<(Entity, &Ship, &Position, &AIShip), Without<crate::carrier::CarrierEscort>>,
+    ships: Query<
+        (Entity, &Ship, &Position, &AIShip),
+        (Without<crate::carrier::Escort>, Without<crate::missions::MissionTarget>),
+    >,
     ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
     mut commands: Commands,
 ) {

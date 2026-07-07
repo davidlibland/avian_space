@@ -73,11 +73,19 @@ pub struct TerrainMeta {
     pub footstep_volume: f32,
 }
 
+fn default_generator() -> String {
+    "organic".to_string()
+}
+
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct BiomeMeta {
     pub atlas: String,
     pub soft_boundaries: bool,
+    /// Terrain-field generator: "organic" (fBm noise, the default) or
+    /// "station" (corridor/room layout for man-made interiors).
+    #[serde(default = "default_generator")]
+    pub generator: String,
     pub terrains: Vec<TerrainMeta>,
 }
 
@@ -145,6 +153,23 @@ pub struct Building3dSprite {
     pub d: u32,
     /// Footprint front-centre on the ground, as a Bevy `Anchor::Custom` fraction.
     pub anchor: (f32, f32),
+    /// South-protruding props, each baked as its own object with its own
+    /// depth-sort line (see `BuildingPropSprite`).
+    #[serde(default)]
+    pub props: Vec<BuildingPropSprite>,
+}
+
+/// One baked building prop (`{style}_{func}_prop_{name}.png`): an individual
+/// object depth-sorted at its own ground line — or, for overhead pieces like
+/// the market porch and the bar sign, at its SUPPORT line.
+#[derive(Deserialize, Debug)]
+pub struct BuildingPropSprite {
+    pub name: String,
+    /// Front-centre pinning fraction, same convention as the building layers.
+    pub anchor: (f32, f32),
+    /// Sort line in tiles SOUTH of the building's front wall (negative =
+    /// north of it, e.g. the garrison flagpole standing beside the wall).
+    pub dy: f32,
 }
 
 /// `buildings3d_manifest.ron` — baked 3/4 building sprites (scripts/ship3d/buildings3d.py bake).

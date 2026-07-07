@@ -5,6 +5,8 @@ shuttle:
   max_health: 30
   cargo_space: 10
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     "laser": [1, null]
   radius: 10.0
@@ -13,6 +15,7 @@ shuttle:
   personality: Trader
   fuel_capacity: 4
   faction: Merchant
+  tech_level: 1
 
 fighter:
   thrust: 120.0
@@ -21,6 +24,8 @@ fighter:
   max_health: 75
   cargo_space: 8
   item_space: 8
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     laser: [2, null]
   radius: 12.0
@@ -29,6 +34,7 @@ fighter:
   personality: Fighter
   fuel_capacity: 3
   required_unlocks: [fighter_license]
+  tech_level: 1
 
 asteroid_miner:
   thrust: 70.0
@@ -37,6 +43,8 @@ asteroid_miner:
   max_health: 120
   cargo_space: 25
   item_space: 16
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     laser: [1, null]
   radius: 20.0
@@ -46,6 +54,7 @@ asteroid_miner:
   fuel_capacity: 5
   faction: Merchant
   required_unlocks: [mining_license]
+  tech_level: 1
 
 # Small, nimble, affordable mining ship. Faster and far more agile than the
 # asteroid_miner (turns quickly to aim and thread dense fields), fairly durable
@@ -58,6 +67,8 @@ prospector:
   max_health: 90
   cargo_space: 6
   item_space: 8
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     laser: [1, null]
   radius: 14.0
@@ -67,6 +78,7 @@ prospector:
   fuel_capacity: 4
   faction: Merchant
   required_unlocks: [mining_license]
+  tech_level: 1
 
 hauler:
   thrust: 40.0
@@ -75,6 +87,8 @@ hauler:
   max_health: 150
   cargo_space: 80
   item_space: 28
+  gun_mounts: 2
+  turret_mounts: 1
   base_weapons:
     "space_mine": [1, 12]
   radius: 40.0
@@ -84,6 +98,7 @@ hauler:
   fuel_capacity: 7
   faction: Merchant
   required_unlocks: [merchant_hauler_license]
+  tech_level: 1
 
 # ── Fighter variants ──────────────────────────────────────────────────────────
 
@@ -96,6 +111,8 @@ corvette:
   max_health: 90
   cargo_space: 10
   item_space: 9
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     proton_beam: [1, null]
   radius: 9.0
@@ -103,6 +120,7 @@ corvette:
   sprite_path: sprites/ships/atlas/corvette.png
   personality: Fighter
   fuel_capacity: 3
+  tech_level: 2
 
 frigate:
   thrust: 90.0
@@ -111,6 +129,8 @@ frigate:
   max_health: 220
   cargo_space: 20
   item_space: 30
+  gun_mounts: 4
+  turret_mounts: 1
   base_weapons:
     proton_beam: [2, null]
     ir_missile: [1, 4]
@@ -120,6 +140,7 @@ frigate:
   personality: Fighter
   fuel_capacity: 6
   required_unlocks: [frigate_license]
+  tech_level: 2
 
 # ── Trader variants ───────────────────────────────────────────────────────────
 
@@ -130,6 +151,8 @@ courier:
   max_health: 45
   cargo_space: 18
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     laser: [1, null]
   radius: 12.0
@@ -138,6 +161,7 @@ courier:
   personality: Trader
   fuel_capacity: 8
   faction: Merchant
+  tech_level: 1
 
 cargo_transport:
   thrust: 52.0
@@ -146,6 +170,8 @@ cargo_transport:
   max_health: 60
   cargo_space: 20
   item_space: 14
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     space_mine: [1, 4]
   radius: 20.0
@@ -154,6 +180,7 @@ cargo_transport:
   personality: Trader
   fuel_capacity: 5
   faction: Merchant
+  tech_level: 1
 
 freighter:
   thrust: 55.0
@@ -162,6 +189,8 @@ freighter:
   max_health: 120
   cargo_space: 40
   item_space: 20
+  gun_mounts: 2
+  turret_mounts: 1
   base_weapons:
     space_mine: [1, 8]
   radius: 32.0
@@ -171,6 +200,7 @@ freighter:
   fuel_capacity: 7
   faction: Merchant
   required_unlocks: [merchant_freighter_license]
+  tech_level: 1
 
 bulk_carrier:
   thrust: 22.0
@@ -178,8 +208,11 @@ bulk_carrier:
   torque: 4.0
   max_health: 280
   cargo_space: 160
-  item_space: 44
+  item_space: 50
+  gun_mounts: 3
+  turret_mounts: 2
   base_weapons:
+    flare_pod: [1, 2]
     space_mine: [1, 20]
   radius: 55.0
   price: 85000
@@ -188,6 +221,7 @@ bulk_carrier:
   fuel_capacity: 9
   faction: Merchant
   required_unlocks: [merchant_bulk_license]
+  tech_level: 2
 
 # ── Federation faction ─────────────────────────────────────────────────────────
 # Black/grey/red. Slower than Rebels, heavier armour, heavier weapons.
@@ -199,6 +233,8 @@ fed_patrol:
   max_health: 70
   cargo_space: 4
   item_space: 6
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     proton_beam: [2, null]
   radius: 15.0
@@ -208,6 +244,8 @@ fed_patrol:
   fuel_capacity: 4
   faction: Federation
   required_unlocks: [federation_ship_license]
+  tech_level: 2
+  sold_by: [Federation, Rebel]
 
 fed_destroyer:
   thrust: 65.0
@@ -216,6 +254,8 @@ fed_destroyer:
   max_health: 350
   cargo_space: 8
   item_space: 34
+  gun_mounts: 6
+  turret_mounts: 1
   base_weapons:
     proton_beam: [4, null]
     ir_missile: [2, 8]
@@ -226,6 +266,8 @@ fed_destroyer:
   fuel_capacity: 7
   faction: Federation
   required_unlocks: [federation_ship_license, federation_capital_license]
+  tech_level: 3
+  sold_by: [Federation, Rebel]
 
 fed_missile_cruiser:
   thrust: 55.0
@@ -234,7 +276,10 @@ fed_missile_cruiser:
   max_health: 280
   cargo_space: 6
   item_space: 56
+  gun_mounts: 5
+  turret_mounts: 1
   base_weapons:
+    flare_pod: [1, 4]
     proton_beam: [1, null]
     ir_missile: [3, 12]
   radius: 35.0
@@ -244,6 +289,8 @@ fed_missile_cruiser:
   fuel_capacity: 6
   faction: Federation
   required_unlocks: [federation_ship_license]
+  tech_level: 4
+  sold_by: [Federation, Rebel]
 
 # ── Rebel faction ──────────────────────────────────────────────────────────────
 # Blue/green. Faster than Federation, lighter armour, less heavy weapons.
@@ -255,6 +302,8 @@ rebel_fighter:
   max_health: 40
   cargo_space: 2
   item_space: 6
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     laser: [2, null]
   radius: 12.0
@@ -264,6 +313,8 @@ rebel_fighter:
   fuel_capacity: 3
   faction: Rebel
   required_unlocks: [rebel_ship_license]
+  tech_level: 1
+  sold_by: [Rebel, Federation]
 
 rebel_gunboat:
   thrust: 95.0
@@ -272,6 +323,8 @@ rebel_gunboat:
   max_health: 110
   cargo_space: 8
   item_space: 10
+  gun_mounts: 4
+  turret_mounts: 0
   base_weapons:
     laser: [3, null]
   radius: 22.0
@@ -281,6 +334,8 @@ rebel_gunboat:
   fuel_capacity: 5
   faction: Rebel
   required_unlocks: [rebel_ship_license]
+  tech_level: 2
+  sold_by: [Rebel, Federation]
 
 rebel_frigate:
   thrust: 80.0
@@ -289,7 +344,10 @@ rebel_frigate:
   max_health: 160
   cargo_space: 10
   item_space: 53
+  gun_mounts: 5
+  turret_mounts: 1
   base_weapons:
+    rebel_chaff: [1, 3]
     laser: [3, null]
     javelin: [1, 24]
   radius: 28.0
@@ -299,6 +357,7 @@ rebel_frigate:
   fuel_capacity: 6
   faction: Rebel
   required_unlocks: [rebel_ship_license, rebel_capital_license]
+  tech_level: 3
 
 # ── Pirate faction ─────────────────────────────────────────────────────────────
 # Brown/tan. Fast but outgunned by Rebel or Federation ships individually.
@@ -310,6 +369,8 @@ pirate_corvette:
   max_health: 45
   cargo_space: 4
   item_space: 4
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     pirate_laser: [2, null]
   radius: 11.0
@@ -318,6 +379,8 @@ pirate_corvette:
   personality: Fighter
   fuel_capacity: 3
   faction: Pirate
+  tech_level: 3
+  sold_by: [Rebel]
 
 pirate_missile_boat:
   thrust: 88.0
@@ -326,6 +389,8 @@ pirate_missile_boat:
   max_health: 80
   cargo_space: 6
   item_space: 24
+  gun_mounts: 4
+  turret_mounts: 0
   base_weapons:
     pirate_laser: [1, null]
     goose: [2, 8]
@@ -335,6 +400,8 @@ pirate_missile_boat:
   personality: Fighter
   fuel_capacity: 4
   faction: Pirate
+  tech_level: 2
+  sold_by: [Rebel]
 
 # ── Carriers ─────────────────────────────────────────────────────────────────
 
@@ -345,7 +412,10 @@ surplus_carrier:
   max_health: 300
   cargo_space: 18
   item_space: 58
+  gun_mounts: 3
+  turret_mounts: 2
   base_weapons:
+    flare_pod: [1, 3]
     laser_turret: [1, null]
     fighter_bay: [1, 3]
   radius: 45.0
@@ -354,6 +424,8 @@ surplus_carrier:
   personality: Fighter
   fuel_capacity: 8
   required_unlocks: [carrier_license]
+  tech_level: 4
+  sold_by: [Rebel, FreeFrontier]
 
 fed_carrier:
   thrust: 40.0
@@ -361,8 +433,11 @@ fed_carrier:
   torque: 4.0
   max_health: 500
   cargo_space: 15
-  item_space: 76
+  item_space: 84
+  gun_mounts: 4
+  turret_mounts: 4
   base_weapons:
+    flare_pod: [1, 4]
     proton_beam_turret: [2, null]
     ir_missile: [2, 8]
     fed_fighter_bay: [1, 4]
@@ -373,6 +448,7 @@ fed_carrier:
   fuel_capacity: 10
   faction: Federation
   required_unlocks: [fed_carrier_license]
+  tech_level: 4
 
 rebel_carrier:
   thrust: 50.0
@@ -380,8 +456,11 @@ rebel_carrier:
   torque: 5.0
   max_health: 400
   cargo_space: 12
-  item_space: 76
+  item_space: 84
+  gun_mounts: 4
+  turret_mounts: 4
   base_weapons:
+    rebel_chaff: [1, 4]
     laser_turret: [3, null]
     javelin: [2, 16]
     rebel_fighter_bay: [1, 4]
@@ -392,6 +471,7 @@ rebel_carrier:
   fuel_capacity: 9
   faction: Rebel
   required_unlocks: [rebel_carrier_license]
+  tech_level: 4
 
 pirate_carrier:
   thrust: 35.0
@@ -399,8 +479,11 @@ pirate_carrier:
   torque: 3.5
   max_health: 350
   cargo_space: 20
-  item_space: 67
+  item_space: 74
+  gun_mounts: 4
+  turret_mounts: 3
   base_weapons:
+    flare_pod: [1, 3]
     laser_turret: [2, null]
     goose: [1, 6]
     space_mine: [1, 6]
@@ -412,6 +495,8 @@ pirate_carrier:
   fuel_capacity: 8
   faction: Pirate
   required_unlocks: [carrier_license]
+  tech_level: 4
+  sold_by: [Rebel]
 # ── Free Frontier (solar-sail militia) ───────────────────────────────────────────
 frontier_skiff:
   thrust: 112.0
@@ -420,6 +505,8 @@ frontier_skiff:
   max_health: 55
   cargo_space: 4
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     flak_gun: [1, null]
   radius: 11.0
@@ -429,6 +516,7 @@ frontier_skiff:
   fuel_capacity: 3
   faction: FreeFrontier
   required_unlocks: [frontier_skiff_license]
+  tech_level: 1
 frontier_harvester:
   thrust: 72.0
   max_speed: 122.0
@@ -436,6 +524,8 @@ frontier_harvester:
   max_health: 165
   cargo_space: 8
   item_space: 12
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     mass_driver: [1, null]
     flak_gun: [1, null]
@@ -446,6 +536,7 @@ frontier_harvester:
   fuel_capacity: 4
   faction: FreeFrontier
   required_unlocks: [frontier_harvester_license]
+  tech_level: 2
 frontier_sailtender:
   thrust: 78.0
   max_speed: 132.0
@@ -453,6 +544,8 @@ frontier_sailtender:
   max_health: 120
   cargo_space: 12
   item_space: 22
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     flak_gun: [1, null]
     prox_mine: [1, 6]
@@ -463,6 +556,7 @@ frontier_sailtender:
   fuel_capacity: 5
   faction: FreeFrontier
   required_unlocks: [frontier_sailtender_license]
+  tech_level: 2
 frontier_monitor:
   thrust: 50.0
   max_speed: 86.0
@@ -470,6 +564,8 @@ frontier_monitor:
   max_health: 340
   cargo_space: 8
   item_space: 24
+  gun_mounts: 3
+  turret_mounts: 2
   base_weapons:
     flak_turret: [1, null]
     mass_driver: [1, null]
@@ -480,6 +576,7 @@ frontier_monitor:
   fuel_capacity: 5
   faction: FreeFrontier
   required_unlocks: [frontier_monitor_license]
+  tech_level: 3
 
 # ── Helios Combine (drones) ──────────────────────────────────────────────────────
 helios_drone:
@@ -489,6 +586,8 @@ helios_drone:
   max_health: 28
   cargo_space: 0
   item_space: 4
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     helios_lance: [1, null]
   radius: 7.0
@@ -498,6 +597,7 @@ helios_drone:
   fuel_capacity: 2
   faction: Helios
   required_unlocks: [helios_drone_license]
+  tech_level: 1
 helios_enforcer:
   thrust: 100.0
   max_speed: 178.0
@@ -505,6 +605,8 @@ helios_enforcer:
   max_health: 90
   cargo_space: 4
   item_space: 10
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     helios_lance: [1, null]
     seeker: [1, 4]
@@ -515,6 +617,7 @@ helios_enforcer:
   fuel_capacity: 4
   faction: Helios
   required_unlocks: [helios_enforcer_license]
+  tech_level: 2
 helios_overseer:
   thrust: 70.0
   max_speed: 122.0
@@ -522,6 +625,8 @@ helios_overseer:
   max_health: 150
   cargo_space: 6
   item_space: 54
+  gun_mounts: 3
+  turret_mounts: 1
   base_weapons:
     drone_bay: [1, 6]
     helios_lance: [1, null]
@@ -532,6 +637,7 @@ helios_overseer:
   fuel_capacity: 5
   faction: Helios
   required_unlocks: [helios_overseer_license]
+  tech_level: 3
 helios_titan:
   thrust: 50.0
   max_speed: 86.0
@@ -539,7 +645,10 @@ helios_titan:
   max_health: 280
   cargo_space: 8
   item_space: 60
+  gun_mounts: 4
+  turret_mounts: 2
   base_weapons:
+    helios_lure: [1, 4]
     drone_bay: [1, 6]
     helios_lance: [2, null]
   radius: 50.0
@@ -549,6 +658,7 @@ helios_titan:
   fuel_capacity: 6
   faction: Helios
   required_unlocks: [helios_titan_license]
+  tech_level: 4
 
 # ── Fed Bastion (iron siege) ─────────────────────────────────────────────────────
 bastion_guard:
@@ -558,6 +668,8 @@ bastion_guard:
   max_health: 105
   cargo_space: 4
   item_space: 8
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     chaingun: [2, null]
   radius: 15.0
@@ -567,6 +679,7 @@ bastion_guard:
   fuel_capacity: 4
   faction: Bastion
   required_unlocks: [bastion_guard_license]
+  tech_level: 1
 bastion_lance:
   thrust: 65.0
   max_speed: 112.0
@@ -574,6 +687,8 @@ bastion_lance:
   max_health: 200
   cargo_space: 6
   item_space: 16
+  gun_mounts: 3
+  turret_mounts: 1
   base_weapons:
     chaingun: [1, null]
     chaingun_turret: [1, null]
@@ -584,6 +699,7 @@ bastion_lance:
   fuel_capacity: 4
   faction: Bastion
   required_unlocks: [bastion_lance_license]
+  tech_level: 2
 siege_monitor:
   thrust: 50.0
   max_speed: 82.0
@@ -591,6 +707,8 @@ siege_monitor:
   max_health: 280
   cargo_space: 6
   item_space: 20
+  gun_mounts: 4
+  turret_mounts: 1
   base_weapons:
     siege_cannon: [1, null]
     chaingun: [2, null]
@@ -601,6 +719,7 @@ siege_monitor:
   fuel_capacity: 5
   faction: Bastion
   required_unlocks: [siege_monitor_license]
+  tech_level: 3
 iron_dreadnought:
   thrust: 42.0
   max_speed: 70.0
@@ -608,6 +727,8 @@ iron_dreadnought:
   max_health: 430
   cargo_space: 8
   item_space: 38
+  gun_mounts: 4
+  turret_mounts: 3
   base_weapons:
     siege_cannon: [1, null]
     chaingun_turret: [2, null]
@@ -618,6 +739,7 @@ iron_dreadnought:
   fuel_capacity: 6
   faction: Bastion
   required_unlocks: [iron_dreadnought_license]
+  tech_level: 4
 
 # ── Artifact Order (reliquaries) ─────────────────────────────────────────────────
 order_acolyte:
@@ -627,6 +749,8 @@ order_acolyte:
   max_health: 42
   cargo_space: 2
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     relic_lance: [1, null]
   radius: 12.0
@@ -636,6 +760,7 @@ order_acolyte:
   fuel_capacity: 3
   faction: Order
   required_unlocks: [order_acolyte_license]
+  tech_level: 1
 order_censer:
   thrust: 86.0
   max_speed: 152.0
@@ -643,6 +768,8 @@ order_censer:
   max_health: 110
   cargo_space: 4
   item_space: 20
+  gun_mounts: 3
+  turret_mounts: 0
   base_weapons:
     relic_lance: [1, null]
     censer_charge: [1, 4]
@@ -653,6 +780,7 @@ order_censer:
   fuel_capacity: 4
   faction: Order
   required_unlocks: [order_censer_license]
+  tech_level: 2
 order_reliquary:
   thrust: 60.0
   max_speed: 100.0
@@ -660,6 +788,8 @@ order_reliquary:
   max_health: 240
   cargo_space: 6
   item_space: 20
+  gun_mounts: 4
+  turret_mounts: 1
   base_weapons:
     relic_lance: [2, null]
     censer_charge: [1, 4]
@@ -670,6 +800,7 @@ order_reliquary:
   fuel_capacity: 5
   faction: Order
   required_unlocks: [order_reliquary_license]
+  tech_level: 3
 order_cathedral:
   thrust: 45.0
   max_speed: 78.0
@@ -677,6 +808,8 @@ order_cathedral:
   max_health: 380
   cargo_space: 8
   item_space: 34
+  gun_mounts: 4
+  turret_mounts: 2
   base_weapons:
     relic_turret: [1, null]
     relic_lance: [2, null]
@@ -687,6 +820,7 @@ order_cathedral:
   fuel_capacity: 6
   faction: Order
   required_unlocks: [order_cathedral_license]
+  tech_level: 4
 
 # ── Precursors (enemy/boss — never sold) ─────────────────────────────────────────
 precursor_seeker:
@@ -696,7 +830,10 @@ precursor_seeker:
   max_health: 45
   cargo_space: 0
   item_space: 4
+  gun_mounts: 1
+  turret_mounts: 1
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [1, null]
   radius: 10.0
   price: 35000
@@ -705,6 +842,14 @@ precursor_seeker:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
+  aura:
+    rate: 30.0
+    particle_lifetime: 0.9
+    speed: 10.0
+    size: 1.6
+    color: [0.75, 0.5, 1.0]
 precursor_sentinel:
   thrust: 90.0
   max_speed: 150.0
@@ -712,7 +857,10 @@ precursor_sentinel:
   max_health: 220
   cargo_space: 0
   item_space: 8
+  gun_mounts: 1
+  turret_mounts: 2
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [2, null]
   radius: 18.0
   price: 120000
@@ -721,6 +869,14 @@ precursor_sentinel:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
+  aura:
+    rate: 18.0
+    particle_lifetime: 0.8
+    speed: 12.0
+    size: 1.6
+    color: [0.75, 0.5, 1.0]
 precursor_harbinger:
   thrust: 82.0
   max_speed: 142.0
@@ -728,7 +884,10 @@ precursor_harbinger:
   max_health: 380
   cargo_space: 0
   item_space: 14
+  gun_mounts: 1
+  turret_mounts: 3
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [3, null]
   radius: 30.0
   price: 280000
@@ -737,6 +896,14 @@ precursor_harbinger:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
+  aura:
+    rate: 16.0
+    particle_lifetime: 0.8
+    speed: 14.0
+    size: 1.8
+    color: [0.75, 0.5, 1.0]
 precursor_sleeper:
   thrust: 40.0
   max_speed: 70.0
@@ -744,7 +911,10 @@ precursor_sleeper:
   max_health: 1200
   cargo_space: 0
   item_space: 24
+  gun_mounts: 2
+  turret_mounts: 5
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [4, null]
   radius: 60.0
   price: 650000
@@ -753,6 +923,14 @@ precursor_sleeper:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
+  aura:
+    rate: 14.0
+    particle_lifetime: 0.9
+    speed: 18.0
+    size: 2.2
+    color: [0.75, 0.5, 1.0]
 
 # ── Faction economy ships (traders & miners) ─────────────────────────────────────
 frontier_prospector:
@@ -762,6 +940,8 @@ frontier_prospector:
   max_health: 60
   cargo_space: 10
   item_space: 4
+  gun_mounts: 1
+  turret_mounts: 0
   base_weapons:
     flak_gun: [1, null]
   radius: 13.0
@@ -771,6 +951,7 @@ frontier_prospector:
   fuel_capacity: 4
   faction: FreeFrontier
   required_unlocks: [free_frontier_license]
+  tech_level: 1
 frontier_dredger:
   thrust: 60.0
   max_speed: 100.0
@@ -778,6 +959,8 @@ frontier_dredger:
   max_health: 180
   cargo_space: 24
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     flak_gun: [1, null]
   radius: 26.0
@@ -787,6 +970,7 @@ frontier_dredger:
   fuel_capacity: 4
   faction: FreeFrontier
   required_unlocks: [free_frontier_license]
+  tech_level: 2
 helios_courier:
   thrust: 120.0
   max_speed: 200.0
@@ -794,6 +978,8 @@ helios_courier:
   max_health: 50
   cargo_space: 12
   item_space: 3
+  gun_mounts: 1
+  turret_mounts: 0
   base_weapons: {}
   radius: 12.0
   price: 24000
@@ -802,6 +988,7 @@ helios_courier:
   fuel_capacity: 4
   faction: Helios
   required_unlocks: [helios_license]
+  tech_level: 1
 helios_freighter:
   thrust: 70.0
   max_speed: 120.0
@@ -809,6 +996,8 @@ helios_freighter:
   max_health: 120
   cargo_space: 40
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     helios_lance: [1, null]
   radius: 30.0
@@ -818,6 +1007,7 @@ helios_freighter:
   fuel_capacity: 5
   faction: Helios
   required_unlocks: [helios_license]
+  tech_level: 2
 helios_hauler:
   thrust: 55.0
   max_speed: 95.0
@@ -825,6 +1015,8 @@ helios_hauler:
   max_health: 200
   cargo_space: 70
   item_space: 4
+  gun_mounts: 2
+  turret_mounts: 1
   base_weapons: {}
   radius: 45.0
   price: 140000
@@ -833,6 +1025,7 @@ helios_hauler:
   fuel_capacity: 6
   faction: Helios
   required_unlocks: [helios_license]
+  tech_level: 3
 bastion_collier:
   thrust: 65.0
   max_speed: 105.0
@@ -840,6 +1033,8 @@ bastion_collier:
   max_health: 220
   cargo_space: 36
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     chaingun: [1, null]
   radius: 30.0
@@ -849,6 +1044,7 @@ bastion_collier:
   fuel_capacity: 5
   faction: Bastion
   required_unlocks: [bastion_license]
+  tech_level: 2
 bastion_dredger:
   thrust: 60.0
   max_speed: 95.0
@@ -856,6 +1052,8 @@ bastion_dredger:
   max_health: 200
   cargo_space: 24
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     chaingun: [1, null]
   radius: 28.0
@@ -865,6 +1063,7 @@ bastion_dredger:
   fuel_capacity: 4
   faction: Bastion
   required_unlocks: [bastion_license]
+  tech_level: 2
 order_almoner:
   thrust: 75.0
   max_speed: 130.0
@@ -872,6 +1071,8 @@ order_almoner:
   max_health: 130
   cargo_space: 34
   item_space: 6
+  gun_mounts: 2
+  turret_mounts: 0
   base_weapons:
     relic_lance: [1, null]
   radius: 28.0
@@ -881,6 +1082,7 @@ order_almoner:
   fuel_capacity: 5
   faction: Order
   required_unlocks: [artifact_order_license]
+  tech_level: 2
 order_quarryman:
   thrust: 70.0
   max_speed: 115.0
@@ -888,6 +1090,8 @@ order_quarryman:
   max_health: 150
   cargo_space: 20
   item_space: 4
+  gun_mounts: 1
+  turret_mounts: 0
   base_weapons: {}
   radius: 24.0
   price: 50000
@@ -896,6 +1100,7 @@ order_quarryman:
   fuel_capacity: 4
   faction: Order
   required_unlocks: [artifact_order_license]
+  tech_level: 2
 precursor_gleaner:
   thrust: 160.0
   max_speed: 270.0
@@ -903,7 +1108,10 @@ precursor_gleaner:
   max_health: 35
   cargo_space: 8
   item_space: 4
+  gun_mounts: 1
+  turret_mounts: 1
   base_weapons:
+    precursor_lure: [1, null]
     precursor_beam: [1, null]
   radius: 9.0
   price: 40000
@@ -912,3 +1120,11 @@ precursor_gleaner:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
+  aura:
+    rate: 30.0
+    particle_lifetime: 0.9
+    speed: 10.0
+    size: 1.6
+    color: [0.75, 0.5, 1.0]

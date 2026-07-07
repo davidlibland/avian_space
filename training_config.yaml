@@ -76,6 +76,17 @@ ppo:
   # Phase A (cycles 17470..17970): bc_coeff 0.30 -> 0 (RL off the BC leash).
   # Phase B (17970..18720): policy_lr + entropy_coeff -> 0 (anneal to low noise).
   # At ~18720 policy_lr hits 0 (policy frozen) -> convergence watch commits + stops.
-  finalize_start_cycle: 17470
-  finalize_bc_decay_cycles: 500
+  # Finalize v2 (bc-FLOOR anneal). The pure-RL v1 (bc->0) collapsed the fighter
+  # policy below bc~0.10 (fighters' per-step RL reward can't hold combat without
+  # the BC leash). New plan: anneal bc 0.30 -> floor and HOLD (lr_decay_cycles=0),
+  # settle, compare candidate floors 0.15 vs 0.10, then resume from the better
+  # checkpoint and linearly decay lr->0 (set lr_decay_cycles>0) to finalize.
+  # STAGE 3 (finalize): floor 0.10 WON the compare (held combat >= 0.15, sharper).
+  #   0.15 settled: fighter=0.00223 ship_hitEV=-0.06 sell=0.804 ff=0.309 EV=0.730
+  #   0.10 settled: fighter=0.00278 ship_hitEV=-0.03 sell=0.733 ff=0.301 EV=0.652
+  # bc_decay=0 -> immediately Phase B: hold bc at 0.10 while policy_lr+entropy -> 0
+  # over 750 cycles, then freeze & commit final policy.
+  finalize_start_cycle: 18185
+  finalize_bc_decay_cycles: 0
   finalize_lr_decay_cycles: 750
+  finalize_bc_floor: 0.10
