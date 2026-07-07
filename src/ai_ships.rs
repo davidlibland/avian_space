@@ -1016,7 +1016,7 @@ fn tick_ai_landed(
 /// or resume flying.
 fn finish_ai_takeoff(
     mut reader: MessageReader<ScaleUpFinished>,
-    ships: Query<(Entity, &Ship, &Position, &AIShip), Without<crate::carrier::CarrierEscort>>,
+    ships: Query<(Entity, &Ship, &Position, &AIShip), Without<crate::carrier::Escort>>,
     ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
     mut commands: Commands,
 ) {

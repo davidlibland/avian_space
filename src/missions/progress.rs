@@ -735,6 +735,7 @@ pub fn despawn_targets_on_failure(
     mut failed: MessageReader<MissionFailed>,
     mut completed: MessageReader<MissionCompleted>,
     targets: Query<(Entity, &MissionTarget)>,
+    squadrons: Query<(Entity, &crate::carrier::MissionSquadron)>,
     mut commands: Commands,
 ) {
     let ended: Vec<&String> = failed
@@ -747,6 +748,12 @@ pub fn despawn_targets_on_failure(
     }
     for (entity, mt) in &targets {
         if ended.iter().any(|id| mt.mission_id == **id) {
+            crate::utils::safe_despawn(&mut commands, entity);
+        }
+    }
+    // The support wing stands down with the mission (win or lose).
+    for (entity, sq) in &squadrons {
+        if ended.iter().any(|id| sq.0 == **id) {
             crate::utils::safe_despawn(&mut commands, entity);
         }
     }
@@ -1061,6 +1068,7 @@ pub(super) fn instantiate_template(
                     },
                     CompletionEffect::Pay { credits: pay },
                 ],
+                squadron: Vec::new(),
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1104,6 +1112,7 @@ pub(super) fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+                squadron: Vec::new(),
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1160,6 +1169,7 @@ pub(super) fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: Vec::new(),
+                squadron: Vec::new(),
             };
             let stage2 = MissionDef {
                 briefing: subst(stage2_briefing, &vars),
@@ -1186,6 +1196,7 @@ pub(super) fn instantiate_template(
                     },
                     CompletionEffect::Pay { credits: pay },
                 ],
+                squadron: Vec::new(),
             };
             vec![(stage1_id, stage1), (stage2_id, stage2)]
         }
@@ -1238,6 +1249,7 @@ pub(super) fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+                squadron: Vec::new(),
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1327,6 +1339,7 @@ pub(super) fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: Vec::new(),
+                squadron: Vec::new(),
             };
 
             // Stage 2: Deliver the stolen goods.
@@ -1350,6 +1363,7 @@ pub(super) fn instantiate_template(
                     commodity,
                     quantity,
                 }],
+                squadron: Vec::new(),
             };
 
             // Stage 3: Catch the thief on a planet.
@@ -1369,6 +1383,7 @@ pub(super) fn instantiate_template(
                 },
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
+                squadron: Vec::new(),
             };
 
             vec![(stage1_id, s1), (stage2_id, s2), (stage3_id, s3)]

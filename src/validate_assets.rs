@@ -242,6 +242,14 @@ fn validate_missions(iu: &ItemUniverse) {
 
     for (mission_id, def) in &iu.missions {
         validate_preconditions(&def.preconditions, mission_id, "mission", iu);
+        for ship in &def.squadron {
+            if !iu.ships.contains_key(ship) {
+                warn!(
+                    "mission \"{mission_id}\" squadron references ship type \"{ship}\" \
+                     which is not defined in ships.yaml"
+                );
+            }
+        }
         validate_offer(&def.offer, mission_id, "mission", &planets);
         validate_objective(&def.objective, mission_id, "mission", iu, &planets);
         validate_start_effects(&def.start_effects, mission_id, "mission", iu);

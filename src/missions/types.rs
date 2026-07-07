@@ -19,6 +19,11 @@ pub struct MissionDef {
     pub requires: Vec<CompletionRequirement>,
     #[serde(default)]
     pub completion_effects: Vec<CompletionEffect>,
+    /// Friendly support wing spawned for the player in the mission's battle
+    /// system while the mission is active (squadron escorts: they follow,
+    /// take B/N/M orders, cannot dock, despawn when the mission ends).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub squadron: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
@@ -362,6 +367,10 @@ pub enum MissionStatus {
 /// objectives that use it; others stay at 0.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct ObjectiveProgress {
+    /// Whether this mission's support squadron has already mustered
+    /// (never respawned — losses are real).
+    #[serde(default)]
+    pub squadron_spawned: bool,
     #[serde(default)]
     pub collected: u16,
     #[serde(default)]

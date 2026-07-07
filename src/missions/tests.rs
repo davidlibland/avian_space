@@ -20,6 +20,7 @@ fn dummy_def() -> MissionDef {
         },
         requires: Vec::new(),
         completion_effects: Vec::new(),
+        squadron: Vec::new(),
     }
 }
 
@@ -420,6 +421,7 @@ fn mission_status_serde_roundtrip() {
         MissionStatus::Active(ObjectiveProgress {
             collected: 3,
             destroyed: 2,
+            squadron_spawned: false,
         }),
         MissionStatus::Completed,
         MissionStatus::Failed,
@@ -454,6 +456,7 @@ fn mission_def_yaml_roundtrip_travel() {
         },
         requires: Vec::new(),
         completion_effects: vec![CompletionEffect::Pay { credits: 1000 }],
+        squadron: Vec::new(),
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -495,6 +498,7 @@ fn mission_def_yaml_roundtrip_land_with_requires() {
                 name: "flag".into(),
             },
         ],
+        squadron: Vec::new(),
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -519,6 +523,7 @@ fn mission_def_yaml_roundtrip_collect() {
         },
         requires: Vec::new(),
         completion_effects: Vec::new(),
+        squadron: Vec::new(),
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -547,6 +552,7 @@ fn mission_def_yaml_roundtrip_destroy_ships() {
         },
         requires: Vec::new(),
         completion_effects: vec![CompletionEffect::Pay { credits: 10000 }],
+        squadron: Vec::new(),
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -572,6 +578,7 @@ fn mission_def_yaml_roundtrip_destroy_ships_no_collect() {
         },
         requires: Vec::new(),
         completion_effects: Vec::new(),
+        squadron: Vec::new(),
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -1124,6 +1131,7 @@ mod runtime {
                     name: "test_license".into(),
                 },
             ],
+            squadron: Vec::new(),
         }
     }
 

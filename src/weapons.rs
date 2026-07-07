@@ -488,8 +488,9 @@ pub fn weapon_fire(
             escort_writer.write(SpawnEscort {
                 mother: cmd.ship,
                 ship_type: ship_type.clone(),
-                weapon_type: cmd.weapon_type.clone(),
+                carried: Some(cmd.weapon_type.clone()),
                 position: spawn_pos,
+                mission: None,
             });
             writer.write(WeaponFired {
                 ship: cmd.ship,
