@@ -1144,33 +1144,27 @@ fn setup_surface(
             }
         }
 
-        // The repair engine sits front-left of the door, over this 2x2 block of
-        // tiles. Mark them impassable just like the building tiles so character
-        // pathfinding routes around it (it used to carry an ad-hoc collider the
-        // pathfinder couldn't see, so NPCs walked into it and got stuck).
+        // The repair engine sits front-left of the door. Mark its tiles
+        // impassable just like the building tiles so character pathfinding
+        // routes around it. ONE row deep: the oblique bake draws the prop's
+        // visible base ~1.5 screen tiles south of the wall, so a second solid
+        // row was an invisible half-tile wall in front of it.
         let engine_tiles = [
             (mech_x.saturating_sub(1), mech_y.saturating_sub(1)),
-            (mech_x.saturating_sub(1), mech_y.saturating_sub(2)),
             (mech_x, mech_y.saturating_sub(1)),
-            (mech_x, mech_y.saturating_sub(2)),
         ];
         for &t in &engine_tiles {
             solid_building_tiles.insert(t);
         }
 
-        // The garrison's monument gun (plinth + cannon) fills a 2x2 block
+        // The garrison's monument gun (plinth + cannon) blocks a 2x1 row
         // front-left of its door — too big to walk through, same treatment
-        // as the mechanic's engine.
+        // (and same one-row depth) as the mechanic's engine.
         let gun_tiles: Vec<(u32, u32)> = building_assignments
             .iter()
             .filter(|(kind, ..)| *kind == BuildingKind::Garrison)
             .flat_map(|&(_, bx, by, _)| {
-                [
-                    (bx, by.saturating_sub(1)),
-                    (bx, by.saturating_sub(2)),
-                    (bx + 1, by.saturating_sub(1)),
-                    (bx + 1, by.saturating_sub(2)),
-                ]
+                [(bx, by.saturating_sub(1)), (bx + 1, by.saturating_sub(1))]
             })
             .collect();
         for &t in &gun_tiles {
