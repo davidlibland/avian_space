@@ -467,7 +467,7 @@ pub fn missions_ui_plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                toggle_mission_log.run_if(in_state(crate::PlayState::Flying)),
+                toggle_mission_log.run_if(not(in_state(crate::PlayState::MainMenu))),
                 drain_completion_toasts,
             ),
         )
@@ -475,7 +475,7 @@ pub fn missions_ui_plugin(app: &mut App) {
             EguiPrimaryContextPass,
             (
                 render_toast,
-                render_mission_log.run_if(in_state(crate::PlayState::Flying)),
+                render_mission_log.run_if(not(in_state(crate::PlayState::MainMenu))),
             ),
         );
 }

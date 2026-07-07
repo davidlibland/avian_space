@@ -180,7 +180,10 @@ fn render_markup_notice(ui: &mut egui::Ui, _planet: &PlanetData, markup: f32) {
     if markup > 1.0 {
         ui.colored_label(
             egui::Color32::from_rgb(230, 140, 90),
-            format!("Poor local standing: prices +{:.0}%.", (markup - 1.0) * 100.0),
+            format!(
+                "Poor local standing: {:.0}% transaction fee on trades.",
+                (markup - 1.0) * 100.0
+            ),
         );
     }
 }
@@ -234,9 +237,10 @@ pub fn render_trade_tab(
                     .map(|c| c.display_name.as_str())
                     .unwrap_or(&commodity);
                 let buy_price = crate::standing::markup_price(price, markup);
+                let sell_price = crate::standing::tariff_price(price, markup);
                 ui.label(commodity_display);
                 ui.label(if buy_price != price {
-                    format!("{buy_price} ({price})")
+                    format!("{buy_price} / sell {sell_price}")
                 } else {
                     price.to_string()
                 });
@@ -272,7 +276,7 @@ pub fn render_trade_tab(
                     .on_hover_text(format!("Shift-click: sell {bulk}"))
                     .clicked()
                 {
-                    ship.sell_cargo(&commodity, amount, price);
+                    ship.sell_cargo(&commodity, amount, sell_price);
                 }
                 ui.end_row();
             }
@@ -299,11 +303,14 @@ pub fn render_trade_tab(
                 ui.label("");
                 ui.end_row();
                 for (commodity, qty) in &extra_cargo {
-                    let sell_price = item_universe
-                        .global_minimum_price
-                        .get(commodity)
-                        .copied()
-                        .unwrap_or(1);
+                    let sell_price = crate::standing::tariff_price(
+                        item_universe
+                            .global_minimum_price
+                            .get(commodity)
+                            .copied()
+                            .unwrap_or(1),
+                        markup,
+                    );
                     let commodity_display = item_universe
                         .commodities
                         .get(commodity)

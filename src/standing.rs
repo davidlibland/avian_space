@@ -104,6 +104,19 @@ pub fn markup_price(price: i128, markup: f32) -> i128 {
     }
 }
 
+/// Tariff applied to sale proceeds (rounded down — the house never rounds
+/// in your favor). The same proportional transaction fee as `markup_price`,
+/// run in reverse: buying pays price × markup, selling nets price ÷ markup.
+/// A flat markup on BOTH sides of the trade would let a disliked pilot
+/// profit by selling into the inflated prices; a fee can't be arbitraged.
+pub fn tariff_price(price: i128, markup: f32) -> i128 {
+    if markup <= 1.0 {
+        price
+    } else {
+        (price as f64 / markup as f64).floor() as i128
+    }
+}
+
 
 
 // ── Systems ──────────────────────────────────────────────────────────────────
@@ -274,7 +287,8 @@ fn arrest_on_landing(
     galaxy: Res<crate::galaxy::GalaxyControl>,
     current_system: Res<CurrentStarSystem>,
     mut catalog: ResMut<MissionCatalog>,
-    log: Res<MissionLog>,
+    mut log: ResMut<MissionLog>,
+    mut started: MessageWriter<crate::missions::MissionStarted>,
     mut counter: Local<u32>,
 ) {
     // NB: ResMut<FactionStandings> only for read + the change-tick touch at
@@ -451,6 +465,17 @@ fn arrest_on_landing(
                 },
             );
         }
+        // Activate the arrest IMMEDIATELY (don't wait for the Locked →
+        // Active pass): prune_dead_chains also consumes this landing message
+        // in another plugin with UNDEFINED relative order, and it deletes
+        // procedural defs that aren't part of an Active chain — a Locked
+        // just-filed arrest would be erased whenever the missions chain
+        // happened to run after this system in the same frame.
+        log.set(
+            &meet_id,
+            MissionStatus::Active(crate::missions::types::ObjectiveProgress::default()),
+        );
+        started.write(crate::missions::MissionStarted(meet_id.clone()));
         // Touch standings so downstream change-gated systems re-run.
         standings.adjust(&faction, 0.0);
     }

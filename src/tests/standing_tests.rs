@@ -76,6 +76,11 @@ fn arrest_app() -> (App, Entity) {
             Update,
             (
                 arrest_on_landing,
+                // The live-game losing interleaving: roll_offers_on_land
+                // prunes dead procedural chains from the SAME landing message
+                // right after the arrest files. Pre-activation at filing time
+                // is what keeps the fresh case out of the prune.
+                crate::missions::progress::roll_offers_on_land,
                 crate::missions::progress::update_locked_to_available,
                 crate::missions::progress::advance_land_objectives,
                 crate::missions::progress::advance_meet_npc_objectives,
@@ -199,9 +204,10 @@ fn arrest_generates_case_and_fine_resolution_restores_standing() {
             "sibling resolutions retire when the case closes: {id}"
         );
     }
-    // No re-arrest while nothing changed… standing is above the threshold now.
+    // No re-arrest while nothing changed… standing is above the threshold
+    // now, and the next landing's prune sweeps the closed case away entirely.
     land(&mut app, "earth");
-    assert_eq!(arrest_ids(&mut app).len(), 4, "no new case filed");
+    assert_eq!(arrest_ids(&mut app).len(), 0, "closed case pruned, no new case filed");
 }
 
 #[test]
@@ -321,4 +327,22 @@ fn standings_and_galaxy_persist() {
     let restored = crate::galaxy::GalaxyControl::from_save(g.to_save(), &iu);
     assert_eq!(restored.influence_of("drift", "Rebel"), g.influence_of("drift", "Rebel"));
     assert_eq!(restored.controllers, g.controllers);
+}
+
+#[test]
+fn transaction_fee_cannot_be_arbitraged() {
+    use crate::standing::{markup_price, price_markup, tariff_price};
+    let m = price_markup(-60.0);
+    assert!(m > 1.0);
+    for price in [1i128, 7, 100, 5321] {
+        let buy = markup_price(price, m);
+        let sell = tariff_price(price, m);
+        assert!(buy > price, "buys cost more when disliked");
+        assert!(sell < price, "sales net less when disliked");
+        // Round-tripping a unit through a hostile market always loses money.
+        assert!(sell < buy, "no arbitrage: sell {sell} < buy {buy}");
+    }
+    // Neutral standing: no fee in either direction.
+    assert_eq!(markup_price(100, price_markup(0.0)), 100);
+    assert_eq!(tariff_price(100, price_markup(0.0)), 100);
 }
