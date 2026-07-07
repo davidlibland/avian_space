@@ -1157,16 +1157,12 @@ fn setup_surface(
             solid_building_tiles.insert(t);
         }
 
-        // Apply terrain constraints + ensure connectivity.
+        // Apply terrain constraints + ensure connectivity, starting from the
+        // same base field used for building placement (organic or station).
         let generated = crate::surface_terrain::generate_constrained_terrain(
             map_w,
             map_h,
-            N_TERRAIN_TYPES,
-            seed,
-            FBM_SCALE,
-            FBM_OCTAVES,
-            FBM_LACUNARITY,
-            FBM_GAIN,
+            initial_terrain.clone(),
             &collision_codes,
             &movement_costs,
             &placed_buildings,
