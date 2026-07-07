@@ -765,11 +765,22 @@ fn spawn_building_3d(
             DespawnOnExit(PlayState::Exploring),
             Sprite::from_image(frames[0].clone()),
             bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-            // A hair BENEATH the facade: the roll-up panel sits in the wall
-            // recess, so the jambs/lintel draw over it while it still covers
-            // the doorway hole.
-            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) - 0.0004)
-                .with_scale(Vec3::splat(scale)),
+            // A hair BENEATH the facade — or beneath the VESTIBULE on cryo
+            // buildings, whose airlock (and its door) juts forward of the
+            // wall: the panel sits in whichever recess it was baked into.
+            Transform::from_xyz(
+                fc.x,
+                fc.y,
+                crate::surface_objects::depth_z(
+                    fc.y
+                        - props
+                            .iter()
+                            .find(|p| p.name == "vest")
+                            .map_or(0.0, |p| p.dy)
+                            * tile_px,
+                ) - 0.0004,
+            )
+            .with_scale(Vec3::splat(scale)),
             BuildingDoor {
                 frames,
                 door_pos: fc,
@@ -1187,12 +1198,13 @@ fn setup_surface(
 
         // The repair engine sits front-left of the door. Mark its tiles
         // impassable just like the building tiles so character pathfinding
-        // routes around it. ONE row deep: the oblique bake draws the prop's
-        // visible base ~1.5 screen tiles south of the wall, so a second solid
-        // row was an invisible half-tile wall in front of it.
+        // routes around it. TWO rows: its visible base reaches ~1.6 screen
+        // tiles south of the wall (the gun's plinth is shallower — one row).
         let engine_tiles = [
             (mech_x.saturating_sub(1), mech_y.saturating_sub(1)),
             (mech_x, mech_y.saturating_sub(1)),
+            (mech_x.saturating_sub(1), mech_y.saturating_sub(2)),
+            (mech_x, mech_y.saturating_sub(2)),
         ];
         for &t in &engine_tiles {
             solid_building_tiles.insert(t);

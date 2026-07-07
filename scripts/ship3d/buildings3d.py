@@ -317,13 +317,17 @@ def entry(s, m, w, d, z0):
     # floor shows through the open door, with the frame/lintel/roof intact.
     b = s["biome"]; fz = -d / 2
     if b == "ice":                         # storm-porch airlock vestibule
-        B.add_box("vest", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.06)
-        B.add_box("vroof", (0, fz - 0.7, z0 + 1.78), (2.1, 1.62, 0.18), m["roof"], bevel=0.04)
+        # The vestibule juts 1.4 tiles FORWARD of the wall, so it bakes as its
+        # own prop object sorted at ITS front line — a player stepping into
+        # the airlock mouth is framed by it instead of drawing over it. The
+        # game also sorts the animated door at this line (see door overlay).
+        B.add_box("pp_vest__wall", (0, fz - 0.7, z0 + 0.85), (1.9, 1.4, 1.7), m["wall"], bevel=0.06)
+        B.add_box("pp_vest__roof", (0, fz - 0.7, z0 + 1.78), (2.1, 1.62, 0.18), m["roof"], bevel=0.04)
         B.add_box("doorpanel", (0, fz - 1.44, z0 + 0.68), (0.96, 0.08, 1.3), m["wall_d"], bevel=0.03)
-        B.add_box("vglow", (0, fz - 1.46, z0 + 1.42), (1.1, 0.1, 0.13), m["glow"], bevel=0.0)
+        B.add_box("pp_vest__glow", (0, fz - 1.46, z0 + 1.42), (1.1, 0.1, 0.13), m["glow"], bevel=0.0)
         # the cut runs from in FRONT of the vestibule (which juts forward) all the
         # way back through the body, so the whole doorway is a real opening
-        cut_doorway(m, ["vest", "body"], 0, fz - 1.55, 1.02, 1.46, z0 + 0.72, 1.55 + d / 2 + 0.4)
+        cut_doorway(m, ["pp_vest__wall", "body"], 0, fz - 1.55, 1.02, 1.46, z0 + 0.72, 1.55 + d / 2 + 0.4)
     else:
         B.add_box("doorpanel", (0, fz - 0.06, z0 + 0.65), (1.0, 0.08, 1.3), m["wall_d"], bevel=0.02)
         B.add_box("lintel", (0, fz - 0.06, z0 + 1.34), (1.3, 0.16, 0.16), m["glow"], bevel=0.0)
@@ -675,6 +679,9 @@ PROP_DY = {
     ("mechanic", "engine"): 2.05, ("mechanic", "plate"): 1.2,
     ("mechanic", "toolbox"): 1.7,
     ("fuel_station", "totem"): 0.6, ("fuel_station", "pumps"): 1.85,
+    # cryo storm-porch vestibule (front wall face 1.4 + door reveal)
+    ("market", "vest"): 1.45, ("outfitter", "vest"): 1.45, ("bar", "vest"): 1.45,
+    ("fuel_station", "vest"): 1.45, ("garrison", "vest"): 1.45,
     ("garrison", "gun"): 1.7,
     ("garrison", "bagsf"): 1.3, ("garrison", "bagsb"): 1.05,
     ("garrison", "board"): 0.65, ("garrison", "flag"): -0.3,
