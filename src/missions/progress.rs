@@ -416,9 +416,10 @@ pub fn finalize_completions(
                 CompletionEffect::Pay { credits } => {
                     ship.credits = ship.credits.saturating_add(*credits as i128);
                 }
-                // Applied by the standing module (it watches MissionCompleted),
-                // keeping mission logic decoupled from the standing resource.
+                // Applied by the standing/galaxy modules (they watch
+                // MissionCompleted), keeping mission logic decoupled.
                 CompletionEffect::AdjustStanding { .. } => {}
+                CompletionEffect::ShiftInfluence { .. } => {}
                 CompletionEffect::GrantUnlock { name } => {
                     unlocks.0.insert(name.clone());
                 }
@@ -761,6 +762,7 @@ pub fn roll_offers_on_land(
     mut catalog: ResMut<MissionCatalog>,
     mut offers: ResMut<MissionOffers>,
     standings: Res<crate::standing::FactionStandings>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
 ) {
     let mut rng = rand::thread_rng();
     for PlayerLandedOnPlanet { planet } in reader.read() {
@@ -775,7 +777,7 @@ pub fn roll_offers_on_land(
         // missions (story or procedural) while the player's standing with
         // that faction is negative. Auto missions (story follow-ups, arrest
         // flows) are unaffected — they don't go through the offer rolls.
-        if !offers_allowed(&standings, &universe, planet) {
+        if !offers_allowed(&standings, &galaxy, &universe, planet) {
             offers.tab = Vec::new();
             offers.npc.insert(planet.clone(), Vec::new());
             continue;
@@ -853,19 +855,17 @@ pub fn roll_offers_on_land(
     }
 }
 
-/// Mission offers require non-negative standing with the planet's faction
-/// (independent worlds don't care).
+/// Mission offers require non-negative standing with the planet's EFFECTIVE
+/// faction — its system's live controller (independent or contested worlds
+/// don't care).
 pub(crate) fn offers_allowed(
     standings: &crate::standing::FactionStandings,
+    galaxy: &crate::galaxy::GalaxyControl,
     universe: &ItemUniverse,
     planet: &str,
 ) -> bool {
-    universe
-        .star_systems
-        .values()
-        .find_map(|s| s.planets.get(planet))
-        .and_then(crate::standing::planet_faction)
-        .map(|f| standings.get(f) >= 0.0)
+    crate::galaxy::effective_planet_faction(galaxy, universe, planet)
+        .map(|f| standings.get(&f) >= 0.0)
         .unwrap_or(true)
 }
 
@@ -889,12 +889,13 @@ pub fn roll_new_offers_while_landed(
     mut offers: ResMut<MissionOffers>,
     landed: Res<crate::planet_ui::LandedContext>,
     standings: Res<crate::standing::FactionStandings>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     universe: Res<ItemUniverse>,
 ) {
     let Some(planet) = landed.planet_name.clone() else {
         return;
     };
-    if !offers_allowed(&standings, &universe, &planet) {
+    if !offers_allowed(&standings, &galaxy, &universe, &planet) {
         return;
     }
     // Collect unrolled Available offers for this visit: (id, weight, is_tab).

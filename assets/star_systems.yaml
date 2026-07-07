@@ -321,26 +321,6 @@ sol:
       location: [500., 300.]
       number: 40
       radius: 1500.
-  ships:
-    min: 2
-    max: 5
-    types:
-      courier: 1.7
-      shuttle: 1.7
-      fed_patrol: 1.0
-      cargo_transport: 0.9
-      freighter: 0.6
-      hauler: 0.5
-      pirate_corvette: 0.4
-      prospector: 0.4
-      bulk_carrier: 0.3
-      asteroid_miner: 0.2
-      fed_destroyer: 0.2
-      fed_missile_cruiser: 0.2
-      corvette: 0.1
-      fed_carrier: 0.1
-      fighter: 0.1
-      surplus_carrier: 0.1
 
 kepler_22:
   map_position: [-520.0, 60.0]
@@ -382,31 +362,9 @@ kepler_22:
       location: [-100., 200.]
       number: 8
       radius: 400.
-  ships:
-    min: 2
-    max: 5
-    types:
-      fed_patrol: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_destroyer: 0.2
-      fed_missile_cruiser: 0.2
-      frontier_skiff: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      bastion_guard: 0.1
-      corvette: 0.1
-      fed_carrier: 0.1
-      fighter: 0.1
-      frontier_harvester: 0.1
 
 tau_ceti:
+  contestable: true
   map_position: [-280.0, 60.0]
   connections: [epsilon_eridani, barnard, kepler_22, sol]
   planets:
@@ -449,28 +407,9 @@ tau_ceti:
       location: [200., 200.]
       number: 6
       radius: 350.
-  ships:
-    min: 2
-    max: 5
-    types:
-      fed_patrol: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_destroyer: 0.2
-      fed_missile_cruiser: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fed_carrier: 0.1
-      fighter: 0.1
 
 epsilon_eridani:
+  contestable: true
   map_position: [-350.0, -100.0]
   connections: [tau_ceti, tycho_drift, vega, kepler_22]
   planets:
@@ -512,30 +451,9 @@ epsilon_eridani:
       location: [-200., 100.]
       number: 12
       radius: 450.
-  ships:
-    min: 2
-    max: 5
-    types:
-      fed_patrol: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_destroyer: 0.2
-      fed_missile_cruiser: 0.2
-      hauler: 0.2
-      helios_drone: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fed_carrier: 0.1
-      fighter: 0.1
-      helios_enforcer: 0.1
 
 vega:
+  contestable: true
   map_position: [-160.0, -220.0]
   connections: [tycho_yards, epsilon_eridani, sol, helios_prime]
   planets:
@@ -589,30 +507,9 @@ vega:
       radius: 700.
       commodities:
         gold: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      fed_patrol: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_destroyer: 0.2
-      fed_missile_cruiser: 0.2
-      hauler: 0.2
-      helios_drone: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fed_carrier: 0.1
-      fighter: 0.1
-      helios_enforcer: 0.1
 
 barnard:
+  contestable: true
   map_position: [-130.0, 180.0]
   connections: [meridian, tau_ceti, sol, drift, ceres_freehold]
   planets:
@@ -649,34 +546,13 @@ barnard:
       location: [0., 0.]
       number: 15
       radius: 600.
-  ships:
-    min: 2
-    max: 5
-    types:
-      fed_patrol: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_destroyer: 0.2
-      fed_missile_cruiser: 0.2
-      frontier_skiff: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fed_carrier: 0.1
-      fighter: 0.1
-      frontier_harvester: 0.1
 
 # ── Uninhabited border systems ──────────────────────────────────────────────────
 # No planets. Dense asteroid fields. Pirates and miners. Both factions send
 # the occasional patrol through here, making it genuinely dangerous.
 
 alpha_centauri:
+  contestable: true
   map_position: [220.0, -90.0]
   connections: [sol, sirius, drift, the_foundry]
   planets: {}
@@ -689,25 +565,9 @@ alpha_centauri:
       location: [-100., 300.]
       number: 15
       radius: 500.
-  ships:
-    min: 2
-    max: 5
-    types:
-      pirate_corvette: 1.8
-      fed_patrol: 0.7
-      rebel_fighter: 0.7
-      pirate_missile_boat: 0.4
-      prospector: 0.4
-      rebel_gunboat: 0.4
-      frigate: 0.3
-      asteroid_miner: 0.2
-      helios_drone: 0.2
-      pirate_carrier: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      helios_enforcer: 0.1
 
 drift:
+  contestable: true
   map_position: [100.0, 150.0]
   connections: [procyon, halcyon, barnard, alpha_centauri]
   planets: {}
@@ -718,29 +578,13 @@ drift:
       radius: 800.
       commodities:
         iron: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      pirate_corvette: 1.8
-      fed_patrol: 0.7
-      rebel_fighter: 0.7
-      pirate_missile_boat: 0.4
-      prospector: 0.4
-      rebel_gunboat: 0.4
-      frigate: 0.3
-      asteroid_miner: 0.2
-      frontier_skiff: 0.2
-      pirate_carrier: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      frontier_harvester: 0.1
 
 # ── Rebel systems (right side) ─────────────────────────────────────────────────
 # Rebels are faster and more aggressive. Border systems (procyon, sirius)
 # have an occasional Federation patrol pushing through.
 
 procyon:
+  contestable: true
   map_position: [270.0, 160.0]
   connections: [drift, sirius, altair, the_verge]
   planets:
@@ -790,28 +634,9 @@ procyon:
         robotics: 40
       outfitter: []
   astroid_fields: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      rebel_fighter: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      rebel_gunboat: 0.7
-      cargo_transport: 0.4
-      freighter: 0.3
-      bulk_carrier: 0.2
-      frontier_skiff: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      rebel_frigate: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      frontier_harvester: 0.1
-      rebel_carrier: 0.1
 
 sirius:
+  contestable: true
   map_position: [420.0, 60.0]
   connections: [procyon, rigel, alpha_centauri, deneb]
   planets:
@@ -859,29 +684,9 @@ sirius:
       radius: 400.
       commodities:
         titanium: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      rebel_fighter: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      rebel_gunboat: 0.7
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      frigate: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      rebel_frigate: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      rebel_carrier: 0.1
 
 rigel:
+  contestable: true
   map_position: [580.0, -120.0]
   connections: [sanctum, deneb, sirius, the_foundry]
   planets:
@@ -922,31 +727,9 @@ rigel:
       location: [300., -100.]
       number: 10
       radius: 500.
-  ships:
-    min: 2
-    max: 5
-    types:
-      rebel_fighter: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      rebel_gunboat: 0.7
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      helios_drone: 0.2
-      order_acolyte: 0.2
-      pirate_missile_boat: 0.2
-      rebel_frigate: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      helios_enforcer: 0.1
-      rebel_carrier: 0.1
 
 altair:
+  contestable: true
   map_position: [500.0, 220.0]
   connections: [wayfarer, deneb, procyon, dim_haven]
   planets:
@@ -995,28 +778,6 @@ altair:
       location: [100., 100.]
       number: 12
       radius: 500.
-  ships:
-    min: 2
-    max: 5
-    types:
-      rebel_fighter: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      rebel_gunboat: 0.7
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      frontier_skiff: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      rebel_frigate: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      frontier_harvester: 0.1
-      rebel_carrier: 0.1
 
 deneb:
   map_position: [680.0, 80.0]
@@ -1071,28 +832,6 @@ deneb:
       location: [-200., -100.]
       number: 6
       radius: 350.
-  ships:
-    min: 2
-    max: 5
-    types:
-      rebel_fighter: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      rebel_gunboat: 0.7
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      order_acolyte: 0.2
-      pirate_missile_boat: 0.2
-      rebel_frigate: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      rebel_carrier: 0.1
-      surplus_carrier: 0.1
 
 # ── Free Frontier — The Reaches (south wing) ─────────────────────────────────────
 # The Independent worlds given a flag. Frontier extraction + free ports, gatewayed
@@ -1139,32 +878,9 @@ halcyon:
       location: [240.0, -120.0]
       number: 6
       radius: 340.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      frigate: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      surplus_carrier: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 ceres_freehold:
+  contestable: true
   map_position: [20.0, 470.0]
   connections: [halcyon, kuiper_reach, barnard, meridian]
   planets:
@@ -1198,31 +914,9 @@ ceres_freehold:
       location: [-120.0, -200.0]
       number: 8
       radius: 360.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_patrol: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 the_verge:
+  contestable: true
   map_position: [330.0, 410.0]
   connections: [wayfarer, halcyon, outer_dark, kuiper_reach, procyon]
   planets:
@@ -1267,33 +961,9 @@ the_verge:
       location: [260.0, -140.0]
       number: 7
       radius: 350.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      rebel_fighter: 0.2
-      surplus_carrier: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      rebel_gunboat: 0.1
 
 kuiper_reach:
+  contestable: true
   map_position: [180.0, 580.0]
   connections: [outer_dark, ceres_freehold, the_verge]
   astroid_fields:
@@ -1337,33 +1007,12 @@ kuiper_reach:
         fuel_cells: 18
         exotic_matter: 261
       outfitter: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 # ── Helios Combine (north wing) ──────────────────────────────────────────────────
 # Megacorp industry above the core: refineries, robotics, automated yards. Gatewayed
 # through Vega (Fed lanes) and Alpha Centauri (the borderlands it overhangs).
 tycho_yards:
+  contestable: true
   map_position: [-120.0, -380.0]
   connections: [vega, helios_prime, tycho_drift]
   astroid_fields: []
@@ -1413,28 +1062,6 @@ tycho_yards:
         robotics: 49
         exotic_matter: 265
       outfitter: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      helios_courier: 2.5
-      helios_hauler: 2.4
-      helios_freighter: 1.7
-      helios_drone: 1.4
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      helios_enforcer: 0.7
-      cargo_transport: 0.4
-      freighter: 0.3
-      bulk_carrier: 0.2
-      fed_patrol: 0.2
-      hauler: 0.2
-      helios_overseer: 0.2
-      helios_titan: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 helios_prime:
   map_position: [60.0, -470.0]
@@ -1485,30 +1112,9 @@ helios_prime:
         electronics: 16
         robotics: 40
       outfitter: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      helios_courier: 2.5
-      helios_hauler: 2.4
-      helios_freighter: 1.7
-      helios_drone: 1.4
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      helios_enforcer: 0.7
-      cargo_transport: 0.4
-      freighter: 0.3
-      bulk_carrier: 0.2
-      fed_patrol: 0.2
-      hauler: 0.2
-      helios_overseer: 0.2
-      helios_titan: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 the_foundry:
+  contestable: true
   map_position: [290.0, -360.0]
   connections: [helios_prime, alpha_centauri, rigel]
   planets:
@@ -1561,31 +1167,6 @@ the_foundry:
       location: [240.0, 140.0]
       number: 8
       radius: 350.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      helios_courier: 2.5
-      helios_hauler: 2.4
-      helios_freighter: 1.7
-      helios_drone: 1.4
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      helios_enforcer: 0.7
-      cargo_transport: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      helios_overseer: 0.2
-      helios_titan: 0.2
-      pirate_missile_boat: 0.2
-      rebel_fighter: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      rebel_gunboat: 0.1
 
 # ── The Bastion — Federation hardliner splinter (far west) ───────────────────────
 # The deep Federation rear, seized by a militarist splinter. Reached only through
@@ -1630,31 +1211,6 @@ iron_march:
         food: 6
         uranium: 8
       outfitter: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      bastion_collier: 1.7
-      bastion_dredger: 1.7
-      bastion_guard: 0.8
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      bastion_lance: 0.5
-      cargo_transport: 0.4
-      prospector: 0.4
-      siege_monitor: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_patrol: 0.2
-      frontier_skiff: 0.2
-      hauler: 0.2
-      iron_dreadnought: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      frontier_harvester: 0.1
 
 bastion:
   map_position: [-860.0, 70.0]
@@ -1694,28 +1250,6 @@ bastion:
       location: [-160.0, -180.0]
       number: 7
       radius: 340.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      bastion_collier: 1.7
-      bastion_dredger: 1.7
-      bastion_guard: 0.8
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      bastion_lance: 0.5
-      cargo_transport: 0.4
-      prospector: 0.4
-      siege_monitor: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      iron_dreadnought: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 # ── Sanctum & the road to the Rift — Artifact Order (east) ───────────────────────
 # The Order's holy ground, guarding the road from Rebel space (Deneb) to the Deep.
@@ -1770,30 +1304,6 @@ sanctum:
         titanium: 16
         weapons_parts: 25
       outfitter: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      order_quarryman: 2.4
-      order_almoner: 1.7
-      order_acolyte: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      order_censer: 0.4
-      order_reliquary: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      order_cathedral: 0.2
-      pirate_missile_boat: 0.2
-      rebel_fighter: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      rebel_gunboat: 0.1
 
 the_threshold:
   map_position: [930.0, -250.0]
@@ -1830,28 +1340,6 @@ the_threshold:
       location: [200.0, 160.0]
       number: 6
       radius: 340.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      order_quarryman: 2.4
-      order_almoner: 1.7
-      order_acolyte: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      order_censer: 0.4
-      order_reliquary: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      order_cathedral: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 # ── The Rift — Precursor deep (endgame, gated) ───────────────────────────────────
 # Uninhabited, derelict-choked, exotic-matter rich. The connection from the_threshold
@@ -1885,6 +1373,7 @@ the_rift:
 
 # ── Bastion — third system (forge) ───────────────────────────────────────────────
 the_anvil:
+  contestable: true
   map_position: [-760.0, -160.0]
   connections: [iron_march, coldforge, bastion]
   planets:
@@ -1921,28 +1410,6 @@ the_anvil:
       location: [220.0, -160.0]
       number: 7
       radius: 340.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      bastion_collier: 1.7
-      bastion_dredger: 1.7
-      bastion_guard: 0.8
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      bastion_lance: 0.5
-      cargo_transport: 0.4
-      prospector: 0.4
-      siege_monitor: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      iron_dreadnought: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 # ── Artifact Order — third system (vaults) ───────────────────────────────────────
 the_cloister:
@@ -1981,28 +1448,6 @@ the_cloister:
         water: 1
         food: 4
       outfitter: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      order_quarryman: 2.4
-      order_almoner: 1.7
-      order_acolyte: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      order_censer: 0.4
-      order_reliquary: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      order_cathedral: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 # ── Precursor Deep — three more (uninhabited, exotic-matter, derelict) ────────────
 # Reached by the unstable jumps beyond the Rift. No markets, no fuel, no mercy.
@@ -2072,6 +1517,7 @@ the_seedbed:
 # ── Densification: corner systems filling the map's edges ──
 
 meridian:
+  contestable: true
   map_position: [-260.0, 300.0]
   connections: [barnard, lowmark, ceres_freehold, drumlin]
   display_name: "Meridian"
@@ -2112,32 +1558,10 @@ meridian:
       radius: 340.0
       commodities:
         silicates: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_patrol: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 
 lowmark:
+  contestable: true
   map_position: [-470.0, 310.0]
   connections: [drumlin, meridian, kepler_22]
   display_name: "Lowmark"
@@ -2173,32 +1597,10 @@ lowmark:
       radius: 340.0
       commodities:
         iron: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      fed_patrol: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 
 drumlin:
+  contestable: true
   map_position: [-610.0, 430.0]
   connections: [lowmark, meridian, iron_march]
   display_name: "Drumlin"
@@ -2238,32 +1640,10 @@ drumlin:
       radius: 340.0
       commodities:
         iron: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      bastion_guard: 0.1
-      corvette: 0.1
-      fighter: 0.1
 
 
 tycho_drift:
+  contestable: true
   map_position: [-340.0, -300.0]
   connections: [epsilon_eridani, tycho_yards, coldforge]
   display_name: "Tycho Drift"
@@ -2306,32 +1686,10 @@ tycho_drift:
         uranium: 40
       outfitter: []
   astroid_fields: []
-  ships:
-    min: 2
-    max: 5
-    types:
-      helios_courier: 2.5
-      helios_hauler: 2.4
-      helios_freighter: 1.7
-      helios_drone: 1.4
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      helios_enforcer: 0.7
-      cargo_transport: 0.4
-      freighter: 0.3
-      bulk_carrier: 0.2
-      fed_patrol: 0.2
-      hauler: 0.2
-      helios_overseer: 0.2
-      helios_titan: 0.2
-      pirate_missile_boat: 0.2
-      bastion_guard: 0.1
-      corvette: 0.1
-      fighter: 0.1
 
 
 coldforge:
+  contestable: true
   map_position: [-620.0, -310.0]
   connections: [the_anvil, tycho_drift, iron_march, bastion]
   display_name: "Cold Forge"
@@ -2371,33 +1729,10 @@ coldforge:
       radius: 340.0
       commodities:
         iron: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      bastion_collier: 1.7
-      bastion_dredger: 1.7
-      bastion_guard: 0.8
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      bastion_lance: 0.5
-      cargo_transport: 0.4
-      prospector: 0.4
-      siege_monitor: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      helios_drone: 0.2
-      iron_dreadnought: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      helios_enforcer: 0.1
 
 
 wayfarer:
+  contestable: true
   map_position: [470.0, 380.0]
   connections: [the_verge, altair, dim_haven, outer_dark]
   display_name: "Wayfarer Station"
@@ -2444,33 +1779,10 @@ wayfarer:
       radius: 340.0
       commodities:
         silicates: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      rebel_fighter: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      rebel_gunboat: 0.1
 
 
 outer_dark:
+  contestable: true
   map_position: [370.0, 600.0]
   connections: [kuiper_reach, the_verge, wayfarer]
   display_name: "The Outer Dark"
@@ -2506,31 +1818,10 @@ outer_dark:
       radius: 340.0
       commodities:
         iron: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 
 saints_rest:
+  contestable: true
   map_position: [820.0, 180.0]
   connections: [deneb, the_cloister, vault_road, dim_haven]
   display_name: "Saint's Rest"
@@ -2574,35 +1865,10 @@ saints_rest:
       radius: 340.0
       commodities:
         exotic_matter: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      order_quarryman: 2.4
-      order_almoner: 1.7
-      order_acolyte: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      order_censer: 0.4
-      order_reliquary: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      frontier_skiff: 0.2
-      hauler: 0.2
-      order_cathedral: 0.2
-      pirate_missile_boat: 0.2
-      rebel_fighter: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      frontier_harvester: 0.1
-      rebel_gunboat: 0.1
 
 
 vault_road:
+  contestable: true
   map_position: [1000.0, 60.0]
   connections: [the_cloister, saints_rest, the_threshold]
   display_name: "The Vault Road"
@@ -2640,31 +1906,10 @@ vault_road:
       radius: 340.0
       commodities:
         exotic_matter: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      order_quarryman: 2.4
-      order_almoner: 1.7
-      order_acolyte: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      cargo_transport: 0.4
-      order_censer: 0.4
-      order_reliquary: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      order_cathedral: 0.2
-      pirate_missile_boat: 0.2
-      corvette: 0.1
-      fighter: 0.1
 
 
 dim_haven:
+  contestable: true
   map_position: [660.0, 440.0]
   connections: [wayfarer, altair, saints_rest]
   display_name: "Dim Haven"
@@ -2703,29 +1948,4 @@ dim_haven:
       radius: 340.0
       commodities:
         iron: 1.0
-  ships:
-    min: 2
-    max: 5
-    types:
-      frontier_prospector: 2.4
-      frontier_dredger: 1.7
-      frontier_skiff: 1.0
-      courier: 0.8
-      pirate_corvette: 0.8
-      shuttle: 0.8
-      frontier_harvester: 0.6
-      cargo_transport: 0.4
-      frontier_sailtender: 0.4
-      prospector: 0.4
-      freighter: 0.3
-      frontier_monitor: 0.3
-      asteroid_miner: 0.2
-      bulk_carrier: 0.2
-      hauler: 0.2
-      order_acolyte: 0.2
-      pirate_missile_boat: 0.2
-      rebel_fighter: 0.2
-      corvette: 0.1
-      fighter: 0.1
-      rebel_gunboat: 0.1
 

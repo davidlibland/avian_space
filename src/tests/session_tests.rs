@@ -58,6 +58,8 @@ fn basic_universe() -> ItemUniverse {
             "sol".to_string(),
             StarSystem {
                 faction: String::new(),
+                contestable: false,
+                authored_traffic: false,
                 display_name: String::new(),
                 map_position: bevy::math::Vec2::ZERO,
                 connections: vec![],

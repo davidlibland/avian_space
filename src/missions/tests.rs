@@ -739,6 +739,8 @@ mod template_targets {
             display_name: String::new(),
             planet_type: String::new(),
             tech_level: 0,
+            explicit_outfitter: Vec::new(),
+            explicit_shipyard: Vec::new(),
             uncolonized: !landable,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -759,6 +761,8 @@ mod template_targets {
     fn system(planets: &[(&str, bool)], field_commodity: Option<&str>) -> StarSystem {
         StarSystem {
             faction: String::new(),
+            contestable: false,
+            authored_traffic: false,
             display_name: String::new(),
             map_position: Vec2::ZERO,
             connections: vec![],
@@ -1350,6 +1354,7 @@ mod runtime {
         // while the player is landed gets one roll on the spot (weight 1.0 →
         // guaranteed offer) and is not re-added on later frames.
         let mut app = App::new();
+        let mut app_galaxy: Option<crate::galaxy::GalaxyControl> = None;
         app.add_plugins(MinimalPlugins)
             .init_resource::<MissionLog>()
             .init_resource::<MissionCatalog>()
@@ -1362,12 +1367,14 @@ mod runtime {
                 )
                 .expect("assets/ must parse");
                 iu.finalize();
+                app_galaxy = Some(crate::galaxy::GalaxyControl::seeded_from(&iu));
                 iu
             })
             .insert_resource(crate::planet_ui::LandedContext {
                 planet_name: Some("earth".into()),
             })
             .add_systems(Update, progress::roll_new_offers_while_landed);
+        app.insert_resource(app_galaxy.take().unwrap());
 
         let mut def = dummy_def();
         def.offer = OfferKind::NpcOffer {

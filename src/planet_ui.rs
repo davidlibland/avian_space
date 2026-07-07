@@ -176,17 +176,12 @@ use crate::planets::PlanetData;
 use bevy_egui::egui;
 
 /// Banner shown when poor faction standing inflates local prices.
-fn render_markup_notice(ui: &mut egui::Ui, planet: &PlanetData, markup: f32) {
+fn render_markup_notice(ui: &mut egui::Ui, _planet: &PlanetData, markup: f32) {
     if markup > 1.0 {
-        if let Some(faction) = crate::standing::planet_faction(planet) {
-            ui.colored_label(
-                egui::Color32::from_rgb(230, 140, 90),
-                format!(
-                    "Poor standing with {faction}: prices +{:.0}%.",
-                    (markup - 1.0) * 100.0
-                ),
-            );
-        }
+        ui.colored_label(
+            egui::Color32::from_rgb(230, 140, 90),
+            format!("Poor local standing: prices +{:.0}%.", (markup - 1.0) * 100.0),
+        );
     }
 }
 

@@ -13,6 +13,8 @@ fn test_universe() -> ItemUniverse {
             display_name: String::new(),
             planet_type: String::new(),
             tech_level: 0,
+            explicit_outfitter: Vec::new(),
+            explicit_shipyard: Vec::new(),
             uncolonized: false,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -34,6 +36,8 @@ fn test_universe() -> ItemUniverse {
             display_name: String::new(),
             planet_type: String::new(),
             tech_level: 0,
+            explicit_outfitter: Vec::new(),
+            explicit_shipyard: Vec::new(),
             uncolonized: false,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -70,6 +74,8 @@ fn test_universe() -> ItemUniverse {
 
     let system = StarSystem {
         faction: String::new(),
+        contestable: false,
+        authored_traffic: false,
         display_name: String::new(),
         map_position: Vec2::ZERO,
         connections: vec![],
@@ -263,12 +269,8 @@ fn market_catalogs_derive_from_tech_and_faction() {
         .expect("assets/ must parse");
     iu.finalize();
 
-    let planet = |name: &str| {
-        iu.star_systems
-            .values()
-            .find_map(|s| s.planets.get(name))
-            .unwrap_or_else(|| panic!("planet {name}"))
-    };
+    let planet =
+        |name: &str| iu.find_gameplay_planet(name).unwrap_or_else(|| panic!("planet {name}")).1;
 
     // Earth: Federation tech 4 — universal + Federation gear, all tech.
     let earth = planet("earth");

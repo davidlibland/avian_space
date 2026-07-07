@@ -171,6 +171,13 @@ pub enum CompletionEffect {
     /// Shift the player's standing with a faction (applied by the standing
     /// module, which watches MissionCompleted — missions stay decoupled).
     AdjustStanding { faction: String, delta: f32 },
+    /// Shift a faction's influence share in a (contestable) system — the
+    /// galactic-war lever. Applied by the galaxy module, same pattern.
+    ShiftInfluence {
+        system: String,
+        faction: String,
+        delta: f32,
+    },
 }
 
 impl MissionDef {

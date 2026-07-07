@@ -48,8 +48,11 @@ fn standings_clamp() {
 
 fn arrest_app() -> (App, Entity) {
     let mut app = App::new();
+    let iu = universe();
+    let galaxy = crate::galaxy::GalaxyControl::seeded_from(&iu);
     app.add_plugins(MinimalPlugins)
-        .insert_resource(universe())
+        .insert_resource(iu)
+        .insert_resource(galaxy)
         .insert_resource(crate::CurrentStarSystem("sol".to_string()))
         .init_resource::<FactionStandings>()
         .init_resource::<MissionLog>()
@@ -225,18 +228,19 @@ fn no_arrest_above_threshold_or_on_unaligned_worlds() {
 #[test]
 fn negative_standing_blocks_offers() {
     let iu = universe();
+    let galaxy = crate::galaxy::GalaxyControl::seeded_from(&iu);
     let mut standings = FactionStandings::default();
     assert!(
-        crate::missions::progress::offers_allowed(&standings, &iu, "earth"),
+        crate::missions::progress::offers_allowed(&standings, &galaxy, &iu, "earth"),
         "neutral standing → offers"
     );
     standings.adjust("Federation", -1.0);
     assert!(
-        !crate::missions::progress::offers_allowed(&standings, &iu, "earth"),
+        !crate::missions::progress::offers_allowed(&standings, &galaxy, &iu, "earth"),
         "any negative standing → no offers on that faction's worlds"
     );
     assert!(
-        crate::missions::progress::offers_allowed(&standings, &iu, "pluto"),
+        crate::missions::progress::offers_allowed(&standings, &galaxy, &iu, "pluto"),
         "independent worlds don't care"
     );
 }

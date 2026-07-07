@@ -535,6 +535,14 @@ fn validate_completion_effects(
             CompletionEffect::Pay { .. }
             | CompletionEffect::GrantUnlock { .. }
             | CompletionEffect::AdjustStanding { .. } => {}
+            CompletionEffect::ShiftInfluence { system, .. } => {
+                if !iu.star_systems.contains_key(system) {
+                    warn!(
+                        "{label} \"{id}\" ShiftInfluence references system \"{system}\" \
+                         which is not defined in star_systems.yaml"
+                    );
+                }
+            }
         }
     }
 }
@@ -576,7 +584,7 @@ fn planet_has_building(pd: &PlanetData, building: &str) -> bool {
 }
 
 fn find_planet<'a>(iu: &'a ItemUniverse, name: &str) -> Option<&'a PlanetData> {
-    iu.star_systems.values().find_map(|s| s.planets.get(name))
+    iu.find_gameplay_planet(name).map(|(_, p)| p)
 }
 
 /// Run all strict checks and collect human-readable problems (empty == good).

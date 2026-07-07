@@ -43,6 +43,13 @@ pub struct PlanetData {
     /// kept as extras on top.
     #[serde(default)]
     pub tech_level: u8,
+    /// The hand-authored outfitter entries from YAML (stashed at finalize so
+    /// markets can be RE-derived when a system changes hands at runtime).
+    #[serde(skip)]
+    pub explicit_outfitter: Vec<String>,
+    /// The hand-authored shipyard entries from YAML (see explicit_outfitter).
+    #[serde(skip)]
+    pub explicit_shipyard: Vec<String>,
     #[serde(skip)]
     pub sprite_handle: Handle<Image>,
 }

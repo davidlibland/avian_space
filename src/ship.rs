@@ -1301,20 +1301,16 @@ fn handle_buy_ship(
     item_universe: Res<ItemUniverse>,
     unlocks: Res<crate::missions::PlayerUnlocks>,
     standings: Res<crate::standing::FactionStandings>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     landed: Res<crate::planet_ui::LandedContext>,
 ) {
-    // Poor standing with the shipyard's faction inflates the sticker price.
+    // Poor standing with the shipyard's EFFECTIVE faction (its system's live
+    // controller) inflates the sticker price.
     let markup = landed
         .planet_name
         .as_deref()
-        .and_then(|p| {
-            item_universe
-                .star_systems
-                .values()
-                .find_map(|s| s.planets.get(p))
-        })
-        .and_then(crate::standing::planet_faction)
-        .map(|f| crate::standing::price_markup(standings.get(f)))
+        .and_then(|p| crate::galaxy::effective_planet_faction(&galaxy, &item_universe, p))
+        .map(|f| crate::standing::price_markup(standings.get(&f)))
         .unwrap_or(1.0);
     for event in reader.read() {
         let Ok((entity, mut ship)) = player_query.single_mut() else {

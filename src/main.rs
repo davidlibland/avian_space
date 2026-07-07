@@ -7,6 +7,7 @@ mod comms;
 mod experiments;
 mod explosions;
 mod fbm;
+mod galaxy;
 mod game_save;
 mod help_ui;
 mod hud;
@@ -421,6 +422,7 @@ fn build_app(
     // ── Data loading (must come before plugins that use init_session_resource) ──
     app.add_plugins((item_universe_plugin, session::session_plugin));
     app.add_plugins(standing::standing_plugin);
+    app.add_plugins(galaxy::galaxy_plugin);
 
     // ── Rendering-dependent plugins (skipped in headless) ────────────────
     if headless {

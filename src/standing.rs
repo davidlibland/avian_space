@@ -110,25 +110,7 @@ pub fn planet_faction(planet: &crate::planets::PlanetData) -> Option<&str> {
     }
 }
 
-/// The faction controlling a star system: the most common tracked faction
-/// among its planets. None for unclaimed / fully independent systems.
-pub fn controlling_faction(iu: &ItemUniverse, system: &str) -> Option<String> {
-    let sys = iu.star_systems.get(system)?;
-    match sys.faction.as_str() {
-        "" | "Independent" => {}
-        f => return Some(f.to_string()),
-    }
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for planet in sys.planets.values() {
-        if let Some(f) = planet_faction(planet) {
-            *counts.entry(f).or_insert(0) += 1;
-        }
-    }
-    counts
-        .into_iter()
-        .max_by_key(|(_, n)| *n)
-        .map(|(f, _)| f.to_string())
-}
+
 
 // ── Systems ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +122,7 @@ fn standing_on_hits(
     mut standings: ResMut<FactionStandings>,
     current_system: Res<CurrentStarSystem>,
     iu: Res<ItemUniverse>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
 ) {
     let Ok(player_entity) = player.single() else {
         return;
@@ -168,7 +151,7 @@ fn standing_on_hits(
         standings.adjust(&victim_faction, -HIT_PENALTY);
 
         // Helping the local power fight its enemies earns a little goodwill.
-        if let Some(controller) = controlling_faction(&iu, &current_system.0) {
+        if let Some(controller) = galaxy.controller(&current_system.0).map(String::from) {
             if controller != victim_faction
                 && iu
                     .enemies
@@ -188,6 +171,7 @@ fn standing_on_mission_complete(
     mut reader: MessageReader<MissionCompleted>,
     catalog: Res<MissionCatalog>,
     iu: Res<ItemUniverse>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     mut standings: ResMut<FactionStandings>,
 ) {
     for MissionCompleted(id) in reader.read() {
@@ -195,12 +179,7 @@ fn standing_on_mission_complete(
             continue;
         };
         if let OfferKind::NpcOffer { planet, .. } = &def.offer {
-            let faction = iu
-                .star_systems
-                .values()
-                .find_map(|s| s.planets.get(planet))
-                .and_then(|p| planet_faction(p).map(String::from));
-            if let Some(f) = faction {
+            if let Some(f) = crate::galaxy::effective_planet_faction(&galaxy, &iu, planet) {
                 standings.adjust(&f, MISSION_BONUS);
             }
         }
@@ -293,6 +272,7 @@ fn arrest_on_landing(
     mut reader: MessageReader<PlayerLandedOnPlanet>,
     mut standings: ResMut<FactionStandings>,
     iu: Res<ItemUniverse>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     current_system: Res<CurrentStarSystem>,
     mut catalog: ResMut<MissionCatalog>,
     log: Res<MissionLog>,
@@ -301,10 +281,10 @@ fn arrest_on_landing(
     // NB: ResMut<FactionStandings> only for read + the change-tick touch at
     // the end; the actual standing restoration happens via mission effects.
     for PlayerLandedOnPlanet { planet } in reader.read() {
-        let Some(pd) = iu.star_systems.values().find_map(|s| s.planets.get(planet)) else {
+        let Some((_, pd)) = iu.find_gameplay_planet(planet) else {
             continue;
         };
-        let Some(faction) = planet_faction(pd).map(String::from) else {
+        let Some(faction) = crate::galaxy::effective_planet_faction(&galaxy, &iu, planet) else {
             continue;
         };
         let standing = standings.get(&faction);
