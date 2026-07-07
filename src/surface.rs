@@ -1158,6 +1158,25 @@ fn setup_surface(
             solid_building_tiles.insert(t);
         }
 
+        // The garrison's monument gun (plinth + cannon) fills a 2x2 block
+        // front-left of its door — too big to walk through, same treatment
+        // as the mechanic's engine.
+        let gun_tiles: Vec<(u32, u32)> = building_assignments
+            .iter()
+            .filter(|(kind, ..)| *kind == BuildingKind::Garrison)
+            .flat_map(|&(_, bx, by, _)| {
+                [
+                    (bx, by.saturating_sub(1)),
+                    (bx, by.saturating_sub(2)),
+                    (bx + 1, by.saturating_sub(1)),
+                    (bx + 1, by.saturating_sub(2)),
+                ]
+            })
+            .collect();
+        for &t in &gun_tiles {
+            solid_building_tiles.insert(t);
+        }
+
         // Apply terrain constraints + ensure connectivity, starting from the
         // same base field used for building placement (organic or station).
         let generated = crate::surface_terrain::generate_constrained_terrain(
@@ -1392,6 +1411,20 @@ fn setup_surface(
             // it; drop a matching per-tile collider on each — exactly like a building
             // tile — so the player is physically blocked where it's solid.
             for &(tx, ty) in &engine_tiles {
+                let wp = tile_to_world(tx, ty, map_w, map_h, tile_px);
+                commands.spawn((
+                    DespawnOnExit(PlayState::Exploring),
+                    RigidBody::Static,
+                    Collider::rectangle(tile_px, tile_px),
+                    CollisionLayers::new(
+                        GameLayer::Surface,
+                        [GameLayer::Surface, GameLayer::Character],
+                    ),
+                    Transform::from_xyz(wp.x, wp.y, 0.0),
+                ));
+            }
+            // The garrison's monument gun blocks like the engine does.
+            for &(tx, ty) in &gun_tiles {
                 let wp = tile_to_world(tx, ty, map_w, map_h, tile_px);
                 commands.spawn((
                     DespawnOnExit(PlayState::Exploring),

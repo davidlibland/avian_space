@@ -475,8 +475,12 @@ def build_garrison(s, m):
     for tx in (-2.25, -1.55):
         B.add_box("pp_gun__carr", (tx, -d / 2 - 1.2, 0.68), (0.28, 0.55, 0.42), m["dark"], bevel=0.05)
     B.add_cylinder("pp_gun__barrel", (-1.65, -d / 2 - 1.2, 1.12), 0.17, 2.2, m["metal"], axis="x", r2=0.11)
+    for rx in (-1.15, -0.85):
+        B.add_cylinder("pp_gun__ring", (rx, -d / 2 - 1.2, 1.12), 0.19, 0.1, m["dark"], axis="x")
     B.add_cylinder("pp_gun__muzzle", (-0.6, -d / 2 - 1.2, 1.12), 0.15, 0.26, m["dark"], axis="x")
     B.add_cylinder("pp_gun__breech", (-2.6, -d / 2 - 1.2, 1.12), 0.21, 0.4, m["dark"], axis="x")
+    # memorial plaque glowing on the plinth's south face
+    B.add_box("pp_gun__plaque", (-1.9, -d / 2 - 1.74, 0.3), (0.7, 0.06, 0.28), m["glow"], bevel=0.02)
     # Sandbag emplacement guarding the right of the approach, two courses high.
     for sx, sy in ((1.35, -d / 2 - 0.85), (1.95, -d / 2 - 1.1), (2.55, -d / 2 - 0.85)):
         B.add_box("pp_bags__a", (sx, sy, 0.18), (0.58, 0.42, 0.34), m["wall_d"], bevel=0.14)
@@ -787,6 +791,11 @@ def bake():
                 gdy = PROP_DY.get((fn, g), 0.5)
                 if fn == "fuel_station" and st == "cryo" and g == "pumps":
                     gdy = 3.05   # ice storm-porch pushes the pumps forward
+                # PROP_DY is authored in MODEL depth tiles; the oblique camera
+                # foreshortens depth by sin(ELEV) on screen, and the player
+                # moves in un-foreshortened terrain pixels — the sort line
+                # must be where the prop's base is VISIBLY drawn.
+                gdy = round(gdy * math.sin(E), 4)
                 prop_entries.append((g, round(gfx, 4), round(gfy, 4), gdy))
             full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
             Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
