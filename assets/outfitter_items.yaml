@@ -3,6 +3,7 @@ pirate_laser:
     price: 60
     space: 2
     weapon_type: pirate_laser
+    tech_level: 1
 goose:
   !SecondaryWeapon
     price: 400
@@ -10,29 +11,34 @@ goose:
     weapon_type: goose
     ammo_price: 35
     ammo_space: 2
+    tech_level: 2
 laser:
   !PrimaryWeapon
     price: 100
     space: 2
     weapon_type: laser
+    tech_level: 1
 proton_beam:
   !PrimaryWeapon
     price: 250
     space: 3
     weapon_type: proton_beam
     required_unlocks: [proton_beam_license]
+    tech_level: 2
 laser_turret:
   !PrimaryWeapon
     price: 2000
     space: 10
     weapon_type: laser_turret
     required_unlocks: [turret_license]
+    tech_level: 3
 proton_beam_turret:
   !PrimaryWeapon
     price: 5000
     space: 15
     weapon_type: proton_beam_turret
     required_unlocks: [turret_license]
+    tech_level: 4
 ir_missile:
   !SecondaryWeapon
     price: 800
@@ -41,6 +47,7 @@ ir_missile:
     ammo_price: 50
     ammo_space: 2
     required_unlocks: [federation_weapons_license]
+    tech_level: 3
 javelin:
   !SecondaryWeapon
     price: 1000
@@ -49,6 +56,8 @@ javelin:
     ammo_price: 60
     ammo_space: 1
     required_unlocks: [rebel_weapons_license]
+    tech_level: 3
+    factions: [Rebel]
 space_mine:
   !SecondaryWeapon
     price: 500
@@ -56,6 +65,7 @@ space_mine:
     weapon_type: space_mine
     ammo_price: 30
     ammo_space: 2
+    tech_level: 1
 fighter_bay:
   !SecondaryWeapon
     price: 8000
@@ -64,6 +74,7 @@ fighter_bay:
     ammo_price: 2000
     ammo_space: 4
     required_unlocks: [carrier_license]
+    tech_level: 4
 fed_fighter_bay:
   !SecondaryWeapon
     price: 10000
@@ -72,6 +83,8 @@ fed_fighter_bay:
     ammo_price: 3000
     ammo_space: 4
     required_unlocks: [fed_carrier_license]
+    tech_level: 4
+    factions: [Federation]
 shuttle_bay:
   !SecondaryWeapon
     price: 4000
@@ -80,6 +93,7 @@ shuttle_bay:
     ammo_price: 1000
     ammo_space: 3
     required_unlocks: [carrier_license]
+    tech_level: 3
 rebel_fighter_bay:
   !SecondaryWeapon
     price: 8000
@@ -88,6 +102,8 @@ rebel_fighter_bay:
     ammo_price: 2000
     ammo_space: 4
     required_unlocks: [rebel_carrier_license]
+    tech_level: 4
+    factions: [Rebel]
 pirate_corvette_bay:
   !SecondaryWeapon
     price: 6000
@@ -95,18 +111,23 @@ pirate_corvette_bay:
     weapon_type: pirate_corvette_bay
     ammo_price: 1500
     ammo_space: 3
+    tech_level: 4
 flak_gun:
   !PrimaryWeapon
     price: 220
     space: 2
     weapon_type: flak_gun
     required_unlocks: [free_frontier_license]
+    tech_level: 1
+    factions: [FreeFrontier]
 mass_driver:
   !PrimaryWeapon
     price: 650
     space: 4
     weapon_type: mass_driver
     required_unlocks: [frontier_harvester_license]
+    tech_level: 2
+    factions: [FreeFrontier]
 prox_mine:
   !SecondaryWeapon
     price: 420
@@ -115,12 +136,16 @@ prox_mine:
     ammo_price: 22
     ammo_space: 2
     required_unlocks: [frontier_sailtender_license]
+    tech_level: 2
+    factions: [FreeFrontier]
 helios_lance:
   !PrimaryWeapon
     price: 750
     space: 3
     weapon_type: helios_lance
     required_unlocks: [helios_license]
+    tech_level: 1
+    factions: [Helios]
 seeker:
   !SecondaryWeapon
     price: 900
@@ -129,30 +154,40 @@ seeker:
     ammo_price: 45
     ammo_space: 1
     required_unlocks: [helios_enforcer_license]
+    tech_level: 2
+    factions: [Helios]
 chaingun:
   !PrimaryWeapon
     price: 450
     space: 3
     weapon_type: chaingun
     required_unlocks: [bastion_license]
+    tech_level: 1
+    factions: [Bastion]
 siege_cannon:
   !PrimaryWeapon
     price: 1600
     space: 6
     weapon_type: siege_cannon
     required_unlocks: [siege_monitor_license]
+    tech_level: 3
+    factions: [Bastion]
 chaingun_turret:
   !PrimaryWeapon
     price: 2800
     space: 10
     weapon_type: chaingun_turret
     required_unlocks: [bastion_lance_license]
+    tech_level: 3
+    factions: [Bastion]
 relic_lance:
   !PrimaryWeapon
     price: 1200
     space: 4
     weapon_type: relic_lance
     required_unlocks: [artifact_order_license]
+    tech_level: 1
+    factions: [Order]
 censer_charge:
   !SecondaryWeapon
     price: 1400
@@ -161,30 +196,40 @@ censer_charge:
     ammo_price: 80
     ammo_space: 2
     required_unlocks: [order_censer_license]
+    tech_level: 2
+    factions: [Order]
 exotic_lance:
   !PrimaryWeapon
     price: 3200
     space: 5
     weapon_type: exotic_lance
     required_unlocks: [precursor_tech_license]
+    tech_level: 4
+    factions: [Order]
 flak_turret:
   !PrimaryWeapon
     price: 1800
     space: 8
     weapon_type: flak_turret
     required_unlocks: [frontier_monitor_license]
+    tech_level: 3
+    factions: [FreeFrontier]
 siege_turret:
   !PrimaryWeapon
     price: 6000
     space: 16
     weapon_type: siege_turret
     required_unlocks: [bastion_license]
+    tech_level: 4
+    factions: [Bastion]
 relic_turret:
   !PrimaryWeapon
     price: 4000
     space: 12
     weapon_type: relic_turret
     required_unlocks: [order_cathedral_license]
+    tech_level: 4
+    factions: [Order]
 drone_bay:
   !SecondaryWeapon
     price: 7000
@@ -193,12 +238,16 @@ drone_bay:
     ammo_price: 700
     ammo_space: 6
     required_unlocks: [helios_overseer_license]
+    tech_level: 4
+    factions: [Helios]
 precursor_beam:
   !PrimaryWeapon
     price: 2200
     space: 3
     weapon_type: precursor_beam
     required_unlocks: [precursor_tech_license]
+    tech_level: 4
+    factions: [Order]
 flare_pod:
   !SecondaryWeapon
     price: 900
@@ -207,6 +256,7 @@ flare_pod:
     ammo_price: 45
     ammo_space: 1
     display_name: "Decoy Flares"
+    tech_level: 1
 helios_lure:
   !SecondaryWeapon
     price: 1800
@@ -216,6 +266,8 @@ helios_lure:
     ammo_space: 1
     display_name: "Helios Holo-Lure"
     required_unlocks: [helios_license]
+    tech_level: 2
+    factions: [Helios]
 rebel_chaff:
   !SecondaryWeapon
     price: 450
@@ -225,21 +277,26 @@ rebel_chaff:
     ammo_space: 1
     display_name: "Surplus Chaff Pod"
     required_unlocks: [rebel_ship_license]
+    tech_level: 2
+    factions: [Rebel]
 engine_mk2:
   !ShipMod
     price: 15000
     space: 4
     display_name: "Vector-Thrust Engine"
     effect: !Engine { speed: 1.2, thrust: 1.25, torque: 1.2 }
+    tech_level: 2
 armor_plating:
   !ShipMod
     price: 9000
     space: 6
     display_name: "Composite Armor Plating"
     effect: !Armor { bonus_hp: 40 }
+    tech_level: 2
 repair_bot:
   !ShipMod
     price: 18000
     space: 5
     display_name: "Hull Repair Bot"
     effect: !RepairBot { hp_per_sec: 0.6 }
+    tech_level: 3

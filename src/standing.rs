@@ -114,6 +114,10 @@ pub fn planet_faction(planet: &crate::planets::PlanetData) -> Option<&str> {
 /// among its planets. None for unclaimed / fully independent systems.
 pub fn controlling_faction(iu: &ItemUniverse, system: &str) -> Option<String> {
     let sys = iu.star_systems.get(system)?;
+    match sys.faction.as_str() {
+        "" | "Independent" => {}
+        f => return Some(f.to_string()),
+    }
     let mut counts: HashMap<&str, usize> = HashMap::new();
     for planet in sys.planets.values() {
         if let Some(f) = planet_faction(planet) {

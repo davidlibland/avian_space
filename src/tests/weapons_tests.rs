@@ -4,7 +4,10 @@ use super::*;
 use std::path::Path;
 
 fn real_universe() -> ItemUniverse {
-    crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse")
+    let mut iu: ItemUniverse =
+        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse");
+    iu.finalize();
+    iu
 }
 
 /// Regression: `from_type` used `cooldown / number` as the timer duration

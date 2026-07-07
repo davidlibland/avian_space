@@ -21,6 +21,7 @@ pub struct PlanetData {
     pub location: Vec2,
     pub description: String,
     pub commodities: HashMap<String, i128>, // Map of commodities to prices
+    #[serde(default)]
     pub outfitter: Vec<String>,
     #[serde(default)]
     pub shipyard: Vec<String>, // Ship types available for purchase
@@ -36,6 +37,12 @@ pub struct PlanetData {
     /// Controlling faction (e.g. "Federation", "Rebel", "Independent").
     #[serde(default)]
     pub faction: String,
+    /// Market tech level: 0 = no trade buildings; 1..=4 fills the outfitter
+    /// and shipyard with everything of that tech (and the planet's faction)
+    /// via `derive_market_catalogs`. Explicit outfitter/shipyard entries are
+    /// kept as extras on top.
+    #[serde(default)]
+    pub tech_level: u8,
     #[serde(skip)]
     pub sprite_handle: Handle<Image>,
 }

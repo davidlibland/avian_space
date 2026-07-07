@@ -738,6 +738,7 @@ mod template_targets {
         PlanetData {
             display_name: String::new(),
             planet_type: String::new(),
+            tech_level: 0,
             uncolonized: !landable,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -757,6 +758,7 @@ mod template_targets {
 
     fn system(planets: &[(&str, bool)], field_commodity: Option<&str>) -> StarSystem {
         StarSystem {
+            faction: String::new(),
             display_name: String::new(),
             map_position: Vec2::ZERO,
             connections: vec![],
@@ -1354,12 +1356,14 @@ mod runtime {
             .init_resource::<MissionOffers>()
             .init_resource::<PlayerUnlocks>()
             .init_resource::<crate::standing::FactionStandings>()
-            .insert_resource(
-                crate::item_universe::parse_dir::<crate::item_universe::ItemUniverse>(
+            .insert_resource({
+                let mut iu = crate::item_universe::parse_dir::<crate::item_universe::ItemUniverse>(
                     std::path::Path::new("assets"),
                 )
-                .expect("assets/ must parse"),
-            )
+                .expect("assets/ must parse");
+                iu.finalize();
+                iu
+            })
             .insert_resource(crate::planet_ui::LandedContext {
                 planet_name: Some("earth".into()),
             })

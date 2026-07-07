@@ -14,7 +14,11 @@ use bevy::prelude::*;
 use std::path::Path;
 
 fn universe() -> ItemUniverse {
-    crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse")
+    let mut iu: ItemUniverse =
+        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse")
+;
+    iu.finalize();
+    iu
 }
 
 // ── Pure derived values ──────────────────────────────────────────────────────

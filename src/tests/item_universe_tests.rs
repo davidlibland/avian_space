@@ -12,6 +12,7 @@ fn test_universe() -> ItemUniverse {
         PlanetData {
             display_name: String::new(),
             planet_type: String::new(),
+            tech_level: 0,
             uncolonized: false,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -32,6 +33,7 @@ fn test_universe() -> ItemUniverse {
         PlanetData {
             display_name: String::new(),
             planet_type: String::new(),
+            tech_level: 0,
             uncolonized: false,
             faction: String::new(),
             sprite_handle: Default::default(),
@@ -67,6 +69,7 @@ fn test_universe() -> ItemUniverse {
     );
 
     let system = StarSystem {
+        faction: String::new(),
         display_name: String::new(),
         map_position: Vec2::ZERO,
         connections: vec![],
@@ -88,6 +91,8 @@ fn test_universe() -> ItemUniverse {
         OutfitterItem::SecondaryWeapon {
             display_name: String::new(),
             required_unlocks: Vec::new(),
+            tech_level: 1,
+            factions: Vec::new(),
             price: 1000,
             space: 2,
             weapon_type: "missile".to_string(),
@@ -236,8 +241,9 @@ fn test_full_assets_parse_like_the_game() {
 #[test]
 fn test_asset_validators_pass() {
     use std::path::Path;
-    let iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
+    let mut iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
         .expect("assets/ must parse");
+    iu.finalize();
     let problems = crate::validate_assets::collect_problems(&iu);
     assert!(
         problems.is_empty(),
@@ -245,4 +251,71 @@ fn test_asset_validators_pass() {
         problems.len(),
         problems.join("\n  - ")
     );
+}
+
+/// The tech-level/faction market derivation: planets stock everything their
+/// tech level + faction admits; tech 0 = no trade buildings; Independent
+/// worlds stock only universal gear; landless factions (Merchant/Pirate/
+/// Precursor without sold_by) sell universally; explicit entries survive.
+#[test]
+fn market_catalogs_derive_from_tech_and_faction() {
+    let mut iu: ItemUniverse = crate::item_universe::parse_dir(std::path::Path::new("assets"))
+        .expect("assets/ must parse");
+    iu.finalize();
+
+    let planet = |name: &str| {
+        iu.star_systems
+            .values()
+            .find_map(|s| s.planets.get(name))
+            .unwrap_or_else(|| panic!("planet {name}"))
+    };
+
+    // Earth: Federation tech 4 — universal + Federation gear, all tech.
+    let earth = planet("earth");
+    assert!(earth.outfitter.contains(&"laser".to_string()));
+    assert!(earth.outfitter.contains(&"proton_beam_turret".to_string()));
+    assert!(earth.outfitter.contains(&"fed_fighter_bay".to_string()));
+    assert!(
+        !earth.outfitter.contains(&"helios_lance".to_string()),
+        "faction gear stays in faction space"
+    );
+    assert!(
+        earth.outfitter.contains(&"javelin".to_string()),
+        "explicit exceptions survive derivation"
+    );
+    assert!(earth.shipyard.contains(&"fed_carrier".to_string()));
+    assert!(
+        earth.shipyard.contains(&"shuttle".to_string()),
+        "landless-faction (Merchant) hulls sell universally"
+    );
+    assert!(!earth.shipyard.contains(&"rebel_fighter".to_string()));
+
+    // Moon: Federation tech 1 — basics only.
+    let moon = planet("moon");
+    assert!(moon.outfitter.contains(&"laser".to_string()));
+    assert!(
+        !moon.outfitter.contains(&"ir_missile".to_string()),
+        "tech 3 gear must not reach a tech 1 outpost"
+    );
+    assert!(!moon.shipyard.contains(&"fed_carrier".to_string()));
+
+    // Deneb Prime: Rebel tech 4 — the rebel capital yards.
+    let deneb = planet("deneb_prime");
+    assert!(deneb.shipyard.contains(&"rebel_carrier".to_string()));
+    assert!(
+        deneb.shipyard.contains(&"pirate_carrier".to_string()),
+        "pirate hulls are fenced through rebel yards"
+    );
+    assert!(deneb.outfitter.contains(&"rebel_chaff".to_string()));
+    assert!(!deneb.shipyard.contains(&"fed_carrier".to_string()));
+
+    // Sanctum: Order tech 4 — recovered precursor hulls sold by the Order.
+    let sanctum = planet("sanctum");
+    assert!(sanctum.shipyard.contains(&"precursor_sleeper".to_string()));
+    assert!(sanctum.outfitter.contains(&"precursor_beam".to_string()));
+
+    // Tech 0 planets have no trade buildings at all.
+    let mars = planet("mars");
+    assert_eq!(mars.tech_level, 0);
+    assert!(mars.outfitter.is_empty() && mars.shipyard.is_empty());
 }

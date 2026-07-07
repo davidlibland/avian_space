@@ -159,6 +159,91 @@ impl ItemUniverse {
         }
     }
 
+    /// Fill each planet's outfitter/shipyard from its `tech_level` and the
+    /// planet's (or system's) faction — replacing hand-curated per-planet
+    /// lists. Explicit YAML entries are kept as extras on top (for special
+    /// cases the rules can't express). A planet sells an item/hull when:
+    ///   * planet.tech_level >= the item's tech_level, and
+    ///   * the item's factions/sold_by is empty (universal) or contains the
+    ///     planet's seller faction (planet.faction, else system.faction;
+    ///     Independent worlds only stock universal gear).
+    /// tech_level 0 (the default) = no trade buildings at all.
+    fn derive_market_catalogs(&mut self) {
+        // Factions that own at least one planet: only these can restrict a
+        // ship's default sale territory. Landless factions (Merchant, Pirate,
+        // Precursor) can't — their unannotated hulls sell universally, and
+        // explicit `sold_by` still applies.
+        let planet_factions: std::collections::HashSet<String> = self
+            .star_systems
+            .values()
+            .flat_map(|s| s.planets.values())
+            .map(|p| p.faction.clone())
+            .filter(|f| !f.is_empty() && f != "Independent")
+            .collect();
+        for sys in self.star_systems.values_mut() {
+            let system_faction = sys.faction.clone();
+            for planet in sys.planets.values_mut() {
+                if planet.tech_level == 0 || planet.uncolonized {
+                    continue;
+                }
+                let seller: Option<&str> = match planet.faction.as_str() {
+                    "" => match system_faction.as_str() {
+                        "" | "Independent" => None,
+                        f => Some(f),
+                    },
+                    "Independent" => None,
+                    f => Some(f),
+                };
+                let faction_ok = |factions: &[String]| {
+                    factions.is_empty()
+                        || seller.is_some_and(|f| factions.iter().any(|x| x == f))
+                };
+                for (name, item) in &self.outfitter_items {
+                    if item.tech_level() <= planet.tech_level
+                        && faction_ok(item.factions())
+                        && !planet.outfitter.contains(name)
+                    {
+                        planet.outfitter.push(name.clone());
+                    }
+                }
+                for (name, ship) in &self.ships {
+                    let sellers: &[String] = if ship.sold_by.is_empty() {
+                        // Default: a faction ship sells in its own faction's
+                        // space; unfactioned hulls — and hulls of landless
+                        // factions — sell universally.
+                        match &ship.faction {
+                            Some(f) if planet_factions.contains(f) => std::slice::from_ref(f),
+                            _ => &[],
+                        }
+                    } else {
+                        &ship.sold_by
+                    };
+                    if ship.tech_level <= planet.tech_level
+                        && faction_ok(sellers)
+                        && !planet.shipyard.contains(name)
+                    {
+                        planet.shipyard.push(name.clone());
+                    }
+                }
+                planet.outfitter.sort();
+                planet.shipyard.sort();
+            }
+        }
+    }
+
+    /// All post-parse processing, in dependency order. Call after `parse_dir`
+    /// (the plugin does; tests that need derived catalogs must too).
+    pub fn finalize(&mut self) {
+        self.fill_display_names();
+        self.materialize_training_systems();
+        self.derive_market_catalogs();
+        self.compute_global_averages();
+        self.compute_trade_maps();
+        self.compute_planet_ammo();
+        self.compute_asteroid_values();
+        self.compute_ship_credit_scales();
+    }
+
     fn compute_global_averages(&mut self) {
         let mut sums: HashMap<String, (f64, u32)> = HashMap::new();
         let mut mins: HashMap<String, i128> = HashMap::new();
@@ -402,6 +487,12 @@ pub enum OutfitterItem {
         display_name: String,
         #[serde(default)]
         required_unlocks: Vec<String>,
+        /// Outfitter tech level required to stock this item (1 = anywhere).
+        #[serde(default = "default_item_tech")]
+        tech_level: u8,
+        /// Factions whose outfitters stock it. Empty = sold universally.
+        #[serde(default)]
+        factions: Vec<String>,
     },
     SecondaryWeapon {
         price: i128,
@@ -413,6 +504,12 @@ pub enum OutfitterItem {
         display_name: String,
         #[serde(default)]
         required_unlocks: Vec<String>,
+        /// Outfitter tech level required to stock this item (1 = anywhere).
+        #[serde(default = "default_item_tech")]
+        tech_level: u8,
+        /// Factions whose outfitters stock it. Empty = sold universally.
+        #[serde(default)]
+        factions: Vec<String>,
     },
     /// A passive ship modification (engine tune, armor plating, repair bot).
     /// Occupies item space like a weapon; its `effect` is folded into the
@@ -425,6 +522,12 @@ pub enum OutfitterItem {
         display_name: String,
         #[serde(default)]
         required_unlocks: Vec<String>,
+        /// Outfitter tech level required to stock this item (1 = anywhere).
+        #[serde(default = "default_item_tech")]
+        tech_level: u8,
+        /// Factions whose outfitters stock it. Empty = sold universally.
+        #[serde(default)]
+        factions: Vec<String>,
     },
 }
 
@@ -455,6 +558,20 @@ impl OutfitterItem {
             OutfitterItem::PrimaryWeapon { required_unlocks, .. } => required_unlocks,
             OutfitterItem::SecondaryWeapon { required_unlocks, .. } => required_unlocks,
             OutfitterItem::ShipMod { required_unlocks, .. } => required_unlocks,
+        }
+    }
+    pub fn tech_level(&self) -> u8 {
+        match self {
+            OutfitterItem::PrimaryWeapon { tech_level, .. } => *tech_level,
+            OutfitterItem::SecondaryWeapon { tech_level, .. } => *tech_level,
+            OutfitterItem::ShipMod { tech_level, .. } => *tech_level,
+        }
+    }
+    pub fn factions(&self) -> &[String] {
+        match self {
+            OutfitterItem::PrimaryWeapon { factions, .. } => factions,
+            OutfitterItem::SecondaryWeapon { factions, .. } => factions,
+            OutfitterItem::ShipMod { factions, .. } => factions,
         }
     }
     /// The mod effect, when this item is a ship mod.
@@ -495,6 +612,10 @@ pub enum ModEffect {
 
 fn one() -> f32 {
     1.0
+}
+
+fn default_item_tech() -> u8 {
+    1
 }
 
 /// Probability distribution + population limits for ships in a star system.
@@ -539,6 +660,11 @@ impl ShipDistribution {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct StarSystem {
+    /// Controlling faction of the whole system — the seller faction for
+    /// planets that don't declare their own, and the standing system's
+    /// controller. Empty = derived from the majority of planet factions.
+    #[serde(default)]
+    pub faction: String,
     #[serde(default)]
     pub map_position: Vec2,
     #[serde(default)]
@@ -558,13 +684,7 @@ pub fn item_universe_plugin(app: &mut App) {
             "failed to parse asset config — check that all .yaml files in assets/ are valid",
         );
 
-    item_universe.fill_display_names();
-    item_universe.materialize_training_systems();
-    item_universe.compute_global_averages();
-    item_universe.compute_trade_maps();
-    item_universe.compute_planet_ammo();
-    item_universe.compute_asteroid_values();
-    item_universe.compute_ship_credit_scales();
+    item_universe.finalize();
     item_universe.validate();
     app.insert_resource::<ItemUniverse>(item_universe);
     app.add_systems(Startup, preload_sprites);

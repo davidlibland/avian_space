@@ -588,8 +588,48 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_mission_coherence(iu, &mut p);
     check_unlock_obtainability(iu, &mut p);
     check_ship_weapons_buyable(iu, &mut p);
+    check_everything_sold_somewhere(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
+}
+
+/// Every ship and outfitter item must be purchasable SOMEWHERE: stocked on at
+/// least one landable planet, in a reachable (non-training) system, at a
+/// planet that actually has the right building (a non-empty shipyard/outfitter
+/// list IS the building, per `planet_has_building`). Licences may still gate
+/// the purchase — obtainability of those is checked separately. Run after
+/// `derive_market_catalogs`, so tech-level/faction coverage gaps surface here.
+fn check_everything_sold_somewhere(iu: &ItemUniverse, p: &mut Vec<String>) {
+    let mut sold_ships: HashSet<&str> = HashSet::new();
+    let mut sold_items: HashSet<&str> = HashSet::new();
+    for (sys_name, sys) in &iu.star_systems {
+        if TRAINING_SYSTEMS.contains(&sys_name.as_str()) {
+            continue;
+        }
+        for pd in sys.planets.values() {
+            if !is_landable(pd) {
+                continue;
+            }
+            sold_ships.extend(pd.shipyard.iter().map(String::as_str));
+            sold_items.extend(pd.outfitter.iter().map(String::as_str));
+        }
+    }
+    for name in iu.ships.keys() {
+        if !sold_ships.contains(name.as_str()) {
+            p.push(format!(
+                "ship '{name}' is sold nowhere — no landable planet's tech level \
+                 + faction stocks it (check tech_level/sold_by in ships.yaml)"
+            ));
+        }
+    }
+    for name in iu.outfitter_items.keys() {
+        if !sold_items.contains(name.as_str()) {
+            p.push(format!(
+                "outfitter item '{name}' is sold nowhere — no landable planet's \
+                 tech level + faction stocks it (check tech_level/factions)"
+            ));
+        }
+    }
 }
 
 /// Buying a ship must imply being able to buy every weapon it spawns with.

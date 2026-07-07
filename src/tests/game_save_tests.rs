@@ -27,6 +27,8 @@ fn basic_item_universe() -> ItemUniverse {
     use crate::ship::{Personality, ShipData};
     let shuttle = ShipData {
         display_name: String::new(),
+        tech_level: 1,
+        sold_by: Vec::new(),
         thrust: 200.0,
         max_speed: 300.0,
         torque: 20.0,
@@ -55,6 +57,7 @@ fn basic_item_universe() -> ItemUniverse {
         star_systems: HashMap::from([(
             "sol".to_string(),
             StarSystem {
+                faction: String::new(),
                 display_name: String::new(),
                 map_position: Vec2::ZERO,
                 connections: vec![],

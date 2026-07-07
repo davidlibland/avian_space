@@ -18,6 +18,12 @@ goose:
     sprite_path: sprites/weapons/goose.png
     sound_path: sounds/weapons/goose.ogg
     display_name: "Goose Missile"
+    particles:
+        rate: 34.0
+        particle_lifetime: 0.35
+        speed: 9.0
+        size: 1.3
+        color: [1.0, 0.6, 0.25]
     ammo:
         !Ammo:
             space: 2
@@ -71,6 +77,12 @@ ir_missile:
     behavior: !Guided { turn_rate: 2.5 }
     sprite_path: sprites/weapons/ir_missile.png
     sound_path: sounds/weapons/ir_missile.ogg
+    particles:
+        rate: 40.0
+        particle_lifetime: 0.3
+        speed: 8.0
+        size: 1.2
+        color: [0.8, 0.85, 0.95]
     ammo:
         !Ammo:
             space: 2
@@ -84,6 +96,12 @@ javelin:
     behavior: !Guided { turn_rate: 1.25 }
     sprite_path: sprites/weapons/javelin.png
     sound_path: sounds/weapons/javelin.ogg
+    particles:
+        rate: 44.0
+        particle_lifetime: 0.32
+        speed: 8.0
+        size: 1.2
+        color: [1.0, 0.45, 0.35]
     ammo:
         !Ammo:
             space: 1
@@ -98,6 +116,12 @@ space_mine:
     aimable_arc: 180
     sprite_path: sprites/weapons/space_mine.png
     sound_path: sounds/weapons/space_mine.ogg
+    particles:
+        rate: 4.0
+        particle_lifetime: 0.5
+        speed: 5.0
+        size: 1.2
+        color: [1.0, 0.3, 0.2]
     ammo:
         !Ammo:
             space: 2
@@ -194,6 +218,12 @@ prox_mine:
     sprite_path: sprites/weapons/prox_mine.png
     sound_path: sounds/weapons/prox_mine.ogg
     display_name: "Proximity Mine"
+    particles:
+        rate: 4.0
+        particle_lifetime: 0.5
+        speed: 5.0
+        size: 1.1
+        color: [1.0, 0.7, 0.2]
     ammo:
         !Ammo:
             space: 2
@@ -219,6 +249,12 @@ seeker:
     sprite_path: sprites/weapons/seeker.png
     sound_path: sounds/weapons/seeker.ogg
     display_name: "Seeker Drone-Missile"
+    particles:
+        rate: 36.0
+        particle_lifetime: 0.28
+        speed: 7.0
+        size: 1.1
+        color: [0.5, 0.9, 1.0]
     ammo:
         !Ammo:
             space: 1
@@ -276,6 +312,12 @@ censer_charge:
     sprite_path: sprites/weapons/censer_charge.png
     sound_path: sounds/weapons/censer_charge.ogg
     display_name: "Censer Charge"
+    particles:
+        rate: 22.0
+        particle_lifetime: 0.9
+        speed: 12.0
+        size: 1.8
+        color: [0.75, 0.85, 0.7]
     ammo:
         !Ammo:
             space: 2
@@ -300,6 +342,12 @@ precursor_beam:
     aimable_arc: 180
     display_name: "Precursor Beam"
     sound_path: sounds/weapons/exotic_beam.ogg
+    particles:
+        rate: 30.0
+        particle_lifetime: 0.25
+        speed: 6.0
+        size: 1.3
+        color: [0.75, 0.5, 1.0]
 flak_turret:
     name: flak_turret
     lifetime: 0.32

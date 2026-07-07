@@ -213,6 +213,9 @@ fn default_reverse_kd() -> Scalar {
 fn default_fuel_capacity() -> u16 {
     4
 }
+fn default_tech_level() -> u8 {
+    1
+}
 
 /// All-zero derived default — used only as a sentinel (e.g. uninitialised resource).
 /// Real ship data always comes from the YAML item universe.
@@ -235,6 +238,14 @@ pub struct ShipData {
     pub price: i128,
     pub personality: Personality,
     pub faction: Option<String>,
+    /// Shipyard tech level required to stock this hull (1 = any shipyard …
+    /// 4 = faction capitals). Consumed by `derive_market_catalogs`.
+    #[serde(default = "default_tech_level")]
+    pub tech_level: u8,
+    /// Factions whose shipyards stock this hull. Empty = derived: the ship's
+    /// own `faction` if set, otherwise sold universally.
+    #[serde(default)]
+    pub sold_by: Vec<String>,
     #[serde(default)]
     pub display_name: String,
     /// Named unlock flags the player must have (all of) before this ship

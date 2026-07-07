@@ -13,6 +13,7 @@ shuttle:
   personality: Trader
   fuel_capacity: 4
   faction: Merchant
+  tech_level: 1
 
 fighter:
   thrust: 120.0
@@ -29,6 +30,7 @@ fighter:
   personality: Fighter
   fuel_capacity: 3
   required_unlocks: [fighter_license]
+  tech_level: 1
 
 asteroid_miner:
   thrust: 70.0
@@ -46,6 +48,7 @@ asteroid_miner:
   fuel_capacity: 5
   faction: Merchant
   required_unlocks: [mining_license]
+  tech_level: 1
 
 # Small, nimble, affordable mining ship. Faster and far more agile than the
 # asteroid_miner (turns quickly to aim and thread dense fields), fairly durable
@@ -67,6 +70,7 @@ prospector:
   fuel_capacity: 4
   faction: Merchant
   required_unlocks: [mining_license]
+  tech_level: 1
 
 hauler:
   thrust: 40.0
@@ -84,6 +88,7 @@ hauler:
   fuel_capacity: 7
   faction: Merchant
   required_unlocks: [merchant_hauler_license]
+  tech_level: 1
 
 # ── Fighter variants ──────────────────────────────────────────────────────────
 
@@ -103,6 +108,7 @@ corvette:
   sprite_path: sprites/ships/atlas/corvette.png
   personality: Fighter
   fuel_capacity: 3
+  tech_level: 2
 
 frigate:
   thrust: 90.0
@@ -120,6 +126,7 @@ frigate:
   personality: Fighter
   fuel_capacity: 6
   required_unlocks: [frigate_license]
+  tech_level: 2
 
 # ── Trader variants ───────────────────────────────────────────────────────────
 
@@ -138,6 +145,7 @@ courier:
   personality: Trader
   fuel_capacity: 8
   faction: Merchant
+  tech_level: 1
 
 cargo_transport:
   thrust: 52.0
@@ -154,6 +162,7 @@ cargo_transport:
   personality: Trader
   fuel_capacity: 5
   faction: Merchant
+  tech_level: 1
 
 freighter:
   thrust: 55.0
@@ -171,6 +180,7 @@ freighter:
   fuel_capacity: 7
   faction: Merchant
   required_unlocks: [merchant_freighter_license]
+  tech_level: 1
 
 bulk_carrier:
   thrust: 22.0
@@ -189,6 +199,7 @@ bulk_carrier:
   fuel_capacity: 9
   faction: Merchant
   required_unlocks: [merchant_bulk_license]
+  tech_level: 2
 
 # ── Federation faction ─────────────────────────────────────────────────────────
 # Black/grey/red. Slower than Rebels, heavier armour, heavier weapons.
@@ -209,6 +220,7 @@ fed_patrol:
   fuel_capacity: 4
   faction: Federation
   required_unlocks: [federation_ship_license]
+  tech_level: 2
 
 fed_destroyer:
   thrust: 65.0
@@ -227,6 +239,7 @@ fed_destroyer:
   fuel_capacity: 7
   faction: Federation
   required_unlocks: [federation_ship_license, federation_capital_license]
+  tech_level: 3
 
 fed_missile_cruiser:
   thrust: 55.0
@@ -246,6 +259,7 @@ fed_missile_cruiser:
   fuel_capacity: 6
   faction: Federation
   required_unlocks: [federation_ship_license]
+  tech_level: 4
 
 # ── Rebel faction ──────────────────────────────────────────────────────────────
 # Blue/green. Faster than Federation, lighter armour, less heavy weapons.
@@ -266,6 +280,7 @@ rebel_fighter:
   fuel_capacity: 3
   faction: Rebel
   required_unlocks: [rebel_ship_license]
+  tech_level: 1
 
 rebel_gunboat:
   thrust: 95.0
@@ -283,6 +298,7 @@ rebel_gunboat:
   fuel_capacity: 5
   faction: Rebel
   required_unlocks: [rebel_ship_license]
+  tech_level: 2
 
 rebel_frigate:
   thrust: 80.0
@@ -302,6 +318,7 @@ rebel_frigate:
   fuel_capacity: 6
   faction: Rebel
   required_unlocks: [rebel_ship_license, rebel_capital_license]
+  tech_level: 3
 
 # ── Pirate faction ─────────────────────────────────────────────────────────────
 # Brown/tan. Fast but outgunned by Rebel or Federation ships individually.
@@ -321,6 +338,8 @@ pirate_corvette:
   personality: Fighter
   fuel_capacity: 3
   faction: Pirate
+  tech_level: 3
+  sold_by: [Rebel]
 
 pirate_missile_boat:
   thrust: 88.0
@@ -338,6 +357,8 @@ pirate_missile_boat:
   personality: Fighter
   fuel_capacity: 4
   faction: Pirate
+  tech_level: 2
+  sold_by: [Rebel]
 
 # ── Carriers ─────────────────────────────────────────────────────────────────
 
@@ -358,6 +379,8 @@ surplus_carrier:
   personality: Fighter
   fuel_capacity: 8
   required_unlocks: [carrier_license]
+  tech_level: 4
+  sold_by: [Rebel, FreeFrontier]
 
 fed_carrier:
   thrust: 40.0
@@ -378,6 +401,7 @@ fed_carrier:
   fuel_capacity: 10
   faction: Federation
   required_unlocks: [fed_carrier_license]
+  tech_level: 4
 
 rebel_carrier:
   thrust: 50.0
@@ -398,6 +422,7 @@ rebel_carrier:
   fuel_capacity: 9
   faction: Rebel
   required_unlocks: [rebel_carrier_license]
+  tech_level: 4
 
 pirate_carrier:
   thrust: 35.0
@@ -419,6 +444,8 @@ pirate_carrier:
   fuel_capacity: 8
   faction: Pirate
   required_unlocks: [carrier_license]
+  tech_level: 4
+  sold_by: [Rebel]
 # ── Free Frontier (solar-sail militia) ───────────────────────────────────────────
 frontier_skiff:
   thrust: 112.0
@@ -436,6 +463,7 @@ frontier_skiff:
   fuel_capacity: 3
   faction: FreeFrontier
   required_unlocks: [frontier_skiff_license]
+  tech_level: 1
 frontier_harvester:
   thrust: 72.0
   max_speed: 122.0
@@ -453,6 +481,7 @@ frontier_harvester:
   fuel_capacity: 4
   faction: FreeFrontier
   required_unlocks: [frontier_harvester_license]
+  tech_level: 2
 frontier_sailtender:
   thrust: 78.0
   max_speed: 132.0
@@ -470,6 +499,7 @@ frontier_sailtender:
   fuel_capacity: 5
   faction: FreeFrontier
   required_unlocks: [frontier_sailtender_license]
+  tech_level: 2
 frontier_monitor:
   thrust: 50.0
   max_speed: 86.0
@@ -487,6 +517,7 @@ frontier_monitor:
   fuel_capacity: 5
   faction: FreeFrontier
   required_unlocks: [frontier_monitor_license]
+  tech_level: 3
 
 # ── Helios Combine (drones) ──────────────────────────────────────────────────────
 helios_drone:
@@ -505,6 +536,7 @@ helios_drone:
   fuel_capacity: 2
   faction: Helios
   required_unlocks: [helios_drone_license]
+  tech_level: 1
 helios_enforcer:
   thrust: 100.0
   max_speed: 178.0
@@ -522,6 +554,7 @@ helios_enforcer:
   fuel_capacity: 4
   faction: Helios
   required_unlocks: [helios_enforcer_license]
+  tech_level: 2
 helios_overseer:
   thrust: 70.0
   max_speed: 122.0
@@ -539,6 +572,7 @@ helios_overseer:
   fuel_capacity: 5
   faction: Helios
   required_unlocks: [helios_overseer_license]
+  tech_level: 3
 helios_titan:
   thrust: 50.0
   max_speed: 86.0
@@ -557,6 +591,7 @@ helios_titan:
   fuel_capacity: 6
   faction: Helios
   required_unlocks: [helios_titan_license]
+  tech_level: 4
 
 # ── Fed Bastion (iron siege) ─────────────────────────────────────────────────────
 bastion_guard:
@@ -575,6 +610,7 @@ bastion_guard:
   fuel_capacity: 4
   faction: Bastion
   required_unlocks: [bastion_guard_license]
+  tech_level: 1
 bastion_lance:
   thrust: 65.0
   max_speed: 112.0
@@ -592,6 +628,7 @@ bastion_lance:
   fuel_capacity: 4
   faction: Bastion
   required_unlocks: [bastion_lance_license]
+  tech_level: 2
 siege_monitor:
   thrust: 50.0
   max_speed: 82.0
@@ -609,6 +646,7 @@ siege_monitor:
   fuel_capacity: 5
   faction: Bastion
   required_unlocks: [siege_monitor_license]
+  tech_level: 3
 iron_dreadnought:
   thrust: 42.0
   max_speed: 70.0
@@ -626,6 +664,7 @@ iron_dreadnought:
   fuel_capacity: 6
   faction: Bastion
   required_unlocks: [iron_dreadnought_license]
+  tech_level: 4
 
 # ── Artifact Order (reliquaries) ─────────────────────────────────────────────────
 order_acolyte:
@@ -644,6 +683,7 @@ order_acolyte:
   fuel_capacity: 3
   faction: Order
   required_unlocks: [order_acolyte_license]
+  tech_level: 1
 order_censer:
   thrust: 86.0
   max_speed: 152.0
@@ -661,6 +701,7 @@ order_censer:
   fuel_capacity: 4
   faction: Order
   required_unlocks: [order_censer_license]
+  tech_level: 2
 order_reliquary:
   thrust: 60.0
   max_speed: 100.0
@@ -678,6 +719,7 @@ order_reliquary:
   fuel_capacity: 5
   faction: Order
   required_unlocks: [order_reliquary_license]
+  tech_level: 3
 order_cathedral:
   thrust: 45.0
   max_speed: 78.0
@@ -695,6 +737,7 @@ order_cathedral:
   fuel_capacity: 6
   faction: Order
   required_unlocks: [order_cathedral_license]
+  tech_level: 4
 
 # ── Precursors (enemy/boss — never sold) ─────────────────────────────────────────
 precursor_seeker:
@@ -713,6 +756,8 @@ precursor_seeker:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
 precursor_sentinel:
   thrust: 90.0
   max_speed: 150.0
@@ -729,6 +774,8 @@ precursor_sentinel:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
 precursor_harbinger:
   thrust: 82.0
   max_speed: 142.0
@@ -745,6 +792,8 @@ precursor_harbinger:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
 precursor_sleeper:
   thrust: 40.0
   max_speed: 70.0
@@ -761,6 +810,8 @@ precursor_sleeper:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]
 
 # ── Faction economy ships (traders & miners) ─────────────────────────────────────
 frontier_prospector:
@@ -779,6 +830,7 @@ frontier_prospector:
   fuel_capacity: 4
   faction: FreeFrontier
   required_unlocks: [free_frontier_license]
+  tech_level: 1
 frontier_dredger:
   thrust: 60.0
   max_speed: 100.0
@@ -795,6 +847,7 @@ frontier_dredger:
   fuel_capacity: 4
   faction: FreeFrontier
   required_unlocks: [free_frontier_license]
+  tech_level: 2
 helios_courier:
   thrust: 120.0
   max_speed: 200.0
@@ -810,6 +863,7 @@ helios_courier:
   fuel_capacity: 4
   faction: Helios
   required_unlocks: [helios_license]
+  tech_level: 1
 helios_freighter:
   thrust: 70.0
   max_speed: 120.0
@@ -826,6 +880,7 @@ helios_freighter:
   fuel_capacity: 5
   faction: Helios
   required_unlocks: [helios_license]
+  tech_level: 2
 helios_hauler:
   thrust: 55.0
   max_speed: 95.0
@@ -841,6 +896,7 @@ helios_hauler:
   fuel_capacity: 6
   faction: Helios
   required_unlocks: [helios_license]
+  tech_level: 3
 bastion_collier:
   thrust: 65.0
   max_speed: 105.0
@@ -857,6 +913,7 @@ bastion_collier:
   fuel_capacity: 5
   faction: Bastion
   required_unlocks: [bastion_license]
+  tech_level: 2
 bastion_dredger:
   thrust: 60.0
   max_speed: 95.0
@@ -873,6 +930,7 @@ bastion_dredger:
   fuel_capacity: 4
   faction: Bastion
   required_unlocks: [bastion_license]
+  tech_level: 2
 order_almoner:
   thrust: 75.0
   max_speed: 130.0
@@ -889,6 +947,7 @@ order_almoner:
   fuel_capacity: 5
   faction: Order
   required_unlocks: [artifact_order_license]
+  tech_level: 2
 order_quarryman:
   thrust: 70.0
   max_speed: 115.0
@@ -904,6 +963,7 @@ order_quarryman:
   fuel_capacity: 4
   faction: Order
   required_unlocks: [artifact_order_license]
+  tech_level: 2
 precursor_gleaner:
   thrust: 160.0
   max_speed: 270.0
@@ -920,3 +980,5 @@ precursor_gleaner:
   fuel_capacity: 9
   faction: Precursor
   required_unlocks: [precursor_ship_license]
+  tech_level: 4
+  sold_by: [Order]

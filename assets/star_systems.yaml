@@ -49,6 +49,7 @@ sol:
       outfitter: []
     earth:
       planet_type: habitable
+      tech_level: 4
       faction: Federation
       location: [500.0, 300.0]
       description: "The Federation capital and home to its largest naval fleet. A major hub for trade and military contracts."
@@ -73,10 +74,11 @@ sol:
         weapons_parts: 28
         robotics: 43
         exotic_matter: 135
-      outfitter: [laser, proton_beam, ir_missile, space_mine, javelin, flare_pod, engine_mk2, armor_plating, repair_bot]
-      shipyard: [shuttle, corvette, fighter, frigate, courier, asteroid_miner, prospector, hauler, cargo_transport, freighter, bulk_carrier, fed_patrol, fed_destroyer, fed_missile_cruiser, fed_carrier, surplus_carrier]
+      outfitter: [javelin]
+      shipyard: [surplus_carrier]
     moon:
       planet_type: rocky
+      tech_level: 1
       faction: Federation
       location: [650.0, 380.0]
       description: "Barren and grey, but surprisingly well-stocked with water ice."
@@ -95,8 +97,6 @@ sol:
         electronics: 18
         uranium: 38
         exotic_matter: 135
-      outfitter: []
-      shipyard: [shuttle, cargo_transport, courier, prospector]
     mars:
       planet_type: desert
       faction: Federation
@@ -348,6 +348,7 @@ kepler_22:
   planets:
     kepler_22b:
       planet_type: habitable
+      tech_level: 4
       faction: Federation
       location: [350.0, 200.0]
       description: "A temperate Federation colony world deep in Federation space. Weapons parts flow from orbital foundries."
@@ -363,8 +364,6 @@ kepler_22:
         medical_supplies: 19
         electronics: 49
         robotics: 95
-      outfitter: [proton_beam, ir_missile, space_mine]
-      shipyard: [fed_patrol, fed_destroyer, fed_missile_cruiser, frigate, cargo_transport, courier, hauler]
     kepler_22_station:
       planet_type: rocky
       faction: Federation
@@ -413,6 +412,7 @@ tau_ceti:
   planets:
     tau_ceti_4:
       planet_type: rocky
+      tech_level: 1
       faction: Federation
       location: [400.0, -100.0]
       description: "Ancient ruins dot this Federation world. Scholars pay a fortune for artifacts from the deep dig sites."
@@ -427,8 +427,6 @@ tau_ceti:
         helium3: 23
         electronics: 26
         uranium: 38
-      outfitter: []
-      shipyard: [shuttle, courier, hauler, cargo_transport, freighter]
     tau_ceti_2:
       planet_type: rocky
       faction: Federation
@@ -478,6 +476,7 @@ epsilon_eridani:
   planets:
     eridani_station:
       planet_type: habitable
+      tech_level: 2
       faction: Federation
       location: [0.0, 400.0]
       description: "A Federation trade hub in a young, turbulent system. Fuel cells are cheap; exotic matter commands a premium."
@@ -494,8 +493,6 @@ epsilon_eridani:
         gold: 15
         electronics: 39
         robotics: 76
-      outfitter: [laser, space_mine]
-      shipyard: [shuttle, courier, hauler, cargo_transport, freighter, bulk_carrier]
     eridani_moon:
       planet_type: icy_dwarf
       faction: Federation
@@ -544,6 +541,7 @@ vega:
   planets:
     vega_1:
       planet_type: desert
+      tech_level: 3
       faction: Federation
       location: [300.0, 300.0]
       description: "A glittering Federation mining colony. Gold is abundant and cheap; titanium gets a premium."
@@ -564,8 +562,6 @@ vega:
         helium3: 25
         uranium: 17
         exotic_matter: 136
-      outfitter: [laser, ir_missile, space_mine]
-      shipyard: [corvette, courier, hauler, asteroid_miner, prospector, cargo_transport, freighter]
     vega_2:
       planet_type: rocky
       faction: Federation
@@ -622,6 +618,7 @@ barnard:
   planets:
     barnard_rock:
       planet_type: rocky
+      tech_level: 1
       faction: Federation
       location: [-100.0, 200.0]
       description: "A Federation frontier world at the edge of the border zone. Uranium ore is dug up cheap and sold fast."
@@ -633,10 +630,9 @@ barnard:
         silicates: 3
         food: 5
         electronics: 22
-      outfitter: [space_mine]
-      shipyard: [shuttle, cargo_transport, courier, asteroid_miner, prospector]
     barnard_station:
       planet_type: rocky
+      tech_level: 3
       faction: Federation
       location: [100.0, 350.0]
       description: "A Federation refinery station and patrol staging point. Watch for Rebel scouts on the outbound lanes."
@@ -648,8 +644,6 @@ barnard:
         silicates: 3
         food: 5
         electronics: 21
-      outfitter: [ir_missile, space_mine]
-      shipyard: [courier, cargo_transport, freighter, bulk_carrier, prospector]
   astroid_fields:
     -
       location: [0., 0.]
@@ -752,6 +746,7 @@ procyon:
   planets:
     procyon_prime:
       planet_type: habitable
+      tech_level: 3
       faction: Rebel
       location: [200.0, 300.0]
       description: "A Rebel-held trade hub. Water and food are cheap; weapons pay well. Federation patrols still probe the outskirts."
@@ -775,8 +770,6 @@ procyon:
         electronics: 38
         weapons_parts: 13
         robotics: 34
-      outfitter: [laser, ir_missile, javelin, space_mine, flare_pod, rebel_chaff, engine_mk2, armor_plating]
-      shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, cargo_transport, freighter, bulk_carrier, asteroid_miner, prospector]
     procyon_ii:
       planet_type: rocky
       faction: Rebel
@@ -824,6 +817,7 @@ sirius:
   planets:
     sirius_b:
       planet_type: desert
+      tech_level: 3
       faction: Rebel
       location: [300.0, -200.0]
       description: "A scorched Rebel industrial world baking under Sirius's intense light. Cooling gel flows out cheap; titanium is in demand."
@@ -841,8 +835,6 @@ sirius:
         titanium: 8
         uranium: 8
         weapons_parts: 26
-      outfitter: [laser, javelin, space_mine, rebel_chaff]
-      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, cargo_transport, freighter]
     sirius_c:
       planet_type: rocky
       faction: Rebel
@@ -895,6 +887,7 @@ rigel:
   planets:
     rigel_outpost:
       planet_type: rocky
+      tech_level: 3
       faction: Rebel
       location: [-200.0, 200.0]
       description: "A hardened Rebel stronghold at the edge of known space. Weapons parts are cheap; exotic matter commands a fortune."
@@ -908,8 +901,6 @@ rigel:
         titanium: 10
         gold: 66
         electronics: 19
-      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine, flare_pod, engine_mk2, armor_plating, repair_bot]
-      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, frigate]
     rigel_station:
       planet_type: rocky
       faction: Rebel
@@ -961,6 +952,7 @@ altair:
   planets:
     altair_haven:
       planet_type: habitable
+      tech_level: 3
       faction: Rebel
       location: [200.0, -200.0]
       description: "A hidden Rebel resupply world tucked in a dense asteroid field. Fuel cells are stockpiled; food and water are always needed."
@@ -979,8 +971,6 @@ altair:
         electronics: 50
         weapons_parts: 16
         robotics: 44
-      outfitter: [laser, javelin, space_mine, rebel_chaff]
-      shipyard: [rebel_fighter, rebel_gunboat, cargo_transport, courier, asteroid_miner, prospector]
     altair_rock:
       planet_type: rocky
       faction: Rebel
@@ -1034,6 +1024,7 @@ deneb:
   planets:
     deneb_prime:
       planet_type: habitable
+      tech_level: 4
       faction: Rebel
       location: [300.0, 100.0]
       description: "The beating heart of the Rebel Alliance. Weapons, ships, and fighters pour out of its shipyards."
@@ -1056,8 +1047,6 @@ deneb:
         electronics: 37
         weapons_parts: 14
         robotics: 61
-      outfitter: [laser, proton_beam, ir_missile, javelin, space_mine, flare_pod, engine_mk2, armor_plating, repair_bot]
-      shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, frigate, hauler, cargo_transport, freighter]
     deneb_station:
       planet_type: rocky
       faction: Rebel
@@ -1114,6 +1103,7 @@ halcyon:
   planets:
     halcyon_port:
       planet_type: habitable
+      tech_level: 2
       faction: FreeFrontier
       location: [120.0, 80.0]
       description: "A free port that asks no questions. The unofficial capital of the Reaches; cheap fuel, open berths, a smuggler's welcome."
@@ -1132,8 +1122,6 @@ halcyon:
         electronics: 35
         weapons_parts: 25
         robotics: 37
-      outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine]
-      shipyard: [shuttle, prospector, courier, cargo_transport, frontier_skiff, frontier_harvester, frontier_sailtender, frontier_prospector]
     halcyon_ice:
       planet_type: icy_dwarf
       faction: FreeFrontier
@@ -1182,6 +1170,7 @@ ceres_freehold:
   planets:
     ceres:
       planet_type: rocky
+      tech_level: 3
       faction: FreeFrontier
       location: [80.0, 60.0]
       description: "The Freehold capital: a cooperative of miners and farmers who answer to no empire. Cheap ore, dear everything else."
@@ -1193,8 +1182,6 @@ ceres_freehold:
         silicates: 3
         food: 5
         electronics: 29
-      outfitter: [laser, flak_gun, mass_driver, space_mine, prox_mine, flak_turret, flare_pod, engine_mk2, armor_plating, repair_bot]
-      shipyard: [shuttle, prospector, asteroid_miner, cargo_transport, frontier_skiff, frontier_harvester, frontier_sailtender, frontier_monitor, frontier_prospector, frontier_dredger]
     pallas:
       planet_type: icy_dwarf
       faction: FreeFrontier
@@ -1253,6 +1240,7 @@ the_verge:
       outfitter: []
     verge_station:
       planet_type: rocky
+      tech_level: 2
       faction: FreeFrontier
       location: [100.0, 80.0]
       description: "A frontier mining post on the Rebel border. The freeholders here trade with both sides and trust neither."
@@ -1264,7 +1252,6 @@ the_verge:
         silicates: 3
         food: 5
         robotics: 42
-      outfitter: [flak_gun, mass_driver, prox_mine]
     verge_giant:
       planet_type: gas_giant
       faction: FreeFrontier
@@ -1320,6 +1307,7 @@ kuiper_reach:
   planets:
     kuiper_haven:
       planet_type: icy_dwarf
+      tech_level: 2
       faction: FreeFrontier
       location: [60.0, 40.0]
       description: "The deepest free port in the Reaches — a smuggler's haven where contraband from every faction changes hands."
@@ -1331,7 +1319,6 @@ kuiper_reach:
         polymers: 7
         cooling_gel: 15
         exotic_matter: 150
-      outfitter: [flak_gun, space_mine, prox_mine]
     kuiper_clouds:
       planet_type: cloud
       faction: FreeFrontier
@@ -1383,6 +1370,7 @@ tycho_yards:
   planets:
     tycho:
       planet_type: rocky
+      tech_level: 4
       faction: Helios
       location: [80.0, 60.0]
       description: "A wholly-automated Helios shipyard. Drones build drones; the few humans wear company badges and sign NDAs."
@@ -1401,8 +1389,6 @@ tycho_yards:
         helium3: 40
         electronics: 21
         uranium: 38
-      outfitter: [laser, proton_beam, helios_lance, seeker, drone_bay, helios_lure]
-      shipyard: [shuttle, cargo_transport, freighter, helios_drone, helios_enforcer, helios_courier, helios_freighter]
     tycho_refinery:
       planet_type: cloud
       faction: Helios
@@ -1457,6 +1443,7 @@ helios_prime:
   planets:
     helios_prime:
       planet_type: habitable
+      tech_level: 4
       faction: Helios
       location: [100.0, 80.0]
       description: "The corporate capital of the Helios Combine. A planet run like a balance sheet; robotics and patents are its lifeblood."
@@ -1481,8 +1468,6 @@ helios_prime:
         electronics: 18
         weapons_parts: 23
         robotics: 34
-      outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker, drone_bay, flare_pod, helios_lure, engine_mk2, armor_plating, repair_bot]
-      shipyard: [shuttle, courier, cargo_transport, freighter, hauler, helios_drone, helios_enforcer, helios_overseer, helios_titan, helios_courier, helios_freighter, helios_hauler]
     helios_orbital:
       planet_type: rocky
       faction: Helios
@@ -1546,6 +1531,7 @@ the_foundry:
       outfitter: []
     foundry_station:
       planet_type: rocky
+      tech_level: 1
       faction: Helios
       location: [80.0, 60.0]
       description: "An automated Helios refinery-station overhanging the borderlands. It feeds the war and skims both sides."
@@ -1560,7 +1546,6 @@ the_foundry:
         gold: 59
         helium3: 13
         electronics: 11
-      outfitter: [laser, helios_lance]
     foundry_giant:
       planet_type: gas_giant
       faction: Helios
@@ -1619,6 +1604,7 @@ iron_march:
   planets:
     iron_march:
       planet_type: rocky
+      tech_level: 3
       faction: Bastion
       location: [80.0, 60.0]
       description: "A grim munitions world under martial law. The Bastion forges its shells and slugs here, around the clock."
@@ -1630,8 +1616,6 @@ iron_march:
         silicates: 2
         food: 6
         uranium: 9
-      outfitter: [laser, proton_beam, chaingun, siege_cannon, space_mine]
-      shipyard: [corvette, fighter, frigate, bastion_guard, bastion_lance, bastion_dredger]
     march_keep:
       planet_type: desert
       faction: Bastion
@@ -1678,6 +1662,7 @@ bastion:
   planets:
     bastion:
       planet_type: rocky
+      tech_level: 4
       faction: Bastion
       location: [100.0, 80.0]
       description: "The hardliner fortress-capital, and the heart of the splinter that calls itself the true Federation. Iron, banners, and no mercy."
@@ -1689,8 +1674,7 @@ bastion:
         silicates: 1
         food: 10
         uranium: 9
-      outfitter: [proton_beam, chaingun, siege_cannon, chaingun_turret, space_mine, siege_turret, armor_plating, repair_bot]
-      shipyard: [fed_patrol, corvette, frigate, fed_destroyer, bastion_guard, bastion_lance, siege_monitor, iron_dreadnought, bastion_collier, bastion_dredger]
+      shipyard: [fed_destroyer, fed_patrol]
     bastion_yard:
       planet_type: rocky
       faction: Bastion
@@ -1749,6 +1733,7 @@ sanctum:
   planets:
     sanctum:
       planet_type: habitable
+      tech_level: 4
       faction: Order
       location: [100.0, 80.0]
       description: "The holy city of the Artifact Order, built around a Precursor reliquary. Pilgrims come; relics never leave."
@@ -1771,8 +1756,6 @@ sanctum:
         electronics: 37
         weapons_parts: 15
         robotics: 77
-      outfitter: [laser, proton_beam, relic_lance, censer_charge, exotic_lance, relic_turret, precursor_beam]
-      shipyard: [shuttle, courier, frigate, order_acolyte, order_censer, order_reliquary, order_cathedral, order_almoner, order_quarryman, precursor_seeker, precursor_gleaner, precursor_sentinel, precursor_harbinger, precursor_sleeper]
     reliquary_moon:
       planet_type: icy_dwarf
       faction: Order
@@ -1830,6 +1813,7 @@ the_threshold:
       outfitter: []
     threshold_watch:
       planet_type: rocky
+      tech_level: 2
       faction: Order
       location: [80.0, 60.0]
       description: "The Order's last waystation before the Rift. A fortress-chapel watching the dark for what stirs within."
@@ -1841,7 +1825,6 @@ the_threshold:
         silicates: 2
         food: 5
         exotic_matter: 21
-      outfitter: [proton_beam, relic_lance]
   astroid_fields:
     -
       location: [200.0, 160.0]
@@ -1907,6 +1890,7 @@ the_anvil:
   planets:
     anvil_forge:
       planet_type: rocky
+      tech_level: 3
       faction: Bastion
       location: [80.0, 60.0]
       description: "The Bastion's great forge-moon. Slug-foundries and chain-gun lines run white-hot, day and night, for a war that never ends."
@@ -1918,8 +1902,6 @@ the_anvil:
         silicates: 1
         food: 10
         uranium: 9
-      outfitter: [laser, proton_beam, chaingun, siege_cannon, space_mine]
-      shipyard: [corvette, fighter]
     anvil_pit:
       planet_type: desert
       faction: Bastion
@@ -1977,6 +1959,7 @@ the_cloister:
   planets:
     cloister:
       planet_type: rocky
+      tech_level: 2
       faction: Order
       location: [80.0, 60.0]
       description: "The Order's reliquary-vaults, carved into a grey moon. Half-understood Precursor relics are sealed here, venerated and feared."
@@ -1987,7 +1970,6 @@ the_cloister:
         iron: 3
         silicates: 3
         food: 4
-      outfitter: [proton_beam, relic_lance, censer_charge]
     cloister_spire:
       planet_type: icy_dwarf
       faction: Order

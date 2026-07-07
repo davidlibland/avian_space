@@ -134,7 +134,10 @@ mod mods {
     use std::path::Path;
 
     fn universe() -> crate::item_universe::ItemUniverse {
-        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse")
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse");
+        iu.finalize();
+        iu
     }
 
     fn modded_ship() -> Ship {
