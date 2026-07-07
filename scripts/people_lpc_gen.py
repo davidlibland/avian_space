@@ -9,6 +9,18 @@ vendored LPC generator repo (scripts/lpc), assembles game-format 3x4 sheets at
   assets/sprites/people/layers.ron       (items + z-order + palette ramps)
   assets/CREDITS-SPRITES.md              (aggregated artist credits)
 
+Prerequisite — the LPC source assets (~800 MB, gitignored, one-time):
+
+    git clone --depth 1 \
+        https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator.git \
+        scripts/lpc
+
+The committed layer sheets were generated from commit d57c8424 (2026-07-06).
+The pipeline reads `spritesheets/`, `sheet_definitions/`, and
+`palette_definitions/` from that repo; a newer clone generally works, but if
+upstream renames items you may need to adjust people_lpc_config.py (this
+script warns about anything missing rather than failing).
+
 Color variation is applied at RUNTIME by src/character_compositor.rs using the
 palette ramps embedded in layers.ron (exact-color remap of the material's base
 ramp), so recolorable items ship exactly one base PNG per (item, sex, layer).

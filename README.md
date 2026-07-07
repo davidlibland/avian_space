@@ -88,6 +88,50 @@ New storylines can be added by writing mission entries in `missions.yaml` with b
 cargo test --features dev
 ```
 
+## Building a Standalone Bundle
+
+The `bundle` cargo feature bakes the entire `assets/` directory into the
+binary (via `bevy_embedded_assets` + `include_dir`), producing a fully
+self-contained executable — no assets folder needs to ship alongside it:
+
+```bash
+cargo build --release --features bundle
+```
+
+Note: build **without** the `dev` feature — `dev` enables Bevy
+`dynamic_linking`, which doesn't relocate cleanly into a distributable.
+
+On macOS, `scripts/build_macos_app.sh` wraps this into a double-clickable
+`.app` (output: `target/macos/AvianSpace.app`; when launched from Finder it
+defaults to `--inference` mode):
+
+```bash
+scripts/build_macos_app.sh                # release build + package
+SKIP_BUILD=1 scripts/build_macos_app.sh   # repackage an existing binary
+```
+
+## Regenerating Character Sprites
+
+Character layer sheets under `assets/sprites/people/layers/` are generated
+(and committed) by `scripts/people_lpc_gen.py` from the LPC asset collection.
+The LPC source repo is large (~800 MB) and gitignored, so clone it once before
+regenerating:
+
+```bash
+git clone --depth 1 \
+    https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator.git \
+    scripts/lpc
+
+.venv/bin/python scripts/people_lpc_gen.py            # regenerate layers + manifest + credits
+.venv/bin/python scripts/people_lpc_gen.py --preview  # also render a contact sheet to /tmp
+.venv/bin/python scripts/people_lpc_gen.py --strict   # only CC0/OGA-BY/CC-BY assets (DRM-safe)
+```
+
+Which items/colors ship is curated in `scripts/people_lpc_config.py`. Output
+is deterministic — re-running with an unchanged config and LPC checkout is
+byte-identical. The committed sheets were generated from LPC commit
+`d57c8424` (2026-07-06).
+
 ## Art Credits & Licensing
 
 NPC and player character sprites are composited at runtime from layers derived
