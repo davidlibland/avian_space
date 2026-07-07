@@ -17,7 +17,7 @@ tutorial_flight:
   - kind: pay
     credits: 300
 tutorial_mining:
-  briefing: "Welcome to the ground: walk with WASD and press E to enter buildings. Stop by the OUTFITTER and buy a Laser — rocks are money. Then lift off, press Q to target the nearest asteroid, hold SPACE to break it up, and hold A to scoop 2 units of iron from the debris."
+  briefing: "Welcome to the ground: walk with WASD and press E to enter buildings. Stop by the OUTFITTER and buy a Laser — rocks are money. Then lift off and press Q to target the nearest asteroid: hold A to auto-aim and press SPACE to break it up. Press P to target the iron in the debris, then hold A and UP and the autopilot flies the scoop — 2 units and you're done."
   success_text: "Ore in the hold. Sell it at any market — every planet pays its own price."
   failure_text: "Tutorial ended. The asteroids will keep."
   preconditions:
