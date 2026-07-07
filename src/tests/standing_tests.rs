@@ -58,6 +58,7 @@ fn arrest_app() -> (App, Entity) {
         .init_resource::<MissionLog>()
         .init_resource::<MissionCatalog>()
         .init_resource::<MissionOffers>()
+        .init_resource::<crate::missions::OfferBackoff>()
         .init_resource::<PlayerUnlocks>()
         .add_message::<PlayerLandedOnPlanet>()
         .add_message::<crate::missions::PlayerEnteredSystem>()

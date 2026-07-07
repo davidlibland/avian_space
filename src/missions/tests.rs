@@ -1041,7 +1041,7 @@ mod toast_queue {
 // objective advancement, completion/failure effects) in a minimal App — not
 // hand-mutated `log.set` reproductions of their logic.
 
-mod runtime {
+pub(super) mod runtime {
     use super::super::events::*;
     use super::super::log::{MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
     use super::super::progress;
@@ -1051,12 +1051,13 @@ mod runtime {
 
     /// App wired with the mission chain (same order as `missions_plugin`) and
     /// a player ship with the given cargo space.
-    fn missions_app(cargo_space: u16) -> (App, Entity) {
+    pub(super) fn missions_app(cargo_space: u16) -> (App, Entity) {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
             .init_resource::<MissionLog>()
             .init_resource::<MissionCatalog>()
             .init_resource::<MissionOffers>()
+        .init_resource::<crate::missions::OfferBackoff>()
             .init_resource::<PlayerUnlocks>()
             .add_message::<PlayerLandedOnPlanet>()
             .add_message::<PlayerEnteredSystem>()
@@ -1101,6 +1102,10 @@ mod runtime {
 
     fn status(app: &mut App, id: &str) -> MissionStatus {
         app.world().resource::<MissionLog>().status(id)
+    }
+
+    pub(super) fn delivery_def_pub() -> MissionDef {
+        delivery_def()
     }
 
     fn delivery_def() -> MissionDef {
@@ -1368,6 +1373,7 @@ mod runtime {
             .init_resource::<MissionLog>()
             .init_resource::<MissionCatalog>()
             .init_resource::<MissionOffers>()
+        .init_resource::<crate::missions::OfferBackoff>()
             .init_resource::<PlayerUnlocks>()
             .init_resource::<crate::standing::FactionStandings>()
             .insert_resource({
@@ -1416,5 +1422,104 @@ mod runtime {
             Some(1),
             "one roll per visit — never duplicated on later frames"
         );
+    }
+}
+
+// ── Tutorial chain + offer backoff ────────────────────────────────────────────
+
+mod tutorial {
+    use super::super::events::{AbandonMission, DeclineMission};
+    use super::super::log::{MissionCatalog, OfferBackoff};
+    use super::*;
+    use crate::session::SessionResource;
+
+    fn real_catalog() -> MissionCatalog {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        MissionCatalog::new_session(&iu)
+    }
+
+    /// The tutorial auto-starts for a fresh pilot, and abandoning any stage
+    /// ends the whole storyline: the rest stays Locked forever.
+    #[test]
+    fn tutorial_auto_starts_and_abandon_ends_the_chain() {
+        let (mut app, _player) = super::runtime::missions_app(20);
+        let catalog = real_catalog();
+        assert!(catalog.defs.contains_key("tutorial_flight"));
+        app.insert_resource(catalog);
+
+        app.update();
+        assert!(
+            matches!(
+                app.world().resource::<MissionLog>().status("tutorial_flight"),
+                MissionStatus::Active(_)
+            ),
+            "the tutorial greets a fresh pilot unprompted"
+        );
+        assert!(matches!(
+            app.world().resource::<MissionLog>().status("tutorial_landing"),
+            MissionStatus::Locked
+        ));
+
+        // An experienced pilot bails out at stage one.
+        app.world_mut()
+            .write_message(AbandonMission("tutorial_flight".to_string()));
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(matches!(
+            app.world().resource::<MissionLog>().status("tutorial_flight"),
+            MissionStatus::Failed
+        ));
+        for stage in ["tutorial_landing", "tutorial_jump", "tutorial_trade"] {
+            assert!(
+                matches!(
+                    app.world().resource::<MissionLog>().status(stage),
+                    MissionStatus::Locked
+                ),
+                "{stage} never surfaces after the bail-out"
+            );
+        }
+    }
+
+    #[test]
+    fn declining_backs_off_exponentially_with_a_floor() {
+        let mut b = OfferBackoff::default();
+        assert_eq!(b.effective_weight("m", 1.0), 1.0);
+        b.record_decline("m");
+        assert!((b.effective_weight("m", 1.0) - 0.5).abs() < 1e-6);
+        b.record_decline("m");
+        assert!((b.effective_weight("m", 1.0) - 0.25).abs() < 1e-6);
+        for _ in 0..10 {
+            b.record_decline("m");
+        }
+        assert!(
+            (b.effective_weight("m", 1.0) - OfferBackoff::FLOOR).abs() < 1e-6,
+            "a storyline is never lost, only quieted"
+        );
+        // Missions rarer than the floor keep their own base rate.
+        assert!((b.effective_weight("m", 0.01) - 0.01).abs() < 1e-6);
+    }
+
+    /// Declining through the real UI-action system records backoff for
+    /// static missions only (template instances get fresh ids per roll).
+    #[test]
+    fn decline_records_backoff_for_static_missions() {
+        let (mut app, _player) = super::runtime::missions_app(20);
+        let mut catalog = real_catalog();
+        catalog
+            .defs
+            .insert("proc__one_off".into(), super::runtime::delivery_def_pub());
+        app.insert_resource(catalog);
+        app.update();
+        app.world_mut()
+            .write_message(DeclineMission("deliver_wheat_intro".to_string()));
+        app.world_mut()
+            .write_message(DeclineMission("proc__one_off".to_string()));
+        app.update();
+        let b = app.world().resource::<OfferBackoff>();
+        assert_eq!(b.0.get("deliver_wheat_intro"), Some(&1));
+        assert_eq!(b.0.get("proc__one_off"), None, "procedural ids don't accumulate");
     }
 }

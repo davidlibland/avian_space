@@ -17,6 +17,7 @@ pub mod ui;
 
 pub use events::*;
 pub use log::{
+    OfferBackoff,
     MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, PlayerUnlocks,
 };
 pub use types::{MissionDef, MissionStatus, MissionTarget, MissionTemplate, NpcApproach, Objective, OfferKind};
@@ -26,6 +27,7 @@ pub fn missions_plugin(app: &mut App) {
     app.init_session_resource::<MissionLog>()
         .init_session_resource::<MissionCatalog>()
         .init_session_resource::<MissionOffers>()
+        .init_session_resource::<OfferBackoff>()
         .init_session_resource::<PlayerUnlocks>()
         .add_message::<PlayerLandedOnPlanet>()
         // spawn_mission_targets writes arrival flashes; registered here (as

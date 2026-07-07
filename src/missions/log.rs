@@ -210,6 +210,40 @@ pub struct MissionOffers {
     pub considered: std::collections::HashSet<String>,
 }
 
+/// Per-mission decline counts. Each explicit Decline halves that mission's
+/// future offer probability (exponential backoff), floored so a storyline is
+/// never permanently lost — it just stops nagging. Persisted with the pilot.
+#[derive(Resource, Default, Clone)]
+pub struct OfferBackoff(pub HashMap<String, u32>);
+
+impl OfferBackoff {
+    /// Even a much-declined mission still knocks about 1 landing in 20.
+    pub const FLOOR: f32 = 0.05;
+
+    pub fn effective_weight(&self, id: &str, base: f32) -> f32 {
+        let n = self.0.get(id).copied().unwrap_or(0).min(16);
+        (base * 0.5f32.powi(n as i32)).max(Self::FLOOR.min(base))
+    }
+
+    pub fn record_decline(&mut self, id: &str) {
+        *self.0.entry(id.to_string()).or_insert(0) += 1;
+    }
+}
+
+impl SessionResource for OfferBackoff {
+    type SaveData = HashMap<String, u32>;
+    const SAVE_KEY: Option<&'static str> = Some("offer_backoff");
+    fn new_session(_: &ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn to_save(&self) -> Self::SaveData {
+        self.0.clone()
+    }
+    fn from_save(data: Self::SaveData, _: &ItemUniverse) -> Self {
+        Self(data)
+    }
+}
+
 impl SessionResource for MissionOffers {
     type SaveData = ();
 

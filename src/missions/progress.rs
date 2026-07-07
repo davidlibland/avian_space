@@ -114,6 +114,7 @@ pub fn handle_ui_actions(
     mut log: ResMut<MissionLog>,
     catalog: Res<MissionCatalog>,
     mut offers: ResMut<MissionOffers>,
+    mut backoff: ResMut<super::OfferBackoff>,
     mut started: MessageWriter<MissionStarted>,
     mut failed: MessageWriter<MissionFailed>,
     player_q: Query<&Ship, With<Player>>,
@@ -140,6 +141,12 @@ pub fn handle_ui_actions(
     }
     for DeclineMission(id) in decline.read() {
         remove_from_offers(&mut offers, id);
+        // Static (storyline) missions back off exponentially when declined.
+        // Template instances get a fresh id per roll, so counting them would
+        // only leak entries into the save.
+        if catalog.base_keys.contains(id) {
+            backoff.record_decline(id);
+        }
     }
     for AbandonMission(id) in abandon.read() {
         if matches!(log.status(id), MissionStatus::Active(_)) {
@@ -782,6 +789,7 @@ pub fn roll_offers_on_land(
     mut offers: ResMut<MissionOffers>,
     standings: Res<crate::standing::FactionStandings>,
     galaxy: Res<crate::galaxy::GalaxyControl>,
+    backoff: Res<super::OfferBackoff>,
 ) {
     let mut rng = rand::thread_rng();
     for PlayerLandedOnPlanet { planet } in reader.read() {
@@ -810,10 +818,14 @@ pub fn roll_offers_on_land(
                 continue;
             }
             match &def.offer {
-                OfferKind::Tab { weight } => tab.push((id.clone(), *weight)),
+                OfferKind::Tab { weight } => {
+                    tab.push((id.clone(), backoff.effective_weight(id, *weight)))
+                }
                 OfferKind::NpcOffer {
                     planet: p, weight, ..
-                } if p == planet => npc.push((id.clone(), *weight)),
+                } if p == planet => {
+                    npc.push((id.clone(), backoff.effective_weight(id, *weight)))
+                }
                 _ => {}
             }
         }
@@ -910,6 +922,7 @@ pub fn roll_new_offers_while_landed(
     standings: Res<crate::standing::FactionStandings>,
     galaxy: Res<crate::galaxy::GalaxyControl>,
     universe: Res<ItemUniverse>,
+    backoff: Res<super::OfferBackoff>,
 ) {
     let Some(planet) = landed.planet_name.clone() else {
         return;
@@ -936,6 +949,7 @@ pub fn roll_new_offers_while_landed(
     }
     let mut rng = rand::thread_rng();
     for (id, weight, is_tab) in candidates {
+        let weight = backoff.effective_weight(&id, weight);
         let hit = rng.gen_range(0.0..1.0) < weight.clamp(0.0, 1.0);
         offers.considered.insert(id.clone());
         if hit {

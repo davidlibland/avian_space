@@ -88,6 +88,7 @@ fn war_app(iu: ItemUniverse, galaxy: GalaxyControl) -> App {
         .init_resource::<MissionCatalog>()
         .init_resource::<MissionLog>()
         .init_resource::<MissionOffers>()
+        .init_resource::<crate::missions::OfferBackoff>()
         .add_message::<PlayerLandedOnPlanet>()
         .add_systems(Update, (offer_war_missions, war_drift));
     app
