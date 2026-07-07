@@ -79,6 +79,7 @@ All game content lives in YAML files under [`assets/`](assets/):
 | `missions.yaml` | Hand-crafted story missions |
 | `mission_templates.yaml` | Parameterized templates for procedural missions |
 | `outfitter_items.yaml` | Purchasable ship upgrades |
+| `npc.yaml` | Recurring storyline NPC characters (names + composited appearances) |
 
 New storylines can be added by writing mission entries in `missions.yaml` with briefing text, objectives, rewards, and optional preconditions that gate progression.
 

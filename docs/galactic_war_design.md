@@ -67,6 +67,14 @@ produces narrative absurdity. Wars are fought over the frontier.
 * **Ambient drift**: a small random walk on both sides of each active front
   per landing/day — the war moves without the player; player missions are
   the decisive strokes.
+* **Storyline battles** (2026-07): hand-authored campaign finales pull the
+  same lever — the Frontier chain's defenses of Ceres Freehold and Kuiper
+  Reach shift influence to the Free Frontier, the Bastion endgame pushes
+  the Anvil toward the Bastion, and the post-Rift "Reclamation" arc shifts
+  the Verge / the Foundry / Alpha Centauri toward FreeFrontier / Helios /
+  Federation as the coalition clears Precursor remnants. Storyline combat
+  missions also field coalition `squadron` escorts (escort HUD panel +
+  green radar dots track them).
 
 ---
 

@@ -6,6 +6,10 @@ pub struct MissionDef {
     pub briefing: String,
     pub success_text: String,
     pub failure_text: String,
+    /// Faction this storyline belongs to (key into factions.yaml). Colors
+    /// the mission in the story chart; None = neutral/unaffiliated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faction: Option<String>,
     #[serde(default)]
     pub preconditions: Vec<Precondition>,
     pub offer: OfferKind,

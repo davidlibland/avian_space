@@ -28,6 +28,7 @@ fn battle_mission(system: &str, squadron: &[&str]) -> MissionDef {
         requires: vec![],
         completion_effects: vec![CompletionEffect::Pay { credits: 1 }],
         squadron: squadron.iter().map(|s| s.to_string()).collect(),
+        faction: None,
     }
 }
 

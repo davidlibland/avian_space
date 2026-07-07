@@ -21,6 +21,7 @@ fn dummy_def() -> MissionDef {
         requires: Vec::new(),
         completion_effects: Vec::new(),
         squadron: Vec::new(),
+        faction: None,
     }
 }
 
@@ -457,6 +458,7 @@ fn mission_def_yaml_roundtrip_travel() {
         requires: Vec::new(),
         completion_effects: vec![CompletionEffect::Pay { credits: 1000 }],
         squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -500,6 +502,7 @@ fn mission_def_yaml_roundtrip_land_with_requires() {
             },
         ],
         squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -525,6 +528,7 @@ fn mission_def_yaml_roundtrip_collect() {
         requires: Vec::new(),
         completion_effects: Vec::new(),
         squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -554,6 +558,7 @@ fn mission_def_yaml_roundtrip_destroy_ships() {
         requires: Vec::new(),
         completion_effects: vec![CompletionEffect::Pay { credits: 10000 }],
         squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -580,6 +585,7 @@ fn mission_def_yaml_roundtrip_destroy_ships_no_collect() {
         requires: Vec::new(),
         completion_effects: Vec::new(),
         squadron: Vec::new(),
+        faction: None,
     };
     let yaml = serde_yaml::to_string(&def).unwrap();
     let restored: MissionDef = serde_yaml::from_str(&yaml).unwrap();
@@ -1140,6 +1146,7 @@ pub(super) mod runtime {
                 },
             ],
             squadron: Vec::new(),
+            faction: None,
         }
     }
 

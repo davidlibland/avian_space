@@ -1095,6 +1095,7 @@ pub(super) fn instantiate_template(
                     CompletionEffect::Pay { credits: pay },
                 ],
                 squadron: Vec::new(),
+                faction: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1139,6 +1140,7 @@ pub(super) fn instantiate_template(
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
                 squadron: Vec::new(),
+                faction: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1196,6 +1198,7 @@ pub(super) fn instantiate_template(
                 requires: Vec::new(),
                 completion_effects: Vec::new(),
                 squadron: Vec::new(),
+                faction: None,
             };
             let stage2 = MissionDef {
                 briefing: subst(stage2_briefing, &vars),
@@ -1223,6 +1226,7 @@ pub(super) fn instantiate_template(
                     CompletionEffect::Pay { credits: pay },
                 ],
                 squadron: Vec::new(),
+                faction: None,
             };
             vec![(stage1_id, stage1), (stage2_id, stage2)]
         }
@@ -1276,6 +1280,7 @@ pub(super) fn instantiate_template(
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
                 squadron: Vec::new(),
+                faction: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1366,6 +1371,7 @@ pub(super) fn instantiate_template(
                 requires: Vec::new(),
                 completion_effects: Vec::new(),
                 squadron: Vec::new(),
+                faction: None,
             };
 
             // Stage 2: Deliver the stolen goods.
@@ -1390,6 +1396,7 @@ pub(super) fn instantiate_template(
                     quantity,
                 }],
                 squadron: Vec::new(),
+                faction: None,
             };
 
             // Stage 3: Catch the thief on a planet.
@@ -1411,6 +1418,7 @@ pub(super) fn instantiate_template(
                 requires: Vec::new(),
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
                 squadron: Vec::new(),
+                faction: None,
             };
 
             vec![(stage1_id, s1), (stage2_id, s2), (stage3_id, s3)]

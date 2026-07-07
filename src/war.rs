@@ -363,6 +363,7 @@ fn instantiate_war_mission(
                         },
                     ],
                     squadron,
+                    faction: None,
                 },
                 None,
             ))
@@ -586,6 +587,7 @@ fn instantiate_war_mission(
                         requires: requires2,
                         completion_effects: final_effects,
                         squadron: Vec::new(),
+                        faction: None,
                     };
                     (effects, Some(follow))
                 }
@@ -610,6 +612,7 @@ fn instantiate_war_mission(
                     requires,
                     completion_effects: stage1_effects,
                     squadron: Vec::new(),
+                    faction: None,
                 },
                 follow_up,
             ))

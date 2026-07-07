@@ -52,6 +52,20 @@ FACTION_ORDER = ["Intro", "Mining Guild", "Merchant Guild", "Federation", "Fed I
                  "Rebel Alliance", "Pirate Clans", "Free Frontier", "Helios Combine",
                  "Fed Bastion", "Artifact Order", "Precursor Rift"]
 
+# Authoritative mapping for the `faction:` field on missions (added 2026-07;
+# the prefix table above remains as a fallback for unfielded missions).
+FACTION_FIELD = {
+    "Merchant":     ("Merchant Guild", (214, 170, 70)),
+    "Federation":   ("Federation",     (78, 120, 196)),
+    "Rebel":        ("Rebel Alliance", (90, 190, 110)),
+    "Pirate":       ("Pirate Clans",   (224, 150, 70)),
+    "FreeFrontier": ("Free Frontier",  (228, 198, 92)),
+    "Helios":       ("Helios Combine", (84, 200, 230)),
+    "Bastion":      ("Fed Bastion",    (188, 64, 56)),
+    "Order":        ("Artifact Order", (162, 110, 214)),
+    "Precursor":    ("Precursor Rift", (196, 84, 206)),
+}
+
 # ── objective kind → stage shape + label ─────────────────────────────────────
 STAGES = {
     "destroy_ships":             ("combat",   "rect"),
@@ -67,7 +81,10 @@ COLGAP, ROWGAP = 96, 30   # gaps
 MARGIN_L, MARGIN_T = 24, 150
 
 
-def faction_of(name):
+def faction_of(name, m=None):
+    # The mission's explicit `faction:` field wins; prefix table is fallback.
+    if m and m.get("faction") in FACTION_FIELD:
+        return FACTION_FIELD[m["faction"]]
     pre = name.split("_")[0]
     return FACTIONS.get(pre, ("Other", (120, 120, 120)))
 
@@ -125,7 +142,7 @@ def main():
     fidx = {f: i for i, f in enumerate(FACTION_ORDER)}
     order = {}
     for c in range(maxd + 1):
-        cols[c].sort(key=lambda n: (fidx.get(faction_of(n)[0], 99), n))
+        cols[c].sort(key=lambda n: (fidx.get(faction_of(n, M[n])[0], 99), n))
         for i, n in enumerate(cols[c]):
             order[n] = i
     # barycentre passes to reduce crossings
@@ -167,7 +184,7 @@ def main():
     # nodes
     for n, v in M.items():
         cx, cy = pos[n]
-        flabel, fcol = faction_of(n)
+        flabel, fcol = faction_of(n, v)
         slabel, shape = stage_of(v)
         grants = [e["name"] for e in v.get("completion_effects", []) or [] if e.get("kind") == "grant_unlock"]
         outline = (235, 200, 90) if grants else (18, 19, 24)
