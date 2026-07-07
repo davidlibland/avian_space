@@ -1079,7 +1079,7 @@ frontier_3:
     - kind: grant_unlock
       name: frontier_sailtender_license
 frontier_4:
-  briefing: "The harbormaster's voice is tight over comms. 'A Bastion raiding column is bearing down on Ceres Freehold — three iron hulls, no mercy in them. The whole Coalition is watching. Hold the line. 50,000, and you'll have earned every credit.'"
+  briefing: "The harbormaster's voice is tight over comms. 'A Bastion raiding column is bearing down on Ceres Freehold — three iron hulls, no mercy in them. The whole Coalition is watching. Hold the line. 50,000, and you'll have earned every credit.' Two Freehold skiffs will fly on your wing."
   success_text: "The Bastion column breaks against the Freehold's guns — and your own. Ceres holds. 'The Reaches are free another day, Captain,' the harbormaster says. 'Because of you.' 20,000 credits — and a harvester gunship off the Ceres line, mass-driver fitted, so you can hit back harder."
   failure_text: "Ceres Freehold burns. The Coalition will not forget who failed them."
   preconditions:
@@ -1104,8 +1104,13 @@ frontier_4:
       credits: 20000
     - kind: grant_unlock
       name: frontier_harvester_license
+    - kind: shift_influence
+      system: ceres_freehold
+      faction: FreeFrontier
+      delta: 0.1
+  squadron: [frontier_skiff, frontier_skiff]
 frontier_5:
-  briefing: "The harbormaster's grin is gone. 'The Bastion learned their lesson and came back heavier — a monitor, the meanest hull they field, leading a push on Kuiper Reach. We have one answer to a monitor, Captain: ours. Take the new gunboat off the Kuiper ways and break theirs. 75,000, and the heavy line is yours.'"
+  briefing: "The harbormaster's grin is gone. 'The Bastion learned their lesson and came back heavier — a monitor, the meanest hull they field, leading a push on Kuiper Reach. We have one answer to a monitor, Captain: ours. Take the new gunboat off the Kuiper ways and break theirs. 75,000, and the heavy line is yours.' A skiff and a harvester gunship fly escort — the Reaches fight together now."
   success_text: "The Bastion monitor folds and the push collapses with it. The Coalition opens its heaviest hull to you — the frontier monitor and its flak turret. 30,000 credits. 'The Reaches will sing about this one,' the harbormaster says."
   failure_text: "The Bastion monitor breaks through, and Kuiper Reach falls under the iron writ."
   preconditions:
@@ -1130,6 +1135,11 @@ frontier_5:
       credits: 30000
     - kind: grant_unlock
       name: frontier_monitor_license
+    - kind: shift_influence
+      system: kuiper_reach
+      faction: FreeFrontier
+      delta: 0.12
+  squadron: [frontier_skiff, frontier_harvester]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Helios Combine — "Quarterly Returns"  (grants helios_license at stage 1).
@@ -1362,7 +1372,7 @@ bastion_3:
     - kind: grant_unlock
       name: bastion_lance_license
 bastion_4:
-  briefing: "'The endgame, Captain. We move on a frontier world that shelters Rebel sympathizers. Three defenders stand in the way. Break them and the Bastion's reach extends another system. 22,000. This is the order we will build, whatever the cost.'"
+  briefing: "'The endgame, Captain. We move on a frontier world that shelters Rebel sympathizers. Three defenders stand in the way. Break them and the Bastion's reach extends another system. 22,000. This is the order we will build, whatever the cost.' A pair of Bastion guards will hold your flanks."
   success_text: "The defenders fall. The Bastion's iron writ spreads. The officer salutes you as kin. 22,000 credits — and the keys to a siege monitor, siege-cannon mounted, with a reputation soaked in it."
   failure_text: "The defenders held the line. The splinter's advance stalls."
   preconditions:
@@ -1387,8 +1397,13 @@ bastion_4:
       credits: 22000
     - kind: grant_unlock
       name: siege_monitor_license
+    - kind: shift_influence
+      system: the_anvil
+      faction: Bastion
+      delta: 0.1
+  squadron: [bastion_guard, bastion_guard]
 bastion_5:
-  briefing: "The officer's voice is iron. 'The endgame the soft never had the will for, Captain. The Coalition has fielded a monitor to break our advance — and behind it, everything they have left. We answer with the Iron Dreadnought, the heaviest hull the forge has ever struck. Fly it, take theirs out, shatter their line. 32,000. After this, there is only the order we impose.'"
+  briefing: "The officer's voice is iron. 'The endgame the soft never had the will for, Captain. The Coalition has fielded a monitor to break our advance — and behind it, everything they have left. We answer with the Iron Dreadnought, the heaviest hull the forge has ever struck. Fly it, take theirs out, shatter their line. 32,000. After this, there is only the order we impose.' A lance and a guard fly at your wing — the Column moves as one."
   success_text: "The Coalition monitor breaks apart against the Dreadnought's broadside. The forge opens its heaviest hull to you — the Iron Dreadnought. 32,000 credits. 'You are the Bastion now,' the officer says."
   failure_text: "The Coalition line held, and the Bastion's advance breaks on the rocks of the Reaches."
   preconditions:
@@ -1413,6 +1428,11 @@ bastion_5:
       credits: 32000
     - kind: grant_unlock
       name: iron_dreadnought_license
+    - kind: shift_influence
+      system: the_anvil
+      faction: Bastion
+      delta: 0.12
+  squadron: [bastion_lance, bastion_guard]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Artifact Order — "The Reliquary" (grants artifact_order_license at stage 1,
@@ -1565,7 +1585,7 @@ order_5:
 # capital-class hull). The hardest content in the game.
 # ══════════════════════════════════════════════════════════════════════════════
 rift_1:
-  briefing: "Federation Intelligence, the Order, and the Free Frontier speak as one for the first time in history: the Rift is waking. Two Sentinels guard the way into the deep. Break them. There is no precedent for what you are about to do. 35,000."
+  briefing: "Federation Intelligence, the Order, and the Free Frontier speak as one for the first time in history: the Rift is waking. Two Sentinels guard the way into the deep. Break them. There is no precedent for what you are about to do. 35,000. The coalition sends a Federation patrol and an Order acolyte to fly at your side."
   success_text: "The Sentinels shatter into drifting violet light. The way into the Rift is open. 35,000 credits — and silence on every comm channel."
   failure_text: "The Sentinels held. The deep stays sealed — for now."
   preconditions:
@@ -1588,8 +1608,9 @@ rift_1:
   completion_effects:
     - kind: pay
       credits: 35000
+  squadron: [fed_patrol, order_acolyte]
 rift_2:
-  briefing: "A Harbinger — a roused hunter-form — has crossed into the Silence, burning toward the inhabited galaxy along the exotic-matter veins. If it passes, nothing the factions have will stop it. End it here. 45,000."
+  briefing: "A Harbinger — a roused hunter-form — has crossed into the Silence, burning toward the inhabited galaxy along the exotic-matter veins. If it passes, nothing the factions have will stop it. End it here. 45,000. A joint wing jumps with you — a Federation destroyer, an Order censer, a Frontier skiff."
   success_text: "The Harbinger is unmade. The veins fall quiet. Only the sleeper remains. 45,000 credits."
   failure_text: "The Harbinger slipped past you into the dark, toward home."
   preconditions:
@@ -1612,8 +1633,9 @@ rift_2:
   completion_effects:
     - kind: pay
       credits: 45000
+  squadron: [fed_destroyer, order_censer, frontier_skiff]
 rift_final:
-  briefing: "It is in the Seedbed, at the bottom of the deep: the Sleeper. The thing that built the ruins, that seeded the exotic matter, that the Order calls a god. It is awake now, and it is vast. Every faction you have ever flown for stands behind you. End it. 120,000 — though credits will mean little if you fail."
+  briefing: "It is in the Seedbed, at the bottom of the deep: the Sleeper. The thing that built the ruins, that seeded the exotic matter, that the Order calls a god. It is awake now, and it is vast. Every faction you have ever flown for stands behind you. End it. 120,000 — though credits will mean little if you fail. Everything the coalition can spare jumps with you: destroyer, patrol, reliquary, monitor."
   success_text: "The Sleeper folds in on itself and is gone, a wound in space closing behind it. The Rift falls silent — truly silent — for the first time in millions of years. Across the galaxy, a Federation officer, a Rebel commander, a frontier harbormaster, and a robed proctor all exhale at once. You did this. 120,000 credits, and a name that outlives you."
   failure_text: "The Sleeper endures. The deep breathes out, and the veins begin to glow toward home."
   preconditions:
@@ -1642,6 +1664,7 @@ rift_final:
       name: turret_license
     - kind: grant_unlock
       name: precursor_ship_license
+  squadron: [fed_destroyer, fed_patrol, order_reliquary, frontier_monitor]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # THE WEIGHT OF ORDER — Federation governance arc (Director Sato, Earth)
@@ -2213,3 +2236,106 @@ invisible_hand_5:
       name: carrier_license
     - kind: grant_unlock
       name: turret_license
+
+# ── Reclamation arc ──────────────────────────────────────────────────────
+# After the Sleeper falls, Precursor remnants scatter into inhabited space.
+# The coalition sweeps them system by system — and every system cleared
+# tips the balance of control toward whoever holds the line there.
+reclamation_1:
+  briefing: "Envoy Chandra finds you before you find her. 'The Sleeper is dead, but its brood scattered when it fell. Seekers have gone to ground in the Verge, striking at Frontier convoys from the drift ice. The Reaches held the line for us once — now we hold it for them. Take a coalition wing and burn the embers out.'"
+  success_text: "The last seeker comes apart against the ice field. The Verge convoys fly unescorted within the week — and the Free Frontier's flag flies higher over the Reaches for it. 40,000 credits, wired with the coalition's thanks."
+  failure_text: "The seekers melt back into the drift ice. The convoys keep dying, and the Verge remembers who left."
+  preconditions:
+    - kind: completed
+      mission: rift_final
+  offer:
+    kind: npc_offer
+    planet: threshold_watch
+    weight: 1.0
+    building: bar
+    npc: rift_envoy
+  objective:
+    kind: destroy_ships
+    system: the_verge
+    ship_type: precursor_seeker
+    count: 3
+    target_name: Brood Seekers
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 40000
+    - kind: shift_influence
+      system: the_verge
+      faction: FreeFrontier
+      delta: 0.1
+  squadron: [fed_patrol, frontier_skiff]
+
+reclamation_2:
+  briefing: "Chandra's tactical display is a mess of red. 'Two sentinels nested in the Foundry slag fields — they're stripping Helios extractors for raw metal, rebuilding something in the dark. Helios is paying the coalition to make it stop, and the coalition is sending you. An enforcer and a Federation patrol will fly at your wing.'"
+  success_text: "The second sentinel folds into the slag it was feeding on. Helios reopens the extractors within the day, and the Combine's stock in the Foundry climbs with them. 55,000 credits — plus a quiet bonus from a grateful Combine."
+  failure_text: "The sentinels finish whatever they were building. Helios pulls out of the Foundry, and the coalition's phone stops ringing."
+  preconditions:
+    - kind: completed
+      mission: reclamation_1
+  offer:
+    kind: npc_offer
+    planet: threshold_watch
+    weight: 1.0
+    building: bar
+    npc: rift_envoy
+  objective:
+    kind: destroy_ships
+    system: the_foundry
+    ship_type: precursor_sentinel
+    count: 2
+    target_name: Foundry Sentinels
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 55000
+    - kind: shift_influence
+      system: the_foundry
+      faction: Helios
+      delta: 0.1
+    - kind: adjust_standing
+      faction: Helios
+      delta: 5.0
+  squadron: [helios_enforcer, fed_patrol]
+
+reclamation_3:
+  briefing: "Chandra doesn't sit. 'The last of the brood — two gleaners, the harvest-forms — jumped for Alpha Centauri. Core space, Captain. Sol's doorstep. If they root there, everything we bled for in the Rift was a delay, not a victory. The coalition is emptying its docks: a destroyer, a censer, and the Kuiper monitor jump with you. End the harvest. End all of it.'"
+  success_text: "The second gleaner cracks open above Alpha Centauri and the sky is finally, completely quiet. The Federation plants its flag over the recovered wrecks, the Order sings the Silence full again, and the Reaches drink to the pilot who finished it. 90,000 credits, and three grateful powers."
+  failure_text: "A gleaner slips the net and vanishes toward the core. Somewhere in the dark, the harvest begins again."
+  preconditions:
+    - kind: completed
+      mission: reclamation_2
+  offer:
+    kind: npc_offer
+    planet: threshold_watch
+    weight: 1.0
+    building: bar
+    npc: rift_envoy
+  objective:
+    kind: destroy_ships
+    system: alpha_centauri
+    ship_type: precursor_gleaner
+    count: 2
+    target_name: Brood Gleaners
+    hostile: true
+  completion_effects:
+    - kind: pay
+      credits: 90000
+    - kind: shift_influence
+      system: alpha_centauri
+      faction: Federation
+      delta: 0.15
+    - kind: adjust_standing
+      faction: Federation
+      delta: 5.0
+    - kind: adjust_standing
+      faction: Order
+      delta: 5.0
+    - kind: adjust_standing
+      faction: FreeFrontier
+      delta: 5.0
+  squadron: [fed_destroyer, order_censer, frontier_monitor]
