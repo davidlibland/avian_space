@@ -163,7 +163,7 @@ fn derived_traffic_reflects_presence_and_wealth() {
     let iu = universe();
     let sol = &iu.star_systems.get("sol").unwrap().ships;
     assert!(!sol.types.is_empty(), "derived distribution must be non-empty");
-    assert!(sol.min >= 1 && sol.min <= sol.max && sol.max <= 8);
+    assert!(sol.min >= 1 && sol.min <= sol.max && sol.max <= 10);
     assert!(
         sol.types.contains_key("fed_patrol"),
         "controller's patrols present at home"

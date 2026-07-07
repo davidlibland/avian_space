@@ -26,7 +26,7 @@ const JUMP_OUT_ACCEL: f32 = 2500.0;
 /// Radius (units) at which a jumping-in ship is placed at the system edge.
 const JUMP_IN_RADIUS: f32 = 6000.0;
 /// How often (seconds) to check whether ship population needs adjusting.
-const POPULATION_CHECK_INTERVAL: f32 = 5.0;
+const POPULATION_CHECK_INTERVAL: f32 = 4.0;
 
 #[derive(Component)]
 pub struct AIShip {

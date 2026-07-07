@@ -356,8 +356,9 @@ impl ItemUniverse {
 
     // ── Derived ship traffic ─────────────────────────────────────────────
     // Replaces hand-authored per-system `ships:` maps (kept verbatim where
-    // declared — training worlds, the precursor rift). Constants tuned so a
-    // typical core system lands near the old authored max of ~5.
+    // declared — training worlds, the precursor rift). Constants tuned for
+    // lively skies: a typical core system carries ~6-8 ships with combat
+    // hulls the biggest bucket, so border systems see real skirmishes.
 
     /// Population: how many AI ships a system sustains.
     const TRAFFIC_PER_TECH: f32 = 0.35;
@@ -369,11 +370,11 @@ impl ItemUniverse {
     const MERCHANTS_PER_CONNECTION: f32 = 0.25;
     const MINERS_PER_FIELD: f32 = 1.2;
     /// Pirates follow wealth, scaled by how unaligned the system is.
-    const PIRATE_SHARE_OF_MERCHANTS: f32 = 0.35;
+    const PIRATE_SHARE_OF_MERCHANTS: f32 = 0.5;
     /// Combat presence multiplier per faction influence share.
-    const COMBAT_PER_PRESENCE: f32 = 2.2;
+    const COMBAT_PER_PRESENCE: f32 = 3.5;
     /// Unfactioned fighters (mercenaries) drift everywhere lightly.
-    const MERCENARY_SHARE: f32 = 0.25;
+    const MERCENARY_SHARE: f32 = 0.3;
 
     /// Re-derive every non-authored system's ship distribution from the live
     /// influence simplex. Faction presence propagates λ-per-jump from
@@ -445,7 +446,7 @@ impl ItemUniverse {
                 + Self::TRAFFIC_PER_FIELD * fields
                 + Self::TRAFFIC_PER_CONNECTION * conn)
                 .round()
-                .clamp(3.0, 8.0) as usize;
+                .clamp(4.0, 10.0) as usize;
 
             // Traders only loiter where a within-system route exists (≥2
             // colonised planets) — matches the trade-route validator.

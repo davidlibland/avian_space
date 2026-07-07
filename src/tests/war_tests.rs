@@ -132,10 +132,12 @@ fn war_missions_offered_only_to_trusted_pilots() {
     // The generated mission is coherent and appears in the planet's offers.
     let world = app.world();
     let catalog = world.resource::<MissionCatalog>();
+    // Two-stage covert ops file an auto-starting __return leg alongside the
+    // primary; only the PRIMARY appears in the planet's offers.
     let (id, def) = catalog
         .defs
         .iter()
-        .find(|(id, _)| id.starts_with("war__"))
+        .find(|(id, _)| id.starts_with("war__") && !id.ends_with("__return"))
         .unwrap();
     let iu = world.resource::<ItemUniverse>();
     if let crate::missions::Objective::DestroyShips { ship_type, .. } = &def.objective {
@@ -322,4 +324,40 @@ fn two_stage_covert_files_a_precondition_locked_return_leg() {
             Precondition::Completed { mission } if *mission == primary)),
         "return leg unlocks on the primary"
     );
+}
+
+/// Every war the map supports must be fightable from BOTH sides, and every
+/// front target must have a landable planet so the full mission family
+/// (including covert ops) can instantiate there. Bastion–Rebel and
+/// FreeFrontier–Helios stay cold by design: their cores sit on opposite
+/// ends of the map with third factions between them.
+#[test]
+fn every_geographic_war_is_two_way_with_covert_venues() {
+    let iu = universe();
+    let galaxy = seeded(&iu);
+    let fronts = detect_fronts(&iu, &galaxy);
+    for (a, b) in [
+        ("Federation", "Rebel"),
+        ("Federation", "Bastion"),
+        ("Bastion", "FreeFrontier"),
+        ("Helios", "Order"),
+    ] {
+        for (sponsor, enemy) in [(a, b), (b, a)] {
+            let side: Vec<&Front> = fronts
+                .iter()
+                .filter(|f| f.sponsor == sponsor && f.enemy == enemy)
+                .collect();
+            assert!(!side.is_empty(), "{sponsor} must be able to attack {enemy}");
+            for f in side {
+                assert!(
+                    iu.star_systems[&f.target]
+                        .planets
+                        .values()
+                        .any(|p| !p.commodities.is_empty()),
+                    "front target {} needs a covert venue",
+                    f.target
+                );
+            }
+        }
+    }
 }

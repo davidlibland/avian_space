@@ -218,7 +218,29 @@ hysteresis, λ-propagation, population formulas), derivation unit tests
 (market restock on flip, spawn mixes), and runtime-fixture mission chains
 for the generator (the arrest tests are the template).
 
-## 7. Open questions
+## 7. The war map (2026-07)
+
+Every mutual-enemy pair with plausible geography has a two-way front whose
+target holds a landable covert venue:
+
+| War | Fronts (sponsor: home → target) |
+|---|---|
+| Federation–Rebel | sol→alpha_centauri, barnard→drift / sirius→alpha_centauri, procyon→drift (venues: centauri_post, drift_anchorage) |
+| Federation–Bastion | kepler_22 & epsilon_eridani → the_marches / iron_march & coldforge → the_marches (venue: marches_freeport) |
+| Bastion–FreeFrontier | iron_march → drumlin & the_barrens / drumlin & lowmark → the_barrens (venue: barrens_hold) |
+| Helios–Order | the_foundry → pilgrims_deep / the_threshold → pilgrims_deep (venue: pilgrims_rest) |
+
+Bastion–Rebel and FreeFrontier–Helios stay COLD by design: their cores sit
+on opposite ends of the map with third factions between them — the enmity
+lives in the data (hit bonuses, hostility) but no front generates.
+`every_geographic_war_is_two_way_with_covert_venues` pins the table.
+
+Traffic tuning (2026-07): COMBAT_PER_PRESENCE 2.2→3.5, pirate share
+0.35→0.5, mercenaries 0.25→0.3, population clamp 3-8→4-10, λ 0.4→0.5,
+population check 5s→4s — denser skies, deeper cross-border patrols, more
+frequent skirmishes.
+
+## 8. Open questions
 
 * Does *anything* happen at galactic domination, or is it a sandbox state?
   (Lean: news toast + achievement-flavor, no mechanical end.)

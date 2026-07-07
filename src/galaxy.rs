@@ -29,7 +29,9 @@ pub const CONTROL_GAIN: f32 = 0.6;
 /// …and only loses it below this one (hysteresis — fronts see-saw).
 pub const CONTROL_KEEP: f32 = 0.5;
 /// Neighbor-influence decay for ship-presence propagation (per jump).
-pub const PRESENCE_LAMBDA: f32 = 0.4;
+/// Higher = enemy patrols roam deeper past the border, so fronts (and the
+/// systems behind them) see more cross-faction contact.
+pub const PRESENCE_LAMBDA: f32 = 0.5;
 
 // ── Resource ─────────────────────────────────────────────────────────────────
 

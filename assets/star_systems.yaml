@@ -555,7 +555,23 @@ alpha_centauri:
   contestable: true
   map_position: [220.0, -90.0]
   connections: [sol, sirius, drift, the_foundry]
-  planets: {}
+  planets:
+    centauri_post:
+      planet_type: rocky
+      tech_level: 1
+      location: [-350.0, -250.0]
+      description: A customs post that outlived the treaty that built it. Federation and Rebel patrols glare at each other across its landing grid, and the bartender waters everyone's drinks equally.
+      radius: 22.0
+      color: [0.5, 0.52, 0.58]
+      commodities:
+        water: 3
+        oxygen: 3
+        iron: 3
+        food: 6
+        fuel_cells: 15
+        cooling_gel: 14
+        electronics: 21
+        gold: 25
   astroid_fields:
     -
       location: [200., 0.]
@@ -570,7 +586,23 @@ drift:
   contestable: true
   map_position: [100.0, 150.0]
   connections: [procyon, halcyon, barnard, alpha_centauri]
-  planets: {}
+  planets:
+    drift_anchorage:
+      planet_type: rocky
+      tech_level: 1
+      location: [500.0, -350.0]
+      description: A tumbling ore-hauler hulk fused into a planetoid, now a way-station for whoever holds the surrounding dark this month. Its docking fees change with the flag.
+      radius: 20.0
+      color: [0.45, 0.48, 0.5]
+      commodities:
+        water: 3
+        oxygen: 3
+        iron: 2
+        silicates: 3
+        food: 6
+        fuel_cells: 16
+        electronics: 20
+        titanium: 12
   astroid_fields:
     -
       location: [0., 0.]
@@ -1116,7 +1148,7 @@ helios_prime:
 the_foundry:
   contestable: true
   map_position: [290.0, -360.0]
-  connections: [helios_prime, alpha_centauri, rigel]
+  connections: [helios_prime, alpha_centauri, rigel, pilgrims_deep]
   planets:
     foundry_skimmer:
       planet_type: rocky
@@ -1173,7 +1205,7 @@ the_foundry:
 # Kepler, behind all of Fed space.
 iron_march:
   map_position: [-700.0, -10.0]
-  connections: [the_anvil, bastion, kepler_22, coldforge, drumlin, the_marches]
+  connections: [the_anvil, bastion, kepler_22, coldforge, drumlin, the_marches, the_barrens]
   astroid_fields:
     -
       location: [240.0, 180.0]
@@ -1307,7 +1339,7 @@ sanctum:
 
 the_threshold:
   map_position: [930.0, -250.0]
-  connections: [the_rift, sanctum, vault_road]
+  connections: [the_rift, sanctum, vault_road, pilgrims_deep]
   planets:
     threshold_chapel:
       planet_type: icy_dwarf
@@ -1563,7 +1595,7 @@ meridian:
 lowmark:
   contestable: true
   map_position: [-470.0, 310.0]
-  connections: [drumlin, meridian, kepler_22]
+  connections: [drumlin, meridian, kepler_22, the_barrens]
   display_name: "Lowmark"
   planets:
     lowmark_port:
@@ -1602,7 +1634,7 @@ lowmark:
 drumlin:
   contestable: true
   map_position: [-610.0, 430.0]
-  connections: [lowmark, meridian, iron_march]
+  connections: [lowmark, meridian, iron_march, the_barrens]
   display_name: "Drumlin"
   planets:
     drumlin:
@@ -1981,5 +2013,70 @@ the_marches:
   - location: [-250.0, 150.0]
     number: 18
     radius: 600.0
+    commodities:
+      iron: 1.0
+
+# The Barrens — the no-man's-land where Free Frontier homesteads thin out
+# against Bastion's wall. Gives the Frontier a counter-front (Bastion already
+# attacks drumlin directly): both sides fight for the buffer, and its two
+# Frontier neighbors (drumlin, lowmark) are contestable, so a Bastion win
+# here opens the push north.
+the_barrens:
+  contestable: true
+  map_position: [-680.0, 210.0]
+  connections: [drumlin, lowmark, iron_march]
+  planets:
+    barrens_hold:
+      planet_type: rocky
+      tech_level: 1
+      location: [250.0, 250.0]
+      description: A homestead dome that got too big to abandon and too poor to defend. Frontier families dig in on one side of the valley; Bastion listening posts stud the other.
+      radius: 23.0
+      color: [0.5, 0.45, 0.38]
+      commodities:
+        water: 3
+        oxygen: 3
+        iron: 3
+        silicates: 3
+        food: 5
+        fuel_cells: 15
+        cooling_gel: 13
+        electronics: 19
+  astroid_fields:
+  - location: [-200.0, -150.0]
+    number: 16
+    radius: 550.0
+    commodities:
+      iron: 1.0
+
+# Pilgrims' Deep — the dark stretch between Helios's foundries and the
+# Order's threshold worlds; the only place their cold war has room to turn
+# hot. The Helios side (the_foundry) is contestable, so an Order win here
+# can spread; the Order side is fortress space and stays theirs.
+pilgrims_deep:
+  contestable: true
+  map_position: [620.0, -380.0]
+  connections: [the_foundry, the_threshold]
+  planets:
+    pilgrims_rest:
+      planet_type: rocky
+      tech_level: 1
+      location: [-300.0, 200.0]
+      description: A waystation chapel grown into a freeport, kept neutral by exhaustion. Order pilgrims and Helios surveyors drink at opposite ends of the same long bar.
+      radius: 22.0
+      color: [0.52, 0.5, 0.44]
+      commodities:
+        water: 3
+        oxygen: 3
+        food: 6
+        silicates: 3
+        fuel_cells: 15
+        medical_supplies: 12
+        electronics: 20
+        gold: 26
+  astroid_fields:
+  - location: [200.0, -180.0]
+    number: 14
+    radius: 500.0
     commodities:
       iron: 1.0
