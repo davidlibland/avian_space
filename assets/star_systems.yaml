@@ -324,7 +324,7 @@ sol:
 
 kepler_22:
   map_position: [-520.0, 60.0]
-  connections: [iron_march, epsilon_eridani, tau_ceti, lowmark]
+  connections: [iron_march, epsilon_eridani, tau_ceti, lowmark, the_marches]
   planets:
     kepler_22b:
       planet_type: habitable
@@ -411,7 +411,7 @@ tau_ceti:
 epsilon_eridani:
   contestable: true
   map_position: [-350.0, -100.0]
-  connections: [tau_ceti, tycho_drift, vega, kepler_22]
+  connections: [tau_ceti, tycho_drift, vega, kepler_22, the_marches]
   planets:
     eridani_station:
       planet_type: habitable
@@ -1173,7 +1173,7 @@ the_foundry:
 # Kepler, behind all of Fed space.
 iron_march:
   map_position: [-700.0, -10.0]
-  connections: [the_anvil, bastion, kepler_22, coldforge, drumlin]
+  connections: [the_anvil, bastion, kepler_22, coldforge, drumlin, the_marches]
   astroid_fields:
     -
       location: [240.0, 180.0]
@@ -1691,7 +1691,7 @@ tycho_drift:
 coldforge:
   contestable: true
   map_position: [-620.0, -310.0]
-  connections: [the_anvil, tycho_drift, iron_march, bastion]
+  connections: [the_anvil, tycho_drift, iron_march, bastion, the_marches]
   display_name: "Cold Forge"
   planets:
     coldforge:
@@ -1949,3 +1949,37 @@ dim_haven:
       commodities:
         iron: 1.0
 
+# The Marches — the no-man's-land between Federation and Bastion space. The
+# only hot front of that war: both cores are fortified (kepler_22 and
+# iron_march are story anchors, contestable: false), so the fighting funnels
+# through here, and the contestable systems on either side (epsilon_eridani,
+# coldforge) let a won buffer become a springboard deeper into enemy space.
+the_marches:
+  contestable: true
+  map_position: [-540.0, -130.0]
+  connections: [kepler_22, iron_march, epsilon_eridani, coldforge]
+  planets:
+    marches_freeport:
+      planet_type: rocky
+      tech_level: 1
+      location: [300.0, -200.0]
+      description: A hollowed-out planetoid flying no flag, wedged in the no-man's-land between Federation and Bastion space. Both militaries watch it; neither one runs it. Everything is for sale, including silence.
+      radius: 24.0
+      color: [0.55, 0.5, 0.45]
+      commodities:
+        water: 3
+        oxygen: 3
+        iron: 3
+        silicates: 3
+        food: 6
+        cooling_gel: 14
+        fuel_cells: 16
+        electronics: 20
+        gold: 24
+        uranium: 36
+  astroid_fields:
+  - location: [-250.0, 150.0]
+    number: 18
+    radius: 600.0
+    commodities:
+      iron: 1.0

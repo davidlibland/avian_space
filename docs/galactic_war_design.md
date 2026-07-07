@@ -10,8 +10,16 @@ War/Covert/Arrest templates in assets/mission_templates.yaml). Two design
 notes from implementation: fronts are usually fought over the UNALIGNED
 buffer systems separating faction cores (direct enemy borders are rare on
 the real map), and campaign tiers key on the SPONSOR's progress toward the
-control threshold. Remaining phase-4 ideas (war-scarcity prices,
-planted-intel hooks, Elo logging) stay future work.
+control threshold. The FULL espionage family (§5) is implemented: all 11
+mission shapes as covert templates, including two-stage extractions
+(primary NpcOffer + auto-starting `__return` leg, precondition-locked on
+the primary, effects on the final stage), cut-supply freighter hunts with
+a Merchant standing cost, and negative-pay bribes. The Federation–Bastion
+war got its venue: `the_marches`, an unaligned contestable buffer wired to
+contestable systems on both sides (epsilon_eridani / coldforge) so a won
+buffer becomes a springboard. Remaining phase-4 ideas (war-scarcity
+prices, the planted-intel *weakening hook* — the mission itself exists —
+and Elo logging) stay future work.
 
 The guiding principle is the one the codebase already lives by: *state is
 data, consequences are derived.* Faction control is one number per

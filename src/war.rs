@@ -131,8 +131,21 @@ fn faction_fighters(iu: &ItemUniverse, faction: &str, max_tech: u8) -> Vec<Strin
     ships.into_iter().map(|(n, _, _)| n.clone()).collect()
 }
 
-/// A landable enemy planet in the target system (covert-op venue).
-fn enemy_planet(iu: &ItemUniverse, system: &str) -> Option<(String, String)> {
+/// The cheapest freighter a faction fields (CutSupply targets).
+fn faction_freighter(iu: &ItemUniverse, faction: &str) -> Option<String> {
+    iu.ships
+        .iter()
+        .filter(|(_, d)| {
+            d.faction.as_deref() == Some(faction)
+                && d.personality == crate::ship::Personality::Trader
+        })
+        .min_by_key(|(n, d)| (d.price, (*n).clone()))
+        .map(|(n, _)| n.clone())
+}
+
+/// A landable planet in `system` (covert-op venue on the target side, the
+/// drop-off on the sponsor side for extractions).
+fn landable_planet(iu: &ItemUniverse, system: &str) -> Option<(String, String)> {
     let sys = iu.star_systems.get(system)?;
     let mut planets: Vec<(&String, &crate::planets::PlanetData)> = sys
         .planets
@@ -226,12 +239,21 @@ fn offer_war_missions(
             let start = rng.gen_range(0..templates.len());
             for k in 0..templates.len() {
                 let (tmpl_id, tmpl) = templates[(start + k) % templates.len()];
-                let Some(def) = instantiate_war_mission(tmpl, front, &iu, &galaxy, &mut rng)
+                let Some((def, follow_up)) =
+                    instantiate_war_mission(tmpl, front, &iu, &galaxy, &mut rng)
                 else {
                     continue;
                 };
                 *counter += 1;
                 let id = format!("war__{}__{:04}", tmpl_id, *counter);
+                if let Some(mut follow) = follow_up {
+                    follow
+                        .preconditions
+                        .push(crate::missions::types::Precondition::Completed {
+                            mission: id.clone(),
+                        });
+                    catalog.defs.insert(format!("{id}__return"), follow);
+                }
                 catalog.defs.insert(id.clone(), def);
                 offers
                     .npc
@@ -246,14 +268,16 @@ fn offer_war_missions(
     }
 }
 
-/// Build a concrete mission from a War/Covert template for a front.
+/// Build a concrete mission from a War/Covert template for a front. Two-stage
+/// covert actions (Extract, Propaganda) also return a follow-up def that the
+/// generator files precondition-locked on the primary and auto-starting.
 fn instantiate_war_mission(
     tmpl: &MissionTemplate,
     front: &Front,
     iu: &ItemUniverse,
     galaxy: &GalaxyControl,
     rng: &mut impl Rng,
-) -> Option<MissionDef> {
+) -> Option<(MissionDef, Option<MissionDef>)> {
     let tier = front_tier(galaxy, front);
     let system_display = iu
         .star_systems
@@ -305,37 +329,40 @@ fn instantiate_war_mission(
                 ("{count}", count.to_string()),
                 ("{pay}", pay.to_string()),
             ];
-            Some(MissionDef {
-                briefing: subst(briefing, &vars),
-                success_text: subst(success_text, &vars),
-                failure_text: subst(failure_text, &vars),
-                preconditions: Vec::new(),
-                offer: OfferKind::NpcOffer {
-                    planet: String::new(), // placed directly into offers
-                    weight: 1.0,
-                    building: Some("bar".to_string()),
-                    approach: NpcApproach::Seek,
-                },
-                start_effects: Vec::new(),
-                objective: Objective::DestroyShips {
-                    system: battle_system,
-                    ship_type,
-                    count,
-                    target_name: format!("{} Warfleet", front.enemy),
-                    hostile: true,
-                    collect: None,
-                },
-                requires: Vec::new(),
-                completion_effects: vec![
-                    CompletionEffect::Pay { credits: pay },
-                    CompletionEffect::ShiftInfluence {
-                        system: shift_system,
-                        faction: front.sponsor.clone(),
-                        delta: *influence_delta,
+            Some((
+                MissionDef {
+                    briefing: subst(briefing, &vars),
+                    success_text: subst(success_text, &vars),
+                    failure_text: subst(failure_text, &vars),
+                    preconditions: Vec::new(),
+                    offer: OfferKind::NpcOffer {
+                        planet: String::new(), // placed directly into offers
+                        weight: 1.0,
+                        building: Some("bar".to_string()),
+                        approach: NpcApproach::Seek,
                     },
-                ],
-                squadron,
-            })
+                    start_effects: Vec::new(),
+                    objective: Objective::DestroyShips {
+                        system: battle_system,
+                        ship_type,
+                        count,
+                        target_name: format!("{} Warfleet", front.enemy),
+                        hostile: true,
+                        collect: None,
+                    },
+                    requires: Vec::new(),
+                    completion_effects: vec![
+                        CompletionEffect::Pay { credits: pay },
+                        CompletionEffect::ShiftInfluence {
+                            system: shift_system,
+                            faction: front.sponsor.clone(),
+                            delta: *influence_delta,
+                        },
+                    ],
+                    squadron,
+                },
+                None,
+            ))
         }
         MissionTemplate::Covert {
             briefing,
@@ -345,9 +372,12 @@ fn instantiate_war_mission(
             influence_delta,
             pay_range,
             enemy_standing_penalty,
+            merchant_standing_penalty,
+            stage2_briefing,
+            stage2_success,
             ..
         } => {
-            let (planet_id, planet_display) = enemy_planet(iu, &front.target)?;
+            let (planet_id, planet_display) = landable_planet(iu, &front.target)?;
             let pay = rng.gen_range(pay_range.0..=pay_range.1.max(pay_range.0));
             let mut vars = vec![
                 ("{faction}", front.sponsor.clone()),
@@ -355,7 +385,12 @@ fn instantiate_war_mission(
                 ("{system_display}", system_display),
                 ("{planet_display}", planet_display),
                 ("{pay}", pay.to_string()),
+                ("{cost}", pay.abs().to_string()),
             ];
+            // Two-stage actions split the influence shift: a taste on the
+            // primary (also what keys open_war's one-per-front bookkeeping),
+            // the bulk on the follow-up.
+            let mut stage2: Option<(Objective, Vec<CompletionRequirement>)> = None;
             let (objective, start_effects, requires, mut effects): (
                 Objective,
                 Vec<StartEffect>,
@@ -408,36 +443,165 @@ fn instantiate_war_mission(
                     Vec::new(),
                     Vec::new(),
                 ),
+                CovertAction::CutSupply { count } => {
+                    let freighter = faction_freighter(iu, &front.enemy)?;
+                    vars.push(("{count}", count.to_string()));
+                    (
+                        Objective::DestroyShips {
+                            system: front.target.clone(),
+                            ship_type: freighter,
+                            count: *count,
+                            target_name: format!("{} Supply Convoy", front.enemy),
+                            hostile: false, // freighters run, they don't hunt
+                            collect: None,
+                        },
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                    )
+                }
+                CovertAction::Bribe { npc_name } => (
+                    // The negative pay_range IS the bribe — Pay below charges it.
+                    Objective::MeetNpc {
+                        planet: planet_id.clone(),
+                        npc_name: npc_name.clone(),
+                        building: None,
+                        approach: NpcApproach::Wait,
+                    },
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                ),
+                CovertAction::Extract { npc_name } => {
+                    let (home_planet, home_display) = landable_planet(iu, &front.home)?;
+                    vars.push(("{dest_display}", home_display));
+                    stage2 = Some((
+                        Objective::LandOnPlanet { planet: home_planet },
+                        Vec::new(),
+                    ));
+                    (
+                        Objective::MeetNpc {
+                            planet: planet_id.clone(),
+                            npc_name: npc_name.clone(),
+                            building: None,
+                            approach: NpcApproach::Seek,
+                        },
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                    )
+                }
+                CovertAction::Propaganda {
+                    commodity,
+                    quantity,
+                    npc_name,
+                } => {
+                    vars.push(("{commodity}", commodity.clone()));
+                    vars.push(("{quantity}", quantity.to_string()));
+                    stage2 = Some((
+                        Objective::MeetNpc {
+                            planet: planet_id.clone(),
+                            npc_name: npc_name.clone(),
+                            building: None,
+                            approach: NpcApproach::Seek,
+                        },
+                        Vec::new(),
+                    ));
+                    (
+                        Objective::LandOnPlanet {
+                            planet: planet_id.clone(),
+                        },
+                        vec![StartEffect::LoadCargo {
+                            commodity: commodity.clone(),
+                            quantity: *quantity,
+                            reserved: true,
+                        }],
+                        vec![CompletionRequirement::HasCargo {
+                            commodity: commodity.clone(),
+                            quantity: *quantity,
+                        }],
+                        vec![CompletionEffect::RemoveCargo {
+                            commodity: commodity.clone(),
+                            quantity: *quantity,
+                        }],
+                    )
+                }
             };
-            effects.push(CompletionEffect::Pay { credits: pay });
-            effects.push(CompletionEffect::ShiftInfluence {
-                system: front.target.clone(),
-                faction: front.sponsor.clone(),
-                delta: *influence_delta,
-            });
+            // Payout, influence, and standing costs land on the FINAL stage;
+            // a two-stage primary carries a quarter of the influence shift
+            // (the defector agreeing to leave already hurts them).
+            let mut final_effects = vec![
+                CompletionEffect::Pay { credits: pay },
+                CompletionEffect::ShiftInfluence {
+                    system: front.target.clone(),
+                    faction: front.sponsor.clone(),
+                    delta: if stage2.is_some() {
+                        influence_delta * 0.75
+                    } else {
+                        *influence_delta
+                    },
+                },
+            ];
             if *enemy_standing_penalty > 0.0 {
-                effects.push(CompletionEffect::AdjustStanding {
+                final_effects.push(CompletionEffect::AdjustStanding {
                     faction: front.enemy.clone(),
                     delta: -enemy_standing_penalty,
                 });
             }
-            Some(MissionDef {
-                briefing: subst(briefing, &vars),
-                success_text: subst(success_text, &vars),
-                failure_text: subst(failure_text, &vars),
-                preconditions: Vec::new(),
-                offer: OfferKind::NpcOffer {
-                    planet: String::new(),
-                    weight: 1.0,
-                    building: Some("bar".to_string()),
-                    approach: NpcApproach::Wait,
+            if *merchant_standing_penalty > 0.0 {
+                final_effects.push(CompletionEffect::AdjustStanding {
+                    faction: "Merchant".to_string(),
+                    delta: -merchant_standing_penalty,
+                });
+            }
+            let (stage1_effects, follow_up) = match stage2 {
+                None => {
+                    effects.extend(final_effects);
+                    (effects, None)
+                }
+                Some((objective2, requires2)) => {
+                    effects.push(CompletionEffect::ShiftInfluence {
+                        system: front.target.clone(),
+                        faction: front.sponsor.clone(),
+                        delta: influence_delta * 0.25,
+                    });
+                    let follow = MissionDef {
+                        briefing: subst(stage2_briefing, &vars),
+                        success_text: subst(stage2_success, &vars),
+                        failure_text: subst(failure_text, &vars),
+                        // Precondition on the primary is filled in by the
+                        // generator, which knows the assigned mission id.
+                        preconditions: Vec::new(),
+                        offer: OfferKind::Auto,
+                        start_effects: Vec::new(),
+                        objective: objective2,
+                        requires: requires2,
+                        completion_effects: final_effects,
+                        squadron: Vec::new(),
+                    };
+                    (effects, Some(follow))
+                }
+            };
+            Some((
+                MissionDef {
+                    briefing: subst(briefing, &vars),
+                    success_text: subst(success_text, &vars),
+                    failure_text: subst(failure_text, &vars),
+                    preconditions: Vec::new(),
+                    offer: OfferKind::NpcOffer {
+                        planet: String::new(),
+                        weight: 1.0,
+                        building: Some("bar".to_string()),
+                        approach: NpcApproach::Wait,
+                    },
+                    start_effects,
+                    objective,
+                    requires,
+                    completion_effects: stage1_effects,
+                    squadron: Vec::new(),
                 },
-                start_effects,
-                objective,
-                requires,
-                completion_effects: effects,
-                squadron: Vec::new(),
-            })
+                follow_up,
+            ))
         }
         _ => None,
     }

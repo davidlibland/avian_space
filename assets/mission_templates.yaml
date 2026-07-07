@@ -238,3 +238,117 @@ covert_snatch_official:
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 6.0
+covert_hearts_minds:
+  kind: covert
+  briefing: "{faction} civil affairs wants {system_display} to remember who fed them when the war passed through: {quantity} units of {commodity} for {planet_display}, no questions, no escort. {pay} for the run."
+  success_text: "Dockhands on {planet_display} unload the crates in silence, but the silence is warmer than it was. {faction}'s name is on every manifest. {pay} credits."
+  failure_text: "The relief crates never reached {planet_display}. Somebody else will feed them — and be remembered for it."
+  action:
+    kind: smuggle
+    commodity: medical_supplies
+    quantity: 10
+  influence_delta: 0.08
+  pay_range: [15000, 22000]
+  min_standing: 10.0
+  tier: 1
+covert_propaganda:
+  kind: covert
+  briefing: "A {faction} political officer hands you a crate that is very much not on the manifest: {quantity} units of {commodity} — broadcast rigs, pamphlet presses. Land them on {planet_display} and meet the cell organizer. {pay}."
+  success_text: "You put the crate on the ground on {planet_display}."
+  failure_text: "The presses never printed a word on {planet_display}."
+  stage2_briefing: "The rigs are down. Now find the organizer before {enemy} counter-intelligence finds either of you."
+  stage2_success: "The organizer signs nothing and thanks no one, but within a week {planet_display}'s night channels are full of a new voice. {pay} credits."
+  action:
+    kind: propaganda
+    commodity: electronics
+    quantity: 6
+    npc_name: "the cell organizer"
+  influence_delta: 0.1
+  pay_range: [20000, 28000]
+  min_standing: 10.0
+  tier: 1
+  enemy_standing_penalty: 3.0
+covert_steal_docs:
+  kind: covert
+  briefing: "{faction} intelligence has a mole in {enemy}'s defense ministry on {planet_display}. Their courier rotation was burned. You're the new courier: meet the mole, take the defense schematics, walk away slowly. {pay}."
+  success_text: "The mole's chip holds {enemy}'s garrison rotations for the whole sector. {faction} planners start smiling in a way that worries you. {pay} credits."
+  failure_text: "The mole waited at the dead drop on {planet_display}. Nobody came."
+  action:
+    kind: meet_contact
+    npc_name: "the ministry mole"
+  influence_delta: 0.1
+  pay_range: [22000, 32000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 4.0
+covert_cut_supply:
+  kind: covert
+  briefing: "{enemy}'s push into {system_display} runs on freighters, not fleets. {faction} wants {count} of them on the bottom. The Merchant Guild will notice — {faction} is paying you enough not to care. {pay}."
+  success_text: "{count} supply hulls gone. {enemy}'s garrisons in {system_display} start rationing within days. The Guild quietly notes your name. {pay} credits."
+  failure_text: "The convoys got through. {enemy}'s garrisons eat well."
+  action:
+    kind: cut_supply
+    count: 3
+  influence_delta: 0.12
+  pay_range: [30000, 42000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 5.0
+  merchant_standing_penalty: 3.0
+covert_extract_defector:
+  kind: covert
+  briefing: "A {enemy} fleet officer on {planet_display} wants out, and what's in their head is worth a carrier group. Meet them quietly and bring them to {dest_display}. {pay} on delivery — alive."
+  success_text: "The officer boards without a word, carrying nothing. People who carry nothing know everything."
+  failure_text: "The defector's window closed. {enemy} counter-intelligence doesn't give second chances."
+  stage2_briefing: "The defector is aboard and {enemy} traffic control is asking polite questions. Get them to {dest_display}."
+  stage2_success: "Debriefers meet you at the pad on {dest_display}. Within hours, {faction} knows every hole in {enemy}'s line. {pay} credits."
+  action:
+    kind: extract
+    npc_name: "the defecting officer"
+  influence_delta: 0.14
+  pay_range: [35000, 50000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 6.0
+covert_plant_intel:
+  kind: covert
+  briefing: "{faction} forgery is an art form: {quantity} units of {commodity} loaded with beautifully wrong fleet movements. Get them into circulation on {planet_display}. {pay}, and {enemy} chases shadows for a month."
+  success_text: "The forged data is in {enemy}'s pipeline on {planet_display}. Somewhere, a staff officer is redeploying a garrison to defend nothing. {pay} credits."
+  failure_text: "The forgeries never entered circulation. {enemy}'s picture of the front stays honest."
+  action:
+    kind: smuggle
+    commodity: electronics
+    quantity: 2
+  influence_delta: 0.12
+  pay_range: [25000, 35000]
+  min_standing: 10.0
+  tier: 2
+  enemy_standing_penalty: 4.0
+covert_bribe_governor:
+  kind: covert
+  briefing: "{enemy}'s governor on {planet_display} has a price, and {faction} knows it: {cost} credits, yours to front, off any book that exists. Meet the bagman. What you buy is a garrison that looks the other way."
+  success_text: "The bagman counts nothing and confirms nothing. But {enemy}'s patrols in {system_display} start finding reasons to be elsewhere. Money well spent."
+  failure_text: "The bagman on {planet_display} stopped answering. The price may have gone up."
+  action:
+    kind: bribe
+    npc_name: "the governor's bagman"
+  influence_delta: 0.2
+  pay_range: [-40000, -30000]
+  min_standing: 10.0
+  tier: 3
+  enemy_standing_penalty: 1.0
+covert_rescue_pows:
+  kind: covert
+  briefing: "{enemy} holds {faction} prisoners in a labor compound on {planet_display}. Their senior officer has an escape window and needs a ship. Meet them, load everyone you can, and run for {dest_display}. {pay} — and {faction} does not forget this kind of thing."
+  success_text: "Gaunt faces file aboard in silence. The senior officer is the last one on."
+  failure_text: "The escape window on {planet_display} closed with everyone still inside."
+  stage2_briefing: "Your hold is full of escaped {faction} prisoners and {enemy} is scrambling patrols. Get them home to {dest_display}."
+  stage2_success: "On {dest_display} the prisoners walk down the ramp into a wall of families and cameras. {faction} broadcasts it for a week. {pay} credits."
+  action:
+    kind: extract
+    npc_name: "the senior POW officer"
+  influence_delta: 0.18
+  pay_range: [45000, 60000]
+  min_standing: 10.0
+  tier: 3
+  enemy_standing_penalty: 8.0

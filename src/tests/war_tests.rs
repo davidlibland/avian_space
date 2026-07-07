@@ -2,6 +2,7 @@
 //! offers gated by standing, mission validity, and ambient drift.
 
 use super::*;
+use rand::SeedableRng;
 use std::path::Path;
 
 fn universe() -> ItemUniverse {
@@ -190,4 +191,135 @@ fn drift_moves_active_fronts_only_a_little() {
 
 fn app_influence(g: &GalaxyControl, system: &str, faction: &str) -> f32 {
     g.influence_of(system, faction)
+}
+
+// ── The Marches: the Federation–Bastion buffer front ─────────────────────────
+
+#[test]
+fn the_marches_is_a_hot_fed_bastion_front() {
+    let iu = universe();
+    let galaxy = seeded(&iu);
+    let fronts = detect_fronts(&iu, &galaxy);
+    // Both cores sponsor the campaign from BOTH their border systems, so a
+    // won buffer becomes a springboard rather than a dead end.
+    for (sponsor, homes, enemy) in [
+        ("Federation", ["kepler_22", "epsilon_eridani"], "Bastion"),
+        ("Bastion", ["iron_march", "coldforge"], "Federation"),
+    ] {
+        for home in homes {
+            assert!(
+                fronts.iter().any(|f| f.sponsor == sponsor
+                    && f.home == home
+                    && f.enemy == enemy
+                    && f.target == "the_marches"),
+                "{sponsor} fights for the_marches from {home}"
+            );
+        }
+    }
+}
+
+// ── Covert family: every template instantiates coherently ────────────────────
+
+#[test]
+fn every_covert_template_instantiates_on_the_marches_front() {
+    use crate::missions::types::{CompletionEffect, OfferKind};
+    let iu = universe();
+    let galaxy = seeded(&iu);
+    let front = Front {
+        sponsor: "Federation".into(),
+        home: "kepler_22".into(),
+        enemy: "Bastion".into(),
+        target: "the_marches".into(),
+    };
+    let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+    let mut coverts: Vec<(&String, &MissionTemplate)> = iu
+        .mission_templates
+        .iter()
+        .filter(|(_, t)| matches!(t, MissionTemplate::Covert { .. }))
+        .collect();
+    coverts.sort_by_key(|(id, _)| (*id).clone());
+    assert_eq!(coverts.len(), 11, "the full covert family from the design doc");
+
+    let has_pay = |effects: &[CompletionEffect]| {
+        effects.iter().any(|e| matches!(e, CompletionEffect::Pay { .. }))
+    };
+    let shift_on_target = |effects: &[CompletionEffect]| {
+        effects.iter().any(|e| matches!(e,
+            CompletionEffect::ShiftInfluence { system, faction, delta }
+                if system == "the_marches" && faction == "Federation" && *delta > 0.0))
+    };
+
+    for (id, tmpl) in coverts {
+        let (def, follow_up) = instantiate_war_mission(tmpl, &front, &iu, &galaxy, &mut rng)
+            .unwrap_or_else(|| panic!("{id} must instantiate on a landable front"));
+        assert!(!def.briefing.contains('{'), "{id}: all vars substituted: {}", def.briefing);
+        // The influence lever always points at the front target, and the
+        // final stage always pays (bribes pay negative).
+        match &follow_up {
+            None => {
+                assert!(has_pay(&def.completion_effects), "{id}: pays");
+                assert!(shift_on_target(&def.completion_effects), "{id}: shifts the front");
+            }
+            Some(follow) => {
+                assert!(matches!(follow.offer, OfferKind::Auto), "{id}: stage 2 auto-starts");
+                assert!(!follow.briefing.is_empty() && !follow.briefing.contains('{'),
+                    "{id}: stage-2 text: {}", follow.briefing);
+                assert!(has_pay(&follow.completion_effects), "{id}: stage 2 pays");
+                assert!(shift_on_target(&follow.completion_effects), "{id}: stage 2 shifts");
+                assert!(shift_on_target(&def.completion_effects),
+                    "{id}: the primary carries a partial shift (open_war bookkeeping)");
+            }
+        }
+        // Bribes cost money; everything else earns it.
+        let pay = def
+            .completion_effects
+            .iter()
+            .chain(follow_up.iter().flat_map(|f| f.completion_effects.iter()))
+            .find_map(|e| match e {
+                CompletionEffect::Pay { credits } => Some(*credits),
+                _ => None,
+            })
+            .unwrap();
+        if id.contains("bribe") {
+            assert!(pay < 0, "{id}: the bribe comes out of your pocket");
+        } else {
+            assert!(pay > 0, "{id}: war work pays");
+        }
+    }
+}
+
+/// The generator files two-stage covert ops as a primary offer plus an
+/// auto-starting follow-up locked on it.
+#[test]
+fn two_stage_covert_files_a_precondition_locked_return_leg() {
+    use crate::missions::types::Precondition;
+    let mut iu = universe();
+    iu.mission_templates
+        .retain(|id, _| id == "covert_propaganda"); // tier 1, two-stage
+    let galaxy = seeded(&iu);
+    let mut app = war_app(iu, galaxy);
+    app.world_mut()
+        .resource_mut::<FactionStandings>()
+        .adjust("Federation", 25.0);
+    app.world_mut().write_message(PlayerLandedOnPlanet {
+        planet: "kepler_22b".to_string(),
+    });
+    app.update();
+
+    let catalog = app.world().resource::<MissionCatalog>();
+    let primary = catalog
+        .defs
+        .keys()
+        .find(|id| id.starts_with("war__covert_propaganda") && !id.ends_with("__return"))
+        .expect("the propaganda op is filed")
+        .clone();
+    let follow = catalog
+        .defs
+        .get(&format!("{primary}__return"))
+        .expect("the return leg is filed with it");
+    assert!(
+        follow.preconditions.iter().any(|p| matches!(p,
+            Precondition::Completed { mission } if *mission == primary)),
+        "return leg unlocks on the primary"
+    );
 }
