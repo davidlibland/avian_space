@@ -41,6 +41,7 @@ mod standing;
 mod starfield;
 mod surface;
 mod character_compositor;
+mod station_layout;
 mod surface_character;
 mod surface_civilians;
 mod surface_fauna;

@@ -73,11 +73,19 @@ pub struct TerrainMeta {
     pub footstep_volume: f32,
 }
 
+fn default_generator() -> String {
+    "organic".to_string()
+}
+
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct BiomeMeta {
     pub atlas: String,
     pub soft_boundaries: bool,
+    /// Terrain-field generator: "organic" (fBm noise, the default) or
+    /// "station" (corridor/room layout for man-made interiors).
+    #[serde(default = "default_generator")]
+    pub generator: String,
     pub terrains: Vec<TerrainMeta>,
 }
 

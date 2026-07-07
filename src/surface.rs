@@ -876,17 +876,28 @@ fn setup_surface(
                 )
             };
 
-        // Generate initial terrain+collision for building placement.
-        let initial_terrain = crate::fbm::generate_terrain_map(
-            map_w,
-            map_h,
-            N_TERRAIN_TYPES,
-            FBM_SCALE,
-            FBM_OCTAVES,
-            FBM_LACUNARITY,
-            FBM_GAIN,
-            seed,
-        );
+        // Generate initial terrain+collision for building placement. The
+        // biome picks its field generator: organic fBm noise (default) or
+        // the designed corridor/room station layout for interiors.
+        let generator = manifest
+            .biomes
+            .get(biome_name)
+            .map(|b| b.generator.as_str())
+            .unwrap_or("organic");
+        let initial_terrain = if generator == "station" {
+            crate::station_layout::generate_station_map(map_w, map_h, N_TERRAIN_TYPES, seed)
+        } else {
+            crate::fbm::generate_terrain_map(
+                map_w,
+                map_h,
+                N_TERRAIN_TYPES,
+                FBM_SCALE,
+                FBM_OCTAVES,
+                FBM_LACUNARITY,
+                FBM_GAIN,
+                seed,
+            )
+        };
 
         // ── Pre-tilemap building placement ─────────────────────────────
         // Find building positions on the initial terrain, then force
