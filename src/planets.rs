@@ -147,10 +147,7 @@ fn landing_input(
     planet_query: Query<&Planet>,
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
-    mut player_query: Query<
-        (Entity, &mut Ship, &ShipHostility),
-        (With<Player>, Without<PlayerLanding>),
-    >,
+    mut player_query: Query<(Entity, &mut Ship), (With<Player>, Without<PlayerLanding>)>,
     mut commands: Commands,
 ) {
     if !keyboard_input.just_pressed(KeyCode::KeyL) {
@@ -162,27 +159,19 @@ fn landing_input(
     let Ok(planet) = planet_query.get(planet_entity) else {
         return;
     };
-    let Ok((entity, mut ship, hostility)) = player_query.single_mut() else {
+    let Ok((entity, mut ship)) = player_query.single_mut() else {
         return;
     };
 
     // Always set nav_target so the comms module can display the right message
     ship.nav_target = Some(Target::Planet(planet_entity));
 
-    // Check landing eligibility
+    // Check landing eligibility. Hostile standing no longer BARS landing —
+    // wanted pilots may set down, and the arrest flow (standing.rs) meets
+    // them on the pad instead. Comms warns them on approach.
     if let Some(system) = item_universe.star_systems.get(&current_star_system.0) {
         if let Some(planet_data) = system.planets.get(&planet.0) {
             if planet_data.uncolonized {
-                return;
-            }
-            if !planet_data.faction.is_empty()
-                && hostility
-                    .0
-                    .get(&planet_data.faction)
-                    .copied()
-                    .unwrap_or(0.0)
-                    > 0.0
-            {
                 return;
             }
         }

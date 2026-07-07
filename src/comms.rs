@@ -31,16 +31,18 @@ struct PrevNavTarget(Option<Entity>);
 fn update_comms_from_nav_target(
     mut comms: ResMut<CommsChannel>,
     mut prev: Local<PrevNavTarget>,
-    player_query: Query<(&Ship, &ShipHostility), With<Player>>,
+    player_query: Query<&Ship, With<Player>>,
     planets_query: Query<&Planet>,
     ships_query: Query<(&Ship, &Distressed, &ShipHostility), Without<Player>>,
     asteroids_query: Query<&Asteroid>,
     pickups_query: Query<&Pickup>,
     item_universe: Res<ItemUniverse>,
     current_system: Res<CurrentStarSystem>,
+    standings: Res<crate::standing::FactionStandings>,
+    galaxy: Res<crate::galaxy::GalaxyControl>,
     time: Res<Time>,
 ) {
-    let Ok((player_ship, player_hostility)) = player_query.single() else {
+    let Ok(player_ship) = player_query.single() else {
         return;
     };
 
@@ -67,7 +69,8 @@ fn update_comms_from_nav_target(
             };
             let msg = planet_message(
                 &planet.0,
-                player_hostility,
+                &standings,
+                &galaxy,
                 &item_universe,
                 &current_system.0,
             );
@@ -105,7 +108,8 @@ fn update_comms_from_nav_target(
 
 fn planet_message(
     planet_key: &str,
-    player_hostility: &ShipHostility,
+    standings: &crate::standing::FactionStandings,
+    galaxy: &crate::galaxy::GalaxyControl,
     iu: &ItemUniverse,
     system: &str,
 ) -> String {
@@ -118,13 +122,20 @@ fn planet_message(
     let name = &pd.display_name;
 
     if pd.uncolonized {
-        format!("{name}: No colony detected.")
-    } else if !pd.faction.is_empty()
-        && player_hostility.0.get(&pd.faction).copied().unwrap_or(0.0) > 0.0
-    {
-        format!("{name}: Docking access denied.")
-    } else {
-        format!("Welcome to {name}. Press L to land.")
+        return format!("{name}: No colony detected.");
+    }
+    // Landing is never barred — but a wanted pilot gets fair warning of the
+    // reception waiting on the pad (the arrest flow in standing.rs).
+    let standing = crate::galaxy::effective_planet_faction(galaxy, iu, planet_key)
+        .map(|f| standings.get(&f));
+    match standing {
+        Some(s) if s <= crate::standing::ARREST_THRESHOLD => format!(
+            "{name}: You are a wanted criminal here. Land and you WILL be detained."
+        ),
+        Some(s) if s < 0.0 => format!(
+            "{name}: Docking permitted. Don't expect hospitality — or fair prices."
+        ),
+        _ => format!("Welcome to {name}. Press L to land."),
     }
 }
 
