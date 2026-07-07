@@ -24,7 +24,10 @@ use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 // Constants
 // ---------------------------------------------------------------------------
 
-const WALK_SPEED: f32 = 120.0;
+/// Player walking speed (below the run-animation threshold, 80).
+const WALK_SPEED: f32 = 70.0;
+/// Player speed while holding Shift (plays the run cycle).
+const RUN_SPEED: f32 = 120.0;
 const WALKER_RADIUS: f32 = 6.0;
 const WALKER_DAMPING: f32 = 10.0;
 
@@ -1727,7 +1730,7 @@ fn setup_surface(
         CollisionLayers::new(GameLayer::Character, [GameLayer::Surface]),
         CollisionEventsEnabled,
         LinearDamping(WALKER_DAMPING),
-        MaxLinearSpeed(WALK_SPEED),
+        MaxLinearSpeed(RUN_SPEED),
         LinearVelocity(Vec2::ZERO),
         Sprite::from_atlas_image(
             walker_image,
@@ -1820,7 +1823,13 @@ fn walker_input(
         dir.x += 1.0;
     }
 
-    let speed = WALK_SPEED / terrain_speed.0;
+    // Hold Shift to run (uses the run animation cycle past 80 u/s).
+    let base = if keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
+        RUN_SPEED
+    } else {
+        WALK_SPEED
+    };
+    let speed = base / terrain_speed.0;
     vel.0 = dir.normalize_or_zero() * speed;
 }
 

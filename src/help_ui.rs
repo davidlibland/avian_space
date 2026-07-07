@@ -228,6 +228,7 @@ fn surface_controls() -> Vec<Group> {
                 ("S / ↓", "Move backward"),
                 ("A / ←", "Move left"),
                 ("D / →", "Move right"),
+                ("Shift", "Hold to run"),
             ],
         },
         Group {

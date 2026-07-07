@@ -25,7 +25,8 @@ pub const PERSON_COLS: usize = 18;
 pub const MOVE_THRESHOLD: f32 = 5.0;
 
 /// Speed at which a person switches from the walk cycle to the run cycle.
-/// (NPC civilians walk at 40; the player moves at 120 on open ground.)
+/// (NPC civilians walk at 40; the player walks at 70 and runs at 120 while
+/// holding Shift — terrain slowdowns naturally drop a runner back to a walk.)
 pub const RUN_THRESHOLD: f32 = 80.0;
 
 // ── Facing ───────────────────────────────────────────────────────────────
