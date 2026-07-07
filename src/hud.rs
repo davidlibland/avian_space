@@ -32,6 +32,10 @@ struct FuelText;
 #[derive(Component)]
 struct TargetText;
 
+/// Red "HOSTILE" badge overlaid on the target wireframe's corner.
+#[derive(Component)]
+struct HostileBadge;
+
 /// The small military-style wireframe of the current target (top-right HUD).
 #[derive(Component)]
 struct TargetWireframe;
@@ -360,6 +364,25 @@ fn spawn_hud(mut commands: Commands) {
                         height: Val::Px(92.0),
                         ..default()
                     },
+                ));
+                // Red HOSTILE badge over the wireframe's bottom-right corner —
+                // kept out of the target text line so long ship names don't
+                // reflow (and blink) the HUD panel.
+                w.spawn((
+                    HostileBadge,
+                    Text::new("HOSTILE"),
+                    TextFont {
+                        font_size: 11.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(1.0, 0.15, 0.15)),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        right: Val::Px(4.0),
+                        bottom: Val::Px(2.0),
+                        ..default()
+                    },
+                    Visibility::Hidden,
                 ));
             });
 
@@ -724,6 +747,7 @@ fn update_target_display(
     current_system: Res<crate::CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
     mut text_query: Query<&mut Text, With<TargetText>>,
+    mut badge_query: Query<&mut Visibility, With<HostileBadge>>,
 ) {
     let Ok((player_entity, player_ship)) = player_query.single() else {
         return;
@@ -731,23 +755,28 @@ fn update_target_display(
     let Ok(mut text) = text_query.single_mut() else {
         return;
     };
+    let mut hostile_target = false;
     **text = match &player_ship.nav_target {
         Some(Target::Ship(entity)) => {
             if let Ok(target_ship) = ships_query.get(*entity) {
-                let is_hostile =
+                hostile_target =
                     matches!(&target_ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
                 // Prefer mission target display name over generic ship type.
+                // Hostility is shown as a badge on the wireframe, NOT in this
+                // line — appending it made long names reflow the HUD (blink).
                 let display = mission_targets
                     .get(*entity)
                     .map(|mt| mt.display_name.as_str())
                     .unwrap_or(&target_ship.data.display_name);
                 let max_health = target_ship.data.max_health.max(1) as f32;
                 let health_pct = (target_ship.health as f32 / max_health * 100.0).round();
-                if is_hostile {
-                    format!("Target: {} ({}%) [HOSTILE]", display, health_pct)
+                // Hard cap so no name can reflow the fixed-width panel.
+                let display: String = if display.chars().count() > 22 {
+                    format!("{}…", display.chars().take(21).collect::<String>())
                 } else {
-                    format!("Target: {} ({}%)", display, health_pct)
-                }
+                    display.to_string()
+                };
+                format!("Target: {} ({}%)", display, health_pct)
             } else {
                 "Target: None".to_string()
             }
@@ -786,6 +815,13 @@ fn update_target_display(
         }
         None => "Target: None".to_string(),
     };
+    if let Ok(mut vis) = badge_query.single_mut() {
+        *vis = if hostile_target {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
 }
 
 /// Draw 4 corner brackets around the player's current nav_target.
