@@ -210,6 +210,7 @@ pub fn render_toast(mut egui_contexts: EguiContexts, mut toast: ResMut<MissionTo
 pub enum MissionLogTab {
     #[default]
     Missions,
+    Story,
     Info,
     Cargo,
 }
@@ -238,6 +239,7 @@ fn render_mission_log(
     mut state: ResMut<MissionLogOpen>,
     log: Res<MissionLog>,
     catalog: Res<MissionCatalog>,
+    unlocks: Res<super::log::PlayerUnlocks>,
     item_universe: Res<ItemUniverse>,
     game_state: Res<PlayerGameState>,
     mut player_query: Query<(&mut Ship, &Transform), With<Player>>,
@@ -262,6 +264,7 @@ fn render_mission_log(
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut state.tab, MissionLogTab::Missions, "Missions");
+                ui.selectable_value(&mut state.tab, MissionLogTab::Story, "Story");
                 ui.selectable_value(&mut state.tab, MissionLogTab::Info, "Info");
                 ui.selectable_value(&mut state.tab, MissionLogTab::Cargo, "Cargo");
             });
@@ -269,6 +272,9 @@ fn render_mission_log(
             match state.tab {
                 MissionLogTab::Missions => {
                     render_active_missions(ui, &log, &catalog, Some(&mut abandon));
+                }
+                MissionLogTab::Story => {
+                    render_story_tab(ui, &log, &unlocks, &item_universe);
                 }
                 MissionLogTab::Info => {
                     render_info_tab(ui, &ship, &game_state, &item_universe, &standings);
@@ -287,6 +293,159 @@ fn render_mission_log(
         });
     if close {
         state.open = false;
+    }
+}
+
+/// Player-facing, partially-obscured storyline flow chart. Faction-colored
+/// layered DAG: completed missions read fully, the next available shows as a
+/// blank in faction color, unmet-requirement missions stay hidden, and closed
+/// branches appear locked. See [`super::story_chart`].
+fn render_story_tab(
+    ui: &mut egui::Ui,
+    log: &MissionLog,
+    unlocks: &super::log::PlayerUnlocks,
+    universe: &ItemUniverse,
+) {
+    use super::story_chart::{build_story_graph, NodeUi};
+
+    let graph = build_story_graph(log, unlocks, universe);
+    if graph.nodes.is_empty() {
+        ui.label("No storylines discovered yet. Take work from the people you\nmeet on planet surfaces to begin a chain.");
+        return;
+    }
+
+    // Legend.
+    ui.horizontal_wrapped(|ui| {
+        let chip = |ui: &mut egui::Ui, label: &str, col: egui::Color32| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 2.0, col);
+            ui.label(label);
+            ui.add_space(8.0);
+        };
+        chip(ui, "done", egui::Color32::from_rgb(90, 170, 100));
+        chip(ui, "active", egui::Color32::from_rgb(230, 200, 90));
+        chip(ui, "next", egui::Color32::from_gray(110));
+        chip(ui, "failed", egui::Color32::from_rgb(170, 70, 70));
+        chip(ui, "closed", egui::Color32::from_gray(60));
+    });
+    ui.separator();
+
+    // Layout metrics (chart-space pixels).
+    const NW: f32 = 128.0;
+    const NH: f32 = 34.0;
+    const COL_GAP: f32 = 40.0;
+    const ROW_GAP: f32 = 10.0;
+    let width = graph.cols as f32 * (NW + COL_GAP) + COL_GAP;
+    let height = graph.rows.max(1) as f32 * (NH + ROW_GAP) + ROW_GAP;
+
+    let node_at = |col: u32, row: u32| -> egui::Rect {
+        let x = COL_GAP + col as f32 * (NW + COL_GAP);
+        let y = ROW_GAP + row as f32 * (NH + ROW_GAP);
+        egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(NW, NH))
+    };
+
+    egui::ScrollArea::both()
+        .max_height(460.0)
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            let (canvas, _) =
+                ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+            let origin = canvas.min.to_vec2();
+            let p = ui.painter_at(canvas);
+
+            // Edges first (under nodes).
+            for e in &graph.edges {
+                let a = node_at(graph.nodes[e.from].col, graph.nodes[e.from].row).translate(origin);
+                let b = node_at(graph.nodes[e.to].col, graph.nodes[e.to].row).translate(origin);
+                let col = if e.satisfied {
+                    egui::Color32::from_gray(130)
+                } else {
+                    egui::Color32::from_gray(70)
+                };
+                p.line_segment(
+                    [egui::pos2(a.max.x, a.center().y), egui::pos2(b.min.x, b.center().y)],
+                    egui::Stroke::new(1.5, col),
+                );
+            }
+
+            // Nodes.
+            for n in &graph.nodes {
+                let rect = node_at(n.col, n.row).translate(origin);
+                let base = egui::Color32::from_rgb(n.color[0], n.color[1], n.color[2]);
+                let (fill, stroke, text_col) = match n.ui {
+                    NodeUi::Completed => (base, egui::Stroke::new(1.0, egui::Color32::from_gray(20)), text_on(base)),
+                    NodeUi::Active => (
+                        base,
+                        egui::Stroke::new(2.5, egui::Color32::from_rgb(240, 210, 90)),
+                        text_on(base),
+                    ),
+                    // Next: faction hue retained but muted + no text.
+                    NodeUi::Next => (
+                        mute(base, 0.32),
+                        egui::Stroke::new(1.0, mute(base, 0.6)),
+                        egui::Color32::TRANSPARENT,
+                    ),
+                    NodeUi::Failed => (
+                        mute(base, 0.4),
+                        egui::Stroke::new(1.5, egui::Color32::from_rgb(150, 60, 60)),
+                        egui::Color32::from_gray(150),
+                    ),
+                    // Closed branch: barely-there hue, locked.
+                    NodeUi::Impossible => (
+                        mute(base, 0.15),
+                        egui::Stroke::new(1.0, egui::Color32::from_gray(70)),
+                        egui::Color32::TRANSPARENT,
+                    ),
+                };
+                p.rect(rect, 5.0, fill, stroke, egui::StrokeKind::Inside);
+
+                if n.ui.shows_name() {
+                    p.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        &n.label,
+                        egui::FontId::proportional(11.0),
+                        text_col,
+                    );
+                    if !n.grants.is_empty() {
+                        let g: Vec<String> = n
+                            .grants
+                            .iter()
+                            .map(|u| u.replace("_license", "").replace('_', " "))
+                            .collect();
+                        p.text(
+                            egui::pos2(rect.center().x, rect.max.y - 5.0),
+                            egui::Align2::CENTER_CENTER,
+                            format!("★ {}", g.join(", ")),
+                            egui::FontId::proportional(8.0),
+                            egui::Color32::from_rgb(240, 210, 110),
+                        );
+                    }
+                } else if matches!(n.ui, NodeUi::Next) {
+                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "?",
+                        egui::FontId::proportional(15.0), mute(base, 0.9));
+                } else if matches!(n.ui, NodeUi::Impossible) {
+                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "\u{1f512}",
+                        egui::FontId::proportional(12.0), egui::Color32::from_gray(90));
+                }
+            }
+        });
+}
+
+/// Desaturate + darken a color toward grey by `1.0 - keep` (keep in [0,1]).
+fn mute(c: egui::Color32, keep: f32) -> egui::Color32 {
+    let grey = 40.0;
+    let mix = |v: u8| (v as f32 * keep + grey * (1.0 - keep)) as u8;
+    egui::Color32::from_rgb(mix(c.r()), mix(c.g()), mix(c.b()))
+}
+
+/// Pick black or white text for contrast against `bg`.
+fn text_on(bg: egui::Color32) -> egui::Color32 {
+    let lum = 0.299 * bg.r() as f32 + 0.587 * bg.g() as f32 + 0.114 * bg.b() as f32;
+    if lum > 140.0 {
+        egui::Color32::from_gray(15)
+    } else {
+        egui::Color32::from_gray(235)
     }
 }
 

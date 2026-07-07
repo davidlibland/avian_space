@@ -12,6 +12,7 @@ mod tests;
 mod events;
 mod log;
 pub(crate) mod progress;
+mod story_chart;
 pub mod types;
 pub mod ui;
 

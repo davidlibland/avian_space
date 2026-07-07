@@ -801,7 +801,7 @@ mod template_targets {
     /// sol: earth/mars/venus landable + barren unlandable + iron field.
     /// simulator (a TRAINING system): landable sim_world + a GOLD field —
     /// gold exists nowhere else, so any "gold" pick means a training leak.
-    fn mini_universe() -> ItemUniverse {
+    pub(super) fn mini_universe() -> ItemUniverse {
         ItemUniverse {
             weapons: HashMap::new(),
             ships: HashMap::new(),
@@ -1531,5 +1531,63 @@ mod tutorial {
         let b = app.world().resource::<OfferBackoff>();
         assert_eq!(b.0.get("deliver_wheat_intro"), Some(&1));
         assert_eq!(b.0.get("proc__one_off"), None, "procedural ids don't accumulate");
+    }
+
+    // ── Story-chart fog of war ──────────────────────────────────────────
+    #[test]
+    fn story_chart_fog_of_war() {
+        use crate::missions::story_chart::{build_story_graph, NodeUi};
+        use crate::missions::PlayerUnlocks;
+
+        // Chain a1 -> a2 -> a3 (faction Fed), plus a branch b (needs a2 FAILED).
+        let chain = |after: Option<&str>, needs_fail: Option<&str>| {
+            let mut d = dummy_def();
+            d.faction = Some("Federation".into());
+            if let Some(prev) = after {
+                d.preconditions
+                    .push(Precondition::Completed { mission: prev.into() });
+            }
+            if let Some(f) = needs_fail {
+                d.preconditions
+                    .push(Precondition::Failed { mission: f.into() });
+            }
+            d
+        };
+        let mut iu = template_targets::mini_universe();
+        iu.missions.insert("a1".into(), chain(None, None));
+        iu.missions.insert("a2".into(), chain(Some("a1"), None));
+        iu.missions.insert("a3".into(), chain(Some("a2"), None));
+        iu.missions.insert("b".into(), chain(Some("a1"), Some("a2")));
+        // A non-story mission (no faction) must be excluded.
+        iu.missions.insert("side".into(), dummy_def());
+
+        let mut log = MissionLog::default();
+        log.set("a1", MissionStatus::Completed);
+        log.set("a2", MissionStatus::Available); // next
+        // a3 Locked (needs a2 completed) → hidden. b needs a2 failed but a2 is
+        // Available (not failed) → not yet impossible, unmet → hidden.
+        let unlocks = PlayerUnlocks::default();
+
+        let g = build_story_graph(&log, &unlocks, &iu);
+        let ui_of = |id: &str| g.nodes.iter().find(|n| n.id == id).map(|n| n.ui);
+        assert_eq!(ui_of("a1"), Some(NodeUi::Completed));
+        assert_eq!(ui_of("a2"), Some(NodeUi::Next));
+        assert_eq!(ui_of("a3"), None, "a3 requirements unmet → hidden");
+        assert_eq!(ui_of("b"), None, "b requirements unmet → hidden");
+        assert_eq!(ui_of("side"), None, "non-story mission excluded");
+        assert!(ui_of("a2").unwrap().shows_name() == false, "next hides its name");
+
+        // Now complete a2: a3 becomes Next; branch b becomes Impossible
+        // (needs a2 FAILED, but a2 is Completed) and is revealed at its
+        // known branch point.
+        log.set("a2", MissionStatus::Completed);
+        let g = build_story_graph(&log, &unlocks, &iu);
+        let ui_of = |id: &str| g.nodes.iter().find(|n| n.id == id).map(|n| n.ui);
+        assert_eq!(ui_of("a2"), Some(NodeUi::Completed));
+        assert_eq!(ui_of("a3"), Some(NodeUi::Next));
+        assert_eq!(ui_of("b"), Some(NodeUi::Impossible));
+        // Columns follow dependency depth.
+        let col = |id: &str| g.nodes.iter().find(|n| n.id == id).unwrap().col;
+        assert!(col("a1") < col("a2") && col("a2") < col("a3"));
     }
 }
