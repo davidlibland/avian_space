@@ -207,6 +207,24 @@ flare_pod:
     ammo_price: 45
     ammo_space: 1
     display_name: "Decoy Flares"
+helios_lure:
+  !SecondaryWeapon
+    price: 1800
+    space: 2
+    weapon_type: helios_lure
+    ammo_price: 90
+    ammo_space: 1
+    display_name: "Helios Holo-Lure"
+    required_unlocks: [helios_license]
+rebel_chaff:
+  !SecondaryWeapon
+    price: 450
+    space: 2
+    weapon_type: rebel_chaff
+    ammo_price: 20
+    ammo_space: 1
+    display_name: "Surplus Chaff Pod"
+    required_unlocks: [rebel_ship_license]
 engine_mk2:
   !ShipMod
     price: 15000

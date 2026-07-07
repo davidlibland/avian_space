@@ -352,7 +352,51 @@ flare_pod:
     damage: 0
     display_name: "Decoy Flares"
     behavior: !Decoy { strength: 0.7 }
-    sound_path: sounds/weapons/goose.ogg
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 26.0
+        particle_lifetime: 1.4
+        speed: 22.0
+        size: 2.0
+        replace_sprite: true
+    ammo:
+        !Ammo:
+            space: 1
+helios_lure:
+    name: helios_lure
+    lifetime: 6.0
+    speed: 40.0
+    cooldown: 4.0
+    color: [0.45, 0.95, 1.0]
+    damage: 0
+    display_name: "Helios Holo-Lure"
+    behavior: !Decoy { strength: 0.85 }
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 34.0
+        particle_lifetime: 1.6
+        speed: 18.0
+        size: 2.2
+        replace_sprite: true
+    ammo:
+        !Ammo:
+            space: 1
+rebel_chaff:
+    name: rebel_chaff
+    lifetime: 4.0
+    speed: 50.0
+    cooldown: 4.0
+    color: [1.0, 0.5, 0.2]
+    damage: 0
+    display_name: "Surplus Chaff Pod"
+    behavior: !Decoy { strength: 0.55 }
+    sound_path: sounds/weapons/flare_pod.ogg
+    particles:
+        rate: 20.0
+        particle_lifetime: 1.1
+        speed: 28.0
+        size: 1.7
+        replace_sprite: true
     ammo:
         !Ammo:
             space: 1

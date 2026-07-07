@@ -308,3 +308,78 @@ fn flare_pod_fires_a_decoy() {
         Some(3)
     );
 }
+
+/// AI ships pop flares automatically when a missile homing on them closes
+/// within range — and only then (no wasted flares, no player auto-fire).
+#[test]
+fn ai_auto_deploys_decoy_against_inbound_missile() {
+    let iu = real_universe();
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(iu)
+        .add_message::<FireCommand>()
+        .add_message::<WeaponFired>()
+        .add_message::<DecoyDeployed>()
+        .add_message::<crate::carrier::SpawnEscort>()
+        .add_systems(Update, (auto_deploy_decoys, weapon_fire).chain());
+
+    let mut ship = crate::ship::Ship::default();
+    ship.weapon_systems = WeaponSystems::build(
+        &HashMap::from([("flare_pod".to_string(), (1u8, Some(2u32)))]),
+        app.world().resource::<ItemUniverse>(),
+    );
+    let ai = app
+        .world_mut()
+        .spawn((
+            ship,
+            Transform::default(),
+            Position(Vec2::ZERO),
+            LinearVelocity(Vec2::ZERO),
+        ))
+        .id();
+
+    // No missile → no flare.
+    app.update();
+    let world = app.world_mut();
+    assert_eq!(world.query::<&Decoy>().iter(world).count(), 0);
+
+    // A distant missile targeting the AI → still no flare.
+    let far_missile = app
+        .world_mut()
+        .spawn((
+            Projectile {
+                lifetime: 5.0,
+                owner: Entity::PLACEHOLDER,
+                weapon_type: "javelin".into(),
+            },
+            GuidedMissile {
+                target: Some(ai),
+                turn_rate: 1.0,
+                cruise_speed: 100.0,
+                drag_rate: 1.0,
+            },
+            Position(Vec2::new(5000.0, 0.0)),
+        ))
+        .id();
+    app.update();
+    let world = app.world_mut();
+    assert_eq!(
+        world.query::<&Decoy>().iter(world).count(),
+        0,
+        "missile out of range must not trigger a flare"
+    );
+
+    // Bring it inside the reaction range → flare pops.
+    app.world_mut().get_mut::<Position>(far_missile).unwrap().0 = Vec2::new(300.0, 0.0);
+    app.update();
+    let world = app.world_mut();
+    assert_eq!(
+        world.query::<&Decoy>().iter(world).count(),
+        1,
+        "inbound missile in range triggers exactly one flare"
+    );
+    // Ammo spent, cooldown running → next frame doesn't double-fire.
+    app.update();
+    let world = app.world_mut();
+    assert_eq!(world.query::<&Decoy>().iter(world).count(), 1);
+}

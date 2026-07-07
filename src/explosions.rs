@@ -10,9 +10,69 @@ pub fn explosions_plugin(app: &mut App) {
         .add_message::<TriggerJumpFlash>()
         .add_systems(
             Update,
-            (trigger_explosions, trigger_jump_flashes).run_if(in_state(PlayState::Flying)),
+            (trigger_explosions, trigger_jump_flashes, emit_weapon_particles)
+                .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(Update, tick_particles.run_if(in_state(PlayState::Flying)));
+}
+
+// ── Weapon particle trails ───────────────────────────────────────────────────
+
+/// Attached by `weapon_fire` to projectiles/decoys whose weapon declares a
+/// `particles:` block — a continuous emitter riding the entity. The flare's
+/// "slow firework" look is entirely data: low speed, long particle life.
+#[derive(Component)]
+pub struct WeaponParticleEmitter {
+    pub fx: crate::weapons::ParticleFx,
+    /// Base color (from the fx override or the weapon color).
+    pub color: [f32; 3],
+    /// Fractional particles carried between frames.
+    pub accum: f32,
+}
+
+/// Emit particles from live weapon emitters (drift/fade is `tick_particles`).
+fn emit_weapon_particles(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut emitters: Query<(&Transform, &mut WeaponParticleEmitter)>,
+) {
+    let mut rng = rand::thread_rng();
+    let dt = time.delta_secs();
+    for (transform, mut emitter) in &mut emitters {
+        emitter.accum += emitter.fx.rate * dt;
+        let n = emitter.accum.floor() as usize;
+        if n == 0 {
+            continue;
+        }
+        emitter.accum -= n as f32;
+        let [r, g, b] = emitter.color;
+        for _ in 0..n {
+            let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
+            let speed: f32 = rng.gen_range(emitter.fx.speed * 0.25..emitter.fx.speed.max(0.26));
+            let lifetime = rng.gen_range(emitter.fx.particle_lifetime * 0.5..emitter.fx.particle_lifetime);
+            let size = rng.gen_range(emitter.fx.size * 0.6..emitter.fx.size * 1.3);
+            // Slight per-particle color jitter so the plume shimmers.
+            let jitter = rng.gen_range(0.85..1.15);
+            let color = Color::srgb(
+                (r * jitter).min(1.0),
+                (g * jitter).min(1.0),
+                (b * jitter).min(1.0),
+            );
+            commands.spawn((
+                DespawnOnExit(PlayState::Flying),
+                Particle {
+                    lifetime,
+                    max_lifetime: lifetime,
+                    velocity: Vec2::new(angle.cos(), angle.sin()) * speed,
+                },
+                Mesh2d(meshes.add(Circle::new(size))),
+                MeshMaterial2d(materials.add(ColorMaterial::from_color(color))),
+                Transform::from_xyz(transform.translation.x, transform.translation.y, 0.5),
+            ));
+        }
+    }
 }
 
 #[derive(Event, Message)]

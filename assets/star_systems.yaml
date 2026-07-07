@@ -775,7 +775,7 @@ procyon:
         electronics: 38
         weapons_parts: 13
         robotics: 34
-      outfitter: [laser, ir_missile, javelin, space_mine, flare_pod, engine_mk2, armor_plating]
+      outfitter: [laser, ir_missile, javelin, space_mine, flare_pod, rebel_chaff, engine_mk2, armor_plating]
       shipyard: [shuttle, rebel_fighter, rebel_gunboat, courier, hauler, cargo_transport, freighter, bulk_carrier, asteroid_miner, prospector]
     procyon_ii:
       planet_type: rocky
@@ -841,7 +841,7 @@ sirius:
         titanium: 8
         uranium: 8
         weapons_parts: 26
-      outfitter: [laser, javelin, space_mine]
+      outfitter: [laser, javelin, space_mine, rebel_chaff]
       shipyard: [rebel_fighter, rebel_gunboat, rebel_frigate, courier, cargo_transport, freighter]
     sirius_c:
       planet_type: rocky
@@ -979,7 +979,7 @@ altair:
         electronics: 50
         weapons_parts: 16
         robotics: 44
-      outfitter: [laser, javelin, space_mine]
+      outfitter: [laser, javelin, space_mine, rebel_chaff]
       shipyard: [rebel_fighter, rebel_gunboat, cargo_transport, courier, asteroid_miner, prospector]
     altair_rock:
       planet_type: rocky
@@ -1401,7 +1401,7 @@ tycho_yards:
         helium3: 40
         electronics: 21
         uranium: 38
-      outfitter: [laser, proton_beam, helios_lance, seeker, drone_bay]
+      outfitter: [laser, proton_beam, helios_lance, seeker, drone_bay, helios_lure]
       shipyard: [shuttle, cargo_transport, freighter, helios_drone, helios_enforcer, helios_courier, helios_freighter]
     tycho_refinery:
       planet_type: cloud
@@ -1481,7 +1481,7 @@ helios_prime:
         electronics: 18
         weapons_parts: 23
         robotics: 34
-      outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker, drone_bay, flare_pod, engine_mk2, armor_plating, repair_bot]
+      outfitter: [laser, proton_beam, ir_missile, helios_lance, seeker, drone_bay, flare_pod, helios_lure, engine_mk2, armor_plating, repair_bot]
       shipyard: [shuttle, courier, cargo_transport, freighter, hauler, helios_drone, helios_enforcer, helios_overseer, helios_titan, helios_courier, helios_freighter, helios_hauler]
     helios_orbital:
       planet_type: rocky
