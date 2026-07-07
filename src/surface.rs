@@ -672,23 +672,21 @@ fn spawn_building_3d(
         Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y + tile_px))
             .with_scale(Vec3::splat(scale)),
     ));
-    // _front normally sits ABOVE the player: it holds the parts that should
-    // occlude them — the door frame + front-protruding props (awnings, the
-    // mechanic's engine, market crates). depth_z(fc.y) alone would let a player
-    // standing *in front* (y south of fc.y) sort over it, so lift it clear of the
-    // player z-band (under labels z5 / fliers z8), keeping per-building ordering.
-    //
-    // EXCEPT the shipyard: it's an open hull-bay with no door cut, so its "front"
-    // is a walkable threshold the player steps onto — that must stay BELOW the
-    // player (no lift), so they walk into the bay rather than under it.
-    let front_lift = if func == "shipyard" { 0.0 } else { 8.0 };
+    // _front sorts NATURALLY at the building's front-wall depth: a player
+    // whose feet are SOUTH of the wall line draws over it (their head can
+    // overlap the facade without being clipped), and a player whose feet
+    // cross into the doorway (north of the line) sorts underneath, framed by
+    // the jambs. The old +8 "always above the player" lift clipped the
+    // 32px sprites' heads a full tile before the doorway. The cost: front-
+    // protruding props (awnings, the mechanic's engine) draw under a player
+    // standing hard against them — their tiles are solid, so it's marginal.
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Sprite::from_image(
             asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_front.png")),
         ),
         bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift)
+        Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y))
             .with_scale(Vec3::splat(scale)),
     ));
     // Animated roll-up door (over the facade): overlays _front exactly (same
@@ -703,7 +701,9 @@ fn spawn_building_3d(
             DespawnOnExit(PlayState::Exploring),
             Sprite::from_image(frames[0].clone()),
             bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + front_lift - 0.1)
+            // A hair above the facade: fills the doorway hole, still under a
+            // player standing more than a few px south of the wall line.
+            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + 0.0004)
                 .with_scale(Vec3::splat(scale)),
             BuildingDoor {
                 frames,
@@ -1500,7 +1500,7 @@ fn setup_surface(
                                 Transform::from_xyz(
                                     fc.x + offset.x,
                                     fc.y + offset.y,
-                                    crate::surface_objects::depth_z(fc.y) + 8.3,
+                                    crate::surface_objects::depth_z(fc.y) + 0.0008,
                                 ),
                             ));
                         }
