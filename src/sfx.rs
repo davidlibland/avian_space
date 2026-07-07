@@ -24,7 +24,7 @@ pub enum SurfaceSfx {
 }
 
 /// Fire-and-forget event for escort-related cues (player-triggered only).
-#[derive(Event, Message, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Event, Message, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum EscortSfx {
     /// An escort just launched from the player's carrier.
     Launching,

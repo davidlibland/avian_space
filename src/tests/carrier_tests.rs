@@ -181,3 +181,47 @@ fn dock_order_falls_back_to_formation_for_squadrons() {
         "squadron wings can't dock — they hold formation instead"
     );
 }
+
+/// Escort-order sounds only play when the player actually commands escorts —
+/// and the dock cue only when something can actually dock.
+#[test]
+fn order_sounds_require_escorts() {
+    use crate::sfx::EscortSfx;
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_message::<EscortSfx>()
+        .add_systems(Update, player_escort_input);
+    let player = app
+        .world_mut()
+        .spawn((Ship::from_ship_data(&ShipData::default(), "t"), Player))
+        .id();
+    let press = |app: &mut App, key: KeyCode| {
+        let mut input = ButtonInput::<KeyCode>::default();
+        input.press(key);
+        app.insert_resource(input);
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<EscortSfx>>()
+            .drain()
+            .collect::<Vec<_>>()
+    };
+
+    // No escorts: silence.
+    assert!(press(&mut app, KeyCode::KeyB).is_empty());
+    assert!(press(&mut app, KeyCode::KeyN).is_empty());
+
+    // A wings-only flight: B acknowledges with the formation cue, not dock.
+    app.world_mut()
+        .spawn((Escort { mother: player }, EscortMode::Escort));
+    assert_eq!(press(&mut app, KeyCode::KeyB), vec![EscortSfx::Escort]);
+
+    // With a carried escort present, B is a real dock order.
+    app.world_mut().spawn((
+        Escort { mother: player },
+        CarriedBy {
+            weapon_type: "fighter_bay".into(),
+        },
+        EscortMode::Escort,
+    ));
+    assert_eq!(press(&mut app, KeyCode::KeyB), vec![EscortSfx::Dock]);
+}

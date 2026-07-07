@@ -360,17 +360,32 @@ fn player_escort_input(
         return;
     };
     let Some(new_mode) = new_mode else { return };
-    sfx_writer.write(sfx);
+    // Only command (and only SOUND) if the player actually has escorts —
+    // the cue used to play on every keypress, escorts or not.
+    let mut commanded = false;
+    let mut any_docked = false;
     for (escort, carried, mut mode) in &mut escorts {
-        if escort.mother == player_entity {
-            // Squadron wings (not carried) can't dock — B falls back to
-            // holding formation.
-            *mode = if matches!(new_mode, EscortMode::Dock) && !carried {
-                EscortMode::Escort
-            } else {
-                new_mode.clone()
-            };
+        if escort.mother != player_entity {
+            continue;
         }
+        commanded = true;
+        // Squadron wings (not carried) can't dock — B falls back to
+        // holding formation.
+        *mode = if matches!(new_mode, EscortMode::Dock) && !carried {
+            EscortMode::Escort
+        } else {
+            any_docked |= carried;
+            new_mode.clone()
+        };
+    }
+    if commanded {
+        // The dock cue only fits if something can actually dock; a
+        // wings-only flight acknowledges with the formation cue instead.
+        let sfx = match sfx {
+            EscortSfx::Dock if !any_docked => EscortSfx::Escort,
+            other => other,
+        };
+        sfx_writer.write(sfx);
     }
 }
 
