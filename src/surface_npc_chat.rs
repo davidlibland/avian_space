@@ -257,13 +257,32 @@ pub fn npc_chat_ui(
                                     btn.on_hover_text("Not enough free cargo space.");
                                 }
                             });
-                            if ui.button("Decline").clicked() {
+                            if ui
+                                .button("Decline")
+                                .on_hover_text(
+                                    "Turn the job down — they'll offer it less often.",
+                                )
+                                .clicked()
+                            {
                                 decline_writer.write(crate::missions::DeclineMission(mission_id.clone()));
                                 if let Some(npc_e) = chat.entity {
                                     if let Ok(mut npc) = npcs.get_mut(npc_e) {
                                         npc.queue.pop_front();
                                     }
                                 }
+                                close = true;
+                                sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);
+                            }
+                            // The soft exit: closes the window WITHOUT a
+                            // decline (no offer backoff) and leaves the offer
+                            // in the NPC's queue, so talking again re-opens
+                            // it. Same effect as dismissing with Esc, but
+                            // discoverable.
+                            if ui
+                                .button("Talk later")
+                                .on_hover_text("Step away without answering — the offer stands.")
+                                .clicked()
+                            {
                                 close = true;
                                 sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);
                             }
