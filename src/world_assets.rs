@@ -153,6 +153,10 @@ pub struct Building3dSprite {
     pub d: u32,
     /// Footprint front-centre on the ground, as a Bevy `Anchor::Custom` fraction.
     pub anchor: (f32, f32),
+    /// Ground line of the building's south-protruding props (its own baked
+    /// `_props` layer), in tiles SOUTH of the front wall. None = no props.
+    #[serde(default)]
+    pub prop_dy: Option<f32>,
 }
 
 /// `buildings3d_manifest.ron` — baked 3/4 building sprites (scripts/ship3d/buildings3d.py bake).

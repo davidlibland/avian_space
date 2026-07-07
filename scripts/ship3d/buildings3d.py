@@ -357,25 +357,25 @@ def build_market(s, m):
     # front beam on grounded posts; produce crates pulled against the posts.
     wp, yf, zf = w + 0.2, -d / 2 - 1.5, z0 + 1.9
     v = [(-wp / 2, -d / 2, top - 0.15), (wp / 2, -d / 2, top - 0.15), (wp / 2, yf, zf), (-wp / 2, yf, zf)]
-    B._obj_from_pydata("porch", v, [(0, 1, 2, 3)], m["roof"], smooth=False, bevel=0.0)
-    B.add_box("pbeam", (0, yf, zf - 0.05), (wp, 0.16, 0.18), m["beam"], bevel=0.0)
+    B._obj_from_pydata("pp_porch", v, [(0, 1, 2, 3)], m["roof"], smooth=False, bevel=0.0)
+    B.add_box("pp_pbeam", (0, yf, zf - 0.05), (wp, 0.16, 0.18), m["beam"], bevel=0.0)
     for sx in (-wp / 2 + 0.25, wp / 2 - 0.25):
-        B.add_box("ppost", (sx, yf, zf / 2), (0.16, 0.16, zf), m["beam"], bevel=0.02)
+        B.add_box("pp_ppost", (sx, yf, zf / 2), (0.16, 0.16, zf), m["beam"], bevel=0.02)
     for i, (bx, by) in enumerate([(-wp / 2 + 0.55, yf + 0.2), (-wp / 2 + 1.0, yf + 0.3), (wp / 2 - 0.6, yf + 0.2)]):
-        B.add_box("crate", (bx, by, 0.42), (0.8, 0.8, 0.8), m["wall_d"] if i % 2 else m["beam"], bevel=0.04)
-        B.add_box("crlabel", (bx, by - 0.42, 0.46), (0.46, 0.03, 0.26), m["trim"], bevel=0.0)        # shipping label
-        B.add_box("crband", (bx, by - 0.41, 0.42), (0.84, 0.02, 0.08), m["beam"], bevel=0.0)         # strap
+        B.add_box("pp_crate", (bx, by, 0.42), (0.8, 0.8, 0.8), m["wall_d"] if i % 2 else m["beam"], bevel=0.04)
+        B.add_box("pp_crlabel", (bx, by - 0.42, 0.46), (0.46, 0.03, 0.26), m["trim"], bevel=0.0)        # shipping label
+        B.add_box("pp_crband", (bx, by - 0.41, 0.42), (0.84, 0.02, 0.08), m["beam"], bevel=0.0)         # strap
 
 
 def build_outfitter(s, m):
     w, d, h = 4, 4, 3.4        # outfitter → small_house 4×4
     z0, top = shell(s, m, w, d, h, win=(2, 1))
     # weapon rack out front (arms dealer) + rooftop test-mount
-    B.add_box("rackbar", (0, -d / 2 - 1.3, 1.2), (3.0, 0.16, 0.16), m["metal"], bevel=0.0)
+    B.add_box("pp_rackbar", (0, -d / 2 - 1.3, 1.2), (3.0, 0.16, 0.16), m["metal"], bevel=0.0)
     for rx in (-1.0, 0.0, 1.0):
-        B.add_cylinder("missile", (rx, -d / 2 - 1.3, 0.7), 0.12, 1.0, m["dark"], axis="z", r2=0.02)
+        B.add_cylinder("pp_missile", (rx, -d / 2 - 1.3, 0.7), 0.12, 1.0, m["dark"], axis="z", r2=0.02)
     for rx in (-1.2, 1.2):
-        B.add_cylinder("rackleg", (rx, -d / 2 - 1.3, 0.6), 0.07, 1.2, m["metal"], axis="z")
+        B.add_cylinder("pp_rackleg", (rx, -d / 2 - 1.3, 0.6), 0.07, 1.2, m["metal"], axis="z")
     B.add_box("rack", (0, 0, top + 0.5), (2.4, 0.5, 0.5), m["metal"], bevel=0.05)
     B.add_cylinder("barrel", (0, -1.0, top + 0.9), 0.18, 2.2, m["dark"], axis="y")
 
@@ -428,8 +428,8 @@ def build_mechanic(s, m):
     # a ship engine pulled out front on a stand, opened up for repair — to the
     # far LEFT, clear of the centred door (a solid impassable tile in-game)
     repair_engine(-2.0, -d / 2 - 1.5, m)
-    B.add_box("plate", (w / 2 - 0.5, -d / 2 - 1.1, 1.1), (1.4, 0.14, 2.0), m["wall_d"], bevel=0.05)
-    B.add_box("toolbox", (w / 2 - 1.5, -d / 2 - 1.4, 0.35), (0.9, 0.6, 0.5), m["roof"], bevel=0.05)
+    B.add_box("pp_plate", (w / 2 - 0.5, -d / 2 - 1.1, 1.1), (1.4, 0.14, 2.0), m["wall_d"], bevel=0.05)
+    B.add_box("pp_toolbox", (w / 2 - 1.5, -d / 2 - 1.4, 0.35), (0.9, 0.6, 0.5), m["roof"], bevel=0.05)
     B.add_cylinder("jib_p", (w / 2 - 0.3, d / 2 - 0.3, top + 0.8), 0.14, 2.0, m["metal"], axis="z")
     B.add_box("jib_a", (w / 2 - 1.2, d / 2 - 0.3, top + 1.4), (2.0, 0.2, 0.2), m["metal"], bevel=0.03)
 
@@ -438,9 +438,9 @@ def build_bar(s, m):
     w, d, h = 6, 5, 3.2        # bar → medium_house 6×5
     z0, top = shell(s, m, w, d, h, win=(3, 2))
     # big glowing hanging sign on a bracket arm + roof chimney
-    B.add_box("bracket", (-w / 2 + 0.2, -d / 2 - 0.5, top - 0.3), (0.1, 1.0, 0.1), m["beam"], bevel=0.0)
-    B.add_box("signpost", (-w / 2 + 0.2, -d / 2 - 1.0, top - 1.1), (0.12, 0.12, 1.0), m["dark"], bevel=0.0)
-    B.add_box("signface", (-w / 2 + 0.2, -d / 2 - 1.06, top - 1.6), (1.4, 0.1, 0.85), m["glow"], bevel=0.02)
+    B.add_box("pp_bracket", (-w / 2 + 0.2, -d / 2 - 0.5, top - 0.3), (0.1, 1.0, 0.1), m["beam"], bevel=0.0)
+    B.add_box("pp_signpost", (-w / 2 + 0.2, -d / 2 - 1.0, top - 1.1), (0.12, 0.12, 1.0), m["dark"], bevel=0.0)
+    B.add_box("pp_signface", (-w / 2 + 0.2, -d / 2 - 1.06, top - 1.6), (1.4, 0.1, 0.85), m["glow"], bevel=0.02)
     B.add_cylinder("chimney", (w / 4, d / 4, top + 0.9), 0.3, 1.5, m["wall_d"], axis="z")
     B.add_cylinder("chimcap", (w / 4, d / 4, top + 1.7), 0.36, 0.2, m["beam"], axis="z")
     if s["biome"] == "garden":
@@ -467,9 +467,9 @@ def build_garrison(s, m):
     B.add_box("crest", (0, -d / 2 - 0.06, z0 + 2.55), (1.3, 0.08, 0.55), m["glow"], bevel=0.02)
     # flagpole on the pad-side corner of the forecourt, base plinth + pole + finial
     fp = (w / 2 + 0.55, -d / 2 + 0.3)
-    B.add_box("flagbase", (fp[0], fp[1], 0.14), (0.5, 0.5, 0.28), m["wall_d"], bevel=0.03)
-    B.add_cylinder("flagpole", (fp[0], fp[1], 2.15), 0.055, 4.0, m["trim"], axis="z")
-    B.add_cylinder("finial", (fp[0], fp[1], 4.25), 0.11, 0.14, m["glow"], axis="z")
+    B.add_box("pp_flagbase", (fp[0], fp[1], 0.14), (0.5, 0.5, 0.28), m["wall_d"], bevel=0.03)
+    B.add_cylinder("pp_flagpole", (fp[0], fp[1], 2.15), 0.055, 4.0, m["trim"], axis="z")
+    B.add_cylinder("pp_finial", (fp[0], fp[1], 4.25), 0.11, 0.14, m["glow"], axis="z")
 
 
 def build_pad(s, m):
@@ -488,8 +488,8 @@ def build_pad(s, m):
 def planters(w, d, m):
     """Garden beds flanking the entrance — colony agrarian life (bible)."""
     for sx in (-w / 2 + 0.7, w / 2 - 0.7):
-        B.add_box("planter", (sx, -d / 2 - 0.35, 0.32), (1.0, 0.5, 0.34), m["beam"], bevel=0.05)
-        B.add_box("plants", (sx, -d / 2 - 0.35, 0.62), (0.9, 0.45, 0.34), m["plant"], bevel=0.2)
+        B.add_box("pp_planter", (sx, -d / 2 - 0.35, 0.32), (1.0, 0.5, 0.34), m["beam"], bevel=0.05)
+        B.add_box("pp_plants", (sx, -d / 2 - 0.35, 0.62), (0.9, 0.45, 0.34), m["plant"], bevel=0.2)
 
 
 def frame_detail(w, d, h, base_z, m):
@@ -516,14 +516,14 @@ def small_ship(cx, cy, cz, m, scale=1.0):
 
 def repair_engine(cx, cy, m):
     """A ship engine pulled onto a service stand, opened up — exposed glowing core."""
-    B.add_box("estand", (cx, cy, 0.08), (1.5, 1.1, 0.16), m["dark"], bevel=0.03)
+    B.add_box("pp_estand", (cx, cy, 0.08), (1.5, 1.1, 0.16), m["dark"], bevel=0.03)
     for ox, oy in ((-0.55, -0.4), (0.55, -0.4), (-0.55, 0.4), (0.55, 0.4)):
-        B.add_cylinder("eleg", (cx + ox, cy + oy, 0.5), 0.06, 0.8, m["metal"], axis="z")
-    B.add_cylinder("ecore", (cx, cy, 1.2), 0.5, 1.7, m["metal"], axis="y", r2=0.42, seg=18)
-    B.add_cylinder("ebell", (cx, cy + 1.0, 1.2), 0.44, 0.5, m["dark"], axis="y")          # exhaust bell
-    B.add_box("eintern", (cx, cy - 0.25, 1.2), (0.7, 0.5, 0.7), m["glow"], bevel=0.02)    # exposed internals
-    B.add_cylinder("epipe", (cx - 0.55, cy - 0.1, 1.5), 0.07, 1.1, m["dark"], axis="y")
-    B.add_box("epanel", (cx + 0.62, cy - 0.3, 1.55), (0.1, 0.6, 0.5), m["wall_d"], bevel=0.03)  # open access hatch
+        B.add_cylinder("pp_eleg", (cx + ox, cy + oy, 0.5), 0.06, 0.8, m["metal"], axis="z")
+    B.add_cylinder("pp_ecore", (cx, cy, 1.2), 0.5, 1.7, m["metal"], axis="y", r2=0.42, seg=18)
+    B.add_cylinder("pp_ebell", (cx, cy + 1.0, 1.2), 0.44, 0.5, m["dark"], axis="y")          # exhaust bell
+    B.add_box("pp_eintern", (cx, cy - 0.25, 1.2), (0.7, 0.5, 0.7), m["glow"], bevel=0.02)    # exposed internals
+    B.add_cylinder("pp_epipe", (cx - 0.55, cy - 0.1, 1.5), 0.07, 1.1, m["dark"], axis="y")
+    B.add_box("pp_epanel", (cx + 0.62, cy - 0.3, 1.55), (0.1, 0.6, 0.5), m["wall_d"], bevel=0.03)  # open access hatch
 
 
 def build_fuel_station(s, m):
@@ -536,8 +536,8 @@ def build_fuel_station(s, m):
     B.add_box("fs_para", (0, -d / 2 - 0.12, top + 0.22), (w + 0.24, 0.14, 0.18), m["trim"], bevel=0.0)
     entry(s, m, w, d, z0)
     # roadside glowing FUEL totem on a pole beside the booth — a strong top-down read
-    B.add_cylinder("fs_pole", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 1.6), 0.1, 3.4, m["metal"], axis="z")
-    B.add_box("fs_totem", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 3.1), (0.72, 0.72, 0.95), m["glow"], bevel=0.06)
+    B.add_cylinder("pp_fs_pole", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 1.6), 0.1, 3.4, m["metal"], axis="z")
+    B.add_box("pp_fs_totem", (-w / 2 - 0.75, -d / 2 - 0.5, z0 + 3.1), (0.72, 0.72, 0.95), m["glow"], bevel=0.06)
     # bulk storage tank on a cradle along the right side
     B.add_cylinder("fs_tank", (w / 2 + 0.6, 0.25, z0 + 0.8), 0.58, 2.5, m["metal"], axis="y")
     B.add_box("fs_cradle", (w / 2 + 0.6, 0.25, z0 + 0.16), (0.9, 2.2, 0.32), m["dark"], bevel=0.0)
@@ -547,13 +547,13 @@ def build_fuel_station(s, m):
     # further out so the pumps don't sit on top of the door.
     fwd = 1.2 if s["biome"] == "ice" else 0.0
     for px in (-1.0, 0.0, 1.0):
-        B.add_box("fs_base", (px, -d / 2 - 1.6 - fwd, z0 + 0.18), (0.46, 0.5, 0.36), m["dark"], bevel=0.04)
-        B.add_box("fs_pump", (px, -d / 2 - 1.6 - fwd, z0 + 0.85), (0.44, 0.46, 1.0), m["wall_d"], bevel=0.06)
-        B.add_box("fs_screen", (px, -d / 2 - 1.84 - fwd, z0 + 1.05), (0.3, 0.05, 0.34), m["glow"], bevel=0.0)
-        B.add_box("fs_top", (px, -d / 2 - 1.6 - fwd, z0 + 1.45), (0.46, 0.5, 0.18), m["metal"], bevel=0.03)
-        B.add_cylinder("fs_hose", (px + 0.3, -d / 2 - 1.54 - fwd, z0 + 0.7), 0.05, 0.9, m["dark"], axis="z")
+        B.add_box("pp_fs_base", (px, -d / 2 - 1.6 - fwd, z0 + 0.18), (0.46, 0.5, 0.36), m["dark"], bevel=0.04)
+        B.add_box("pp_fs_pump", (px, -d / 2 - 1.6 - fwd, z0 + 0.85), (0.44, 0.46, 1.0), m["wall_d"], bevel=0.06)
+        B.add_box("pp_fs_screen", (px, -d / 2 - 1.84 - fwd, z0 + 1.05), (0.3, 0.05, 0.34), m["glow"], bevel=0.0)
+        B.add_box("pp_fs_top", (px, -d / 2 - 1.6 - fwd, z0 + 1.45), (0.46, 0.5, 0.18), m["metal"], bevel=0.03)
+        B.add_cylinder("pp_fs_hose", (px + 0.3, -d / 2 - 1.54 - fwd, z0 + 0.7), 0.05, 0.9, m["dark"], axis="z")
     # hazard stripe marking the forecourt apron
-    B.add_box("fs_hazard", (0, -d / 2 - 2.25 - fwd, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
+    B.add_box("fl_fs_hazard", (0, -d / 2 - 2.25 - fwd, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
 
 
 BUILDERS = {"market": build_market, "outfitter": build_outfitter, "shipyard": build_shipyard,
@@ -672,19 +672,41 @@ def bake():
                 o.hide_render = not o.name.startswith(("floor", "fl_"))
             cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
             B.render_to(tmp("floor")); floor_im = Image.open(tmp("floor")).convert("RGBA")
-            # STRUCTURE passes: hide the floor slab AND the animated door panel
-            # (the facade keeps the dark recess behind the door).
+            # PROPS pass: south-protruding props (pp_*) bake into their own
+            # layer so the game can depth-sort them at their own ground line
+            # instead of the building's front-wall plane.
+            props = [o for o in meshes if o.name.startswith("pp_")]
+            props_im = None
+            prop_dy = None
+            if props:
+                for o in meshes:
+                    o.hide_render = not o.name.startswith("pp_")
+                cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
+                B.render_to(tmp("props")); props_im = Image.open(tmp("props")).convert("RGBA")
+                # ground line of the props, model-tiles SOUTH of the front
+                # wall (authored per builder — Blender dimensions are not
+                # reliable for pydata meshes). Negative = north of the line
+                # (the garrison pole stands beside the wall).
+                base = {"market": 1.7, "outfitter": 1.3, "bar": 1.1,
+                        "mechanic": 2.0, "fuel_station": 1.85,
+                        "garrison": -0.3}.get(fn, 0.5)
+                if fn == "fuel_station" and st == "cryo":
+                    base = 3.05   # ice storm-porch pushes the pumps forward
+                prop_dy = base
+            # STRUCTURE passes: hide the floor slab, the animated door panel
+            # AND the props (they render in their own pass above).
             for o in meshes:
-                o.hide_render = o.name.startswith(("floor", "fl_", "doorpanel"))
+                o.hide_render = o.name.startswith(("floor", "fl_", "doorpanel", "pp_"))
             cam.data.clip_start = 0.05; cam.data.clip_end = 1000.0
             B.render_to(tmp("full")); full = Image.open(tmp("full")).convert("RGBA")
             cam.data.clip_end = depth
             B.render_to(tmp("front")); front = Image.open(tmp("front")).convert("RGBA")
             cam.data.clip_start = depth; cam.data.clip_end = 1000.0
             B.render_to(tmp("back")); back = Image.open(tmp("back")).convert("RGBA")
-            # union bbox (structure ∪ floor — the floor sits lower on screen)
+            # union bbox (structure ∪ floor ∪ props)
             a = np.asarray(full)[..., 3]; afl = np.asarray(floor_im)[..., 3]
-            ys, xs = np.where((a > 8) | (afl > 8))
+            apr = np.asarray(props_im)[..., 3] if props_im is not None else np.zeros_like(a)
+            ys, xs = np.where((a > 8) | (afl > 8) | (apr > 8))
             x0, y0, x1, y1 = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
             box = (x0, y0, x1, y1)
             full_c = full.crop(box); fr = np.array(front.crop(box)); bk = back.crop(box)
@@ -717,11 +739,13 @@ def bake():
                         p.location.z = top - h * sc / 2
                     B.render_to(tmp("door"))
                     Image.open(tmp("door")).convert("RGBA").crop(box).save(dpath)
+            if props_im is not None:
+                props_im.crop(box).save(os.path.join(out_dir, f"{st}_{fn}_props.png"))
             full_c.save(os.path.join(out_dir, f"{st}_{fn}.png"))
             Image.fromarray(fr).save(os.path.join(out_dir, f"{st}_{fn}_front.png"))
             bk.save(os.path.join(out_dir, f"{st}_{fn}_back.png"))
             floor_c.save(os.path.join(out_dir, f"{st}_{fn}_floor.png"))
-            entries.append((st, fn, w_t, d_t, round(fx, 4), round(fy, 4)))
+            entries.append((st, fn, w_t, d_t, round(fx, 4), round(fy, 4), prop_dy))
     mpath = os.path.abspath(os.path.join(out_dir, "..", "buildings3d_manifest.ron"))
     kept = []
     if only is not None and os.path.exists(mpath):
@@ -735,8 +759,9 @@ def bake():
              "// anchor = footprint front-centre on the ground, as Bevy Anchor::Custom fraction",
              "(", f"    px_per_tile: {round(ppt, 4)},", "    sprites: ["]
     lines += kept
-    for st, fn, w, d, fx, fy in entries:
-        lines.append(f'        (style: "{st}", func: "{fn}", w: {w}, d: {d}, anchor: ({fx}, {fy})),')
+    for st, fn, w, d, fx, fy, pdy in entries:
+        prop = f", prop_dy: Some({pdy})" if pdy is not None else ""
+        lines.append(f'        (style: "{st}", func: "{fn}", w: {w}, d: {d}, anchor: ({fx}, {fy}){prop}),')
     lines += ["    ],", ")", ""]
     open(mpath, "w").write("\n".join(lines))
     print(f"baked {len(entries)} sprites → {out_dir}")

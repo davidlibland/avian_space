@@ -650,6 +650,7 @@ fn spawn_building_3d(
     fc: Vec2,
     scale: f32,
     tile_px: f32,
+    prop_dy: Option<f32>,
 ) {
     // _floor: the building's own floor + thresholds (walkable). ALWAYS below the
     // player (and above terrain at -10), so the player walks over it and it hides
@@ -689,6 +690,27 @@ fn spawn_building_3d(
         Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y))
             .with_scale(Vec3::splat(scale)),
     ));
+    // South-protruding props (market crates, the mechanic's engine, fuel
+    // pumps, the garrison flagpole) live in their own baked layer, depth-
+    // sorted at THEIR ground line rather than the building's wall plane: a
+    // player between the props and the wall draws over the facade but under
+    // the props — exactly what the eye expects.
+    if let Some(dy) = prop_dy {
+        commands.spawn((
+            DespawnOnExit(PlayState::Exploring),
+            Sprite::from_image(
+                asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_props.png")),
+            ),
+            bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
+            Transform::from_xyz(
+                fc.x,
+                fc.y,
+                crate::surface_objects::depth_z(fc.y - dy * tile_px),
+            )
+            .with_scale(Vec3::splat(scale)),
+        ));
+    }
+
     // Animated roll-up door (over the facade): overlays _front exactly (same
     // anchor/pos), and rolls open when the player nears. Only door buildings.
     if matches!(func, "market" | "outfitter" | "bar" | "mechanic" | "fuel_station" | "garrison") {
@@ -701,9 +723,10 @@ fn spawn_building_3d(
             DespawnOnExit(PlayState::Exploring),
             Sprite::from_image(frames[0].clone()),
             bevy::sprite::Anchor(Vec2::new(anchor.0, anchor.1)),
-            // A hair above the facade: fills the doorway hole, still under a
-            // player standing more than a few px south of the wall line.
-            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) + 0.0004)
+            // A hair BENEATH the facade: the roll-up panel sits in the wall
+            // recess, so the jambs/lintel draw over it while it still covers
+            // the doorway hole.
+            Transform::from_xyz(fc.x, fc.y, crate::surface_objects::depth_z(fc.y) - 0.0004)
                 .with_scale(Vec3::splat(scale)),
             BuildingDoor {
                 frames,
@@ -1364,6 +1387,7 @@ fn setup_surface(
                     fc,
                     scale,
                     tile_px,
+                    spr.prop_dy,
                 );
             }
             // The repair engine sits front-left of the door. Its tiles were marked
@@ -1471,6 +1495,7 @@ fn setup_surface(
                         fc,
                         scale,
                         tile_px,
+                        spr.prop_dy,
                     );
                     // The garrison flies the CONTROLLING faction's colors: a
                     // grayscale cloth sprite tinted at runtime, pinned to the
@@ -1497,10 +1522,14 @@ fn setup_surface(
                                     custom_size: Some(Vec2::new(1.3, 0.84) * tile_px),
                                     ..default()
                                 },
+                                // The cloth rides just above the pole, which
+                                // lives in the props layer at its own depth.
                                 Transform::from_xyz(
                                     fc.x + offset.x,
                                     fc.y + offset.y,
-                                    crate::surface_objects::depth_z(fc.y) + 0.0008,
+                                    crate::surface_objects::depth_z(
+                                        fc.y - spr.prop_dy.unwrap_or(0.0) * tile_px,
+                                    ) + 0.0004,
                                 ),
                             ));
                         }
