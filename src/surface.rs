@@ -2066,6 +2066,16 @@ fn update_interact_prompt(
 /// Render the appropriate egui window based on which building the player is
 /// interacting with. Reuses the extracted tab renderers from planet_ui.rs.
 #[allow(clippy::too_many_arguments)]
+/// Price multiplier for a planet from the player's standing with its faction.
+fn planet_markup(
+    standings: &crate::standing::FactionStandings,
+    planet: &crate::planets::PlanetData,
+) -> f32 {
+    crate::standing::planet_faction(planet)
+        .map(|f| crate::standing::price_markup(standings.get(f)))
+        .unwrap_or(1.0)
+}
+
 fn surface_building_ui(
     mut egui_contexts: EguiContexts,
     mut active_ui: ResMut<ActiveBuildingUI>,
@@ -2078,6 +2088,7 @@ fn surface_building_ui(
     mission_offers: Res<MissionOffers>,
     mission_catalog: Res<MissionCatalog>,
     unlocks: Res<PlayerUnlocks>,
+    standings: Res<crate::standing::FactionStandings>,
     mut accept_writer: MessageWriter<AcceptMission>,
     mut abandon_writer: MessageWriter<AbandonMission>,
     mut next_state: ResMut<NextState<PlayState>>,
@@ -2104,20 +2115,23 @@ fn surface_building_ui(
             match kind {
                 BuildingKind::Market => {
                     if let (Ok(mut ship), Some(pd)) = (player_query.single_mut(), planet_data) {
-                        render_trade_tab(ui, &mut ship, pd, &item_universe);
+                        let markup = planet_markup(&standings, pd);
+                        render_trade_tab(ui, &mut ship, pd, &item_universe, markup);
                     } else {
                         ui.label("No commodities available.");
                     }
                 }
                 BuildingKind::Outfitter => {
                     if let (Ok(mut ship), Some(pd)) = (player_query.single_mut(), planet_data) {
-                        render_outfitter_tab(ui, &mut ship, pd, &item_universe, &unlocks);
+                        let markup = planet_markup(&standings, pd);
+                        render_outfitter_tab(ui, &mut ship, pd, &item_universe, &unlocks, markup);
                     } else {
                         ui.label("No equipment available.");
                     }
                 }
                 BuildingKind::Shipyard => {
                     if let (Ok(ship), Some(pd)) = (player_query.single(), planet_data) {
+                        let markup = planet_markup(&standings, pd);
                         render_shipyard_tab(
                             ui,
                             &ship,
@@ -2125,6 +2139,7 @@ fn surface_building_ui(
                             &item_universe,
                             &unlocks,
                             &mut buy_ship_writer,
+                            markup,
                         );
                     } else {
                         ui.label("No ships for sale.");

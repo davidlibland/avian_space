@@ -175,6 +175,21 @@ fn place_player_at_launch_site(
 use crate::planets::PlanetData;
 use bevy_egui::egui;
 
+/// Banner shown when poor faction standing inflates local prices.
+fn render_markup_notice(ui: &mut egui::Ui, planet: &PlanetData, markup: f32) {
+    if markup > 1.0 {
+        if let Some(faction) = crate::standing::planet_faction(planet) {
+            ui.colored_label(
+                egui::Color32::from_rgb(230, 140, 90),
+                format!(
+                    "Poor standing with {faction}: prices +{:.0}%.",
+                    (markup - 1.0) * 100.0
+                ),
+            );
+        }
+    }
+}
+
 /// Batch size for shift-clicked Buy/Sell: a round multiple of 5, scaled to
 /// roughly an eighth of the hold so it stays proportionate — 5 for a shuttle
 /// (10 cargo), 10 for a hauler (70–80), 20 for a bulk carrier (160).
@@ -188,9 +203,11 @@ pub fn render_trade_tab(
     ship: &mut Ship,
     planet: &PlanetData,
     item_universe: &ItemUniverse,
+    markup: f32,
 ) {
     let bulk = bulk_trade_amount(ship.data.cargo_space);
     ui.label(format!("Credits: {}", ship.credits));
+    render_markup_notice(ui, planet, markup);
     ui.label(
         egui::RichText::new(format!("Shift-click Buy/Sell to trade {bulk} at a time."))
             .small()
@@ -221,8 +238,13 @@ pub fn render_trade_tab(
                     .get(&commodity)
                     .map(|c| c.display_name.as_str())
                     .unwrap_or(&commodity);
+                let buy_price = crate::standing::markup_price(price, markup);
                 ui.label(commodity_display);
-                ui.label(price.to_string());
+                ui.label(if buy_price != price {
+                    format!("{buy_price} ({price})")
+                } else {
+                    price.to_string()
+                });
                 if let Some(&avg) = item_universe.global_average_price.get(&commodity) {
                     let ratio = price as f64 / avg;
                     let (label, color) = if ratio < 0.6 {
@@ -248,7 +270,7 @@ pub fn render_trade_tab(
                     .on_hover_text(format!("Shift-click: buy {bulk}"))
                     .clicked()
                 {
-                    ship.buy_cargo(&commodity, amount, price);
+                    ship.buy_cargo(&commodity, amount, buy_price);
                 }
                 if ui
                     .button("Sell")
@@ -317,8 +339,10 @@ pub fn render_outfitter_tab(
     planet: &PlanetData,
     item_universe: &ItemUniverse,
     unlocks: &crate::missions::PlayerUnlocks,
+    markup: f32,
 ) {
     ui.label(format!("Credits: {}", ship.credits));
+    render_markup_notice(ui, planet, markup);
     ui.label(format!(
         "Free space: {}/{}",
         ship.remaining_item_space(),
@@ -371,11 +395,11 @@ pub fn render_outfitter_tab(
                     .map(|i| i.display_name())
                     .unwrap_or(&item);
                 ui.label(item_display);
-                ui.label(price.to_string());
+                ui.label(crate::standing::markup_price(price, markup).to_string());
                 ui.label(space.to_string());
                 ui.label(owned.to_string());
                 if ui.button("Buy").clicked() {
-                    ship.buy_weapon(&item, &item_universe);
+                    ship.buy_weapon(&item, &item_universe, markup);
                 }
                 if ui.button("Sell").clicked() {
                     ship.sell_weapon(&item, &item_universe);
@@ -391,9 +415,9 @@ pub fn render_outfitter_tab(
                     .clicked()
                 {
                     if shift {
-                        ship.buy_max_ammo(&item, &item_universe);
+                        ship.buy_max_ammo(&item, &item_universe, markup);
                     } else {
-                        ship.buy_ammo(&item, &item_universe);
+                        ship.buy_ammo(&item, &item_universe, markup);
                     }
                 }
                 if ui
@@ -449,12 +473,12 @@ pub fn render_outfitter_tab(
                     };
                     ui.label(item.display_name());
                     ui.label(describe_mod_effect(effect));
-                    ui.label(item.price().to_string());
+                    ui.label(crate::standing::markup_price(item.price(), markup).to_string());
                     ui.label(item.space().to_string());
                     ui.label(ship.mods.get(&name).copied().unwrap_or(0).to_string());
                     ui.horizontal(|ui| {
                         if ui.button("Buy").clicked() {
-                            ship.buy_mod(&name, &item_universe);
+                            ship.buy_mod(&name, &item_universe, markup);
                         }
                         if ui.button("Sell").clicked() {
                             ship.sell_mod(&name, &item_universe);
@@ -496,8 +520,10 @@ pub fn render_shipyard_tab(
     item_universe: &ItemUniverse,
     unlocks: &crate::missions::PlayerUnlocks,
     buy_ship_writer: &mut MessageWriter<BuyShip>,
+    markup: f32,
 ) {
     ui.label(format!("Credits: {}", ship.credits));
+    render_markup_notice(ui, planet, markup);
     ui.separator();
     if planet.shipyard.is_empty() {
         ui.label("No ships for sale here.");
@@ -531,7 +557,7 @@ pub fn render_shipyard_tab(
                 let trade_in = ship.trade_in_value(item_universe);
                 for (ship_type, data) in ships {
                     let is_current = ship_type == ship.ship_type;
-                    let net_cost = data.price - trade_in;
+                    let net_cost = crate::standing::markup_price(data.price, markup) - trade_in;
                     let can_afford = ship.credits >= net_cost;
                     if is_current {
                         ui.strong(&data.display_name);

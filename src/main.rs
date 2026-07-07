@@ -36,6 +36,7 @@ mod sfx;
 mod ship;
 mod ship_anim;
 mod space;
+mod standing;
 mod starfield;
 mod surface;
 mod surface_character;
@@ -419,6 +420,7 @@ fn build_app(
 
     // ── Data loading (must come before plugins that use init_session_resource) ──
     app.add_plugins((item_universe_plugin, session::session_plugin));
+    app.add_plugins(standing::standing_plugin);
 
     // ── Rendering-dependent plugins (skipped in headless) ────────────────
     if headless {

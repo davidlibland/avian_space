@@ -976,7 +976,7 @@ fn finish_ai_landing(
                 .cloned()
                 .collect();
             for weapon_type in &restock {
-                ship.buy_max_ammo(weapon_type, &item_universe);
+                ship.buy_max_ammo(weapon_type, &item_universe, 1.0);
             }
         }
 

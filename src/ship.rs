@@ -513,17 +513,18 @@ impl Ship {
 
     /// Buy one copy of a ship mod. Refuses on unknown item / wrong item kind /
     /// insufficient credits or item space.
-    pub fn buy_mod(&mut self, name: &str, item_universe: &ItemUniverse) {
+    pub fn buy_mod(&mut self, name: &str, item_universe: &ItemUniverse, markup: f32) {
         let Some(item) = item_universe.outfitter_items.get(name) else {
             return;
         };
         if item.mod_effect().is_none() {
             return;
         }
-        if item.price() > self.credits || (item.space() as i32) > self.remaining_item_space() {
+        let price = crate::standing::markup_price(item.price(), markup);
+        if price > self.credits || (item.space() as i32) > self.remaining_item_space() {
             return;
         }
-        self.credits -= item.price();
+        self.credits -= price;
         *self.mods.entry(name.to_string()).or_insert(0) += 1;
         self.recompute_mod_stats(item_universe);
         // Armor changes effective max health; clamp (selling handled in sell_mod).
@@ -663,11 +664,12 @@ impl Ship {
                 (quantity_added as i128) * price;
         }
     }
-    pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
+    pub fn buy_weapon(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
-        if outfitter_item.price() > self.credits {
+        let price = crate::standing::markup_price(outfitter_item.price(), markup);
+        if price > self.credits {
             return;
         }
         if outfitter_item.space() as i32 > self.remaining_item_space() {
@@ -676,12 +678,12 @@ impl Ship {
         // Increment count if the weapon is already present in either map.
         if let Some(ws) = self.weapon_systems.primary.get_mut(weapon_type) {
             ws.number += 1;
-            self.credits -= outfitter_item.price();
+            self.credits -= price;
             return;
         }
         if let Some(ws) = self.weapon_systems.secondary.get_mut(weapon_type) {
             ws.number += 1;
-            self.credits -= outfitter_item.price();
+            self.credits -= price;
             return;
         }
         // New weapon: insert into the correct map based on whether it uses ammo.
@@ -715,7 +717,7 @@ impl Ship {
             _ => (),
         }
     }
-    pub fn buy_max_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
+    pub fn buy_max_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
@@ -725,8 +727,9 @@ impl Ship {
                 ammo_space,
                 ..
             } => {
-                let max_price_qty = if *ammo_price > 0 {
-                    self.credits / *ammo_price
+                let ammo_price = crate::standing::markup_price(*ammo_price, markup);
+                let max_price_qty = if ammo_price > 0 {
+                    self.credits / ammo_price
                 } else {
                     100
                 };
@@ -748,7 +751,7 @@ impl Ship {
             _ => (),
         }
     }
-    pub fn buy_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
+    pub fn buy_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
@@ -758,7 +761,8 @@ impl Ship {
                 ammo_space,
                 ..
             } => {
-                if *ammo_price > self.credits {
+                let ammo_price = crate::standing::markup_price(*ammo_price, markup);
+                if ammo_price > self.credits {
                     return;
                 }
                 if *ammo_space as i32 > self.remaining_item_space() {
@@ -1285,7 +1289,22 @@ fn handle_buy_ship(
     mut player_query: Query<(Entity, &mut Ship), With<crate::Player>>,
     item_universe: Res<ItemUniverse>,
     unlocks: Res<crate::missions::PlayerUnlocks>,
+    standings: Res<crate::standing::FactionStandings>,
+    landed: Res<crate::planet_ui::LandedContext>,
 ) {
+    // Poor standing with the shipyard's faction inflates the sticker price.
+    let markup = landed
+        .planet_name
+        .as_deref()
+        .and_then(|p| {
+            item_universe
+                .star_systems
+                .values()
+                .find_map(|s| s.planets.get(p))
+        })
+        .and_then(crate::standing::planet_faction)
+        .map(|f| crate::standing::price_markup(standings.get(f)))
+        .unwrap_or(1.0);
     for event in reader.read() {
         let Ok((entity, mut ship)) = player_query.single_mut() else {
             continue;
@@ -1299,7 +1318,7 @@ fn handle_buy_ship(
             continue;
         }
         let trade_in = ship.trade_in_value(&item_universe);
-        let net_cost = new_data.price - trade_in;
+        let net_cost = crate::standing::markup_price(new_data.price, markup) - trade_in;
         if ship.credits < net_cost {
             continue;
         }
@@ -1363,6 +1382,7 @@ fn handle_buy_ship(
 fn score_hits(
     mut reader: MessageReader<ScoreHit>,
     mut ship_hostilities: Query<&mut ShipHostility>,
+    players: Query<(), With<Player>>,
     ships: Query<&Ship>,
     positions: Query<&Position>,
     rl_agents: Query<&RLAgent>,
@@ -1386,8 +1406,10 @@ fn score_hits(
 
                 // Faction hostility: only escalate for INTENTIONAL hits (the
                 // target was the source's weapons_target).  Accidental/stray
-                // hits don't trigger faction-level contagion.
-                if on_target {
+                // hits don't trigger faction-level contagion. The PLAYER's
+                // hostility map is derived from signed faction standing
+                // instead (see standing::derive_player_hostility).
+                if on_target && players.get(*source).is_err() {
                     if let Ok(mut source_hostility) = ship_hostilities.get_mut(*source) {
                         if let Some(ts) = &target_ship {
                             if let Some(target_faction) = ts.data.faction.as_ref() {

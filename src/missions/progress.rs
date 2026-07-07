@@ -416,6 +416,9 @@ pub fn finalize_completions(
                 CompletionEffect::Pay { credits } => {
                     ship.credits = ship.credits.saturating_add(*credits as i128);
                 }
+                // Applied by the standing module (it watches MissionCompleted),
+                // keeping mission logic decoupled from the standing resource.
+                CompletionEffect::AdjustStanding { .. } => {}
                 CompletionEffect::GrantUnlock { name } => {
                     unlocks.0.insert(name.clone());
                 }
@@ -757,6 +760,7 @@ pub fn roll_offers_on_land(
     universe: Res<ItemUniverse>,
     mut catalog: ResMut<MissionCatalog>,
     mut offers: ResMut<MissionOffers>,
+    standings: Res<crate::standing::FactionStandings>,
 ) {
     let mut rng = rand::thread_rng();
     for PlayerLandedOnPlanet { planet } in reader.read() {
@@ -766,6 +770,16 @@ pub fn roll_offers_on_land(
 
         // New visit: every Available mission gets a fresh roll.
         offers.considered.clear();
+
+        // Nobody offers work to an outlaw: a faction's planets post no
+        // missions (story or procedural) while the player's standing with
+        // that faction is negative. Auto missions (story follow-ups, arrest
+        // flows) are unaffected — they don't go through the offer rolls.
+        if !offers_allowed(&standings, &universe, planet) {
+            offers.tab = Vec::new();
+            offers.npc.insert(planet.clone(), Vec::new());
+            continue;
+        }
 
         // Static missions currently Available.
         let mut tab: Vec<(String, f32)> = Vec::new();
@@ -839,6 +853,22 @@ pub fn roll_offers_on_land(
     }
 }
 
+/// Mission offers require non-negative standing with the planet's faction
+/// (independent worlds don't care).
+pub(crate) fn offers_allowed(
+    standings: &crate::standing::FactionStandings,
+    universe: &ItemUniverse,
+    planet: &str,
+) -> bool {
+    universe
+        .star_systems
+        .values()
+        .find_map(|s| s.planets.get(planet))
+        .and_then(crate::standing::planet_faction)
+        .map(|f| standings.get(f) >= 0.0)
+        .unwrap_or(true)
+}
+
 fn roll(candidates: &[(String, f32)], rng: &mut impl Rng) -> Vec<String> {
     candidates
         .iter()
@@ -858,10 +888,15 @@ pub fn roll_new_offers_while_landed(
     catalog: Res<MissionCatalog>,
     mut offers: ResMut<MissionOffers>,
     landed: Res<crate::planet_ui::LandedContext>,
+    standings: Res<crate::standing::FactionStandings>,
+    universe: Res<ItemUniverse>,
 ) {
     let Some(planet) = landed.planet_name.clone() else {
         return;
     };
+    if !offers_allowed(&standings, &universe, &planet) {
+        return;
+    }
     // Collect unrolled Available offers for this visit: (id, weight, is_tab).
     let candidates: Vec<(String, f32, bool)> = catalog
         .defs
@@ -1337,6 +1372,9 @@ pub(super) fn instantiate_template(
 
             vec![(stage1_id, s1), (stage2_id, s2), (stage3_id, s3)]
         }
+        // Instantiated ad-hoc by the standing system on landing, never by the
+        // offer rolls.
+        MissionTemplate::Arrest { .. } => Vec::new(),
     }
 }
 

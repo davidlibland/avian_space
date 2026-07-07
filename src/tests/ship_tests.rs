@@ -157,13 +157,13 @@ mod mods {
         let mut ship = modded_ship();
         ship.credits = 100_000;
         assert_eq!(ship.max_speed(), 200.0);
-        ship.buy_mod("engine_mk2", &iu);
+        ship.buy_mod("engine_mk2", &iu, 1.0);
         assert_eq!(ship.mods.get("engine_mk2"), Some(&1));
         assert!((ship.max_speed() - 200.0 * 1.2).abs() < 1e-3);
         assert!((ship.thrust() - 100.0 * 1.25).abs() < 1e-3);
         assert!((ship.torque() - 40.0 * 1.2).abs() < 1e-3);
         // Stacks multiplicatively.
-        ship.buy_mod("engine_mk2", &iu);
+        ship.buy_mod("engine_mk2", &iu, 1.0);
         assert!((ship.max_speed() - 200.0 * 1.2 * 1.2).abs() < 1e-3);
     }
 
@@ -172,7 +172,7 @@ mod mods {
         let iu = universe();
         let mut ship = modded_ship();
         ship.credits = 100_000;
-        ship.buy_mod("armor_plating", &iu);
+        ship.buy_mod("armor_plating", &iu, 1.0);
         assert_eq!(ship.max_health(), 140);
         assert_eq!(ship.health, 100, "buying armor must not heal");
         // After a full repair, the same ABSOLUTE damage is a smaller fraction
@@ -194,7 +194,7 @@ mod mods {
         let iu = universe();
         let mut ship = modded_ship();
         ship.credits = 100_000;
-        ship.buy_mod("armor_plating", &iu);
+        ship.buy_mod("armor_plating", &iu, 1.0);
         ship.health = 140; // fully repaired with armor
         ship.sell_mod("armor_plating", &iu);
         assert_eq!(ship.health, 100, "health must clamp to the bare hull");
@@ -206,13 +206,13 @@ mod mods {
         let iu = universe();
         let mut ship = modded_ship();
         ship.credits = 10; // can't afford anything
-        ship.buy_mod("engine_mk2", &iu);
+        ship.buy_mod("engine_mk2", &iu, 1.0);
         assert!(ship.mods.is_empty(), "must refuse without credits");
 
         ship.credits = 1_000_000;
         // Fill the hold so no item space remains.
         ship.mod_space = ship.data.item_space as i32;
-        ship.buy_mod("engine_mk2", &iu);
+        ship.buy_mod("engine_mk2", &iu, 1.0);
         assert!(ship.mods.is_empty(), "must refuse without item space");
     }
 
@@ -222,7 +222,7 @@ mod mods {
         let mut ship = modded_ship();
         ship.credits = 100_000;
         let before = ship.remaining_item_space();
-        ship.buy_mod("armor_plating", &iu); // space 6
+        ship.buy_mod("armor_plating", &iu, 1.0); // space 6
         assert_eq!(ship.remaining_item_space(), before - 6);
         ship.sell_mod("armor_plating", &iu);
         assert_eq!(ship.remaining_item_space(), before);

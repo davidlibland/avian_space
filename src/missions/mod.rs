@@ -11,7 +11,7 @@ mod tests;
 
 mod events;
 mod log;
-mod progress;
+pub(crate) mod progress;
 pub mod types;
 pub mod ui;
 

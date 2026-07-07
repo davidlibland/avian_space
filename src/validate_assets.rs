@@ -296,6 +296,16 @@ fn validate_mission_templates(iu: &ItemUniverse) {
                     }
                 }
             }
+            MissionTemplate::Arrest {
+                service_commodity, ..
+            } => {
+                if !iu.commodities.contains_key(service_commodity) {
+                    warn!(
+                        "Mission template \"{tmpl_id}\" service_commodity \"{service_commodity}\" \
+                         is not defined in commodities.yaml"
+                    );
+                }
+            }
             MissionTemplate::CatchThief {
                 offer,
                 ship_type_pool,
@@ -522,7 +532,9 @@ fn validate_completion_effects(
                     );
                 }
             }
-            CompletionEffect::Pay { .. } | CompletionEffect::GrantUnlock { .. } => {}
+            CompletionEffect::Pay { .. }
+            | CompletionEffect::GrantUnlock { .. }
+            | CompletionEffect::AdjustStanding { .. } => {}
         }
     }
 }

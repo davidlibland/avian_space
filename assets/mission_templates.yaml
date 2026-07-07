@@ -107,3 +107,28 @@ federation_bounty:
   count_range: [1, 3]
   pay_range: [8000, 45000]
   target_name: Pirate Hostiles
+
+# ── Arrest flow ──────────────────────────────────────────────────────────────
+# Generated ad-hoc by the standing system when the player lands on a world
+# whose faction they've antagonized past the arrest threshold (never offered
+# by the landing rolls). Vars: {faction} {fine} {planet_display}
+# {dest_display} {count} {quantity} {commodity}.
+arrest:
+  kind: arrest
+  meet_briefing: "Your ship is impounded the moment the clamps lock. {faction} enforcement has flagged you as hostile — officers are already crossing the pad to arrest you."
+  meet_success: "The {faction} sergeant reads the charges and offers terms: pay the fine ({fine} credits) at the clerk, serve a warrant against raiders preying on {faction} space, or run relief supplies where they're needed. Settle ANY one and your record is wiped back to merely watched."
+  meet_failure: "You slipped {faction} enforcement — this time."
+  fine_briefing: "Settle your {faction} charges the simple way: pay the {fine}-credit fine at the fines clerk by the market."
+  fine_success: "{fine} credits, gone. 'Keep your nose clean,' the clerk says, stamping your {faction} record back to merely watched."
+  fine_failure: "The {faction} fine remains unpaid."
+  bounty_briefing: "Work off your {faction} charges in the cockpit: a warrant for {count} hostile ships raiding this system. No pay — your record is the payment."
+  bounty_success: "The wrecks are logged against your warrant. {faction} enforcement wipes your record back to merely watched. Cheaper than the fine — if you don't count the hull damage."
+  bounty_failure: "The {faction} warrant expires unserved."
+  service_briefing: "Community service, {faction} style: source {quantity} units of {commodity} AT YOUR OWN EXPENSE and deliver them to {dest_display}."
+  service_success: "The relief supplies are signed for on {dest_display}. Word gets back: {faction} wipes your record back to merely watched, and the medics don't care what you did."
+  service_failure: "The {faction} relief run never arrived."
+  fine_base: 3000
+  fine_per_standing: 50
+  bounty_count: 2
+  service_commodity: medical_supplies
+  service_quantity: 8

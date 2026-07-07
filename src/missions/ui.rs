@@ -243,7 +243,7 @@ fn render_mission_log(
     mut player_query: Query<(&mut Ship, &Transform), With<Player>>,
     mut abandon: MessageWriter<AbandonMission>,
     mut pickup_drop: MessageWriter<PickupDrop>,
-    mut virtual_time: ResMut<Time<Virtual>>,
+    standings: Res<crate::standing::FactionStandings>,
 ) {
     if !state.open {
         return;
@@ -271,7 +271,7 @@ fn render_mission_log(
                     render_active_missions(ui, &log, &catalog, Some(&mut abandon));
                 }
                 MissionLogTab::Info => {
-                    render_info_tab(ui, &ship, &game_state, &item_universe);
+                    render_info_tab(ui, &ship, &game_state, &item_universe, &standings);
                 }
                 MissionLogTab::Cargo => {
                     let forward = (transform.rotation * Vec3::Y).xy();
@@ -295,7 +295,9 @@ fn render_info_tab(
     ship: &Ship,
     game_state: &PlayerGameState,
     item_universe: &ItemUniverse,
+    standings: &crate::standing::FactionStandings,
 ) {
+    render_standings(ui, standings);
     ui.heading("Pilot");
     egui::Grid::new("pilot_info_grid")
         .num_columns(2)
@@ -505,4 +507,41 @@ pub fn drain_completion_toasts(
             }
         }
     }
+}
+
+
+/// Faction standings summary for the info tab.
+fn render_standings(ui: &mut egui::Ui, standings: &crate::standing::FactionStandings) {
+    use crate::standing::{ARREST_THRESHOLD, ENGAGE_THRESHOLD};
+    ui.heading("Faction Standing");
+    if standings.0.is_empty() {
+        ui.label("(No faction has an opinion of you yet.)");
+    } else {
+        let mut entries: Vec<(&String, &f32)> = standings.0.iter().collect();
+        entries.sort_by(|a, b| a.0.cmp(b.0));
+        egui::Grid::new("standings_grid")
+            .num_columns(3)
+            .striped(true)
+            .show(ui, |ui| {
+                for (faction, &value) in entries {
+                    let (label, color) = if value <= ARREST_THRESHOLD {
+                        ("wanted", egui::Color32::from_rgb(235, 60, 60))
+                    } else if value <= ENGAGE_THRESHOLD {
+                        ("hostile", egui::Color32::from_rgb(230, 120, 60))
+                    } else if value < 0.0 {
+                        ("distrusted", egui::Color32::from_rgb(220, 190, 90))
+                    } else if value > 20.0 {
+                        ("trusted", egui::Color32::from_rgb(90, 220, 120))
+                    } else {
+                        ("neutral", egui::Color32::GRAY)
+                    };
+                    ui.label(faction);
+                    ui.label(format!("{value:+.0}"));
+                    ui.colored_label(color, label);
+                    ui.end_row();
+                }
+            });
+    }
+    ui.add_space(6.0);
+    ui.separator();
 }
