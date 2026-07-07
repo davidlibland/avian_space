@@ -151,13 +151,18 @@ SLOTS = {
     "hat":   {"z": 130, "required": False},
 }
 
-# Game sheet geometry (matches surface_character.rs 3x4 layout).
+# Game sheet geometry (matches surface_character.rs people layout).
+# Columns per facing row: 2 idle (breathing) + 8 walk cycle + 8 run cycle.
 TILE = 32                 # output tile size (LPC 64 halved)
-GAME_COLS = 3             # still, w1, w2
+IDLE_FRAMES = 2
+WALK_FRAMES = 8
+RUN_FRAMES = 8
+GAME_COLS = IDLE_FRAMES + WALK_FRAMES + RUN_FRAMES  # 18
 GAME_ROWS = 4             # down, left, right, up
 WALK_SPEED = 40.0
 
-# LPC walk.png geometry: 9 cols x 4 rows of 64px. Row order up,left,down,right.
+# LPC source geometry: 64px frames; row order up,left,down,right.
+#   walk.png: 9 cols (col 0 = standing pose, cols 1-8 = walk cycle)
+#   idle.png: 2 cols (breathing); run.png: 8 cols
 LPC_FRAME = 64
-LPC_WALK_COLS = [0, 2, 6]           # still, stride A, stride B
 LPC_ROW_FOR_GAME_ROW = [2, 1, 3, 0]  # game rows down,left,right,up -> LPC rows

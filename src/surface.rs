@@ -107,32 +107,7 @@ pub struct Walker;
 // Walker sprite loading
 // ---------------------------------------------------------------------------
 
-use crate::surface_character::{CharacterAnim, SPRITE_COLS};
-
-/// Loaded sprite sheet for the walker character.
-#[derive(Resource)]
-struct WalkerSheet {
-    image: Handle<Image>,
-    layout: Handle<TextureAtlasLayout>,
-}
-
-impl WalkerSheet {
-    fn load(
-        asset_server: &AssetServer,
-        atlas_layouts: &mut Assets<TextureAtlasLayout>,
-        gender: &str,
-    ) -> Self {
-        let image = asset_server.load(format!("sprites/people/{gender}.png"));
-        let layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
-            UVec2::new(16, 16),
-            SPRITE_COLS as u32,
-            4,
-            None,
-            None,
-        ));
-        Self { image, layout }
-    }
-}
+use crate::surface_character::CharacterAnim;
 
 /// Interaction zone for a building.
 #[derive(Component)]
@@ -1727,35 +1702,25 @@ fn setup_surface(
     // Spawn on the landing pad (always at map center).
     let spawn_pos = tile_to_world(map_w / 2, map_h / 2, map_w, map_h, tile_px);
 
-    // Composite the player's avatar sheet (32px). Falls back to the legacy
-    // 16px boy/girl sheets if the layer catalog isn't available.
-    let (walker_image, walker_layout, foot_offset) = match character_layers
-        .as_deref_mut()
-        .and_then(|layers| {
+    // Composite the player's avatar sheet (32px, 18-col idle/walk/run).
+    let Some((walker_image, walker_layout)) =
+        character_layers.as_deref_mut().and_then(|layers| {
             layers
                 .composite(&game_state.avatar, &mut images)
                 .map(|img| (img, layers.layout.clone()))
-        }) {
-        Some((image, layout)) => (image, layout, 14.0),
-        None => {
-            let sheet = WalkerSheet::load(
-                &asset_server,
-                &mut atlas_layouts,
-                game_state.gender.sprite_dir(),
-            );
-            (sheet.image, sheet.layout, 8.0)
-        }
+        })
+    else {
+        eprintln!("[surface] WARNING: character layers unavailable — no walker spawned");
+        return;
     };
-    let initial_index = crate::surface_character::sprite_index(
-        crate::surface_character::Facing::Down,
-        crate::surface_character::WalkFrame::Still,
-    );
+    let walker_anim = CharacterAnim::person(0.08);
+    let initial_index = walker_anim.atlas_index();
 
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Walker,
-        crate::surface_objects::FootOffset(foot_offset),
-        CharacterAnim::default(),
+        crate::surface_objects::FootOffset(14.0),
+        walker_anim,
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
         Collider::circle(WALKER_RADIUS),
@@ -1774,7 +1739,7 @@ fn setup_surface(
         Transform::from_xyz(
             spawn_pos.x,
             spawn_pos.y,
-            crate::surface_objects::depth_z(spawn_pos.y - foot_offset),
+            crate::surface_objects::depth_z(spawn_pos.y - 14.0),
         ),
     ));
 
@@ -1931,10 +1896,7 @@ fn play_footstep(
         return;
     };
 
-    if !anim.is_moving || !anim.walk_timer.just_finished() {
-        return;
-    }
-    if anim.walk_phase != 1 && anim.walk_phase != 3 {
+    if !anim.just_stepped {
         return;
     }
     if footstep_data.terrains.is_empty() || footstep_data.map_w == 0 {

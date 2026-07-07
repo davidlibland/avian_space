@@ -2,8 +2,8 @@
 """LPC -> avian_space character-layer pipeline.
 
 Reads curated items from people_lpc_config.py, extracts walk frames from the
-vendored LPC generator repo (scripts/lpc), assembles game-format 3x4 sheets at
-32x32, and writes:
+vendored LPC generator repo (scripts/lpc), assembles game-format 18x4 sheets (2
+idle + 8 walk + 8 run columns per facing row) at 32x32, and writes:
 
   assets/sprites/people/layers/<slot>/<item>[_<sex>][_<layerN>].png
   assets/sprites/people/layers.ron       (items + z-order + palette ramps)
@@ -150,29 +150,56 @@ def def_licenses(d):
 
 # ── frame extraction ─────────────────────────────────────────────────────────
 
-def load_walk_source(srcdir, variant=None):
-    """Return the 576x256 walk sheet Image or None.
+def load_anim_source(srcdir, anim, variant=None):
+    """Return the LPC animation sheet Image or None.
 
-    Recolor-style: <srcdir>/walk.png ; variant-style: <srcdir>/walk/<variant>.png
+    Recolor-style: <srcdir>/<anim>.png ; variant-style: <srcdir>/<anim>/<variant>.png
     """
     base = LPC / "spritesheets" / srcdir
-    p = base / "walk" / f"{variant}.png" if variant else base / "walk.png"
+    p = base / anim / f"{variant}.png" if variant else base / f"{anim}.png"
     if not p.exists():
-        walkdir = base / "walk"
-        if walkdir.is_dir():
-            avail = sorted(f.stem for f in walkdir.glob("*.png"))
+        if anim == "walk" and (base / anim).is_dir():
+            avail = sorted(f.stem for f in (base / anim).glob("*.png"))
             print(f"[gen] HINT {srcdir}: variant-style; available: {avail}")
         return None
     return Image.open(p).convert("RGBA")
 
 
-def assemble_game_sheet(walk_img):
-    """LPC walk sheet (9x4 of 64) -> game sheet (3x4 of TILE)."""
+def assemble_game_sheet(srcdir, variant=None):
+    """LPC walk/idle/run sheets -> game sheet (18x4 of TILE).
+
+    Columns: 2 idle + 8 walk + 8 run. Fallbacks keep every layer aligned:
+    missing idle -> the walk standing pose (col 0) twice; missing run -> the
+    walk cycle. Returns None if the item has no walk sheet at all.
+    """
     f = cfg.LPC_FRAME
+    walk = load_anim_source(srcdir, "walk", variant)
+    if walk is None:
+        return None
+    idle = load_anim_source(srcdir, "idle", variant)
+    run = load_anim_source(srcdir, "run", variant)
+
+    def frames(img, cols):
+        """Per LPC row, the crop x-columns available in `img` (clamped)."""
+        avail = img.width // f
+        return [min(c, avail - 1) for c in cols]
+
     sheet = Image.new("RGBA", (cfg.GAME_COLS * f, cfg.GAME_ROWS * f), (0, 0, 0, 0))
     for game_row, lpc_row in enumerate(cfg.LPC_ROW_FOR_GAME_ROW):
-        for game_col, lpc_col in enumerate(cfg.LPC_WALK_COLS):
-            frame = walk_img.crop((lpc_col * f, lpc_row * f, (lpc_col + 1) * f, (lpc_row + 1) * f))
+        # (source image, source col) per output column.
+        plan = []
+        if idle is not None:
+            plan += [(idle, c) for c in frames(idle, range(cfg.IDLE_FRAMES))]
+        else:
+            plan += [(walk, 0)] * cfg.IDLE_FRAMES
+        plan += [(walk, c) for c in frames(walk, range(1, 1 + cfg.WALK_FRAMES))]
+        if run is not None:
+            plan += [(run, c) for c in frames(run, range(cfg.RUN_FRAMES))]
+        else:
+            plan += [(walk, c) for c in frames(walk, range(1, 1 + cfg.RUN_FRAMES))]
+
+        for game_col, (img, col) in enumerate(plan):
+            frame = img.crop((col * f, lpc_row * f, (col + 1) * f, (lpc_row + 1) * f))
             sheet.paste(frame, (game_col * f, game_row * f))
     return sheet.resize((cfg.GAME_COLS * cfg.TILE, cfg.GAME_ROWS * cfg.TILE), Image.NEAREST)
 
@@ -223,11 +250,10 @@ def generate(strict=False, preview=False):
                 by_src.setdefault(src, []).append(sex)
             for src, sexes in sorted(by_src.items()):
                 for variant in variants:
-                    img = load_walk_source(src, variant)
-                    if img is None:
+                    sheet = assemble_game_sheet(src, variant)
+                    if sheet is None:
                         warned.append(f"no walk src: {item['id']} {src} variant={variant}")
                         continue
-                    sheet = assemble_game_sheet(img)
                     suffix = ""
                     if len(by_src) > 1:
                         suffix += "_" + "".join(s[0] for s in sexes)  # _m / _f

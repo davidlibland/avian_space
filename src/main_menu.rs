@@ -199,15 +199,16 @@ fn new_pilot_panel(
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 // Live preview: down-facing still frame (tile 0 of the
-                // 3x4 sheet), drawn at 4x.
+                // 18x4 sheet), drawn at 4x.
                 if let Some(tex) = preview_tex {
+                    let cols = crate::surface_character::PERSON_COLS as f32;
                     let img = egui::Image::new(egui::load::SizedTexture::new(
                         tex,
-                        [96.0, 128.0],
+                        [cols * 32.0, 128.0],
                     ))
                     .uv(egui::Rect::from_min_max(
                         egui::pos2(0.0, 0.0),
-                        egui::pos2(1.0 / 3.0, 0.25),
+                        egui::pos2(1.0 / cols, 0.25),
                     ))
                     .fit_to_exact_size([128.0, 128.0].into());
                     ui.add(img);

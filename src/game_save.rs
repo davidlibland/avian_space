@@ -17,15 +17,6 @@ pub enum Gender {
     Girl,
 }
 
-impl Gender {
-    /// Sprite directory name under `assets/people/`.
-    pub fn sprite_dir(&self) -> &'static str {
-        match self {
-            Gender::Boy => "boy",
-            Gender::Girl => "girl",
-        }
-    }
-}
 
 // ── Serialisable save ────────────────────────────────────────────────────────
 

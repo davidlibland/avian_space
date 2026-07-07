@@ -288,7 +288,7 @@ pub fn spawn_fauna(
                 timer: Timer::from_seconds(graze, TimerMode::Once),
                 target: pos,
             },
-            CharacterAnim::with_interval(if flier { 0.11 } else { 0.16 }),
+            CharacterAnim::legacy_rpg(if flier { 0.11 } else { 0.16 }),
             RigidBody::Dynamic,
             LockedAxes::ROTATION_LOCKED,
             LinearDamping(if flier { 4.0 } else { 12.0 }),

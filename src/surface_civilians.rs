@@ -115,7 +115,7 @@ pub fn spawn_civilians(
         DespawnOnExit(PlayState::Exploring),
         Npc,
         behavior,
-        CharacterAnim::with_interval(0.2),
+        CharacterAnim::person(0.11),
         RigidBody::Dynamic,
         LockedAxes::ROTATION_LOCKED,
         Collider::circle(5.0),
