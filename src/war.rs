@@ -244,8 +244,19 @@ fn offer_war_missions(
                 else {
                     continue;
                 };
+                // The counter is session-local, but ACTIVE war missions are
+                // persisted with the pilot and re-enter the catalog on load —
+                // a fresh session's counter would reuse their ids and
+                // silently overwrite the player's active mission with a
+                // different front's. Skip past anything that exists.
                 *counter += 1;
-                let id = format!("war__{}__{:04}", tmpl_id, *counter);
+                let mut id = format!("war__{}__{:04}", tmpl_id, *counter);
+                while catalog.defs.contains_key(&id)
+                    || catalog.defs.contains_key(&format!("{id}__return"))
+                {
+                    *counter += 1;
+                    id = format!("war__{}__{:04}", tmpl_id, *counter);
+                }
                 if let Some(mut follow) = follow_up {
                     follow
                         .preconditions

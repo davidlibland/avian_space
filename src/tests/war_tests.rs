@@ -380,3 +380,66 @@ fn every_geographic_war_is_two_way_with_covert_venues() {
         }
     }
 }
+
+/// War-mission ids must never collide with ACTIVE missions persisted from a
+/// previous session: the id counter is session-local, and reusing an id
+/// silently overwrites the player's active mission with a new front's.
+#[test]
+fn war_ids_skip_persisted_missions_from_prior_sessions() {
+    use crate::missions::types::{CompletionEffect, MissionDef, OfferKind};
+    let mut iu = universe();
+    iu.mission_templates.retain(|id, _| id == "war_raid"); // tier 1, deterministic
+    let galaxy = seeded(&iu);
+    let mut app = war_app(iu, galaxy);
+    // A war mission persisted from an earlier session, still active.
+    let stale_id = "war__war_raid__0001".to_string();
+    let stale = MissionDef {
+        briefing: "the player's ACTIVE mission from last session".into(),
+        success_text: "s".into(),
+        failure_text: "f".into(),
+        preconditions: vec![],
+        offer: OfferKind::Auto,
+        start_effects: vec![],
+        objective: crate::missions::Objective::TravelToSystem {
+            system: "sol".into(),
+        },
+        requires: vec![],
+        // Shifts an UNRELATED system so open_war doesn't block new offers.
+        completion_effects: vec![CompletionEffect::ShiftInfluence {
+            system: "pilgrims_deep".into(),
+            faction: "Helios".into(),
+            delta: 0.1,
+        }],
+        squadron: vec![],
+        faction: None,
+    };
+    app.world_mut()
+        .resource_mut::<MissionCatalog>()
+        .defs
+        .insert(stale_id.clone(), stale);
+    app.world_mut().resource_mut::<MissionLog>().set(
+        &stale_id,
+        MissionStatus::Active(crate::missions::types::ObjectiveProgress::default()),
+    );
+    app.world_mut()
+        .resource_mut::<FactionStandings>()
+        .adjust("Federation", 25.0);
+    app.world_mut().write_message(PlayerLandedOnPlanet {
+        planet: "kepler_22b".to_string(),
+    });
+    app.update();
+
+    let catalog = app.world().resource::<MissionCatalog>();
+    assert_eq!(
+        catalog.defs[&stale_id].briefing,
+        "the player's ACTIVE mission from last session",
+        "the persisted active mission must survive untouched"
+    );
+    assert!(
+        catalog
+            .defs
+            .keys()
+            .any(|id| id.starts_with("war__war_raid") && *id != stale_id),
+        "the new offer takes a fresh id instead of colliding"
+    );
+}

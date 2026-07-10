@@ -332,3 +332,42 @@ fn mission_shift_flips_system_and_restocks() {
     assert_eq!(g.controller("sol"), Some("Federation"));
     assert_eq!(g.influence_of("sol", "Rebel"), 0.0);
 }
+
+/// update_controllers must not re-arm its own resource_changed gate: it
+/// calls a &mut method through ResMut, and without bypassing change
+/// detection, ONE influence drift put it (and the full traffic
+/// rederivation behind the same gate) on an every-frame loop forever.
+#[test]
+fn controller_recompute_does_not_retrigger_change_gate() {
+    let mut app = App::new();
+    let iu = universe();
+    let galaxy = GalaxyControl::seeded_from(&iu);
+    app.add_plugins(MinimalPlugins)
+        .insert_resource(galaxy)
+        .add_message::<crate::galaxy::SystemControlChanged>()
+        .add_systems(
+            Update,
+            crate::galaxy::update_controllers
+                .run_if(resource_changed::<GalaxyControl>),
+        );
+    // Insertion counts as a change: the first frame legitimately runs.
+    app.update();
+    // From here the gate must stay closed until a REAL influence write.
+    for _ in 0..3 {
+        app.update();
+        assert!(
+            !app
+                .world()
+                .resource_ref::<GalaxyControl>()
+                .is_changed(),
+            "controller recompute must not dirty GalaxyControl"
+        );
+    }
+    // A real drift re-opens the gate exactly once.
+    app.world_mut()
+        .resource_mut::<GalaxyControl>()
+        .apply_shift("the_marches", "Federation", 0.1);
+    app.update();
+    app.update();
+    assert!(!app.world().resource_ref::<GalaxyControl>().is_changed());
+}

@@ -239,10 +239,17 @@ fn influence_on_mission_complete(
 
 /// Recompute controllers whenever influence changed; emit SystemControlChanged
 /// per flip. (Its own controller writes re-trigger it once; it settles.)
-fn update_controllers(
+pub(crate) fn update_controllers(
     mut galaxy: ResMut<GalaxyControl>,
     mut changed: MessageWriter<SystemControlChanged>,
 ) {
+    // recompute_controller takes &mut self; calling it through ResMut marks
+    // GalaxyControl changed EVERY pass — which re-arms this system's own
+    // resource_changed gate AND the full traffic rederivation behind the
+    // same gate, so one influence drift put both on an every-frame loop
+    // forever. Controller flips broadcast via SystemControlChanged and the
+    // influence simplex is untouched here, so bypass the change flag.
+    let galaxy = galaxy.bypass_change_detection();
     let systems: Vec<String> = galaxy.influence.keys().cloned().collect();
     for system in systems {
         if let Some(new_controller) = galaxy.recompute_controller(&system) {
