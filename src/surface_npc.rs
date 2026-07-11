@@ -144,8 +144,11 @@ pub struct NpcMarker;
 /// player "adjacent" and the behavior completes.
 const ADJACENT_DIST_TILES: f32 = 1.5;
 
-/// Distance (in world units) for waypoint arrival.
-const WAYPOINT_ARRIVE_DIST: f32 = 2.0;
+/// Distance (in world units) for waypoint arrival. Physics (damping +
+/// integration) never parks a body within a couple of pixels of a point —
+/// the old 2px threshold made NPCs orbit waypoints and grind against the
+/// walls beside them.
+const WAYPOINT_ARRIVE_DIST: f32 = 10.0;
 
 /// Default repathing interval for SeekPlayer / FleePlayer.
 const REPATH_INTERVAL: f32 = 1.0;
@@ -193,7 +196,7 @@ pub fn run_npc_behaviors(
                             let door_path = &paths.paths[&key];
                             if let Some(&first_door) = door_path.first() {
                                 // Pathfind from current position to the start door.
-                                let my_tile = SurfaceCostMap::world_to_tile(pos);
+                                let my_tile = SurfaceCostMap::world_to_tile(foot(pos));
                                 let mut full_path = if my_tile == first_door {
                                     Vec::new()
                                 } else {
@@ -223,12 +226,11 @@ pub fn run_npc_behaviors(
 
                 let (tx, ty) = waypoints[*current_idx];
                 let target = SurfaceCostMap::tile_to_world(tx, ty);
-                let diff = target - pos;
-                if diff.length() < WAYPOINT_ARRIVE_DIST {
+                if (target - foot(pos)).length() < WAYPOINT_ARRIVE_DIST {
                     *current_idx += 1;
                     vel.0 = Vec2::ZERO;
                 } else {
-                    vel.0 = diff.normalize() * speed;
+                    vel.0 = steer_to(target, pos, speed);
                 }
             }
 
@@ -260,7 +262,7 @@ pub fn run_npc_behaviors(
                             let skip = new_path.iter()
                                 .position(|&(tx, ty)| {
                                     let wp = SurfaceCostMap::tile_to_world(tx, ty);
-                                    (wp - pos).length() > TILE_PX * 0.5
+                                    (wp - foot(pos)).length() > TILE_PX * 0.5
                                 })
                                 .unwrap_or(0);
                             *path = new_path;
@@ -273,15 +275,22 @@ pub fn run_npc_behaviors(
                 if *current_idx < path.len() {
                     let (tx, ty) = path[*current_idx];
                     let target = SurfaceCostMap::tile_to_world(tx, ty);
-                    let diff = target - pos;
-                    if diff.length() < WAYPOINT_ARRIVE_DIST {
+                    if (target - foot(pos)).length() < WAYPOINT_ARRIVE_DIST {
                         *current_idx += 1;
                     } else {
-                        vel.0 = diff.normalize() * speed;
+                        vel.0 = steer_to(target, pos, speed);
                     }
                 } else {
-                    // Path exhausted and repath failed — move directly.
-                    vel.0 = (wp - pos).normalize_or_zero() * speed;
+                    // Path exhausted / repath failed. NEVER beeline (that's
+                    // how NPCs ground themselves against buildings) — nudge
+                    // toward the nearest walkable tile so the next repath
+                    // starts from clean ground.
+                    if let Some(cm) = cost_map.as_ref() {
+                        let t = find_nearest_walkable(pos, cm);
+                        vel.0 = steer_to(SurfaceCostMap::tile_to_world(t.0, t.1), pos, speed * 0.6);
+                    } else {
+                        vel.0 = Vec2::ZERO;
+                    }
                 }
             }
 
@@ -314,7 +323,7 @@ pub fn run_npc_behaviors(
                             let skip = new_path.iter()
                                 .position(|&(tx, ty)| {
                                     let wp = SurfaceCostMap::tile_to_world(tx, ty);
-                                    (wp - pos).length() > TILE_PX * 0.5
+                                    (wp - foot(pos)).length() > TILE_PX * 0.5
                                 })
                                 .unwrap_or(0);
                             *path = new_path;
@@ -326,14 +335,20 @@ pub fn run_npc_behaviors(
                 if *current_idx < path.len() {
                     let (tx, ty) = path[*current_idx];
                     let target = SurfaceCostMap::tile_to_world(tx, ty);
-                    let diff = target - pos;
-                    if diff.length() < WAYPOINT_ARRIVE_DIST {
+                    if (target - foot(pos)).length() < WAYPOINT_ARRIVE_DIST {
                         *current_idx += 1;
                     } else {
-                        vel.0 = diff.normalize() * speed;
+                        vel.0 = steer_to(target, pos, speed);
                     }
                 } else {
-                    vel.0 = (wp - pos).normalize_or_zero() * speed;
+                    // Path exhausted / repath failed — nudge to walkable
+                    // ground instead of beelining into buildings.
+                    if let Some(cm) = cost_map.as_ref() {
+                        let t = find_nearest_walkable(pos, cm);
+                        vel.0 = steer_to(SurfaceCostMap::tile_to_world(t.0, t.1), pos, speed * 0.6);
+                    } else {
+                        vel.0 = Vec2::ZERO;
+                    }
                 }
             }
 
@@ -363,23 +378,13 @@ pub fn run_npc_behaviors(
                 if needs_repath {
                     if let Some(cm) = cost_map.as_ref() {
                         let my_tile = find_nearest_walkable(pos, cm);
-                        let player_tile = SurfaceCostMap::world_to_tile(wp);
-
-                        // Pick a flee target: the tile furthest from the player
-                        // among the building doors.
-                        if let Some(paths) = surface_paths.as_ref() {
-                            let mut best_goal = my_tile;
-                            let mut best_dist = 0i32;
-                            for path_tiles in paths.paths.values() {
-                                let last = *path_tiles.last().unwrap_or(&my_tile);
-                                let d = (last.0 as i32 - player_tile.0 as i32).abs()
-                                    + (last.1 as i32 - player_tile.1 as i32).abs();
-                                if d > best_dist {
-                                    best_dist = d;
-                                    best_goal = last;
-                                }
-                            }
-                            if let Some(flee_path) = cm.find_path(my_tile, best_goal) {
+                        let player_tile = SurfaceCostMap::world_to_tile(foot(wp));
+                        // Sampled open-ground escapes (see pick_flee_goal) —
+                        // the old door-only goals sent runners INTO
+                        // buildings, frequently straight past the player.
+                        let mut rng = rand::thread_rng();
+                        if let Some(goal) = pick_flee_goal(cm, my_tile, player_tile, &mut rng) {
+                            if let Some(flee_path) = cm.find_path(my_tile, goal) {
                                 *path = flee_path;
                                 *current_idx = 0;
                             }
@@ -389,17 +394,43 @@ pub fn run_npc_behaviors(
 
                 // Follow flee path.
                 if *current_idx >= path.len() {
-                    // Flee directly away.
-                    let away = (pos - wp).normalize_or_zero();
-                    vel.0 = away * speed * 1.2; // flee faster
+                    // No path — run away along walkable ground: pick the
+                    // best walkable neighbor tile in the away direction
+                    // rather than pushing blindly into whatever's behind.
+                    if let Some(cm) = cost_map.as_ref() {
+                        let my_tile = find_nearest_walkable(pos, cm);
+                        let away = (foot(pos) - foot(wp)).normalize_or_zero();
+                        let mut best: Option<((u32, u32), f32)> = None;
+                        for (dx, dy) in [(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                            let n = (
+                                (my_tile.0 as i32 + dx).max(0) as u32,
+                                (my_tile.1 as i32 + dy).max(0) as u32,
+                            );
+                            if !walkable(cm, n) {
+                                continue;
+                            }
+                            let dir = Vec2::new(dx as f32, dy as f32);
+                            let score = dir.dot(away);
+                            if best.map_or(true, |(_, b)| score > b) {
+                                best = Some((n, score));
+                            }
+                        }
+                        if let Some((n, _)) = best {
+                            let target = SurfaceCostMap::tile_to_world(n.0, n.1);
+                            vel.0 = steer_to(target, pos, speed * 1.2);
+                        } else {
+                            vel.0 = Vec2::ZERO;
+                        }
+                    } else {
+                        vel.0 = (foot(pos) - foot(wp)).normalize_or_zero() * speed * 1.2;
+                    }
                 } else {
                     let (tx, ty) = path[*current_idx];
                     let target = SurfaceCostMap::tile_to_world(tx, ty);
-                    let diff = target - pos;
-                    if diff.length() < WAYPOINT_ARRIVE_DIST {
+                    if (target - foot(pos)).length() < WAYPOINT_ARRIVE_DIST {
                         *current_idx += 1;
                     } else {
-                        vel.0 = diff.normalize() * speed * 1.2;
+                        vel.0 = steer_to(target, pos, speed * 1.2);
                     }
                 }
             }
@@ -672,8 +703,92 @@ pub fn spawn_objective_npc(
 /// Find the nearest walkable tile to a world position.  If the tile under
 /// `world_pos` is walkable, returns it directly.  Otherwise spirals outward
 /// to find the closest passable tile.
+/// A character's FOOT position: the collider and everything walkability-
+/// related anchors 14px below the sprite centre (see CHARACTER_FOOT_OFFSET).
+/// All tile math must use this, or an NPC whose sprite centre reads as a
+/// walkable tile can have its feet (and collider) pressed half a tile into
+/// the building row below — the classic "NPC grinding against a wall".
+fn foot(pos: Vec2) -> Vec2 {
+    pos - Vec2::new(0.0, crate::surface_objects::CHARACTER_FOOT_OFFSET)
+}
+
+/// Steering velocity that drives the FOOT toward a tile-centre target.
+fn steer_to(target: Vec2, pos: Vec2, speed: f32) -> Vec2 {
+    (target - foot(pos)).normalize_or_zero() * speed
+}
+
+/// Whether a tile is walkable on the cost map.
+fn walkable(cm: &SurfaceCostMap, tile: (u32, u32)) -> bool {
+    let idx = (tile.1 * cm.width + tile.0) as usize;
+    idx < cm.data.len() && cm.data[idx] < f32::INFINITY
+}
+
+/// Pick a flee goal: the reachable walkable tile that best trades "far from
+/// the player" against "not absurdly far from me". Samples a ring of
+/// candidates around the NPC (plus a jittered fan) instead of only building
+/// doors — doors made fleeing NPCs run INTO buildings, and often straight
+/// past the player to reach the "far" door.
+pub(crate) fn pick_flee_goal(
+    cm: &SurfaceCostMap,
+    npc_tile: (u32, u32),
+    player_tile: (u32, u32),
+    rng: &mut impl rand::Rng,
+) -> Option<(u32, u32)> {
+    let mut best: Option<((u32, u32), f32)> = None;
+    // Candidates: 8 compass rays at fixed radii (corridors and streets are
+    // axis-aligned — a pure random ring misses a 1-tile-wide lane), plus a
+    // jittered ring for open ground.
+    let mut candidates: Vec<(f32, f32)> = Vec::with_capacity(24 + 24);
+    for (dx, dy) in [
+        (1.0f32, 0.0f32),
+        (-1.0, 0.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (0.7, 0.7),
+        (-0.7, 0.7),
+        (0.7, -0.7),
+        (-0.7, -0.7),
+    ] {
+        for radius in [6.0f32, 10.0, 14.0] {
+            candidates.push((dx * radius, dy * radius));
+        }
+    }
+    for _ in 0..24 {
+        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let radius = rng.gen_range(8.0..=16.0f32);
+        candidates.push((angle.cos() * radius, angle.sin() * radius));
+    }
+    for (ox, oy) in candidates {
+        let cx = (npc_tile.0 as f32 + ox).round();
+        let cy = (npc_tile.1 as f32 + oy).round();
+        if cx < 1.0 || cy < 1.0 || cx >= (cm.width - 1) as f32 || cy >= (cm.height - 1) as f32 {
+            continue;
+        }
+        let cand = (cx as u32, cy as u32);
+        if !walkable(cm, cand) {
+            continue;
+        }
+        let d_player = (cand.0 as f32 - player_tile.0 as f32).abs()
+            + (cand.1 as f32 - player_tile.1 as f32).abs();
+        let d_npc = (cand.0 as f32 - npc_tile.0 as f32).abs()
+            + (cand.1 as f32 - npc_tile.1 as f32).abs();
+        // Far from the player, mildly preferring nearby escapes; a goal the
+        // player stands between us and is fine ONLY if the path says so —
+        // reachability is checked for the winner below.
+        let score = d_player - 0.25 * d_npc;
+        if best.map_or(true, |(_, b)| score > b) {
+            // Verify reachability before accepting (paths route around
+            // buildings, so an unreachable pocket never wins).
+            if cm.find_path(npc_tile, cand).is_some() {
+                best = Some((cand, score));
+            }
+        }
+    }
+    best.map(|(t, _)| t)
+}
+
 fn find_nearest_walkable(world_pos: Vec2, cm: &SurfaceCostMap) -> (u32, u32) {
-    let tile = SurfaceCostMap::world_to_tile(world_pos);
+    let tile = SurfaceCostMap::world_to_tile(foot(world_pos));
     let idx = (tile.1 * cm.width + tile.0) as usize;
     if idx < cm.data.len() && cm.data[idx] < f32::INFINITY {
         return tile;
@@ -696,4 +811,70 @@ fn find_nearest_walkable(world_pos: Vec2, cm: &SurfaceCostMap) -> (u32, u32) {
         }
     }
     tile // fallback
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::SeedableRng;
+
+    /// A corridor world: one open row (y=5) crossing a solid field, with an
+    /// open pocket on each end. The NPC must flee ALONG the corridor away
+    /// from the player, not into the walls (old door-based goals routinely
+    /// pointed through the player or into buildings).
+    fn corridor_map() -> SurfaceCostMap {
+        let (w, h) = (40u32, 11u32);
+        let mut data = vec![f32::INFINITY; (w * h) as usize];
+        for x in 0..w {
+            data[(5 * w + x) as usize] = 1.0; // the corridor
+        }
+        // open pockets at both ends
+        for y in 3..8u32 {
+            for x in 0..4u32 {
+                data[(y * w + x) as usize] = 1.0;
+                data[(y * w + (w - 1 - x)) as usize] = 1.0;
+            }
+        }
+        SurfaceCostMap { data, width: w, height: h }
+    }
+
+    #[test]
+    fn flee_goal_runs_away_along_walkable_ground() {
+        let cm = corridor_map();
+        let npc = (12u32, 5u32);
+        let player = (8u32, 5u32); // west of the NPC in the corridor
+        let mut rng = rand::rngs::StdRng::seed_from_u64(3);
+        let mut east_wins = 0;
+        for _ in 0..10 {
+            let goal = pick_flee_goal(&cm, npc, player, &mut rng)
+                .expect("open corridor always offers an escape");
+            // Walkable + reachable by construction; away = east of the NPC.
+            assert!(walkable(&cm, goal), "flee goal must be walkable");
+            assert!(
+                cm.find_path(npc, goal).is_some(),
+                "flee goal must be reachable"
+            );
+            if goal.0 > npc.0 {
+                east_wins += 1;
+            }
+        }
+        assert!(
+            east_wins >= 9,
+            "fleeing east (away from the player) must dominate: {east_wins}/10"
+        );
+    }
+
+    #[test]
+    fn flee_goal_never_picks_solid_or_unreachable_tiles() {
+        let cm = corridor_map();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(11);
+        for seed_pos in [(4u32, 5u32), (20, 5), (35, 5)] {
+            for _ in 0..5 {
+                if let Some(goal) = pick_flee_goal(&cm, seed_pos, (2, 5), &mut rng) {
+                    assert!(walkable(&cm, goal));
+                    assert!(cm.find_path(seed_pos, goal).is_some());
+                }
+            }
+        }
+    }
 }
