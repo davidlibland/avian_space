@@ -57,12 +57,103 @@ pub struct CarriedBy {
 #[derive(Component)]
 pub struct MissionSquadron(pub String);
 
+/// Links a live escort entity to its [`EscortRoster`] entry. Roster escorts
+/// are PERSISTENT: they follow the player through jumps and landings (the
+/// per-system entity despawns with the world; the roster survives and the
+/// escort respawns beside the player), are saved with the pilot, and leave
+/// the roster only by dying or docking into their mother's bay.
+#[derive(Component)]
+pub struct PersistentEscort(pub u64);
+
+/// What kind of persistent escort a roster entry is.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum EscortKind {
+    /// Lives in a carrier bay on the player's ship: launched from a bay
+    /// weapon, docks back into it (restoring the bay's ammo round).
+    Carried { weapon_type: String },
+    /// A loyal friend or hired wingman: no bay, cannot dock — flies with
+    /// the player until they die (or are dismissed by future UI).
+    Companion { name: String },
+}
+
+/// One persistent escort.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EscortEntry {
+    /// Runtime id linking the entry to its live entity (NOT persisted —
+    /// reassigned on load).
+    #[serde(skip)]
+    pub id: u64,
+    pub ship_type: String,
+    pub kind: EscortKind,
+    /// Hull carried across jumps/landings — damage is not shaken off by
+    /// hopping systems.
+    pub health: i32,
+}
+
+/// The player's persistent escorts (session resource, saved with the pilot).
+/// Mission squadrons are NOT in here — they belong to their battle system.
+#[derive(Resource, Default)]
+pub struct EscortRoster {
+    pub entries: Vec<EscortEntry>,
+    next_id: u64,
+}
+
+impl EscortRoster {
+    pub fn add(&mut self, ship_type: String, kind: EscortKind, health: i32) -> u64 {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.entries.push(EscortEntry {
+            id,
+            ship_type,
+            kind,
+            health,
+        });
+        id
+    }
+
+    pub fn remove(&mut self, id: u64) {
+        self.entries.retain(|e| e.id != id);
+    }
+
+    pub fn get_mut(&mut self, id: u64) -> Option<&mut EscortEntry> {
+        self.entries.iter_mut().find(|e| e.id == id)
+    }
+}
+
+impl crate::session::SessionResource for EscortRoster {
+    type SaveData = Vec<EscortEntry>;
+    const SAVE_KEY: Option<&'static str> = Some("escort_roster");
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn to_save(&self) -> Self::SaveData {
+        self.entries.clone()
+    }
+    fn from_save(data: Self::SaveData, _: &crate::item_universe::ItemUniverse) -> Self {
+        let mut roster = Self::default();
+        for e in data {
+            roster.add(e.ship_type, e.kind, e.health);
+        }
+        roster
+    }
+}
+
 /// Escort is in the dock animation — shrinking as it returns to the mother.
 #[derive(Component)]
 pub struct DockingEscort {
     /// Distance to the mother when docking started, used to compute scale.
     start_distance: f32,
     full_size: Vec2,
+}
+
+#[cfg(test)]
+impl DockingEscort {
+    pub fn for_tests(start_distance: f32, full_size: Vec2) -> Self {
+        Self {
+            start_distance,
+            full_size,
+        }
+    }
 }
 
 /// Behavioral mode of an escort. Drives target assignment in
@@ -90,6 +181,10 @@ pub struct SpawnEscort {
     pub position: Vec2,
     /// Mission id for squadron escorts (cleanup on mission end).
     pub mission: Option<String>,
+    /// Existing roster entry this spawn re-materializes (respawn after a
+    /// jump/landing). None = not yet rostered; player bay launches enroll
+    /// themselves on spawn.
+    pub roster: Option<u64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -102,12 +197,18 @@ pub fn carrier_plugin(app: &mut App) {
     // headless mode, where those plugins aren't loaded.
     app.add_message::<EscortSfx>();
     app.add_message::<crate::explosions::TriggerJumpFlash>();
+    {
+        use crate::session::SessionResourceExt;
+        app.init_session_resource::<EscortRoster>();
+    }
     app.add_message::<SpawnEscort>().add_systems(
         Update,
         (
             auto_launch_carrier_bays,
             spawn_mission_squadrons,
+            respawn_roster_escorts,
             spawn_escort_ships,
+            sync_roster_health,
             escort_launch_movement,
             player_escort_input,
             update_escort_modes,
@@ -170,6 +271,7 @@ fn spawn_escort_ships(
     current_system: Res<crate::CurrentStarSystem>,
     mother_ships: Query<(&Position, &LinearVelocity, &Transform, &Ship)>,
     player: Query<Entity, With<Player>>,
+    mut roster: Option<ResMut<EscortRoster>>,
     mut sfx_writer: MessageWriter<EscortSfx>,
     mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
     images: Res<Assets<Image>>,
@@ -200,6 +302,32 @@ fn spawn_escort_ships(
         );
         let personality = bundle.get_personality();
         let is_bay_launch = event.carried.is_some();
+
+        // Roster bookkeeping: a respawn re-links its entry; a fresh PLAYER
+        // bay launch enrolls itself (AI carriers' fighters are not the
+        // player's to keep). Squadron wings never enroll.
+        let roster_id = match (event.roster, &event.carried, &mut roster) {
+            (Some(id), _, _) => Some(id),
+            (None, Some(weapon_type), Some(roster))
+                if Some(event.mother) == player_entity && event.mission.is_none() =>
+            {
+                Some(roster.add(
+                    event.ship_type.clone(),
+                    EscortKind::Carried {
+                        weapon_type: weapon_type.clone(),
+                    },
+                    bundle.ship_health(),
+                ))
+            }
+            _ => None,
+        };
+
+        // Respawns carry their hull damage across the jump/landing.
+        if let (Some(id), Some(roster)) = (event.roster, &mut roster) {
+            if let Some(entry) = roster.get_mut(id) {
+                bundle.set_ship_health(entry.health);
+            }
+        }
 
         // Bay launches grow out of the mother's hull; squadron wings jump in
         // at their formation slots, full-size with a hyperspace flash — they
@@ -252,6 +380,9 @@ fn spawn_escort_ships(
                 MissionSquadron(event.mission.clone().unwrap_or_default()),
                 || event.mission.is_some(),
             )
+            .insert_if(PersistentEscort(roster_id.unwrap_or_default()), || {
+                roster_id.is_some()
+            })
             .with_children(|parent| {
                 parent.spawn((
                     Collider::circle(DETECTION_RADIUS),
@@ -534,6 +665,7 @@ fn animate_escort_dock(
         Entity,
         &Escort,
         &CarriedBy,
+        Option<&PersistentEscort>,
         &DockingEscort,
         &EscortMode,
         &Position,
@@ -543,6 +675,7 @@ fn animate_escort_dock(
     )>,
     mut mother_ships: Query<(&mut Ship, &Position), Without<Escort>>,
     player: Query<Entity, With<Player>>,
+    mut roster: Option<ResMut<EscortRoster>>,
     mut sfx_writer: MessageWriter<EscortSfx>,
 ) {
     let player_entity = player.single().ok();
@@ -550,6 +683,7 @@ fn animate_escort_dock(
         entity,
         escort,
         carried,
+        persistent,
         dock,
         mode,
         escort_pos,
@@ -589,7 +723,75 @@ fn animate_escort_dock(
             if Some(escort.mother) == player_entity {
                 sfx_writer.write(EscortSfx::Docked);
             }
+            // Back in the bay: the roster entry retires (the ammo round
+            // above is its new home).
+            if let (Some(pe), Some(roster)) = (persistent, &mut roster) {
+                roster.remove(pe.0);
+            }
             safe_despawn(&mut commands, entity);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Persistent escorts (the roster)
+// ---------------------------------------------------------------------------
+
+/// Re-materialize roster escorts that have no live entity — after a jump or
+/// a landing/takeoff, the per-system entities are gone (DespawnOnExit) but
+/// the roster survives, so the flight re-forms beside the player. Death and
+/// dock remove the entry BEFORE the entity despawns, so they never respawn.
+/// `pending` guards the one-frame gap between writing SpawnEscort and the
+/// entity existing.
+fn respawn_roster_escorts(
+    roster: Option<Res<EscortRoster>>,
+    live: Query<&PersistentEscort>,
+    player: Query<(Entity, &Position), With<Player>>,
+    mut writer: MessageWriter<SpawnEscort>,
+    mut pending: Local<std::collections::HashSet<u64>>,
+) {
+    let Some(roster) = roster else { return };
+    let Ok((player_entity, player_pos)) = player.single() else {
+        return;
+    };
+    let live_ids: std::collections::HashSet<u64> = live.iter().map(|p| p.0).collect();
+    pending.retain(|id| !live_ids.contains(id));
+    let missing: Vec<&EscortEntry> = roster
+        .entries
+        .iter()
+        .filter(|e| !live_ids.contains(&e.id) && !pending.contains(&e.id))
+        .collect();
+    let n = missing.len().max(1);
+    for (i, entry) in missing.into_iter().enumerate() {
+        let angle = i as f32 / n as f32 * std::f32::consts::TAU;
+        let offset = Vec2::new(angle.cos(), angle.sin()) * 90.0;
+        writer.write(SpawnEscort {
+            mother: player_entity,
+            ship_type: entry.ship_type.clone(),
+            carried: match &entry.kind {
+                EscortKind::Carried { weapon_type } => Some(weapon_type.clone()),
+                EscortKind::Companion { .. } => None,
+            },
+            position: player_pos.0 + offset,
+            mission: None,
+            roster: Some(entry.id),
+        });
+        pending.insert(entry.id);
+    }
+}
+
+/// Keep roster hull values current so damage persists across jumps, landings
+/// and saves. Cheap: a handful of escorts at most.
+fn sync_roster_health(
+    mut roster: Option<ResMut<EscortRoster>>,
+    escorts: Query<(&PersistentEscort, &Ship), Changed<Ship>>,
+) {
+    let Some(roster) = &mut roster else { return };
+    for (pe, ship) in &escorts {
+        if let Some(entry) = roster.get_mut(pe.0) {
+            if entry.health != ship.health {
+                entry.health = ship.health;
+            }
         }
     }
 }
@@ -644,6 +846,7 @@ fn spawn_mission_squadrons(
                 carried: None,
                 position: player_pos.0 + offset,
                 mission: Some(id.clone()),
+                roster: None, // squadron wings belong to their battle system
             });
         }
         log.set(

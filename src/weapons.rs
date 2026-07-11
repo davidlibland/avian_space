@@ -510,6 +510,7 @@ pub fn weapon_fire(
                 carried: Some(cmd.weapon_type.clone()),
                 position: spawn_pos,
                 mission: None,
+                roster: None, // player launches enroll themselves on spawn
             });
             writer.write(WeaponFired {
                 ship: cmd.ship,

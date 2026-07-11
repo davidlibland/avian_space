@@ -933,6 +933,17 @@ pub struct ShipBundle {
 }
 
 impl ShipBundle {
+    /// Current hull of the bundled ship (escort roster bookkeeping).
+    pub fn ship_health(&self) -> i32 {
+        self.ship.health
+    }
+
+    /// Override the bundled ship's hull (persistent escorts respawn with
+    /// the damage they carried through the jump).
+    pub fn set_ship_health(&mut self, health: i32) {
+        self.ship.health = health.max(1);
+    }
+
     pub fn get_personality(&self) -> Personality {
         self.ship.data.personality.clone()
     }
@@ -1239,7 +1250,7 @@ fn update_ship_sprite_frame(mut ships: Query<(&Transform, &DriveActive, &mut Spr
     }
 }
 
-fn apply_damage(
+pub(crate) fn apply_damage(
     mut commands: Commands,
     mut reader: MessageReader<DamageShip>,
     mut ships: Query<(&mut Ship, &Transform, &mut Distressed)>,
@@ -1252,6 +1263,8 @@ fn apply_damage(
     mut rl_reward_writer: MessageWriter<RLReward>,
     mut ship_destroyed_writer: MessageWriter<crate::missions::ShipDestroyed>,
     mission_targets: Query<&crate::missions::MissionTarget>,
+    persistent_escorts: Query<&crate::carrier::PersistentEscort>,
+    mut escort_roster: Option<ResMut<crate::carrier::EscortRoster>>,
     model_mode: Res<crate::ModelMode>,
     reward_cfg: Res<crate::config::RewardConfig>,
 ) {
@@ -1298,6 +1311,13 @@ fn apply_damage(
                     )));
                 }
             } else if ai_ships.contains(event.entity) {
+                // A persistent escort that dies is gone for good — the
+                // roster entry retires with the hull.
+                if let (Ok(pe), Some(roster)) =
+                    (persistent_escorts.get(event.entity), &mut escort_roster)
+                {
+                    roster.remove(pe.0);
+                }
                 ship_destroyed_writer.write(crate::missions::ShipDestroyed {
                     entity: event.entity,
                     mission_target: mission_targets.get(event.entity).ok().cloned(),
