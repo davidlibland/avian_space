@@ -1,5 +1,11 @@
 # Companions — loyal friends & hired escorts (design)
 
+**Status: BUILT (src/companions.rs)** — registry, GrantCompanion + the
+permadeath ledger, the six friend arcs, the bar's wingman desk (hire /
+dismiss / rejoin), temperaments, rate-limited chatter, and surface avatars
+(friends walk with the player when landed). Remaining polish: escort-panel
+portraits, mechanic escort repair, mournful-bartender lines.
+
 The escort-persistence substrate is BUILT (src/carrier.rs): the
 `EscortRoster` session resource persists escorts across jumps, landings and
 saves, with `EscortKind::Companion { name }` reserved for exactly this

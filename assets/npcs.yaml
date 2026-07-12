@@ -98,3 +98,35 @@ pirate_king:
     sex: male
     slots: { body: body, head: head_m, hair: bedhead, beard: beard, shirt: sleeveless_red, over: jacket_trench_gray, legs: pants_cuffed, feet: boots_leather, hat: bandana }
     colors: { body: bronze, hair: red, eye: green, cloth: red }
+
+# ── Companions (assets/companions.yaml) ───────────────────────────────
+vex_marlowe:
+  name: "Vex Marlowe"
+  role: guard
+  avatar:
+    sex: female
+    slots: { body: body, head: head_f, hair: buzzcut, shirt: longsleeve, over: armour_leather, legs: pants, feet: boots_black }
+    colors: { body: ivory, hair: red, eye: green, cloth: navy }
+oak_adaora:
+  name: "Okonkwo \"Oak\" Adaora"
+  role: civilian
+  avatar:
+    sex: male
+    slots: { body: body, head: head_m, hair: flat_top, shirt: longsleeve, over: overalls_brown, legs: pants, feet: boots_brown }
+    colors: { body: coffee, hair: black, eye: brown, cloth: tan }
+sable_dune:
+  name: "Sable Dune"
+  role: merchant
+  avatar:
+    sex: female
+    slots: { body: body, head: head_f, hair: bangs_long, shirt: tshirt, over: overalls_charcoal, legs: pants, feet: boots_black }
+    colors: { body: bronze, hair: black, eye: hazel, cloth: charcoal }
+brother_cassian:
+  name: "Brother Cassian"
+  role: civilian
+tinny:
+  name: "Tinny"
+  role: alien
+yara_brakespear:
+  name: "Capt. Yara Brakespear"
+  role: guard

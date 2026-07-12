@@ -4,6 +4,7 @@ use bevy::prelude::*;
 mod asteroids;
 mod carrier;
 mod comms;
+mod companions;
 mod experiments;
 mod explosions;
 mod fbm;

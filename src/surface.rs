@@ -267,6 +267,7 @@ pub fn surface_plugin(app: &mut App) {
                 building_interact,
                 update_interact_prompt,
                 spawn_mission_npcs,
+                spawn_companion_avatars,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )
@@ -528,6 +529,64 @@ fn spawn_mission_npcs(
 /// Resolve a mission's recurring-NPC reference (`npc:` in missions.yaml) to
 /// a display name + consistent avatar. Unknown ids warn and fall back to the
 /// anonymous random look.
+/// Friends walk with you: spawn a following avatar for every enrolled
+/// Companion (friends only — hired pilots stay with their ships). Runs every
+/// Exploring frame, idempotent per companion key, so a friend granted while
+/// landed appears immediately.
+fn spawn_companion_avatars(
+    mut commands: Commands,
+    roster: Option<Res<crate::carrier::EscortRoster>>,
+    item_universe: Res<ItemUniverse>,
+    existing: Query<&crate::surface_npc::CompanionAvatar>,
+    walker: Query<&Transform, With<Walker>>,
+    cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
+    layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let (Some(roster), Some(cost_map), Some(mut layers)) = (roster, cost_map, layers) else {
+        return;
+    };
+    let Ok(walker_tf) = walker.single() else {
+        return;
+    };
+    let here: std::collections::HashSet<&str> = existing.iter().map(|c| c.0.as_str()).collect();
+    let walk_speed = layers.walk_speed;
+    for entry in &roster.entries {
+        let crate::carrier::EscortKind::Companion { name } = &entry.kind else {
+            continue;
+        };
+        if here.contains(name.as_str()) {
+            continue;
+        }
+        let Some(def) = item_universe.companions.get(name) else {
+            continue;
+        };
+        // Beside the player, on walkable ground.
+        let base = walker_tf.translation.truncate() + Vec2::new(TILE_PX * 1.5, 0.0);
+        let tile = {
+            let t = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(base);
+            let idx = (t.1 * cost_map.width + t.0) as usize;
+            if idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY {
+                t
+            } else {
+                crate::surface_pathfinding::SurfaceCostMap::world_to_tile(
+                    walker_tf.translation.truncate(),
+                )
+            }
+        };
+        let identity = npc_identity(&item_universe, &layers, &Some(def.npc.clone()));
+        crate::surface_npc::spawn_companion_avatar(
+            &mut commands,
+            &mut layers,
+            &mut images,
+            name,
+            identity,
+            tile,
+            walk_speed,
+        );
+    }
+}
+
 fn npc_identity(
     universe: &ItemUniverse,
     layers: &crate::character_compositor::CharacterLayers,
@@ -2250,16 +2309,20 @@ fn surface_building_ui(
     item_universe: Res<ItemUniverse>,
     mut player_query: Query<&mut Ship, With<Player>>,
     mut buy_ship_writer: MessageWriter<BuyShip>,
-    mission_log: Res<MissionLog>,
-    mission_offers: Res<MissionOffers>,
-    mission_catalog: Res<MissionCatalog>,
-    unlocks: Res<PlayerUnlocks>,
+    missions: (
+        Res<MissionLog>,
+        Res<MissionOffers>,
+        Res<MissionCatalog>,
+        Res<PlayerUnlocks>,
+    ),
     standings: Res<crate::standing::FactionStandings>,
     galaxy: Res<crate::galaxy::GalaxyControl>,
     mut accept_writer: MessageWriter<AcceptMission>,
     mut abandon_writer: MessageWriter<AbandonMission>,
+    mut escort_roster: Option<ResMut<crate::carrier::EscortRoster>>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
+    let (mission_log, mission_offers, mission_catalog, unlocks) = missions;
     let Some(kind) = active_ui.0 else {
         return;
     };
@@ -2326,6 +2389,18 @@ fn surface_building_ui(
                         &mut accept_writer,
                         &mut abandon_writer,
                     );
+                    // The wingman desk: companions, rejoins, pilots for hire.
+                    if let (Ok(mut ship), Some(roster)) =
+                        (player_query.single_mut(), escort_roster.as_deref_mut())
+                    {
+                        crate::companions::render_companions_section(
+                            ui,
+                            &mut ship,
+                            roster,
+                            &item_universe,
+                            planet_name,
+                        );
+                    }
                 }
                 BuildingKind::ShipPad => {
                     ui.label("Your ship is docked here.");

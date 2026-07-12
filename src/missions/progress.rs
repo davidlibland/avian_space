@@ -427,6 +427,8 @@ pub fn finalize_completions(
                 // MissionCompleted), keeping mission logic decoupled.
                 CompletionEffect::AdjustStanding { .. } => {}
                 CompletionEffect::ShiftInfluence { .. } => {}
+                // Applied by the companions module (GrantCompanion watcher).
+                CompletionEffect::GrantCompanion { .. } => {}
                 CompletionEffect::GrantUnlock { name } => {
                     unlocks.0.insert(name.clone());
                 }

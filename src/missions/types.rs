@@ -198,6 +198,10 @@ pub enum CompletionEffect {
         faction: String,
         delta: f32,
     },
+    /// A loyal friend joins the player's wing (key into companions.yaml).
+    /// Applied by the companions module watching MissionCompleted; blocked
+    /// forever by the roster's fallen ledger — death is permanent.
+    GrantCompanion { companion: String },
 }
 
 impl MissionDef {

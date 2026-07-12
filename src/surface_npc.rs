@@ -582,6 +582,75 @@ pub fn spawn_mission_npc(
     });
 }
 
+/// A companion friend's surface avatar (companions.yaml key). They walk
+/// with the player whenever they land — same follow logic as mission NPCs.
+#[derive(Component)]
+pub struct CompanionAvatar(pub String);
+
+/// Spawn a loyal friend's walking avatar, following the player around the
+/// surface. Persistent in the roster sense: re-spawned on every landing
+/// while the friend is enrolled.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_companion_avatar(
+    commands: &mut Commands,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    companion_key: &str,
+    identity: Option<(String, crate::character_compositor::AvatarSpec)>,
+    start_tile: (u32, u32),
+    speed: f32,
+) {
+    let mut rng = rand::thread_rng();
+    let spec = identity
+        .as_ref()
+        .map(|(_, spec)| spec.clone())
+        .unwrap_or_else(|| layers.random_spec(&mut rng, "civilian"));
+    let Some(image) = layers.composite(&spec, images) else {
+        return; // layer images still loading; idempotent caller retries
+    };
+    let start = SurfaceCostMap::tile_to_world(start_tile.0, start_tile.1);
+    let behavior = NpcBehavior::with_behaviors(
+        speed,
+        [Behavior::FollowPlayer {
+            path: Vec::new(),
+            current_idx: 0,
+            repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
+        }],
+    );
+    let npc_entity = commands
+        .spawn((
+            DespawnOnExit(crate::PlayState::Exploring),
+            Npc,
+            CompanionAvatar(companion_key.to_string()),
+            behavior,
+            crate::surface_character::CharacterAnim::person(0.11),
+            RigidBody::Dynamic,
+            LockedAxes::ROTATION_LOCKED,
+            crate::surface_objects::character_foot_collider(5.0),
+            CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+            LinearDamping(10.0),
+            LinearVelocity(Vec2::ZERO),
+            Sprite::from_atlas_image(
+                image,
+                TextureAtlas {
+                    layout: layers.layout.clone(),
+                    index: 0,
+                },
+            ),
+            Transform::from_xyz(
+                start.x,
+                start.y,
+                crate::surface_objects::depth_z(
+                    start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
+                ),
+            ),
+        ))
+        .id();
+    if let Some((name, _)) = identity {
+        commands.entity(npc_entity).insert(NpcIdentity { name });
+    }
+}
+
 /// What kind of objective NPC to spawn.
 pub enum ObjectiveKind {
     Meet { seek: bool },

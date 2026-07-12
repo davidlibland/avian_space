@@ -2419,3 +2419,264 @@ reclamation_3:
       faction: FreeFrontier
       delta: 5.0
   squadron: [fed_destroyer, order_censer, frontier_monitor]
+
+# ── Friend arcs: loyal companions (docs/companions_design.md) ─────────────────
+# Each storyline's tail opens a short personal arc ending in GrantCompanion.
+# Friends are permadeath: the roster's fallen ledger blocks any re-grant.
+
+friend_vex_1:
+  briefing: "A message finds you through Federation channels: 'Marlowe. The ace you hauled off that penal transport. Three of the hunters who framed me are working the Drift as \"privateers\". Bring me their wrecks and I'll believe you're worth flying with.'"
+  success_text: "Three kills logged. A slow clap crackles over comms."
+  failure_text: "The privateers scatter. Marlowe goes quiet."
+  preconditions:
+  - kind: completed
+    mission: bounty_story_6_catch
+  offer:
+    kind: npc_offer
+    planet: kepler_22b
+    weight: 1.0
+    building: bar
+    npc: vex_marlowe
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: drift
+    ship_type: pirate_missile_boat
+    count: 3
+    target_name: "Marlowe's Hunters"
+    hostile: true
+  completion_effects:
+  - kind: pay
+    credits: 6000
+friend_vex_2:
+  briefing: "Marlowe's waiting on Kepler-22b with two glasses and one bottle. 'Fine. You fly like you mean it. I'm sick of drinking alone — meet me and let's make it official.'"
+  success_text: "'Wingman rules,' she says. 'I complain, you ignore it, nobody dies.' Vex Marlowe joins your wing."
+  failure_text: "The bottle's empty and Marlowe's gone."
+  preconditions:
+  - kind: completed
+    mission: friend_vex_1
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: kepler_22b
+    npc_name: "Vex Marlowe"
+    building: bar
+    npc: vex_marlowe
+  completion_effects:
+  - kind: grant_companion
+    companion: vex_marlowe
+
+friend_oak_1:
+  briefing: "Okonkwo Adaora finds you by the pad, hat in hand. 'You fed my family when the war did not. Raiders burned our seed store on Drumlin Camp — 8 units of food would see the valley through. I pay in work, not credits.'"
+  success_text: "The valley eats this winter. Oak shakes your hand like he's testing a beam."
+  failure_text: "The valley goes hungry. Oak doesn't ask twice."
+  preconditions:
+  - kind: completed
+    mission: frontier_5
+  offer:
+    kind: npc_offer
+    planet: drumlin
+    weight: 1.0
+    building: market
+    npc: oak_adaora
+    approach: seek
+  start_effects: []
+  objective:
+    kind: land_on_planet
+    planet: drumlin_camp
+  requires:
+  - kind: has_cargo
+    commodity: food
+    quantity: 8
+  completion_effects:
+  - kind: remove_cargo
+    commodity: food
+    quantity: 8
+friend_oak_2:
+  briefing: "'Said I pay in work.' Oak pats the hull of a patched-up sailtender. 'She's slow, but she turns like a promise. Point me at your wing and I'll hold it.'"
+  success_text: "Okonkwo \"Oak\" Adaora joins your wing. Like a fencepost."
+  failure_text: "Oak waits by his sailtender."
+  preconditions:
+  - kind: completed
+    mission: friend_oak_1
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: drumlin_camp
+    npc_name: "Okonkwo Adaora"
+    npc: oak_adaora
+  completion_effects:
+  - kind: grant_companion
+    companion: oak_adaora
+
+friend_sable_1:
+  briefing: "Sable Dune slides into the seat across from you. 'You pulled me out of a Federation cell and I keep a ledger. Problem: my old partner sold me out and kept my gunboat's sister ship. She's running the Verge with a crew of two. Sink her and we're square enough to talk.'"
+  success_text: "The sister ship breaks up over the Verge. Sable watches the debris a long moment."
+  failure_text: "The partner's still flying. The ledger stays open."
+  preconditions:
+  - kind: completed
+    mission: espionage_final
+  offer:
+    kind: npc_offer
+    planet: titan
+    weight: 1.0
+    building: bar
+    npc: sable_dune
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_verge
+    ship_type: rebel_gunboat
+    count: 1
+    target_name: "The Faithless Partner"
+    hostile: true
+  completion_effects:
+  - kind: pay
+    credits: 8000
+friend_sable_2:
+  briefing: "'Ledger says I owe you more than credits,' Sable admits on Titan. 'It says hours. Escort-hours. Come shake on it before I re-read the fine print.'"
+  success_text: "Sable Dune joins your wing. 'First rule: if I say run, I'm already running.'"
+  failure_text: "The fine print wins."
+  preconditions:
+  - kind: completed
+    mission: friend_sable_1
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: titan
+    npc_name: "Sable Dune"
+    building: bar
+    npc: sable_dune
+  completion_effects:
+  - kind: grant_companion
+    companion: sable_dune
+
+friend_cassian_1:
+  briefing: "A tonsured man in patched robes waits by your ship on Sanctum. 'Brother Cassian. Formerly. The Order buried three relic fragments with the miners they abandoned in the Cloister fields — collect 4 units of artifacts so the families can bury their own. I am told you dig well.'"
+  success_text: "The fragments come home. Cassian says nothing, which says everything."
+  failure_text: "The fields keep their dead."
+  preconditions:
+  - kind: completed
+    mission: order_5
+  offer:
+    kind: npc_offer
+    planet: sanctum
+    weight: 1.0
+    building: bar
+    npc: brother_cassian
+    approach: seek
+  objective:
+    kind: collect_pickups
+    commodity: artifacts
+    system: the_cloister
+    quantity: 4
+  completion_effects:
+  - kind: pay
+    credits: 5000
+friend_cassian_2:
+  briefing: "'The Order has excommunicated me for helping you,' Cassian says, sounding delighted. 'My calendar is suddenly clear. Meet me on Sanctum; my acolyte fighter needs a flock to follow.'"
+  success_text: "Brother Cassian joins your wing. 'I bless the hull. It can't hurt.'"
+  failure_text: "Cassian's calendar refills with prayer."
+  preconditions:
+  - kind: completed
+    mission: friend_cassian_1
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: sanctum
+    npc_name: "Brother Cassian"
+    building: bar
+    npc: brother_cassian
+  completion_effects:
+  - kind: grant_companion
+    companion: brother_cassian
+
+friend_tinny_1:
+  briefing: "The Guild foreman waves you over, embarrassed. 'That combat drone you hauled in with the ore? It rebuilt itself overnight and it keeps drawing your ship on the workshop wall. Helios wants 6 units of electronics as a licensing fee or they impound it. Your call.'"
+  success_text: "The fee is paid. The drone beeps at a frequency the foreman describes as 'happy, probably'."
+  failure_text: "Helios crates the drone. It doesn't resist, which is worse."
+  preconditions:
+  - kind: completed
+    mission: mining_story_3
+  offer:
+    kind: npc_offer
+    planet: helios_prime
+    weight: 1.0
+    building: mechanicshop
+    npc: tinny
+    approach: seek
+  objective:
+    kind: land_on_planet
+    planet: helios_prime
+  requires:
+  - kind: has_cargo
+    commodity: electronics
+    quantity: 6
+  completion_effects:
+  - kind: remove_cargo
+    commodity: electronics
+    quantity: 6
+friend_tinny_2:
+  briefing: "STATUS: LICENSED. QUERY: MAY UNIT FOLLOW FRIEND-SHAPE. UNIT HAS PRACTICED FORMATION. UNIT HAS ALSO PRACTICED LOYALTY. MEET UNIT AT PAD."
+  success_text: "Tinny joins your wing. DIRECTIVE ACCEPTED: FOLLOW FOREVER."
+  failure_text: "UNIT WAITS. UNIT IS PATIENT. UNIT COUNTS STARS."
+  preconditions:
+  - kind: completed
+    mission: friend_tinny_1
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: helios_prime
+    npc_name: "Tinny"
+    npc: tinny
+  completion_effects:
+  - kind: grant_companion
+    companion: tinny
+
+friend_yara_1:
+  briefing: "Captain Brakespear corners you at the March Keep bar. 'Thirty years I held the wall. Now pirates raid our supply road while the fleet drills parades. Clear 2 of them off the Barrens run and I'll consider the fleet's honor rented, if not restored.'"
+  success_text: "The supply road runs clean. Brakespear nods once — from her, a parade."
+  failure_text: "The raiders keep the road. Brakespear keeps her silence."
+  preconditions:
+  - kind: completed
+    mission: bastion_5
+  offer:
+    kind: npc_offer
+    planet: iron_march
+    weight: 1.0
+    building: bar
+    npc: yara_brakespear
+    approach: seek
+  objective:
+    kind: destroy_ships
+    system: the_barrens
+    ship_type: pirate_corvette
+    count: 2
+    target_name: "Road Raiders"
+    hostile: true
+  completion_effects:
+  - kind: pay
+    credits: 7000
+friend_yara_2:
+  briefing: "'I'm retired, not finished,' Brakespear says, flight bag already packed. 'My lance is fueled. Meet me on Iron March and I'll fly your wall for you.'"
+  success_text: "Capt. Yara Brakespear joins your wing. 'Shields to the front.'"
+  failure_text: "The lance stays fueled and grounded."
+  preconditions:
+  - kind: completed
+    mission: friend_yara_1
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: iron_march
+    npc_name: "Capt. Yara Brakespear"
+    building: bar
+    npc: yara_brakespear
+  completion_effects:
+  - kind: grant_companion
+    companion: yara_brakespear

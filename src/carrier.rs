@@ -71,9 +71,13 @@ pub enum EscortKind {
     /// Lives in a carrier bay on the player's ship: launched from a bay
     /// weapon, docks back into it (restoring the bay's ammo round).
     Carried { weapon_type: String },
-    /// A loyal friend or hired wingman: no bay, cannot dock — flies with
-    /// the player until they die (or are dismissed by future UI).
+    /// A loyal friend: `name` is the key into assets/companions.yaml. No
+    /// bay, cannot dock — flies with the player until death (permadeath)
+    /// or dismissal (parks at their home planet, re-recruitable there).
     Companion { name: String },
+    /// A hired wingman from a bar: replaceable, fee sunk on death or
+    /// dismissal. `temperament` is a Temperament key.
+    Hired { name: String, temperament: String },
 }
 
 /// One persistent escort.
@@ -95,7 +99,22 @@ pub struct EscortEntry {
 #[derive(Resource, Default)]
 pub struct EscortRoster {
     pub entries: Vec<EscortEntry>,
+    /// Friends who DIED while enrolled — never re-grantable (permadeath).
+    pub fallen: std::collections::HashSet<String>,
+    /// Friends dismissed to their home planet, re-recruitable there.
+    pub parked: std::collections::HashSet<String>,
     next_id: u64,
+}
+
+/// Serialized roster: entries + both companion ledgers.
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+pub struct EscortRosterSave {
+    #[serde(default)]
+    pub entries: Vec<EscortEntry>,
+    #[serde(default)]
+    pub fallen: Vec<String>,
+    #[serde(default)]
+    pub parked: Vec<String>,
 }
 
 impl EscortRoster {
@@ -118,22 +137,57 @@ impl EscortRoster {
     pub fn get_mut(&mut self, id: u64) -> Option<&mut EscortEntry> {
         self.entries.iter_mut().find(|e| e.id == id)
     }
+
+    /// Whether a FRIEND (companions.yaml key) is currently enrolled.
+    pub fn is_enrolled(&self, companion: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|e| matches!(&e.kind, EscortKind::Companion { name } if name == companion))
+    }
+
+    /// Record a death: removes the entry, and a friend goes into the
+    /// permadeath ledger.
+    pub fn record_death(&mut self, id: u64) {
+        if let Some(e) = self.entries.iter().find(|e| e.id == id) {
+            if let EscortKind::Companion { name } = &e.kind {
+                self.fallen.insert(name.clone());
+            }
+        }
+        self.remove(id);
+    }
+
+    /// Dismiss an entry: hires vanish (fee sunk); friends PARK at their
+    /// home planet and can be re-recruited there.
+    pub fn dismiss(&mut self, id: u64) {
+        if let Some(e) = self.entries.iter().find(|e| e.id == id) {
+            if let EscortKind::Companion { name } = &e.kind {
+                self.parked.insert(name.clone());
+            }
+        }
+        self.remove(id);
+    }
 }
 
 impl crate::session::SessionResource for EscortRoster {
-    type SaveData = Vec<EscortEntry>;
+    type SaveData = EscortRosterSave;
     const SAVE_KEY: Option<&'static str> = Some("escort_roster");
     fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
         Self::default()
     }
     fn to_save(&self) -> Self::SaveData {
-        self.entries.clone()
+        EscortRosterSave {
+            entries: self.entries.clone(),
+            fallen: self.fallen.iter().cloned().collect(),
+            parked: self.parked.iter().cloned().collect(),
+        }
     }
     fn from_save(data: Self::SaveData, _: &crate::item_universe::ItemUniverse) -> Self {
         let mut roster = Self::default();
-        for e in data {
+        for e in data.entries {
             roster.add(e.ship_type, e.kind, e.health);
         }
+        roster.fallen = data.fallen.into_iter().collect();
+        roster.parked = data.parked.into_iter().collect();
         roster
     }
 }
@@ -158,7 +212,7 @@ impl DockingEscort {
 
 /// Behavioral mode of an escort. Drives target assignment in
 /// [`update_escort_modes`] and gates dock/firing systems.
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Debug)]
 pub enum EscortMode {
     /// Stay near the mother. No engagement.
     Escort,
@@ -322,10 +376,22 @@ fn spawn_escort_ships(
             _ => None,
         };
 
-        // Respawns carry their hull damage across the jump/landing.
+        // Respawns carry their hull damage across the jump/landing; companions
+        // also carry their temperament (from the registry or the hire).
+        let mut roster_temperament: Option<crate::companions::Temperament> = None;
         if let (Some(id), Some(roster)) = (event.roster, &mut roster) {
             if let Some(entry) = roster.get_mut(id) {
                 bundle.set_ship_health(entry.health);
+                roster_temperament = match &entry.kind {
+                    EscortKind::Companion { name } => item_universe
+                        .companions
+                        .get(name)
+                        .map(|d| d.temperament),
+                    EscortKind::Hired { temperament, .. } => {
+                        Some(crate::companions::Temperament::parse(temperament))
+                    }
+                    EscortKind::Carried { .. } => None,
+                };
             }
         }
 
@@ -383,6 +449,12 @@ fn spawn_escort_ships(
             .insert_if(PersistentEscort(roster_id.unwrap_or_default()), || {
                 roster_id.is_some()
             })
+            .insert_if(
+                // Companions get combat personality; carried fighters and
+                // squadron wings stay plain order-followers.
+                roster_temperament.unwrap_or(crate::companions::Temperament::Protective),
+                || roster_temperament.is_some(),
+            )
             .with_children(|parent| {
                 parent.spawn((
                     Collider::circle(DETECTION_RADIUS),
@@ -770,7 +842,7 @@ fn respawn_roster_escorts(
             ship_type: entry.ship_type.clone(),
             carried: match &entry.kind {
                 EscortKind::Carried { weapon_type } => Some(weapon_type.clone()),
-                EscortKind::Companion { .. } => None,
+                EscortKind::Companion { .. } | EscortKind::Hired { .. } => None,
             },
             position: player_pos.0 + offset,
             mission: None,

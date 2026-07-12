@@ -107,6 +107,10 @@ pub struct ItemUniverse {
     /// appearances for storyline mission givers and objective NPCs.
     #[serde(default)]
     pub npcs: HashMap<String, NpcDef>,
+    /// Loyal-friend companions (assets/companions.yaml) — see
+    /// docs/companions_design.md and src/companions.rs.
+    #[serde(default)]
+    pub companions: HashMap<String, crate::companions::CompanionDef>,
     /// Average price of each commodity across all planets in all star systems.
     #[serde(skip)]
     pub global_average_price: HashMap<String, f64>,

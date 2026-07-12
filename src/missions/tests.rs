@@ -844,6 +844,7 @@ mod template_targets {
             enemies: HashMap::new(),
             allies: HashMap::new(),
             npcs: HashMap::new(),
+        companions: HashMap::new(),
         }
     }
 

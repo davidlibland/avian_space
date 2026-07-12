@@ -1,0 +1,118 @@
+# Loyal-friend companions (docs/companions_design.md, src/companions.rs).
+#
+# Each is granted by a mission (CompletionEffect::GrantCompanion) at the tail
+# of an existing storyline. Death is permanent (the roster's fallen ledger);
+# dismissal parks them at home_planet, re-recruitable there. `npc` keys into
+# assets/npcs.yaml for the face and chat title; chatter keys: kill,
+# player_hit, jump_in, idle.
+
+vex_marlowe:
+  name: "Vex Marlowe"
+  npc: vex_marlowe
+  ship_type: fed_patrol
+  home_planet: kepler_22b
+  temperament: aggressive
+  bio: "cashiered Federation ace, flies angry"
+  chatter:
+    kill:
+      - "Tally one. You're welcome."
+      - "That's how it's done. Write it down."
+    player_hit:
+      - "Break left! I've got them."
+      - "You fly like a freighter. Move!"
+    jump_in:
+      - "Still with you. Regrettably."
+      - "New system, same Vex."
+    idle:
+      - "My old squadron patrols this lane. Wave."
+      - "I outrank you, technically. I just don't care."
+
+oak_adaora:
+  name: "Okonkwo \"Oak\" Adaora"
+  npc: oak_adaora
+  ship_type: frontier_sailtender
+  home_planet: drumlin
+  temperament: protective
+  bio: "Frontier homesteader who doesn't forget a kindness"
+  chatter:
+    kill:
+      - "Won't trouble anyone again."
+    player_hit:
+      - "I'm between you and them. Stay behind me."
+    jump_in:
+      - "Right beside you. Like a fencepost."
+    idle:
+      - "Quiet out here. Good soil, probably."
+      - "The family sends greetings. All eleven of them."
+
+sable_dune:
+  name: "Sable Dune"
+  npc: sable_dune
+  ship_type: rebel_gunboat
+  home_planet: titan
+  temperament: cautious
+  bio: "smuggler paying a debt in escort-hours"
+  chatter:
+    kill:
+      - "Ledger says that one's free."
+    player_hit:
+      - "We can outrun this. I vote we outrun this."
+    jump_in:
+      - "Customs here owes me money. Fly casual."
+    idle:
+      - "Every crate in my hold is legal. Today."
+      - "Debt's not paid off yet. Sadly for both of us."
+
+brother_cassian:
+  name: "Brother Cassian"
+  npc: brother_cassian
+  ship_type: order_acolyte
+  home_planet: sanctum
+  temperament: protective
+  bio: "excommunicated Order acolyte, serene about it"
+  chatter:
+    kill:
+      - "May they find a quieter orbit."
+    player_hit:
+      - "Hold. Your hull is not yet scripture."
+    jump_in:
+      - "The relic hums. Or that's the reactor. Either way."
+    idle:
+      - "Excommunication has excellent hours."
+      - "The Order watches. Let them."
+
+tinny:
+  name: "Tinny"
+  npc: tinny
+  ship_type: helios_drone
+  home_planet: helios_prime
+  temperament: aggressive
+  bio: "salvaged combat drone, imprinted on your hull"
+  chatter:
+    kill:
+      - "TARGET REDUCED TO COMPONENTS. COMPONENTS ARE FREE."
+      - "EFFICIENCY: ACCEPTABLE."
+    player_hit:
+      - "DAMAGE DETECTED ON PRIMARY FRIEND-SHAPE. OBJECTING."
+    jump_in:
+      - "NEW SKY. SAME DIRECTIVE: FOLLOW."
+    idle:
+      - "COUNTING STARS. RECOUNTING. TOTALS DIFFER."
+      - "QUERY: DO FRIEND-SHAPES DREAM. LOGGING FOR LATER."
+
+yara_brakespear:
+  name: "Capt. Yara Brakespear"
+  npc: yara_brakespear
+  ship_type: bastion_lance
+  home_planet: iron_march
+  temperament: protective
+  bio: "retired Bastion lance sergeant, follows conduct not pay"
+  chatter:
+    kill:
+      - "Line holds."
+    player_hit:
+      - "Shields to the front. ALWAYS to the front."
+    jump_in:
+      - "Formation review at your leisure. It will be poor."
+    idle:
+      - "Thirty years of walls. The sky is better."

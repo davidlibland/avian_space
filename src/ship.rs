@@ -187,7 +187,7 @@ pub enum ScoreHit {
 #[derive(Component, Clone, Default)]
 pub struct ShipHostility(pub HashMap<String, f32>);
 
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub enum Personality {
     #[default]
     Trader, // Likes to trade, traveling from planet to planet
@@ -349,7 +349,7 @@ pub fn first_tick_rotation_rad(torque: Scalar, angular_drag: Scalar, dt: Scalar)
     torque / (angular_drag * angular_drag) * (u - 1.0 + (-u).exp())
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Target {
     Ship(Entity),
     Planet(Entity),
@@ -1316,7 +1316,7 @@ pub(crate) fn apply_damage(
                 if let (Ok(pe), Some(roster)) =
                     (persistent_escorts.get(event.entity), &mut escort_roster)
                 {
-                    roster.remove(pe.0);
+                    roster.record_death(pe.0);
                 }
                 ship_destroyed_writer.write(crate::missions::ShipDestroyed {
                     entity: event.entity,

@@ -132,6 +132,7 @@ fn test_universe() -> ItemUniverse {
         ship_credit_scale: HashMap::new(),
         allies: HashMap::new(),
         npcs: HashMap::new(),
+        companions: HashMap::new(),
     };
     iu.compute_global_averages();
     iu.compute_trade_maps();

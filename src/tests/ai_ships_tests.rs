@@ -31,6 +31,7 @@ fn empty_item_universe() -> ItemUniverse {
         ship_credit_scale: HashMap::new(),
         allies: HashMap::new(),
         npcs: HashMap::new(),
+        companions: HashMap::new(),
     }
 }
 

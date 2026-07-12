@@ -600,6 +600,14 @@ fn validate_completion_effects(
                     );
                 }
             }
+            CompletionEffect::GrantCompanion { companion } => {
+                if !iu.companions.contains_key(companion) {
+                    warn!(
+                        "{label} \"{id}\" GrantCompanion references companion \
+                         \"{companion}\" which is not defined in companions.yaml"
+                    );
+                }
+            }
         }
     }
 }
@@ -651,6 +659,7 @@ fn find_planet<'a>(iu: &'a ItemUniverse, name: &str) -> Option<&'a PlanetData> {
 pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     let mut p = Vec::new();
     check_base_weapons_fit_mounts(iu, &mut p);
+    check_companions(iu, &mut p);
     check_base_weapons_fit_item_space(iu, &mut p);
     check_trade_routes(iu, &mut p);
     check_sprites_exist(iu, &mut p);
@@ -662,6 +671,52 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_fenced_carrier_items(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
+}
+
+/// Companions must reference real npcs/ships/planets, use known chatter
+/// keys, and be OBTAINABLE — some mission must grant each one, or the
+/// content is dead on arrival.
+fn check_companions(iu: &ItemUniverse, p: &mut Vec<String>) {
+    use crate::missions::types::CompletionEffect;
+    let granted: std::collections::HashSet<&str> = iu
+        .missions
+        .values()
+        .flat_map(|d| d.completion_effects.iter())
+        .filter_map(|e| match e {
+            CompletionEffect::GrantCompanion { companion } => Some(companion.as_str()),
+            _ => None,
+        })
+        .collect();
+    for (key, c) in &iu.companions {
+        if !iu.npcs.contains_key(&c.npc) {
+            p.push(format!("companion '{key}': npc '{}' not in npcs.yaml", c.npc));
+        }
+        if !iu.ships.contains_key(&c.ship_type) {
+            p.push(format!(
+                "companion '{key}': ship '{}' not in ships.yaml",
+                c.ship_type
+            ));
+        }
+        match iu.find_gameplay_planet(&c.home_planet) {
+            Some((_, pd)) if !pd.commodities.is_empty() => {}
+            _ => p.push(format!(
+                "companion '{key}': home planet '{}' missing or not landable",
+                c.home_planet
+            )),
+        }
+        for chatter_key in c.chatter.keys() {
+            if !matches!(chatter_key.as_str(), "kill" | "player_hit" | "jump_in" | "idle") {
+                p.push(format!(
+                    "companion '{key}': unknown chatter event '{chatter_key}'"
+                ));
+            }
+        }
+        if !granted.contains(key.as_str()) {
+            p.push(format!(
+                "companion '{key}': no mission grants them (unobtainable)"
+            ));
+        }
+    }
 }
 
 /// Every hull's factory loadout must fit its own item space (test-enforced

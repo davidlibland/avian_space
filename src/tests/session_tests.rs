@@ -94,6 +94,7 @@ fn basic_universe() -> ItemUniverse {
         enemies: HashMap::new(),
         allies: HashMap::new(),
         npcs: HashMap::new(),
+        companions: HashMap::new(),
     }
 }
 
