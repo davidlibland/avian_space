@@ -395,6 +395,12 @@ pub struct Ship {
     /// jump consumes 1; refuel at the fuel station.
     #[serde(default)]
     pub fuel: u16,
+    /// Extra cargo capacity contributed by the player's wing: companions and
+    /// hired escorts lend their hulls' holds while enrolled. Derived from the
+    /// EscortRoster every frame (see carrier::sync_escort_cargo_bonus) — NOT
+    /// persisted; the roster is the source of truth.
+    #[serde(skip)]
+    pub escort_cargo_bonus: u16,
     // A map indicating inclusion in factions
     pub enemies: HashMap<String, f32>,
     /// Factions whose rewards are shared into this ship's reward signal.
@@ -465,6 +471,7 @@ impl Ship {
             reserved_cargo: HashMap::new(),
             recent_landings: HashMap::new(),
             credits: 10000,
+            escort_cargo_bonus: 0,
             fuel: data.fuel_capacity,
             allies: Vec::new(),
             nav_target: None,
@@ -614,11 +621,19 @@ impl Ship {
             / 100;
         ship_value + weapon_value + mod_value
     }
-    fn current_cargo(&self) -> u16 {
+    pub fn current_cargo(&self) -> u16 {
         self.cargo.values().sum()
     }
+    /// Total hold: own hull + the wing's contributed holds.
+    pub fn cargo_capacity(&self) -> u16 {
+        self.data.cargo_space.saturating_add(self.escort_cargo_bonus)
+    }
+
+    /// Free space. Losing a contributing escort while loaded can leave the
+    /// fleet OVER capacity — nothing is confiscated, this just saturates to
+    /// zero so no new cargo fits until the player sells down.
     pub fn remaining_cargo_space(&self) -> u16 {
-        return self.data.cargo_space.saturating_sub(self.current_cargo());
+        self.cargo_capacity().saturating_sub(self.current_cargo())
     }
     fn add_cargo(&mut self, commodity: &str, quantity_desired: u16) -> u16 {
         let quantity_added = std::cmp::min(quantity_desired, self.remaining_cargo_space());

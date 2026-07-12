@@ -203,8 +203,16 @@ pub fn render_trade_tab(
     item_universe: &ItemUniverse,
     markup: f32,
 ) {
-    let bulk = bulk_trade_amount(ship.data.cargo_space);
+    let bulk = bulk_trade_amount(ship.cargo_capacity());
     ui.label(format!("Credits: {}", ship.credits));
+    if ship.escort_cargo_bonus > 0 {
+        ui.label(format!(
+            "Hold: {} / {} (incl. {} lent by your wing)",
+            ship.current_cargo(),
+            ship.cargo_capacity(),
+            ship.escort_cargo_bonus
+        ));
+    }
     render_markup_notice(ui, planet, markup);
     ui.label(
         egui::RichText::new(format!("Shift-click Buy/Sell to trade {bulk} at a time."))

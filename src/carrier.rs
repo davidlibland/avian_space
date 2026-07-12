@@ -263,7 +263,8 @@ pub fn carrier_plugin(app: &mut App) {
     }
     app.add_systems(
         Update,
-        service_escorts_on_landing.run_if(not(in_state(PlayState::MainMenu))),
+        (service_escorts_on_landing, sync_escort_cargo_bonus)
+            .run_if(not(in_state(PlayState::MainMenu))),
     );
     app.add_message::<SpawnEscort>().add_systems(
         Update,
@@ -970,6 +971,39 @@ fn service_entry(
             *credits -= affordable * unit;
             entry.ammo.insert(weapon.clone(), have + affordable as u32);
         }
+    }
+}
+
+/// Companions and hires lend their hulls' holds to the fleet: the player's
+/// effective cargo capacity grows while they're enrolled. Carried bay
+/// fighters don't count (they spend half their lives inside the bay), and
+/// mission squadron wings aren't the player's to load. Writes only on
+/// change so it doesn't dirty the player's Ship every frame.
+fn sync_escort_cargo_bonus(
+    roster: Option<Res<EscortRoster>>,
+    iu: Res<crate::item_universe::ItemUniverse>,
+    mut player: Query<&mut Ship, With<Player>>,
+) {
+    let Ok(mut ship) = player.single_mut() else {
+        return;
+    };
+    let bonus: u16 = roster
+        .map(|r| {
+            r.entries
+                .iter()
+                .filter(|e| {
+                    matches!(
+                        e.kind,
+                        EscortKind::Companion { .. } | EscortKind::Hired { .. }
+                    )
+                })
+                .filter_map(|e| iu.ships.get(&e.ship_type))
+                .map(|d| d.cargo_space)
+                .sum()
+        })
+        .unwrap_or(0);
+    if ship.escort_cargo_bonus != bonus {
+        ship.escort_cargo_bonus = bonus;
     }
 }
 

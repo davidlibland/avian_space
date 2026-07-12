@@ -830,3 +830,123 @@ mod servicing {
         );
     }
 }
+
+// ── Fleet cargo: the wing lends its holds ────────────────────────────────────
+mod fleet_cargo {
+    use super::*;
+
+    fn iu() -> crate::item_universe::ItemUniverse {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        iu
+    }
+
+    fn app_with_player(cargo_space: u16) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(iu())
+            .init_resource::<EscortRoster>()
+            .add_systems(Update, sync_escort_cargo_bonus);
+        let player = app
+            .world_mut()
+            .spawn((
+                Ship::from_ship_data(
+                    &ShipData {
+                        cargo_space,
+                        ..Default::default()
+                    },
+                    "p",
+                ),
+                Player,
+            ))
+            .id();
+        (app, player)
+    }
+
+    #[test]
+    fn companions_and_hires_lend_their_holds() {
+        let universe = iu();
+        let gunboat_hold = universe.ships["rebel_gunboat"].cargo_space;
+        let corvette_hold = universe.ships["corvette"].cargo_space;
+        let fighter_hold = universe.ships["fighter"].cargo_space;
+        let (mut app, player) = app_with_player(10);
+        {
+            let mut r = app.world_mut().resource_mut::<EscortRoster>();
+            r.add(
+                "rebel_gunboat".into(),
+                EscortKind::Companion {
+                    name: "sable_dune".into(),
+                },
+                50,
+            );
+            r.add(
+                "corvette".into(),
+                EscortKind::Hired {
+                    name: "Joss Calloway".into(),
+                    temperament: "cautious".into(),
+                },
+                50,
+            );
+            // A carried bay fighter does NOT lend its hold.
+            r.add(
+                "fighter".into(),
+                EscortKind::Carried {
+                    weapon_type: "fighter_bay".into(),
+                },
+                50,
+            );
+        }
+        app.update();
+        let ship = app.world().get::<Ship>(player).unwrap();
+        assert_eq!(
+            ship.escort_cargo_bonus,
+            gunboat_hold + corvette_hold,
+            "companions + hires lend holds; carried fighters don't"
+        );
+        assert_eq!(ship.cargo_capacity(), 10 + gunboat_hold + corvette_hold);
+        let _ = fighter_hold;
+    }
+
+    #[test]
+    fn losing_a_contributor_blocks_new_cargo_but_confiscates_nothing() {
+        let (mut app, player) = app_with_player(10);
+        let id = app.world_mut().resource_mut::<EscortRoster>().add(
+            "rebel_gunboat".into(),
+            EscortKind::Companion {
+                name: "sable_dune".into(),
+            },
+            50,
+        );
+        app.update();
+        // Fill the FLEET hold beyond the player's own hull.
+        let capacity = {
+            let ship = app.world().get::<Ship>(player).unwrap();
+            ship.cargo_capacity()
+        };
+        assert!(capacity > 10);
+        {
+            let mut ship = app.world_mut().get_mut::<Ship>(player).unwrap();
+            ship.buy_cargo("food", capacity, 1);
+            assert_eq!(ship.current_cargo(), capacity, "fleet hold fills");
+        }
+        // Sable dies with the grain aboard.
+        app.world_mut()
+            .resource_mut::<EscortRoster>()
+            .record_death(id);
+        app.update();
+        let mut ship = app.world_mut().get_mut::<Ship>(player).unwrap();
+        assert_eq!(
+            ship.current_cargo(),
+            capacity,
+            "nothing confiscated — the books just don't balance"
+        );
+        assert_eq!(ship.remaining_cargo_space(), 0, "over capacity: no room");
+        ship.buy_cargo("water", 5, 1);
+        assert_eq!(
+            ship.cargo.get("water").copied().unwrap_or(0),
+            0,
+            "no new cargo until the player sells down"
+        );
+    }
+}

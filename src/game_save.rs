@@ -151,6 +151,7 @@ impl PlayerGameState {
             mod_space: 0,
             recent_landings: HashMap::new(),
             credits: save.credits,
+            escort_cargo_bonus: 0,
             fuel,
             allies: Vec::new(),
             nav_target: None,
