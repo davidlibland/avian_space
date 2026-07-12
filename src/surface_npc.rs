@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::surface::{BuildingKind, TILE_PX, WORLD_HEIGHT, WORLD_WIDTH, Walker};
+use crate::surface::{TILE_PX, Walker};
 use crate::surface_pathfinding::{SurfaceCostMap, SurfacePaths};
 
 // ── Behavior enum ────────────────────────────────────────────────────────
@@ -255,22 +255,20 @@ pub fn run_npc_behaviors(
                 repath_timer.tick(time.delta());
                 let needs_repath =
                     path.is_empty() || *current_idx >= path.len() || repath_timer.just_finished();
-                if needs_repath {
-                    if let Some(cm) = cost_map.as_ref() {
-                        let start = find_nearest_walkable(pos, cm);
-                        let goal = find_nearest_walkable(wp, cm);
-                        if let Some(new_path) = cm.find_path(start, goal) {
-                            // Skip waypoints we're already past.
-                            let skip = new_path
-                                .iter()
-                                .position(|&(tx, ty)| {
-                                    let wp = SurfaceCostMap::tile_to_world(tx, ty);
-                                    (wp - foot(pos)).length() > TILE_PX * 0.5
-                                })
-                                .unwrap_or(0);
-                            *path = new_path;
-                            *current_idx = skip;
-                        }
+                if needs_repath && let Some(cm) = cost_map.as_ref() {
+                    let start = find_nearest_walkable(pos, cm);
+                    let goal = find_nearest_walkable(wp, cm);
+                    if let Some(new_path) = cm.find_path(start, goal) {
+                        // Skip waypoints we're already past.
+                        let skip = new_path
+                            .iter()
+                            .position(|&(tx, ty)| {
+                                let wp = SurfaceCostMap::tile_to_world(tx, ty);
+                                (wp - foot(pos)).length() > TILE_PX * 0.5
+                            })
+                            .unwrap_or(0);
+                        *path = new_path;
+                        *current_idx = skip;
                     }
                 }
 
@@ -321,21 +319,19 @@ pub fn run_npc_behaviors(
                 repath_timer.tick(time.delta());
                 let needs_repath =
                     path.is_empty() || *current_idx >= path.len() || repath_timer.just_finished();
-                if needs_repath {
-                    if let Some(cm) = cost_map.as_ref() {
-                        let start = find_nearest_walkable(pos, cm);
-                        let goal = find_nearest_walkable(wp, cm);
-                        if let Some(new_path) = cm.find_path(start, goal) {
-                            let skip = new_path
-                                .iter()
-                                .position(|&(tx, ty)| {
-                                    let wp = SurfaceCostMap::tile_to_world(tx, ty);
-                                    (wp - foot(pos)).length() > TILE_PX * 0.5
-                                })
-                                .unwrap_or(0);
-                            *path = new_path;
-                            *current_idx = skip;
-                        }
+                if needs_repath && let Some(cm) = cost_map.as_ref() {
+                    let start = find_nearest_walkable(pos, cm);
+                    let goal = find_nearest_walkable(wp, cm);
+                    if let Some(new_path) = cm.find_path(start, goal) {
+                        let skip = new_path
+                            .iter()
+                            .position(|&(tx, ty)| {
+                                let wp = SurfaceCostMap::tile_to_world(tx, ty);
+                                (wp - foot(pos)).length() > TILE_PX * 0.5
+                            })
+                            .unwrap_or(0);
+                        *path = new_path;
+                        *current_idx = skip;
                     }
                 }
 
@@ -386,20 +382,18 @@ pub fn run_npc_behaviors(
                 repath_timer.tick(time.delta());
                 let needs_repath =
                     path.is_empty() || *current_idx >= path.len() || repath_timer.just_finished();
-                if needs_repath {
-                    if let Some(cm) = cost_map.as_ref() {
-                        let my_tile = find_nearest_walkable(pos, cm);
-                        let player_tile = SurfaceCostMap::world_to_tile(foot(wp));
-                        // Sampled open-ground escapes (see pick_flee_goal) —
-                        // the old door-only goals sent runners INTO
-                        // buildings, frequently straight past the player.
-                        let mut rng = rand::thread_rng();
-                        if let Some(goal) = pick_flee_goal(cm, my_tile, player_tile, &mut rng) {
-                            if let Some(flee_path) = cm.find_path(my_tile, goal) {
-                                *path = flee_path;
-                                *current_idx = 0;
-                            }
-                        }
+                if needs_repath && let Some(cm) = cost_map.as_ref() {
+                    let my_tile = find_nearest_walkable(pos, cm);
+                    let player_tile = SurfaceCostMap::world_to_tile(foot(wp));
+                    // Sampled open-ground escapes (see pick_flee_goal) —
+                    // the old door-only goals sent runners INTO
+                    // buildings, frequently straight past the player.
+                    let mut rng = rand::thread_rng();
+                    if let Some(goal) = pick_flee_goal(cm, my_tile, player_tile, &mut rng)
+                        && let Some(flee_path) = cm.find_path(my_tile, goal)
+                    {
+                        *path = flee_path;
+                        *current_idx = 0;
                     }
                 }
 
@@ -422,7 +416,7 @@ pub fn run_npc_behaviors(
                             }
                             let dir = Vec2::new(dx as f32, dy as f32);
                             let score = dir.dot(away);
-                            if best.map_or(true, |(_, b)| score > b) {
+                            if best.is_none_or(|(_, b)| score > b) {
                                 best = Some((n, score));
                             }
                         }
@@ -885,7 +879,7 @@ pub(crate) fn pick_flee_goal(
         // player stands between us and is fine ONLY if the path says so —
         // reachability is checked for the winner below.
         let score = d_player - 0.25 * d_npc;
-        if best.map_or(true, |(_, b)| score > b) {
+        if best.is_none_or(|(_, b)| score > b) {
             // Verify reachability before accepting (paths route around
             // buildings, so an unreachable pocket never wins).
             if cm.find_path(npc_tile, cand).is_some() {

@@ -17,6 +17,9 @@ pub mod types;
 pub mod ui;
 
 pub use events::*;
+// NB: the *Save types are consumed by the test target only — clippy's
+// unused-import fix on the bin target must not strip them again.
+#[allow(unused_imports)]
 pub use log::{
     MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, OfferBackoff,
     PlayerUnlocks,

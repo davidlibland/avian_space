@@ -373,11 +373,11 @@ pub fn run_fauna(
         let pos = tf.translation.truncate();
 
         // Recycle anything that has drifted far off-screen.
-        if let Some(pp) = ppos {
-            if pos.distance(pp) > DESPAWN_DIST {
-                commands.entity(entity).despawn();
-                continue;
-            }
+        if let Some(pp) = ppos
+            && pos.distance(pp) > DESPAWN_DIST
+        {
+            commands.entity(entity).despawn();
+            continue;
         }
 
         // Fliers drift over the map ignoring terrain, never fleeing — so they
@@ -399,10 +399,11 @@ pub fn run_fauna(
         }
 
         // Roamers panic when the player is close.
-        if let Some(pp) = ppos {
-            if pos.distance(pp) < FLEE_RADIUS && fauna.state != FaunaState::Flee {
-                fauna.state = FaunaState::Flee;
-            }
+        if let Some(pp) = ppos
+            && pos.distance(pp) < FLEE_RADIUS
+            && fauna.state != FaunaState::Flee
+        {
+            fauna.state = FaunaState::Flee;
         }
 
         match fauna.state {

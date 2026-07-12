@@ -479,7 +479,7 @@ fn spawn_mission_npcs(
                 } else {
                     door
                 };
-                let world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(
+                let _world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(
                     spawn_tile.0,
                     spawn_tile.1,
                 );
@@ -506,7 +506,7 @@ fn spawn_mission_npcs(
                     .and_then(|name| building_door.get(&name.to_lowercase()))
                     .copied()
                     .unwrap_or_else(|| door_tiles[rng.r#gen_range(0..door_tiles.len())]);
-                let world_pos =
+                let _world_pos =
                     crate::surface_pathfinding::SurfaceCostMap::tile_to_world(door.0, door.1);
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
@@ -1000,7 +1000,8 @@ fn setup_surface(
     let map_h = WORLD_HEIGHT;
     let tile_px = TILE_PX;
 
-    let (col_data, placed_buildings) = if let (Some(lut_data), Some(manifest)) = (&lut, &manifest) {
+    let (_col_data, _placed_buildings) = if let (Some(lut_data), Some(manifest)) = (&lut, &manifest)
+    {
         // Seed fBm from planet name for deterministic, per-planet terrain.
         let seed = planet_name
             .bytes()
@@ -1084,9 +1085,9 @@ fn setup_surface(
         let bldg_style = bldg_manifest
             .as_ref()
             .and_then(|m| m.styles.get(style_name));
-        let ext_atlas_handle: Option<Handle<Image>> =
+        let _ext_atlas_handle: Option<Handle<Image>> =
             bldg_style.map(|s| asset_server.load(format!("{WORLDS_DIR}/{}", s.exterior_atlas)));
-        let ext_layout: Option<Handle<TextureAtlasLayout>> = bldg_manifest.as_ref().map(|m| {
+        let _ext_layout: Option<Handle<TextureAtlasLayout>> = bldg_manifest.as_ref().map(|m| {
             atlas_layouts.add(TextureAtlasLayout::from_grid(
                 UVec2::new(tile_px as u32, tile_px as u32),
                 m.ext_cols,
@@ -1221,10 +1222,10 @@ fn setup_surface(
         door_positions.push((BuildingKind::ShipPad, (pad_cx, pad_cy)));
         door_positions.push((BuildingKind::MechanicShop, (mech_x + 1, mech_y)));
         for &(kind, bx, by, ti) in &building_assignments {
-            if let Some(tmpl) = templates.get(ti) {
-                if let Some(&(dc, dr)) = tmpl.entry_points.first() {
-                    door_positions.push((kind, (bx + dc, by + dr)));
-                }
+            if let Some(tmpl) = templates.get(ti)
+                && let Some(&(dc, dr)) = tmpl.entry_points.first()
+            {
+                door_positions.push((kind, (bx + dc, by + dr)));
             }
         }
 
@@ -1574,7 +1575,7 @@ fn setup_surface(
         // ── Spawn building sprites from pre-computed assignments ─────
         for &(kind, anchor_tx, anchor_ty, ti) in &building_assignments {
             let tmpl = templates.get(ti);
-            let (bw, bh) = tmpl.map(|t| (t.width, t.height)).unwrap_or((2, 2));
+            let (bw, _bh) = tmpl.map(|t| (t.width, t.height)).unwrap_or((2, 2));
 
             // Depth-sort: all tiles in the building share z based on the floor.
             let bldg_floor_world = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
@@ -1657,41 +1658,40 @@ fn setup_surface(
                     // finial z≈4.2; screen offset = (x, Δdepth·sin50° +
                     // z·cos50°) in tiles — see build_garrison in
                     // scripts/ship3d/buildings3d.py).
-                    if kind == BuildingKind::Garrison {
-                        if let Some(color) = crate::galaxy::effective_planet_faction(
+                    if kind == BuildingKind::Garrison
+                        && let Some(color) = crate::galaxy::effective_planet_faction(
                             &galaxy,
                             &item_universe,
                             &planet_name,
                         )
                         .and_then(|f| item_universe.factions.get(&f))
                         .map(|fd| fd.color)
-                        {
-                            let offset = Vec2::new(4.25, 2.61) * tile_px;
-                            commands.spawn((
-                                DespawnOnExit(PlayState::Exploring),
-                                Sprite {
-                                    image: asset_server
-                                        .load(format!("{WORLDS_DIR}/buildings3d/flag.png")),
-                                    color: Color::srgb_u8(color[0], color[1], color[2]),
-                                    custom_size: Some(Vec2::new(1.3, 0.84) * tile_px),
-                                    ..default()
-                                },
-                                // The cloth rides just above the pole, which
-                                // is its own prop object at its own depth.
-                                Transform::from_xyz(
-                                    fc.x + offset.x,
-                                    fc.y + offset.y,
-                                    crate::surface_objects::depth_z(
-                                        fc.y - spr
-                                            .props
-                                            .iter()
-                                            .find(|p| p.name == "flag")
-                                            .map_or(0.0, |p| p.dy)
-                                            * tile_px,
-                                    ) + 0.0004,
-                                ),
-                            ));
-                        }
+                    {
+                        let offset = Vec2::new(4.25, 2.61) * tile_px;
+                        commands.spawn((
+                            DespawnOnExit(PlayState::Exploring),
+                            Sprite {
+                                image: asset_server
+                                    .load(format!("{WORLDS_DIR}/buildings3d/flag.png")),
+                                color: Color::srgb_u8(color[0], color[1], color[2]),
+                                custom_size: Some(Vec2::new(1.3, 0.84) * tile_px),
+                                ..default()
+                            },
+                            // The cloth rides just above the pole, which
+                            // is its own prop object at its own depth.
+                            Transform::from_xyz(
+                                fc.x + offset.x,
+                                fc.y + offset.y,
+                                crate::surface_objects::depth_z(
+                                    fc.y - spr
+                                        .props
+                                        .iter()
+                                        .find(|p| p.name == "flag")
+                                        .map_or(0.0, |p| p.dy)
+                                        * tile_px,
+                                ) + 0.0004,
+                            ),
+                        ));
                     }
                 }
             } else {
@@ -2273,10 +2273,10 @@ fn building_interact(
     }
 
     // Open building on E.
-    if keyboard.just_pressed(KeyCode::KeyE) {
-        if let Some((_, kind)) = nearby.current {
-            active_ui.0 = Some(kind);
-        }
+    if keyboard.just_pressed(KeyCode::KeyE)
+        && let Some((_, kind)) = nearby.current
+    {
+        active_ui.0 = Some(kind);
     }
 }
 
@@ -2385,7 +2385,7 @@ fn surface_building_ui(
                             planet_markup(&standings, &galaxy, &item_universe, planet_name);
                         render_shipyard_tab(
                             ui,
-                            &ship,
+                            ship,
                             pd,
                             &item_universe,
                             &unlocks,

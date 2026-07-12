@@ -165,7 +165,7 @@ fn new_pilot_panel(
     current_system: &mut CurrentStarSystem,
     next_state: &mut NextState<PlayState>,
     item_universe: &ItemUniverse,
-    mut layers: Option<&mut CharacterLayers>,
+    layers: Option<&mut CharacterLayers>,
     preview_tex: Option<egui::TextureId>,
 ) {
     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -192,9 +192,7 @@ fn new_pilot_panel(
         });
 
         // ── Avatar creator ────────────────────────────────────────────────
-        if let (Some(layers), Some(mut spec)) =
-            (layers.as_deref_mut(), menu_state.new_pilot_avatar.clone())
-        {
+        if let (Some(layers), Some(mut spec)) = (layers, menu_state.new_pilot_avatar.clone()) {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 // Live preview: the 64×64 native-resolution portrait
@@ -318,17 +316,16 @@ fn load_pilot_panel(
                     if ui
                         .add_sized([300.0, 28.0], egui::Button::new(save_name))
                         .clicked()
+                        && let Some(save) = load_save(save_name)
                     {
-                        if let Some(save) = load_save(save_name) {
-                            current_system.0 = save.current_star_system.clone();
-                            // Store the resources map for session resources to
-                            // consume on entering Flying.
-                            commands.insert_resource(PendingSessionLoad {
-                                resources: save.resources.clone(),
-                            });
-                            *game_state = PlayerGameState::from_save(&save, item_universe);
-                            next_state.set(PlayState::Flying);
-                        }
+                        current_system.0 = save.current_star_system.clone();
+                        // Store the resources map for session resources to
+                        // consume on entering Flying.
+                        commands.insert_resource(PendingSessionLoad {
+                            resources: save.resources.clone(),
+                        });
+                        *game_state = PlayerGameState::from_save(&save, item_universe);
+                        next_state.set(PlayState::Flying);
                     }
                 }
             });

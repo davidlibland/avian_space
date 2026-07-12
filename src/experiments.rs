@@ -96,15 +96,13 @@ pub fn setup_experiment(fresh: bool) -> ExperimentSetup {
 
     let highest_id = find_highest_run_id();
 
-    if !fresh {
-        if let Some(id) = highest_id {
-            let dir = format!("{EXPERIMENTS_DIR}/run_{id}");
-            println!("[experiment] Resuming run {id} from {dir}");
-            return ExperimentSetup {
-                run_dir: dir,
-                is_fresh: false,
-            };
-        }
+    if !fresh && let Some(id) = highest_id {
+        let dir = format!("{EXPERIMENTS_DIR}/run_{id}");
+        println!("[experiment] Resuming run {id} from {dir}");
+        return ExperimentSetup {
+            run_dir: dir,
+            is_fresh: false,
+        };
     }
 
     let new_id = highest_id.map(|id| id + 1).unwrap_or(0);
@@ -129,10 +127,10 @@ fn find_highest_run_id() -> Option<u32> {
     for entry in entries.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if let Some(suffix) = name.strip_prefix("run_") {
-            if let Ok(id) = suffix.parse::<u32>() {
-                max_id = Some(max_id.map_or(id, |m: u32| m.max(id)));
-            }
+        if let Some(suffix) = name.strip_prefix("run_")
+            && let Ok(id) = suffix.parse::<u32>()
+        {
+            max_id = Some(max_id.map_or(id, |m: u32| m.max(id)));
         }
     }
     max_id

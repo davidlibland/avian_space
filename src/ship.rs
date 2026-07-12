@@ -366,10 +366,10 @@ pub enum Target {
 impl Target {
     pub fn get_entity(&self) -> Entity {
         match self {
-            Target::Ship(e) => e.clone(),
-            Target::Planet(e) => e.clone(),
-            Target::Asteroid(e) => e.clone(),
-            Target::Pickup(e) => e.clone(),
+            Target::Ship(e) => *e,
+            Target::Planet(e) => *e,
+            Target::Asteroid(e) => *e,
+            Target::Pickup(e) => *e,
         }
     }
 }
@@ -490,7 +490,7 @@ impl Ship {
         }
     }
     pub fn remaining_item_space(&self) -> i32 {
-        return (self.data.item_space as i32 - self.consumed_item_space()).max(0);
+        (self.data.item_space as i32 - self.consumed_item_space()).max(0)
     }
 
     // ── Effective ship stats ────────────────────────────────────────────────
@@ -646,7 +646,7 @@ impl Ship {
     fn add_cargo(&mut self, commodity: &str, quantity_desired: u16) -> u16 {
         let quantity_added = std::cmp::min(quantity_desired, self.remaining_cargo_space());
         *self.cargo.entry(commodity.to_string()).or_insert(0) += quantity_added;
-        return quantity_added;
+        quantity_added
     }
     pub fn sell_cargo(&mut self, commodity: &str, quantity: u16, price: i128) {
         let held = *self.cargo.get(commodity).unwrap_or(&0u16);
@@ -757,10 +757,10 @@ impl Ship {
         if outfitter_item.space() as i32 > self.remaining_item_space() {
             return;
         }
-        if let Some(weapon) = item_universe.weapons.get(weapon_type) {
-            if !self.mount_free_for(weapon) {
-                return;
-            }
+        if let Some(weapon) = item_universe.weapons.get(weapon_type)
+            && !self.mount_free_for(weapon)
+        {
+            return;
         }
         // Increment count if the weapon is already present in either map.
         if let Some(ws) = self.weapon_systems.primary.get_mut(weapon_type) {
@@ -791,106 +791,95 @@ impl Ship {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
-        match self.weapon_systems.find_weapon_entry(weapon_type) {
-            std::collections::hash_map::Entry::Occupied(mut view) => {
-                self.credits += outfitter_item.price();
-                let val = view.get_mut();
-                if val.number > 0 {
-                    val.number -= 1;
-                } else {
-                    view.remove_entry();
-                }
+        if let std::collections::hash_map::Entry::Occupied(mut view) =
+            self.weapon_systems.find_weapon_entry(weapon_type)
+        {
+            self.credits += outfitter_item.price();
+            let val = view.get_mut();
+            if val.number > 0 {
+                val.number -= 1;
+            } else {
+                view.remove_entry();
             }
-            _ => (),
         }
     }
     pub fn buy_max_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
-        match outfitter_item {
-            OutfitterItem::SecondaryWeapon {
-                ammo_price,
-                ammo_space,
-                ..
-            } => {
-                let ammo_price = crate::standing::markup_price(*ammo_price, markup);
-                let max_price_qty = if ammo_price > 0 {
-                    self.credits / ammo_price
-                } else {
-                    100
-                };
-                let max_space_qty = if *ammo_space > 0 {
-                    self.remaining_item_space() / *ammo_space as i32
-                } else {
-                    100
-                };
-                let qty = std::cmp::min(max_price_qty, max_space_qty as i128).max(0);
-                match self.weapon_systems.find_weapon_entry(weapon_type) {
-                    std::collections::hash_map::Entry::Occupied(view) => {
-                        let val = view.into_mut();
-                        val.ammo_quantity = val.ammo_quantity.map(|n| n + qty as u32);
-                        self.credits -= ammo_price * qty;
-                    }
-                    _ => (),
-                }
+        if let OutfitterItem::SecondaryWeapon {
+            ammo_price,
+            ammo_space,
+            ..
+        } = outfitter_item
+        {
+            let ammo_price = crate::standing::markup_price(*ammo_price, markup);
+            let max_price_qty = if ammo_price > 0 {
+                self.credits / ammo_price
+            } else {
+                100
+            };
+            let max_space_qty = if *ammo_space > 0 {
+                self.remaining_item_space() / *ammo_space as i32
+            } else {
+                100
+            };
+            let qty = std::cmp::min(max_price_qty, max_space_qty as i128).max(0);
+            if let std::collections::hash_map::Entry::Occupied(view) =
+                self.weapon_systems.find_weapon_entry(weapon_type)
+            {
+                let val = view.into_mut();
+                val.ammo_quantity = val.ammo_quantity.map(|n| n + qty as u32);
+                self.credits -= ammo_price * qty;
             }
-            _ => (),
         }
     }
     pub fn buy_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
-        match outfitter_item {
-            OutfitterItem::SecondaryWeapon {
-                ammo_price,
-                ammo_space,
-                ..
-            } => {
-                let ammo_price = crate::standing::markup_price(*ammo_price, markup);
-                if ammo_price > self.credits {
-                    return;
-                }
-                if *ammo_space as i32 > self.remaining_item_space() {
-                    return;
-                }
-                match self.weapon_systems.find_weapon_entry(weapon_type) {
-                    std::collections::hash_map::Entry::Occupied(view) => {
-                        let val = view.into_mut();
-                        val.ammo_quantity = val.ammo_quantity.map(|n| n + 1);
-                        self.credits -= ammo_price;
-                    }
-                    _ => (),
-                }
+        if let OutfitterItem::SecondaryWeapon {
+            ammo_price,
+            ammo_space,
+            ..
+        } = outfitter_item
+        {
+            let ammo_price = crate::standing::markup_price(*ammo_price, markup);
+            if ammo_price > self.credits {
+                return;
             }
-            _ => (),
+            if *ammo_space as i32 > self.remaining_item_space() {
+                return;
+            }
+            if let std::collections::hash_map::Entry::Occupied(view) =
+                self.weapon_systems.find_weapon_entry(weapon_type)
+            {
+                let val = view.into_mut();
+                val.ammo_quantity = val.ammo_quantity.map(|n| n + 1);
+                self.credits -= ammo_price;
+            }
         }
     }
     pub fn sell_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
-        match outfitter_item {
-            OutfitterItem::SecondaryWeapon { ammo_price, .. } => {
-                match self.weapon_systems.find_weapon_entry(weapon_type) {
-                    std::collections::hash_map::Entry::Occupied(mut view) => {
-                        // self.credits += outfitter_item.price();
-                        let val = view.get_mut();
-                        val.ammo_quantity = match val.ammo_quantity {
-                            Some(qty) => Some(if qty > 0 {
-                                self.credits += ammo_price;
-                                qty - 1
-                            } else {
-                                0
-                            }),
-                            _ => None,
-                        }
-                    }
-                    _ => (),
+        if let OutfitterItem::SecondaryWeapon { ammo_price, .. } = outfitter_item {
+            if let std::collections::hash_map::Entry::Occupied(mut view) =
+                self.weapon_systems.find_weapon_entry(weapon_type)
+            {
+                // self.credits += outfitter_item.price();
+                let val = view.get_mut();
+                val.ammo_quantity = match val.ammo_quantity {
+                    Some(qty) => Some(if qty > 0 {
+                        self.credits += ammo_price;
+                        qty - 1
+                    } else {
+                        0
+                    }),
+                    _ => None,
                 }
             }
-            _ => (),
         }
     }
     /// Sell every round of ammo for `weapon_type` in one transaction
@@ -1039,7 +1028,7 @@ pub fn ship_bundle(
     let ship_data = item_universe
         .ships
         .get(ship_type)
-        .expect(&format!("Un recognized ship type {}", ship_type));
+        .unwrap_or_else(|| panic!("Un recognized ship type {}", ship_type));
     let mut ship = Ship::from_ship_data(ship_data, ship_type);
     ship.weapon_systems = WeaponSystems::build(&ship_data.base_weapons, item_universe);
     ship.enemies = ship_data
@@ -1100,7 +1089,7 @@ pub fn ship_bundle(
         distressed: Distressed::default(),
         repair_buffer: RepairBuffer::default(),
         tracer_slots: crate::weapons::TracerSlots::new(crate::rl_obs::K_OWN_PROJECTILES),
-        sprite: ship_sprite(&ship_data),
+        sprite: ship_sprite(ship_data),
         drive: DriveActive::default(),
         transform: Transform::from_xyz(pos.x, pos.y, 0.0),
         body: RigidBody::Dynamic,
@@ -1204,22 +1193,22 @@ fn ship_movement(
             let pd_force = (ship.data.thrust_kp * speed_deficit
                 - ship.data.thrust_kd * forward_speed)
                 .clamp(0.0, thrust);
-            (*velocity).0 += forward * pd_force * cmd.thrust * dt;
+            velocity.0 += forward * pd_force * cmd.thrust * dt;
         }
 
         if cmd.turn.abs() > f32::EPSILON {
-            (*ang_vel).0 += -torque * cmd.turn * dt;
+            ang_vel.0 += -torque * cmd.turn * dt;
         }
 
         let new_ang_vel = ang_vel.0 * (-ship.data.angular_drag * dt).exp();
-        (*ang_vel).0 = new_ang_vel;
+        ang_vel.0 = new_ang_vel;
 
         if cmd.reverse.abs() > f32::EPSILON && speed > f32::EPSILON {
             let retrograde = -velocity.normalize();
             let angle_err = forward.angle_to(retrograde);
             let pd_torque = (ship.data.reverse_kp * angle_err - ship.data.reverse_kd * new_ang_vel)
                 .clamp(-torque, torque);
-            (*ang_vel).0 += pd_torque * cmd.reverse * dt;
+            ang_vel.0 += pd_torque * cmd.reverse * dt;
         }
     }
 }
@@ -1333,7 +1322,7 @@ pub(crate) fn apply_damage(
         // At full health the penalty is 0 (combat is free); at low health it
         // approaches the full damage magnitude (strong pressure to disengage).
         if rl_agents.contains(event.entity) {
-            let dmg_frac = event.damage as f32 / ship.data.max_health.max(1) as f32;
+            let dmg_frac = event.damage / ship.data.max_health.max(1) as f32;
             let penalty = -reward_cfg.health_damage_penalty * dmg_frac * (1.0 - h_frac_before);
             rl_reward_writer.write(RLReward {
                 entity: event.entity,
@@ -1538,17 +1527,16 @@ fn score_hits(
                 // hits don't trigger faction-level contagion. The PLAYER's
                 // hostility map is derived from signed faction standing
                 // instead (see standing::derive_player_hostility).
-                if on_target && players.get(*source).is_err() {
-                    if let Ok(mut source_hostility) = ship_hostilities.get_mut(*source) {
-                        if let Some(ts) = &target_ship {
-                            if let Some(target_faction) = ts.data.faction.as_ref() {
-                                *(source_hostility
-                                    .0
-                                    .entry(target_faction.clone())
-                                    .or_default()) += 1.0;
-                            }
-                        }
-                    }
+                if on_target
+                    && players.get(*source).is_err()
+                    && let Ok(mut source_hostility) = ship_hostilities.get_mut(*source)
+                    && let Some(ts) = &target_ship
+                    && let Some(target_faction) = ts.data.faction.as_ref()
+                {
+                    *(source_hostility
+                        .0
+                        .entry(target_faction.clone())
+                        .or_default()) += 1.0;
                 }
                 // RL reward for hitting a ship.
                 if let Ok(agent) = rl_agents.get(*source) {
@@ -1556,16 +1544,10 @@ fn score_hits(
                     let is_engaged = match (&source_ship, &target_ship) {
                         (Some(ss), Some(ts)) => {
                             let should_engage = ss.should_engage(
-                                &ship_hostilities
-                                    .get(*target)
-                                    .map(|h| h.clone())
-                                    .unwrap_or_default(),
+                                &ship_hostilities.get(*target).cloned().unwrap_or_default(),
                             );
                             let hostile = ts.should_engage(
-                                &ship_hostilities
-                                    .get(*source)
-                                    .map(|h| h.clone())
-                                    .unwrap_or_default(),
+                                &ship_hostilities.get(*source).cloned().unwrap_or_default(),
                             );
                             should_engage || hostile
                         }
@@ -1674,7 +1656,7 @@ fn score_hits(
                         reward: r * personality_scale + assist_bonus,
                         reward_type: crate::consts::REWARD_SHIP_HIT,
                     });
-                    if let Some(ss) = ships.get(*source).ok() {
+                    if let Ok(ss) = ships.get(*source) {
                         let h_frac = ss.health as f32 / ss.data.max_health.max(1) as f32;
                         rl_reward_writer.write(RLReward {
                             entity: *source,
@@ -1695,7 +1677,7 @@ fn score_hits(
                         reward,
                         reward_type: crate::consts::REWARD_ASTEROID_HIT,
                     });
-                    if let Some(ss) = ships.get(*source).ok() {
+                    if let Ok(ss) = ships.get(*source) {
                         let h_frac = ss.health as f32 / ss.data.max_health.max(1) as f32;
                         rl_reward_writer.write(RLReward {
                             entity: *source,
@@ -1714,11 +1696,11 @@ fn sync_hostilites(mut ships: Query<(&mut Ship, &mut ShipHostility)>) {
         // Runs every frame over every ship, so avoid deep clones and — just as
         // important — avoid dirtying change detection when nothing changed
         // (`&mut` derefs mark the component changed even on no-op writes).
-        if let Some(faction) = ship.data.faction.as_deref() {
-            if hostility.0.contains_key(faction) {
-                let faction = faction.to_string();
-                hostility.0.remove(&faction);
-            }
+        if let Some(faction) = ship.data.faction.as_deref()
+            && hostility.0.contains_key(faction)
+        {
+            let faction = faction.to_string();
+            hostility.0.remove(&faction);
         }
         // Copy the hostility onto the ship only when it actually differs.
         if ship.enemies != hostility.0 {

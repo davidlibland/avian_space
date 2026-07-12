@@ -348,42 +348,42 @@ fn trader_message(
     }
 
     // Heading to a planet
-    if let Some(ref dest) = nav_desc {
-        if matches!(&ship.nav_target, Some(Target::Planet(_))) {
-            if cargo_full {
-                if let Some(cargo_name) = primary_cargo(ship, iu) {
-                    let pool = &[
-                        "Hold's packed with {cargo}. {dest} better have good prices.",
-                        "Full load of {cargo}: headed to {dest} to sell.",
-                        "Running {cargo} to {dest}. Margins look decent.",
-                    ];
-                    return pick(pool, entity, time)
-                        .replace("{cargo}", &cargo_name)
-                        .replace("{dest}", dest);
-                }
+    if let Some(ref dest) = nav_desc
+        && matches!(&ship.nav_target, Some(Target::Planet(_)))
+    {
+        if cargo_full {
+            if let Some(cargo_name) = primary_cargo(ship, iu) {
                 let pool = &[
-                    "Hold's full. Making a run to {dest}.",
-                    "Cargo bay's bursting: off to {dest} to sell.",
+                    "Hold's packed with {cargo}. {dest} better have good prices.",
+                    "Full load of {cargo}: headed to {dest} to sell.",
+                    "Running {cargo} to {dest}. Margins look decent.",
                 ];
-                return pick(pool, entity, time).replace("{dest}", dest);
+                return pick(pool, entity, time)
+                    .replace("{cargo}", &cargo_name)
+                    .replace("{dest}", dest);
             }
-
-            if cargo_empty {
-                let pool = &[
-                    "Heading to {dest} to pick up a load.",
-                    "Empty hold. {dest} should have something worth buying.",
-                    "Making for {dest}: time to restock.",
-                ];
-                return pick(pool, entity, time).replace("{dest}", dest);
-            }
-
-            // Partial cargo
             let pool = &[
-                "En route to {dest}. Still have room in the hold.",
-                "Headed to {dest} for another load.",
+                "Hold's full. Making a run to {dest}.",
+                "Cargo bay's bursting: off to {dest} to sell.",
             ];
             return pick(pool, entity, time).replace("{dest}", dest);
         }
+
+        if cargo_empty {
+            let pool = &[
+                "Heading to {dest} to pick up a load.",
+                "Empty hold. {dest} should have something worth buying.",
+                "Making for {dest}: time to restock.",
+            ];
+            return pick(pool, entity, time).replace("{dest}", dest);
+        }
+
+        // Partial cargo
+        let pool = &[
+            "En route to {dest}. Still have room in the hold.",
+            "Headed to {dest} for another load.",
+        ];
+        return pick(pool, entity, time).replace("{dest}", dest);
     }
 
     // Fallback
@@ -489,16 +489,16 @@ fn miner_message(
 
     // Heading to a planet (probably to sell)
     if let Some(ref dest) = nav_desc {
-        if !ship.cargo.is_empty() {
-            if let Some(cargo_name) = primary_cargo(ship, iu) {
-                let pool = &[
-                    "Hold's got a good haul of {cargo}. Heading to {dest} to sell.",
-                    "Hauling {cargo} to {dest}. Not bad for a day's work.",
-                ];
-                return pick(pool, entity, time)
-                    .replace("{cargo}", &cargo_name)
-                    .replace("{dest}", dest);
-            }
+        if !ship.cargo.is_empty()
+            && let Some(cargo_name) = primary_cargo(ship, iu)
+        {
+            let pool = &[
+                "Hold's got a good haul of {cargo}. Heading to {dest} to sell.",
+                "Hauling {cargo} to {dest}. Not bad for a day's work.",
+            ];
+            return pick(pool, entity, time)
+                .replace("{cargo}", &cargo_name)
+                .replace("{dest}", dest);
         }
         let pool = &[
             "Headed back to {dest}. Need to refuel.",

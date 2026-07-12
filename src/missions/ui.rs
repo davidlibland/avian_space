@@ -23,7 +23,7 @@ pub fn render_active_missions(
     // Sort by id: statuses is a HashMap, and unordered iteration made the
     // mission list shuffle whenever an entry was inserted.
     let mut entries: Vec<_> = log.statuses.iter().collect();
-    entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+    entries.sort_by_key(|(a, _)| *a);
     for (id, status) in entries {
         if let MissionStatus::Active(progress) = status {
             any_active = true;
@@ -33,10 +33,10 @@ pub fn render_active_missions(
             ui.group(|ui| {
                 ui.label(&def.briefing);
                 ui.label(format_objective(&def.objective, progress));
-                if let Some(ref mut w) = abandon {
-                    if ui.button("Abandon").clicked() {
-                        w.write(AbandonMission(id.clone()));
-                    }
+                if let Some(ref mut w) = abandon
+                    && ui.button("Abandon").clicked()
+                {
+                    w.write(AbandonMission(id.clone()));
                 }
             });
         }
@@ -653,14 +653,14 @@ fn render_cargo_tab(
             }
         });
 
-    if let Some(commodity) = to_jettison {
-        if ship.jettison_cargo(&commodity) {
-            pickup_drop.write(PickupDrop {
-                location,
-                commodity,
-                quantity: 1,
-            });
-        }
+    if let Some(commodity) = to_jettison
+        && ship.jettison_cargo(&commodity)
+    {
+        pickup_drop.write(PickupDrop {
+            location,
+            commodity,
+            quantity: 1,
+        });
     }
 }
 
@@ -706,10 +706,10 @@ pub fn drain_completion_toasts(
     // surface the briefing here the player never sees the opening message
     // (it was previously only visible in the mission log).
     for MissionStarted(id) in started.read() {
-        if let Some(def) = catalog.defs.get(id) {
-            if matches!(def.offer, OfferKind::Auto) {
-                toast.push(def.briefing.clone());
-            }
+        if let Some(def) = catalog.defs.get(id)
+            && matches!(def.offer, OfferKind::Auto)
+        {
+            toast.push(def.briefing.clone());
         }
     }
 }

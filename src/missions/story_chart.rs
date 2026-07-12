@@ -108,10 +108,10 @@ pub fn build_story_graph(
     let mut preds: HashMap<&str, Vec<&str>> = ids.iter().map(|id| (id.as_str(), vec![])).collect();
     for id in &ids {
         for p in &def(id).unwrap().preconditions {
-            if let Precondition::Completed { mission } = p {
-                if in_set.contains(mission.as_str()) {
-                    preds.get_mut(id.as_str()).unwrap().push(mission.as_str());
-                }
+            if let Precondition::Completed { mission } = p
+                && in_set.contains(mission.as_str())
+            {
+                preds.get_mut(id.as_str()).unwrap().push(mission.as_str());
             }
         }
     }

@@ -7,7 +7,7 @@ use crate::planets::Planet;
 use crate::rl_collection::{RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
 use crate::ship::{Personality, Ship, ShipHostility, Target, ship_bundle};
 use crate::ship_anim::{
-    self, PLANET_ANIM_DURATION, ScaleDownFinished, ScaleUpFinished, ScalingDown, ScalingUp,
+    PLANET_ANIM_DURATION, ScaleDownFinished, ScaleUpFinished, ScalingDown, ScalingUp,
 };
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::{CurrentStarSystem, GameLayer, PlayState};
@@ -623,7 +623,7 @@ pub fn compute_ai_action(
                 }
                 xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 let mid = xs.len() / 2;
-                Some(if xs.len() % 2 == 0 {
+                Some(if xs.len().is_multiple_of(2) {
                     0.5 * (xs[mid - 1] + xs[mid])
                 } else {
                     xs[mid]
@@ -798,9 +798,9 @@ fn land_ship(
         ),
     >,
     mut commands: Commands,
-    images: Res<Assets<Image>>,
+    _images: Res<Assets<Image>>,
 ) {
-    for (entity, ship, ship_pos, vel, sprite) in ships.iter() {
+    for (entity, ship, ship_pos, vel, _sprite) in ships.iter() {
         let Some(Target::Planet(planet_entity)) = ship.nav_target else {
             continue;
         };
@@ -855,7 +855,7 @@ fn finish_ai_landing(
 ) {
     let mut rng = rand::thread_rng();
     for ScaleDownFinished { entity } in reader.read() {
-        let Ok((ship_entity, mut ship, ship_pos, ai_ship, landing, rl_agent)) =
+        let Ok((ship_entity, mut ship, _ship_pos, ai_ship, landing, rl_agent)) =
             ships.get_mut(*entity)
         else {
             continue;
@@ -1024,16 +1024,14 @@ fn finish_ai_landing(
                     reward_type: crate::consts::REWARD_HEALTH_GATED,
                 });
             }
-            if matches!(ai_ship.personality, Personality::Trader) {
-                if let Some(commodity) = item_universe
+            if matches!(ai_ship.personality, Personality::Trader)
+                && let Some(commodity) = item_universe
                     .system_planet_best_commodity_to_buy
                     .get(&system_name)
                     .and_then(|m| m.get(&planet_name))
-                {
-                    if let Some(&price) = planet_data.commodities.get(commodity) {
-                        ship.buy_cargo(commodity, u16::MAX, price);
-                    }
-                }
+                && let Some(&price) = planet_data.commodities.get(commodity)
+            {
+                ship.buy_cargo(commodity, u16::MAX, price);
             }
             let restock: Vec<String> = ship
                 .weapon_systems

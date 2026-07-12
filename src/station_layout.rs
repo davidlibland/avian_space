@@ -88,7 +88,7 @@ pub fn generate_station_map(width: u32, height: u32, n_terrain_types: u32, seed:
     let mut ped: Vec<Option<u32>> = vec![None; n];
     let idx = |x: i32, y: i32| (y * w + x) as usize;
 
-    let mut carve_rect = |open: &mut Vec<bool>, r: Rect, chamfer: i32| {
+    let carve_rect = |open: &mut Vec<bool>, r: Rect, chamfer: i32| {
         for y in r.y0..r.y1 {
             for x in r.x0..r.x1 {
                 if chamfer > 0 {

@@ -427,7 +427,7 @@ impl ItemUniverse {
             }
             // presence(F) = local + λ·1-jump + λ²·2-jump influence
             let mut presence: HashMap<String, f32> = HashMap::new();
-            let mut add = |map: &mut HashMap<String, f32>, sys: &str, w: f32| {
+            let add = |map: &mut HashMap<String, f32>, sys: &str, w: f32| {
                 if let Some(inf) = galaxy.influence.get(sys) {
                     for (f, v) in inf {
                         *map.entry(f.clone()).or_insert(0.0) += v * w;
@@ -960,7 +960,7 @@ fn default_item_tech() -> u8 {
 }
 
 /// Probability distribution + population limits for ships in a star system.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, Default)]
 pub struct ShipDistribution {
     /// Minimum number of AI ships to maintain in the system.
     pub min: usize,
@@ -968,16 +968,6 @@ pub struct ShipDistribution {
     pub max: usize,
     /// Relative spawn weights per ship type.  Higher values = more likely.
     pub types: HashMap<String, f32>,
-}
-
-impl Default for ShipDistribution {
-    fn default() -> Self {
-        ShipDistribution {
-            min: 0,
-            max: 0,
-            types: HashMap::new(),
-        }
-    }
 }
 
 impl ShipDistribution {

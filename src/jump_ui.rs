@@ -80,10 +80,11 @@ fn system_faction(sys: &StarSystem, iu: &ItemUniverse) -> String {
     }
     if by.is_empty() {
         for (name, weight) in &sys.ships.types {
-            if let Some(f) = iu.ships.get(name).and_then(|s| s.faction.as_deref()) {
-                if f != "Pirate" && f != "Merchant" {
-                    *by.entry(f).or_default() += *weight;
-                }
+            if let Some(f) = iu.ships.get(name).and_then(|s| s.faction.as_deref())
+                && f != "Pirate"
+                && f != "Merchant"
+            {
+                *by.entry(f).or_default() += *weight;
             }
         }
     }
@@ -213,7 +214,7 @@ fn jump_ui(
     mission_log: Res<MissionLog>,
     mission_catalog: Res<MissionCatalog>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut virtual_time: ResMut<Time<Virtual>>,
+    _virtual_time: ResMut<Time<Virtual>>,
     mut player_ship: Query<&mut crate::ship::Ship, With<crate::Player>>,
 ) {
     if !ui_state.open {
@@ -336,13 +337,12 @@ fn jump_ui(
                         if conn > sys_name
                             && is_visible(conn)
                             && (visited.contains(sys_name) || visited.contains(conn))
+                            && let Some(other) = item_universe.star_systems.get(conn)
                         {
-                            if let Some(other) = item_universe.star_systems.get(conn) {
-                                painter.line_segment(
-                                    [from, to_screen(other.map_position)],
-                                    Stroke::new(1.0, Color32::from_rgb(40, 50, 90)),
-                                );
-                            }
+                            painter.line_segment(
+                                [from, to_screen(other.map_position)],
+                                Stroke::new(1.0, Color32::from_rgb(40, 50, 90)),
+                            );
                         }
                     }
                 }
@@ -365,7 +365,7 @@ fn jump_ui(
                     let is_jumpable = jumpable_neighbors.contains(sys_name);
 
                     if is_jumpable {
-                        let hovered = hover_pos.map_or(false, |hp| (hp - pos).length() < CLICK_R);
+                        let hovered = hover_pos.is_some_and(|hp| (hp - pos).length() < CLICK_R);
                         if hovered {
                             painter.circle_filled(
                                 pos,
@@ -427,12 +427,11 @@ fn jump_ui(
                         );
                     }
 
-                    if is_jumpable {
-                        if let Some(cp) = click_pos {
-                            if (cp - pos).length() < CLICK_R {
-                                jump_target = Some(sys_name.clone());
-                            }
-                        }
+                    if is_jumpable
+                        && let Some(cp) = click_pos
+                        && (cp - pos).length() < CLICK_R
+                    {
+                        jump_target = Some(sys_name.clone());
                     }
                 }
 
@@ -484,15 +483,15 @@ fn jump_ui(
         });
 
     // Only jump if there's fuel; a jump burns one unit.
-    if let Some(dest) = jump_target {
-        if fuel > 0 {
-            if let Ok(mut ship) = player_ship.single_mut() {
-                ship.fuel = ship.fuel.saturating_sub(1);
-            }
-            travel_ctx.destination = dest;
-            travel_ctx.phase = TravelPhase::Accelerating;
-            ui_state.open = false;
+    if let Some(dest) = jump_target
+        && fuel > 0
+    {
+        if let Ok(mut ship) = player_ship.single_mut() {
+            ship.fuel = ship.fuel.saturating_sub(1);
         }
+        travel_ctx.destination = dest;
+        travel_ctx.phase = TravelPhase::Accelerating;
+        ui_state.open = false;
     }
     if close {
         ui_state.open = false;

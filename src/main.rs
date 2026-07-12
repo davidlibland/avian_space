@@ -395,15 +395,14 @@ fn build_app(
         // N concurrent worlds don't each fan out across all cores and thrash
         // (the spike showed sub-linear scaling from this contention). Only the
         // first app to build actually creates the pool; the rest are no-ops.
-        if multiworld {
-            if let Some(k) = std::env::var("MW_COMPUTE_THREADS")
+        if multiworld
+            && let Some(k) = std::env::var("MW_COMPUTE_THREADS")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
-            {
-                plugins = plugins.set(bevy::app::TaskPoolPlugin {
-                    task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(k),
-                });
-            }
+        {
+            plugins = plugins.set(bevy::app::TaskPoolPlugin {
+                task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(k),
+            });
         }
         app.add_plugins(plugins)
             // Run frames back-to-back with no inter-frame sleep so headless
@@ -823,7 +822,7 @@ fn click_to_target(
 
     // Nearest entity whose circle contains the cursor wins.
     fn consider(best: &mut Option<(f32, Target)>, dist: f32, hit_r: f32, t: Target) {
-        if dist <= hit_r && best.as_ref().map_or(true, |(bd, _)| dist < *bd) {
+        if dist <= hit_r && best.as_ref().is_none_or(|(bd, _)| dist < *bd) {
             *best = Some((dist, t));
         }
     }
@@ -1055,10 +1054,10 @@ fn keyboard_input(
     // Intercept autopilot overrides turn/thrust when the player isn't already
     // giving arrow-key input on those axes. Arrow keys always win so the
     // player can course-correct while holding I.
-    if let Some(auto_turn) = auto_turn_cmd {
-        if turn.abs() < f32::EPSILON {
-            turn = auto_turn;
-        }
+    if let Some(auto_turn) = auto_turn_cmd
+        && turn.abs() < f32::EPSILON
+    {
+        turn = auto_turn;
     }
 
     // Send a command every frame, even all-zero. DriveActive (the exhaust plume)
@@ -1092,14 +1091,12 @@ fn keyboard_input(
     }
 
     let fire_secondary = keyboard_input.any_pressed([KeyCode::ShiftLeft]);
-    if fire_secondary {
-        if let Some(selected) = &player_ship.weapon_systems.selected_secondary {
-            weapons_writer.write(FireCommand {
-                ship: player_entity,
-                weapon_type: selected.clone(),
-                target: player_ship.weapons_target.clone().map(|t| t.get_entity()), // guided missiles auto-acquire the nearest enemy
-            });
-        }
+    if fire_secondary && let Some(selected) = &player_ship.weapon_systems.selected_secondary {
+        weapons_writer.write(FireCommand {
+            ship: player_entity,
+            weapon_type: selected.clone(),
+            target: player_ship.weapons_target.clone().map(|t| t.get_entity()), // guided missiles auto-acquire the nearest enemy
+        });
     }
 }
 
@@ -1178,26 +1175,26 @@ fn collision_system(
             None
         };
 
-        if let Some((weapon_entity, ship_entity)) = weapon_ship_entity {
-            if let Ok(projectile) = weapons.get(weapon_entity) {
-                if projectile.owner == ship_entity {
-                    continue;
-                }
-                if despawned_weapons.insert(weapon_entity) {
-                    safe_despawn(&mut commands, weapon_entity);
-                    let damage = item_universe
-                        .weapons
-                        .get(&projectile.weapon_type)
-                        .map_or(0.0, |w| w.damage as f32);
-                    damage_writer.write(DamageShip {
-                        entity: ship_entity,
-                        damage,
-                    });
-                    score_hit_writer.write(ScoreHit::OnShip {
-                        source: projectile.owner,
-                        target: ship_entity,
-                    });
-                }
+        if let Some((weapon_entity, ship_entity)) = weapon_ship_entity
+            && let Ok(projectile) = weapons.get(weapon_entity)
+        {
+            if projectile.owner == ship_entity {
+                continue;
+            }
+            if despawned_weapons.insert(weapon_entity) {
+                safe_despawn(&mut commands, weapon_entity);
+                let damage = item_universe
+                    .weapons
+                    .get(&projectile.weapon_type)
+                    .map_or(0.0, |w| w.damage as f32);
+                damage_writer.write(DamageShip {
+                    entity: ship_entity,
+                    damage,
+                });
+                score_hit_writer.write(ScoreHit::OnShip {
+                    source: projectile.owner,
+                    target: ship_entity,
+                });
             }
         }
     }

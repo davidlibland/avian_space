@@ -708,9 +708,9 @@ pub fn spawn_ppo_training_thread(
 
                             let raw = total_policy_loss.backward();
                             let grads = GradientsParams::from_grads(raw, net);
-                            let policy_loss_s = f32::from(policy_loss.into_scalar());
-                            let entropy_s = f32::from((-entropy_bonus).into_scalar());
-                            let bc_loss_s = f32::from(bc_loss.into_scalar());
+                            let policy_loss_s = policy_loss.into_scalar();
+                            let entropy_s = (-entropy_bonus).into_scalar();
+                            let bc_loss_s = bc_loss.into_scalar();
                             (grads, (policy_loss_s, entropy_s, bc_loss_s, diag))
                         };
                         epoch_policy_loss += policy_loss_s;
@@ -729,7 +729,7 @@ pub fn spawn_ppo_training_thread(
                         let (value_out, _, _) = vnet.forward(self_t, obj_t, proj_t);
                         let vloss = value_fn::huber_value_loss(value_out, targets, ppo.huber_delta);
 
-                        epoch_value_loss += f32::from(vloss.clone().into_scalar());
+                        epoch_value_loss += vloss.clone().into_scalar();
 
                         let raw = vloss.backward();
                         GradientsParams::from_grads(raw, vnet)
@@ -743,7 +743,7 @@ pub fn spawn_ppo_training_thread(
                 if policy_mbs_this_epoch > 0 {
                     for h in 0..6 {
                         if let Some(acc) = head_max_prob_sum[h].take() {
-                            let mp = f32::from(acc.into_scalar()) / policy_mbs_this_epoch as f32;
+                            let mp = acc.into_scalar() / policy_mbs_this_epoch as f32;
                             epoch_head_max_prob[h] += mp;
                         }
                     }
@@ -797,14 +797,14 @@ pub fn spawn_ppo_training_thread(
 
             update_cycle += 1;
 
-            if update_cycle % ppo.weight_sync_interval == 0 {
+            if update_cycle.is_multiple_of(ppo.weight_sync_interval) {
                 let bytes = model::training_net_to_bytes(inner.policy_net.as_ref().unwrap());
                 if let Ok(mut lock) = inference_net.lock() {
                     lock.load_bytes(bytes);
                 }
             }
 
-            if update_cycle % ppo.save_interval == 0 {
+            if update_cycle.is_multiple_of(ppo.save_interval) {
                 save_all_checkpoints(
                     &inner,
                     &segments,

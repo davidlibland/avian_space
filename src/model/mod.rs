@@ -26,9 +26,15 @@ mod net;
 mod sampling;
 mod training;
 
+#[allow(unused_imports)]
 pub use inference::{
-    InferenceNet, load_inference_net, load_training_net, load_training_net_with_dim,
-    save_training_net, training_net_to_bytes,
+    // load_inference_net is test-target-only — keep it exported.
+    InferenceNet,
+    load_inference_net,
+    load_training_net,
+    load_training_net_with_dim,
+    save_training_net,
+    training_net_to_bytes,
 };
 pub use net::RLNet;
 #[cfg(test)]

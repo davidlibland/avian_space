@@ -380,10 +380,10 @@ fn companion_chatter(
     for d in destroyed.read() {
         // Attribution heuristic: a companion close to the wreck takes credit.
         let near = destroyed_pos.get(d.entity).ok().map(|p| p.0);
-        if let Some(wreck) = near {
-            if live.iter().any(|(_, p)| (p.0 - wreck).length() < 700.0) {
-                event = Some("kill");
-            }
+        if let Some(wreck) = near
+            && live.iter().any(|(_, p)| (p.0 - wreck).length() < 700.0)
+        {
+            event = Some("kill");
         }
     }
     for d in damaged.read() {
@@ -412,13 +412,12 @@ fn companion_chatter(
         };
         match &entry.kind {
             EscortKind::Companion { name } => {
-                if let Some(def) = iu.companions.get(name) {
-                    if let Some(pool) = def.chatter.get(event) {
-                        if !pool.is_empty() {
-                            let line = pool[rng.gen_range(0..pool.len())].clone();
-                            lines.push((def.name.clone(), line));
-                        }
-                    }
+                if let Some(def) = iu.companions.get(name)
+                    && let Some(pool) = def.chatter.get(event)
+                    && !pool.is_empty()
+                {
+                    let line = pool[rng.gen_range(0..pool.len())].clone();
+                    lines.push((def.name.clone(), line));
                 }
             }
             EscortKind::Hired { name, temperament } => {

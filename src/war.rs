@@ -18,7 +18,7 @@ use bevy::prelude::*;
 use rand::Rng;
 
 use crate::PlayState;
-use crate::galaxy::{CONTROL_GAIN, GalaxyControl};
+use crate::galaxy::GalaxyControl;
 use crate::item_universe::ItemUniverse;
 use crate::missions::types::{
     CompletionEffect, CompletionRequirement, CovertAction, MissionDef, NpcApproach, Objective,

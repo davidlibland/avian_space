@@ -389,8 +389,7 @@ impl CharacterLayers {
             .items
             .iter()
             .filter(|i| {
-                i.sexes.iter().any(|s| *s == spec.sex)
-                    && spec.slots.get(&i.slot).is_some_and(|id| *id == i.id)
+                i.sexes.contains(&spec.sex) && spec.slots.get(&i.slot).is_some_and(|id| *id == i.id)
             })
             .collect();
         chosen.sort_by_key(|i| (i.z, i.layer, i.id.clone()));

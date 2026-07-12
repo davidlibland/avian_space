@@ -10,7 +10,7 @@ use crate::item_universe::ItemUniverse;
 use crate::missions::PlayerLandedOnPlanet;
 use crate::planet_ui::LandedContext;
 use crate::session::SessionResourceExt;
-use crate::ship::{ShipHostility, Target};
+use crate::ship::Target;
 use crate::ship_anim::{PLANET_ANIM_DURATION, ScaleDownFinished, ScalingDown};
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player, Ship};
 
@@ -173,12 +173,11 @@ fn landing_input(
     // Check landing eligibility. Hostile standing no longer BARS landing —
     // wanted pilots may set down, and the arrest flow (standing.rs) meets
     // them on the pad instead. Comms warns them on approach.
-    if let Some(system) = item_universe.star_systems.get(&current_star_system.0) {
-        if let Some(planet_data) = system.planets.get(&planet.0) {
-            if planet_data.uncolonized {
-                return;
-            }
-        }
+    if let Some(system) = item_universe.star_systems.get(&current_star_system.0)
+        && let Some(planet_data) = system.planets.get(&planet.0)
+        && planet_data.uncolonized
+    {
+        return;
     }
 
     landed_context.planet_name = Some(planet.0.clone());

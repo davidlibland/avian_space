@@ -154,10 +154,10 @@ impl EscortRoster {
     /// Record a death: removes the entry, and a friend goes into the
     /// permadeath ledger.
     pub fn record_death(&mut self, id: u64) {
-        if let Some(e) = self.entries.iter().find(|e| e.id == id) {
-            if let EscortKind::Companion { name } = &e.kind {
-                self.fallen.insert(name.clone());
-            }
+        if let Some(e) = self.entries.iter().find(|e| e.id == id)
+            && let EscortKind::Companion { name } = &e.kind
+        {
+            self.fallen.insert(name.clone());
         }
         self.remove(id);
     }
@@ -165,10 +165,10 @@ impl EscortRoster {
     /// Dismiss an entry: hires vanish (fee sunk); friends PARK at their
     /// home planet and can be re-recruited there.
     pub fn dismiss(&mut self, id: u64) {
-        if let Some(e) = self.entries.iter().find(|e| e.id == id) {
-            if let EscortKind::Companion { name } = &e.kind {
-                self.parked.insert(name.clone());
-            }
+        if let Some(e) = self.entries.iter().find(|e| e.id == id)
+            && let EscortKind::Companion { name } = &e.kind
+        {
+            self.parked.insert(name.clone());
         }
         self.remove(id);
     }
@@ -339,7 +339,7 @@ fn spawn_escort_ships(
     mut roster: Option<ResMut<EscortRoster>>,
     mut sfx_writer: MessageWriter<EscortSfx>,
     mut jump_flash_writer: MessageWriter<crate::explosions::TriggerJumpFlash>,
-    images: Res<Assets<Image>>,
+    _images: Res<Assets<Image>>,
 ) {
     let player_entity = player.single().ok();
     for event in reader.read() {
@@ -392,20 +392,20 @@ fn spawn_escort_ships(
         // Respawns carry their hull damage across the jump/landing; companions
         // also carry their temperament (from the registry or the hire).
         let mut roster_temperament: Option<crate::companions::Temperament> = None;
-        if let (Some(id), Some(roster)) = (event.roster, &mut roster) {
-            if let Some(entry) = roster.get_mut(id) {
-                bundle.set_ship_health(entry.health);
-                bundle.set_ship_ammo(&entry.ammo);
-                roster_temperament = match &entry.kind {
-                    EscortKind::Companion { name } => {
-                        item_universe.companions.get(name).map(|d| d.temperament)
-                    }
-                    EscortKind::Hired { temperament, .. } => {
-                        Some(crate::companions::Temperament::parse(temperament))
-                    }
-                    EscortKind::Carried { .. } => None,
-                };
-            }
+        if let (Some(id), Some(roster)) = (event.roster, &mut roster)
+            && let Some(entry) = roster.get_mut(id)
+        {
+            bundle.set_ship_health(entry.health);
+            bundle.set_ship_ammo(&entry.ammo);
+            roster_temperament = match &entry.kind {
+                EscortKind::Companion { name } => {
+                    item_universe.companions.get(name).map(|d| d.temperament)
+                }
+                EscortKind::Hired { temperament, .. } => {
+                    Some(crate::companions::Temperament::parse(temperament))
+                }
+                EscortKind::Carried { .. } => None,
+            };
         }
 
         // Bay launches grow out of the mother's hull; squadron wings jump in
@@ -424,9 +424,9 @@ fn spawn_escort_ships(
 
         // Match the mother's heading via Transform rotation.
         // avian2d will initialize Rotation from this on the first physics step.
-        let mother_heading = mother_tf.rotation;
+        let _mother_heading = mother_tf.rotation;
 
-        let escort_entity = commands
+        let _escort_entity = commands
             .spawn((
                 DespawnOnExit(PlayState::Flying),
                 AIShip {
@@ -526,25 +526,25 @@ fn update_escort_modes(
             continue;
         };
 
-        if let EscortMode::Attack { ref target } = *mode {
-            if target_alive.get(target.get_entity()).is_err() {
-                if mother_is_player {
-                    sfx_writer.write(EscortSfx::Neutralized);
-                }
-                *mode = if mother_is_player {
-                    EscortMode::Escort
-                } else {
-                    match mother.weapons_target.as_ref() {
-                        Some(new_target) => EscortMode::Attack {
-                            target: new_target.clone(),
-                        },
-                        // Dock only means something for carried escorts;
-                        // begin_escort_dock gates on CarriedBy, so a squadron
-                        // wing in Dock mode just shadows its mother.
-                        None => EscortMode::Dock,
-                    }
-                };
+        if let EscortMode::Attack { ref target } = *mode
+            && target_alive.get(target.get_entity()).is_err()
+        {
+            if mother_is_player {
+                sfx_writer.write(EscortSfx::Neutralized);
             }
+            *mode = if mother_is_player {
+                EscortMode::Escort
+            } else {
+                match mother.weapons_target.as_ref() {
+                    Some(new_target) => EscortMode::Attack {
+                        target: new_target.clone(),
+                    },
+                    // Dock only means something for carried escorts;
+                    // begin_escort_dock gates on CarriedBy, so a squadron
+                    // wing in Dock mode just shadows its mother.
+                    None => EscortMode::Dock,
+                }
+            };
         }
 
         match &*mode {
@@ -648,7 +648,7 @@ fn escort_act(
             continue;
         }
         match compute_ai_action(
-            &*ship,
+            &ship,
             position.0,
             ship_vel.0,
             ang_vel.0,
@@ -887,10 +887,10 @@ fn sync_roster_health(
                 entry.health = ship.health;
             }
             for (k, ws) in ship.weapon_systems.iter_all() {
-                if let Some(n) = ws.ammo_quantity {
-                    if entry.ammo.get(k) != Some(&n) {
-                        entry.ammo.insert(k.clone(), n);
-                    }
+                if let Some(n) = ws.ammo_quantity
+                    && entry.ammo.get(k) != Some(&n)
+                {
+                    entry.ammo.insert(k.clone(), n);
                 }
             }
         }

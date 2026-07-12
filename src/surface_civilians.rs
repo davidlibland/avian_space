@@ -7,10 +7,9 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
-use serde::Deserialize;
 
 use crate::PlayState;
-use crate::surface::{BuildingKind, TILE_PX, Walker};
+use crate::surface::{BuildingKind, Walker};
 use crate::surface_objects::depth_z;
 use crate::surface_pathfinding::SurfacePaths;
 

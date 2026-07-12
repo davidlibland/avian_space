@@ -169,8 +169,8 @@ fn force_paths_for_connectivity(
 
     for i in 0..door_positions.len() {
         for j in (i + 1)..door_positions.len() {
-            let (kind_a, pos_a) = door_positions[i];
-            let (kind_b, pos_b) = door_positions[j];
+            let (_kind_a, pos_a) = door_positions[i];
+            let (_kind_b, pos_b) = door_positions[j];
 
             // Try normal pathfinding first.
             if surface_pathfinding::path_exists(pos_a, pos_b, &cost_map, map_w, map_h) {

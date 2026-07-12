@@ -236,7 +236,7 @@ pub struct AsteroidField {
 
 impl AsteroidField {
     fn gmass(&self) -> f32 {
-        return self.radius * ASTEROID_VELOCITY.powi(2);
+        self.radius * ASTEROID_VELOCITY.powi(2)
     }
 }
 
@@ -410,7 +410,7 @@ pub fn build_asteroid_field(
 }
 
 pub fn shatter_asteroid(
-    mut commands: &mut Commands,
+    commands: &mut Commands,
     atlases: &AsteroidAtlases,
     asteroid_entity: &Entity,
     asteroids: &Query<(&Asteroid, &Transform, &LinearVelocity)>,
@@ -422,14 +422,14 @@ pub fn shatter_asteroid(
         let size = asteroid.size;
         let field = asteroid.field;
         // Remove the asteroid:
-        safe_despawn(&mut commands, *asteroid_entity);
+        safe_despawn(commands, *asteroid_entity);
         if size > 10.0 {
             for _ in 0..2 {
                 let new_size = rng.gen_range((size * 0.3)..(size * 0.8));
                 let new_vel = vel.0 + random_velocity(vel.0.length() * size / new_size);
                 let offset = new_size * new_vel / new_vel.length();
                 spawn_asteroid(
-                    &mut commands,
+                    commands,
                     atlases,
                     field,
                     new_size,

@@ -15,7 +15,7 @@
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
-use crate::surface::{ActiveBuildingUI, BuildingKind, TILE_PX, Walker};
+use crate::surface::{ActiveBuildingUI, TILE_PX, Walker};
 use crate::surface_npc::{Behavior, Npc, NpcBehavior};
 
 // ── Chat state ───────────────────────────────────────────────────────────
@@ -263,10 +263,10 @@ pub fn npc_chat_ui(
                                 if btn.clicked() {
                                     accept_writer
                                         .write(crate::missions::AcceptMission(mission_id.clone()));
-                                    if let Some(npc_e) = chat.entity {
-                                        if let Ok(mut npc) = npcs.get_mut(npc_e) {
-                                            npc.queue.pop_front();
-                                        }
+                                    if let Some(npc_e) = chat.entity
+                                        && let Ok(mut npc) = npcs.get_mut(npc_e)
+                                    {
+                                        npc.queue.pop_front();
                                     }
                                     close = true;
                                     sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);
@@ -282,10 +282,10 @@ pub fn npc_chat_ui(
                             {
                                 decline_writer
                                     .write(crate::missions::DeclineMission(mission_id.clone()));
-                                if let Some(npc_e) = chat.entity {
-                                    if let Ok(mut npc) = npcs.get_mut(npc_e) {
-                                        npc.queue.pop_front();
-                                    }
+                                if let Some(npc_e) = chat.entity
+                                    && let Ok(mut npc) = npcs.get_mut(npc_e)
+                                {
+                                    npc.queue.pop_front();
                                 }
                                 close = true;
                                 sfx_writer.write(crate::sfx::SurfaceSfx::UiButton);

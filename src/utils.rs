@@ -90,7 +90,7 @@ pub fn angle_to_hit(proj_vel: f32, obj_pos: &Vec2, obj_vel: &Vec2) -> Option<f32
         t2
     };
     let contact_pos = obj_pos + t * obj_vel;
-    return Some(contact_pos.y.atan2(contact_pos.x));
+    Some(contact_pos.y.atan2(contact_pos.x))
 }
 
 #[cfg(test)]

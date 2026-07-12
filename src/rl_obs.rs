@@ -519,7 +519,7 @@ pub fn rotate_to_ego(v: [f32; 2], sin_a: f32, cos_a: f32) -> [f32; 2] {
 /// 2. The weapon with the most remaining ammo.
 ///
 /// Returns `None` if no secondary weapon has ammo.
-pub fn select_secondary_weapon<'a>(ship: &'a Ship, target_is_ship: bool) -> Option<(&'a str, u32)> {
+pub fn select_secondary_weapon(ship: &Ship, target_is_ship: bool) -> Option<(&str, u32)> {
     ship.weapon_systems
         .secondary
         .iter()
@@ -838,7 +838,7 @@ fn encode_slot(
     obs: &mut Vec<f32>,
 ) {
     let Some(s) = slot else {
-        obs.extend(std::iter::repeat(0.0_f32).take(SLOT_SIZE));
+        obs.extend(std::iter::repeat_n(0.0_f32, SLOT_SIZE));
         return;
     };
     let rel_pos = s.core.rel_pos;
@@ -963,7 +963,7 @@ pub fn encode_projectiles(
 /// Encode a single projectile slot (PROJ_SLOT_SIZE floats). `None` → all zeros.
 fn encode_projectile_slot(slot: Option<&ProjectileSlotData>, max_speed: f32, obs: &mut Vec<f32>) {
     let Some(p) = slot else {
-        obs.extend(std::iter::repeat(0.0_f32).take(PROJ_SLOT_SIZE));
+        obs.extend(std::iter::repeat_n(0.0_f32, PROJ_SLOT_SIZE));
         return;
     };
 

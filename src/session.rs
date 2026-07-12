@@ -74,10 +74,10 @@ fn sync_save_data<R: SessionResource>(res: Res<R>, mut buf: ResMut<SessionSaveDa
     if !res.is_changed() {
         return;
     }
-    if let Some(key) = R::SAVE_KEY {
-        if let Ok(value) = serde_yaml::to_value(&res.to_save()) {
-            buf.resources.insert(key.to_string(), value);
-        }
+    if let Some(key) = R::SAVE_KEY
+        && let Ok(value) = serde_yaml::to_value(res.to_save())
+    {
+        buf.resources.insert(key.to_string(), value);
     }
 }
 

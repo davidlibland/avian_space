@@ -185,15 +185,14 @@ fn standing_on_hits(
         standings.adjust(&victim_faction, -HIT_PENALTY);
 
         // Helping the local power fight its enemies earns a little goodwill.
-        if let Some(controller) = galaxy.controller(&current_system.0).map(String::from) {
-            if controller != victim_faction
-                && iu
-                    .enemies
-                    .get(&controller)
-                    .is_some_and(|es| es.contains(&victim_faction))
-            {
-                standings.adjust(&controller, ENEMY_HIT_BONUS);
-            }
+        if let Some(controller) = galaxy.controller(&current_system.0).map(String::from)
+            && controller != victim_faction
+            && iu
+                .enemies
+                .get(&controller)
+                .is_some_and(|es| es.contains(&victim_faction))
+        {
+            standings.adjust(&controller, ENEMY_HIT_BONUS);
         }
     }
 }
@@ -213,12 +212,12 @@ fn standing_on_mission_complete(
         let Some(def) = catalog.defs.get(id) else {
             continue;
         };
-        if let OfferKind::NpcOffer { planet, .. } = &def.offer {
-            if let Some(f) = crate::galaxy::effective_planet_faction(&galaxy, &iu, planet) {
-                standings.adjust(&f, MISSION_BONUS);
-                if let Some(service) = service.as_deref_mut() {
-                    service.record(&f);
-                }
+        if let OfferKind::NpcOffer { planet, .. } = &def.offer
+            && let Some(f) = crate::galaxy::effective_planet_faction(&galaxy, &iu, planet)
+        {
+            standings.adjust(&f, MISSION_BONUS);
+            if let Some(service) = service.as_deref_mut() {
+                service.record(&f);
             }
         }
         for effect in &def.completion_effects {

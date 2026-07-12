@@ -1188,9 +1188,7 @@ fn toggle_space_hud_visibility(
         }
     }
     // Set the mini-map image when entering Exploring.
-    if exploring {
-        if let (Some(minimap), Ok(mut img_node)) = (minimap_res, minimap_q.single_mut()) {
-            img_node.image = minimap.image.clone();
-        }
+    if exploring && let (Some(minimap), Ok(mut img_node)) = (minimap_res, minimap_q.single_mut()) {
+        img_node.image = minimap.image.clone();
     }
 }

@@ -33,7 +33,7 @@ mod bc;
 pub use bc::{compute_bc_loss, compute_bc_loss_from_logits, load_bc_buffer};
 
 use crate::CurrentStarSystem;
-use crate::ai_ships::{AIShip, compute_ai_action};
+use crate::ai_ships::compute_ai_action;
 use crate::asteroids::{Asteroid, AsteroidField};
 use crate::item_universe::ItemUniverse;
 use crate::model::{self, RLResource};
@@ -497,10 +497,10 @@ fn apply_loaded_policy(
 /// accumulated reward.
 fn accumulate_rewards(mut reward_events: MessageReader<RLReward>, mut agents: Query<&mut RLAgent>) {
     for ev in reward_events.read() {
-        if let Ok(mut agent) = agents.get_mut(ev.entity) {
-            if ev.reward_type < crate::consts::N_REWARD_TYPES {
-                agent.accumulated_rewards[ev.reward_type] += ev.reward;
-            }
+        if let Ok(mut agent) = agents.get_mut(ev.entity)
+            && ev.reward_type < crate::consts::N_REWARD_TYPES
+        {
+            agent.accumulated_rewards[ev.reward_type] += ev.reward;
         }
     }
 }
@@ -640,10 +640,10 @@ fn rl_step(
         mode,
         reward_cfg,
     );
-    if segments_sent > 0 {
-        if let Some(c) = segment_counter.as_deref_mut() {
-            c.0 += segments_sent;
-        }
+    if segments_sent > 0
+        && let Some(c) = segment_counter.as_deref_mut()
+    {
+        c.0 += segments_sent;
     }
 }
 
@@ -682,14 +682,15 @@ fn repeat_actions(
                 });
             }
         }
-        if fire_secondary == 1 && wep_entity.is_some() {
-            if let Some((wtype, _)) = rl_obs::select_secondary_weapon(ship, wep_is_ship) {
-                fire_writer.write(FireCommand {
-                    ship: entity,
-                    weapon_type: wtype.to_string(),
-                    target: wep_entity,
-                });
-            }
+        if fire_secondary == 1
+            && wep_entity.is_some()
+            && let Some((wtype, _)) = rl_obs::select_secondary_weapon(ship, wep_is_ship)
+        {
+            fire_writer.write(FireCommand {
+                ship: entity,
+                weapon_type: wtype.to_string(),
+                target: wep_entity,
+            });
         }
     }
 }
@@ -978,10 +979,11 @@ fn build_all_observations(
             }
             let off = info.pos - pos.0;
             let d2 = off.length_squared();
-            if info.distressed && d2 <= ASSIST_RADIUS_SQ {
-                if let Some(tgt) = info.wep_target {
-                    distressed_ally_targets.insert(tgt);
-                }
+            if info.distressed
+                && d2 <= ASSIST_RADIUS_SQ
+                && let Some(tgt) = info.wep_target
+            {
+                distressed_ally_targets.insert(tgt);
             }
             if d2 > det_sq {
                 continue;
@@ -993,10 +995,10 @@ fn build_all_observations(
             if info.distressed {
                 t_n_distressed += 1;
             }
-            if let (Some(a), Some(b)) = (self_wep_target, info.wep_target) {
-                if a == b {
-                    t_n_shared += 1;
-                }
+            if let (Some(a), Some(b)) = (self_wep_target, info.wep_target)
+                && a == b
+            {
+                t_n_shared += 1;
             }
             if d2 < t_nearest_d2 {
                 t_nearest_d2 = d2;
@@ -1098,16 +1100,16 @@ fn build_all_observations(
             .iter()
             .filter_map(|(e, planet)| {
                 // Skip planets the ship can't land on (uncolonized or hostile).
-                if let Some(sd) = system_data {
-                    if let Some(pd) = sd.planets.get(&planet.0) {
-                        if pd.uncolonized {
-                            return None;
-                        }
-                        if !pd.faction.is_empty()
-                            && _self_hostility.0.get(&pd.faction).copied().unwrap_or(0.0) > 0.0
-                        {
-                            return None;
-                        }
+                if let Some(sd) = system_data
+                    && let Some(pd) = sd.planets.get(&planet.0)
+                {
+                    if pd.uncolonized {
+                        return None;
+                    }
+                    if !pd.faction.is_empty()
+                        && _self_hostility.0.get(&pd.faction).copied().unwrap_or(0.0) > 0.0
+                    {
+                        return None;
                     }
                 }
                 // Try Position first (dynamic bodies), fall back to Transform.
@@ -1288,6 +1290,9 @@ fn build_all_observations(
                         })
                         .unwrap_or((0.0, 0.0));
                     // 1.0 iff their weapons_target's entity is us.
+                    // (clippy's collapsible_match fix would rewrite this into
+                    // a guard-only match, which isn't exhaustive — keep it.)
+                    #[allow(clippy::collapsible_match)]
                     let is_targeting_me = match &other_ship.weapons_target {
                         Some(t) => {
                             if t.get_entity() == entity {
@@ -1301,8 +1306,8 @@ fn build_all_observations(
                     let sd = ShipSlotData {
                         max_health: data.map(|d| d.max_health as f32).unwrap_or(0.0),
                         health: other_ship.health as f32,
-                        max_speed: data.map(|d| d.max_speed as f32).unwrap_or(0.0),
-                        torque: data.map(|d| d.torque as f32).unwrap_or(0.0),
+                        max_speed: data.map(|d| d.max_speed).unwrap_or(0.0),
+                        torque: data.map(|d| d.torque).unwrap_or(0.0),
                         is_hostile,
                         should_engage,
                         is_ally,
@@ -1506,7 +1511,7 @@ fn build_all_observations(
             secondary_weapon_speed,
             secondary_cooldown_frac,
             secondary_fire_rate,
-        ) = rl_obs::select_secondary_weapon(&ship, wep_target_is_ship)
+        ) = rl_obs::select_secondary_weapon(ship, wep_target_is_ship)
             .and_then(|(wname, _ammo)| ship.weapon_systems.secondary.get(wname))
             .map(|ws| {
                 let dur = ws.cooldown.duration().as_secs_f32().max(f32::EPSILON);
@@ -1603,16 +1608,16 @@ fn build_all_observations(
         // Own projectiles: tracer-tagged projectiles in their assigned slot order.
         let mut own_projectile_slots: Vec<ProjectileSlotData> = Vec::new();
         for slot_entry in &self_tracer_slots.slots {
-            if let Some(proj_entity) = slot_entry {
-                if let Some(slot_data) = make_proj_slot(*proj_entity, 1.0) {
-                    own_projectile_slots.push(slot_data);
-                }
+            if let Some(proj_entity) = slot_entry
+                && let Some(slot_data) = make_proj_slot(*proj_entity, 1.0)
+            {
+                own_projectile_slots.push(slot_data);
             }
         }
 
         let obs_input = ObsInput {
             personality: &agent.personality,
-            ship: &ship,
+            ship,
             velocity: [vel.x, vel.y],
             angular_velocity: ang_vel.0,
             ship_heading: heading,
@@ -1956,7 +1961,7 @@ fn store_obs_actions(
         // Compute the rule-based action — used as BC label and as the
         // fallback when no model action is available.
         let rule_based_action = if let Some(raw) = compute_ai_action(
-            &*ship,
+            &ship,
             pos.0,
             vel.0,
             ang_vel.0,

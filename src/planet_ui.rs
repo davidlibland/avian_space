@@ -101,10 +101,10 @@ fn ship_pad_ui(
             }
             ui.separator();
             ui.horizontal(|ui| {
-                if ui.button("Repair").clicked() {
-                    if let Ok(mut ship) = player_query.single_mut() {
-                        ship.health = ship.max_health();
-                    }
+                if ui.button("Repair").clicked()
+                    && let Ok(mut ship) = player_query.single_mut()
+                {
+                    ship.health = ship.max_health();
                 }
                 if ui.button("Launch").clicked() {
                     state.set(PlayState::Flying);
@@ -136,7 +136,7 @@ fn place_player_at_launch_site(
     mut camera_query: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,
     current_system: Res<CurrentStarSystem>,
     item_universe: Res<ItemUniverse>,
-    images: Res<Assets<Image>>,
+    _images: Res<Assets<Image>>,
 ) {
     let Some(planet_name) = landed.planet_name.take() else {
         return;
@@ -192,7 +192,7 @@ fn render_markup_notice(ui: &mut egui::Ui, _planet: &PlanetData, markup: f32) {
 /// roughly an eighth of the hold so it stays proportionate — 5 for a shuttle
 /// (10 cargo), 10 for a hauler (70–80), 20 for a bulk carrier (160).
 fn bulk_trade_amount(cargo_space: u16) -> u16 {
-    ((cargo_space / 8 + 4) / 5 * 5).max(5)
+    ((cargo_space / 8).div_ceil(5) * 5).max(5)
 }
 
 /// Render the Trade tab content into an egui Ui.
@@ -426,10 +426,10 @@ pub fn render_outfitter_tab(
                     buy.on_disabled_hover_text("No free mount on this hull")
                 };
                 if buy.clicked() {
-                    ship.buy_weapon(&item, &item_universe, markup);
+                    ship.buy_weapon(&item, item_universe, markup);
                 }
                 if ui.button("Sell").clicked() {
-                    ship.sell_weapon(&item, &item_universe);
+                    ship.sell_weapon(&item, item_universe);
                 }
                 ui.label(match ammo {
                     Some(qty) => qty.to_string(),
@@ -442,9 +442,9 @@ pub fn render_outfitter_tab(
                     .clicked()
                 {
                     if shift {
-                        ship.buy_max_ammo(&item, &item_universe, markup);
+                        ship.buy_max_ammo(&item, item_universe, markup);
                     } else {
-                        ship.buy_ammo(&item, &item_universe, markup);
+                        ship.buy_ammo(&item, item_universe, markup);
                     }
                 }
                 if ui
@@ -453,9 +453,9 @@ pub fn render_outfitter_tab(
                     .clicked()
                 {
                     if shift {
-                        ship.sell_all_ammo(&item, &item_universe);
+                        ship.sell_all_ammo(&item, item_universe);
                     } else {
-                        ship.sell_ammo(&item, &item_universe);
+                        ship.sell_ammo(&item, item_universe);
                     }
                 }
                 ui.end_row();
@@ -514,10 +514,10 @@ pub fn render_mods_section(
                     ui.label(ship.mods.get(&name).copied().unwrap_or(0).to_string());
                     ui.horizontal(|ui| {
                         if ui.button("Buy").clicked() {
-                            ship.buy_mod(&name, &item_universe, markup);
+                            ship.buy_mod(&name, item_universe, markup);
                         }
                         if ui.button("Sell").clicked() {
-                            ship.sell_mod(&name, &item_universe);
+                            ship.sell_mod(&name, item_universe);
                         }
                     });
                     ui.end_row();

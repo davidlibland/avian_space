@@ -82,7 +82,7 @@ impl GalaxyControl {
     /// authored faction (explicit `faction:` or planet majority).
     pub fn seeded_from(iu: &ItemUniverse) -> Self {
         let mut g = Self::default();
-        for (name, _) in &iu.star_systems {
+        for name in iu.star_systems.keys() {
             if ItemUniverse::TRAINING_SYSTEM_KEYS.contains(&name.as_str()) {
                 continue;
             }

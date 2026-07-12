@@ -155,12 +155,11 @@ pub(super) fn spawn_bc_training_thread(
 
         let mut buffer: VecDeque<BCTransition> = if !experiment.is_fresh {
             load_bc_buffer(&buffer_path)
-                .map(|b| {
+                .inspect(|b| {
                     println!(
                         "[bc] Restored buffer with {} transitions from {buffer_path}",
                         b.len()
                     );
-                    b
                 })
                 .unwrap_or_else(|| {
                     println!("[bc] No buffer checkpoint found at {buffer_path} — starting empty.");
@@ -213,12 +212,12 @@ pub(super) fn spawn_bc_training_thread(
                     .map(|_| &buffer[rng.gen_range(0..n)])
                     .collect();
 
-                let log_this_step = step % 100 == 0;
+                let log_this_step = step.is_multiple_of(100);
                 let grads = {
                     let net = inner.policy_net.as_ref().unwrap();
                     let total_loss = compute_bc_loss(net, &batch, &loss_fn, &device);
                     if log_this_step {
-                        let v = f32::from(total_loss.clone().into_scalar());
+                        let v = total_loss.clone().into_scalar();
                         println!("[bc] step={step:>6}  loss={v:.4}  buffer={}", buffer.len());
                     }
                     let raw = total_loss.backward();
@@ -229,14 +228,14 @@ pub(super) fn spawn_bc_training_thread(
                 inner.policy_net = Some(inner.policy_optim.step(BC_LR, net, grads));
                 step += 1;
 
-                if step % BC_WEIGHT_SYNC_INTERVAL == 0 {
+                if step.is_multiple_of(BC_WEIGHT_SYNC_INTERVAL) {
                     let bytes = training_net_to_bytes(inner.policy_net.as_ref().unwrap());
                     if let Ok(mut lock) = inference_net.lock() {
                         lock.load_bytes(bytes);
                     }
                 }
 
-                if step % BC_SAVE_INTERVAL == 0 {
+                if step.is_multiple_of(BC_SAVE_INTERVAL) {
                     save_bc_checkpoint(inner.policy_net.as_ref().unwrap(), &checkpoint_path);
                     save_bc_buffer(&buffer, &buffer_path);
                 }

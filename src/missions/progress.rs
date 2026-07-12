@@ -130,10 +130,10 @@ pub fn handle_ui_actions(
         // hold the LoadCargo start effects. The UI should already disable
         // the button, but we defend in depth so programmatic paths (auto
         // acceptance, future tests) can't overload the hold.
-        if let Ok(ship) = player_q.single() {
-            if def.required_cargo_space() > ship.remaining_cargo_space() {
-                continue;
-            }
+        if let Ok(ship) = player_q.single()
+            && def.required_cargo_space() > ship.remaining_cargo_space()
+        {
+            continue;
         }
         log.set(id, MissionStatus::Active(initial_progress(&def.objective)));
         started.write(MissionStarted(id.clone()));
@@ -218,18 +218,18 @@ pub fn advance_travel_objectives(
             if !matches!(log.status(id), MissionStatus::Active(_)) {
                 continue;
             }
-            if let Objective::TravelToSystem { system: target } = &def.objective {
-                if target == system {
-                    resolve_active_mission(
-                        id,
-                        def,
-                        ship,
-                        &unlocks,
-                        &mut log,
-                        &mut completed,
-                        &mut failed,
-                    );
-                }
+            if let Objective::TravelToSystem { system: target } = &def.objective
+                && target == system
+            {
+                resolve_active_mission(
+                    id,
+                    def,
+                    ship,
+                    &unlocks,
+                    &mut log,
+                    &mut completed,
+                    &mut failed,
+                );
             }
         }
     }
@@ -250,18 +250,18 @@ pub fn advance_land_objectives(
             if !matches!(log.status(id), MissionStatus::Active(_)) {
                 continue;
             }
-            if let Objective::LandOnPlanet { planet: target } = &def.objective {
-                if target == planet {
-                    resolve_active_mission(
-                        id,
-                        def,
-                        ship,
-                        &unlocks,
-                        &mut log,
-                        &mut completed,
-                        &mut failed,
-                    );
-                }
+            if let Objective::LandOnPlanet { planet: target } = &def.objective
+                && target == planet
+            {
+                resolve_active_mission(
+                    id,
+                    def,
+                    ship,
+                    &unlocks,
+                    &mut log,
+                    &mut completed,
+                    &mut failed,
+                );
             }
         }
     }
@@ -637,7 +637,7 @@ pub fn advance_destroy_collect(
             else {
                 continue;
             };
-            if &event.commodity != &req.commodity || &event.system != system {
+            if event.commodity != req.commodity || &event.system != system {
                 continue;
             }
             let MissionStatus::Active(progress) = log.status(id) else {
@@ -683,20 +683,19 @@ pub fn advance_meet_npc_objectives(
         if !matches!(log.status(mission_id), MissionStatus::Active(_)) {
             continue;
         }
-        if let Some(def) = catalog.defs.get(mission_id) {
-            if let Objective::MeetNpc { planet: target, .. } = &def.objective {
-                if target == planet {
-                    resolve_active_mission(
-                        mission_id,
-                        def,
-                        ship,
-                        &unlocks,
-                        &mut log,
-                        &mut completed,
-                        &mut failed,
-                    );
-                }
-            }
+        if let Some(def) = catalog.defs.get(mission_id)
+            && let Objective::MeetNpc { planet: target, .. } = &def.objective
+            && target == planet
+        {
+            resolve_active_mission(
+                mission_id,
+                def,
+                ship,
+                &unlocks,
+                &mut log,
+                &mut completed,
+                &mut failed,
+            );
         }
     }
 }
@@ -715,20 +714,19 @@ pub fn advance_catch_npc_objectives(
         if !matches!(log.status(mission_id), MissionStatus::Active(_)) {
             continue;
         }
-        if let Some(def) = catalog.defs.get(mission_id) {
-            if let Objective::CatchNpc { planet: target, .. } = &def.objective {
-                if target == planet {
-                    resolve_active_mission(
-                        mission_id,
-                        def,
-                        ship,
-                        &unlocks,
-                        &mut log,
-                        &mut completed,
-                        &mut failed,
-                    );
-                }
-            }
+        if let Some(def) = catalog.defs.get(mission_id)
+            && let Objective::CatchNpc { planet: target, .. } = &def.objective
+            && target == planet
+        {
+            resolve_active_mission(
+                mission_id,
+                def,
+                ship,
+                &unlocks,
+                &mut log,
+                &mut completed,
+                &mut failed,
+            );
         }
     }
 }

@@ -239,10 +239,10 @@ fn update_thruster_sfx(
         return;
     };
     let Ok(player_entity) = player.single() else {
-        if let Some(e) = audio.entity.take() {
-            if existing.get(e).is_ok() {
-                commands.entity(e).despawn();
-            }
+        if let Some(e) = audio.entity.take()
+            && existing.get(e).is_ok()
+        {
+            commands.entity(e).despawn();
         }
         return;
     };

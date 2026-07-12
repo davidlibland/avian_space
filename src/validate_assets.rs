@@ -260,13 +260,13 @@ fn validate_ship_base_weapons(iu: &ItemUniverse) {
 /// Weapons with carrier-bay behavior must reference a valid ship type.
 fn validate_weapon_carrier_bays(iu: &ItemUniverse) {
     for (weapon_name, weapon) in &iu.weapons {
-        if let Some(bay_ship) = weapon.carrier_bay() {
-            if !iu.ships.contains_key(bay_ship) {
-                warn!(
-                    "Weapon \"{weapon_name}\" has carrier bay ship \"{bay_ship}\" \
+        if let Some(bay_ship) = weapon.carrier_bay()
+            && !iu.ships.contains_key(bay_ship)
+        {
+            warn!(
+                "Weapon \"{weapon_name}\" has carrier bay ship \"{bay_ship}\" \
                      which is not defined in ships.yaml"
-                );
-            }
+            );
         }
     }
 }
@@ -344,13 +344,13 @@ fn validate_mission_templates(iu: &ItemUniverse) {
             }
             MissionTemplate::War { .. } => {}
             MissionTemplate::Covert { action, .. } => {
-                if let crate::missions::types::CovertAction::Smuggle { commodity, .. } = action {
-                    if !iu.commodities.contains_key(commodity) {
-                        warn!(
-                            "Mission template \"{tmpl_id}\" smuggle commodity \
+                if let crate::missions::types::CovertAction::Smuggle { commodity, .. } = action
+                    && !iu.commodities.contains_key(commodity)
+                {
+                    warn!(
+                        "Mission template \"{tmpl_id}\" smuggle commodity \
                              \"{commodity}\" is not defined in commodities.yaml"
-                        );
-                    }
+                    );
                 }
             }
             MissionTemplate::Arrest {
@@ -410,13 +410,13 @@ fn validate_preconditions(preconds: &[Precondition], id: &str, label: &str, iu: 
 }
 
 fn validate_offer(offer: &OfferKind, id: &str, label: &str, planets: &HashSet<&str>) {
-    if let OfferKind::NpcOffer { planet, .. } = offer {
-        if !planets.contains(planet.as_str()) {
-            warn!(
-                "{label} \"{id}\" NpcOffer references planet \"{planet}\" \
+    if let OfferKind::NpcOffer { planet, .. } = offer
+        && !planets.contains(planet.as_str())
+    {
+        warn!(
+            "{label} \"{id}\" NpcOffer references planet \"{planet}\" \
                  which does not exist in any star system"
-            );
-        }
+        );
     }
 }
 
@@ -500,20 +500,20 @@ fn validate_objective(
                 // `quantity % count` ships carry one extra unit. Verify the
                 // per-ship share fits in the ship_type's cargo hold so the
                 // player can actually collect the full quantity.
-                if *count > 0 {
-                    if let Some(ship_data) = iu.ships.get(ship_type) {
-                        let hold = ship_data.cargo_space;
-                        let per_ship_max = req.quantity.div_ceil(*count as u16);
-                        if per_ship_max > hold {
-                            warn!(
-                                "{label} \"{id}\" objective collect requires {} units of \
+                if *count > 0
+                    && let Some(ship_data) = iu.ships.get(ship_type)
+                {
+                    let hold = ship_data.cargo_space;
+                    let per_ship_max = req.quantity.div_ceil(*count as u16);
+                    if per_ship_max > hold {
+                        warn!(
+                            "{label} \"{id}\" objective collect requires {} units of \
                                  \"{}\" across {} \"{ship_type}\" ships — each ship must \
                                  carry up to {per_ship_max} units, but ship_type cargo \
                                  hold is only {hold}. Reduce collect.quantity, raise count, \
                                  or pick a ship with more cargo_space.",
-                                req.quantity, req.commodity, count,
-                            );
-                        }
+                            req.quantity, req.commodity, count,
+                        );
                     }
                 }
             }
@@ -965,12 +965,12 @@ fn check_ship_weapons_buyable(iu: &ItemUniverse, p: &mut Vec<String>) {
 fn check_mission_graph(iu: &ItemUniverse, p: &mut Vec<String>) {
     for (id, def) in &iu.missions {
         for pc in &def.preconditions {
-            if let Precondition::Completed { mission } | Precondition::Failed { mission } = pc {
-                if !iu.missions.contains_key(mission) {
-                    p.push(format!(
-                        "mission '{id}': precondition references unknown mission '{mission}'"
-                    ));
-                }
+            if let Precondition::Completed { mission } | Precondition::Failed { mission } = pc
+                && !iu.missions.contains_key(mission)
+            {
+                p.push(format!(
+                    "mission '{id}': precondition references unknown mission '{mission}'"
+                ));
             }
         }
     }
@@ -1185,21 +1185,20 @@ fn check_mission_coherence(iu: &ItemUniverse, p: &mut Vec<String>) {
         if let OfferKind::NpcOffer {
             planet, building, ..
         } = &def.offer
+            && let Some(pd) = find_planet(iu, planet)
         {
-            if let Some(pd) = find_planet(iu, planet) {
-                check_surface(id, "offered on", planet, pd, building.as_deref(), p);
-            }
+            check_surface(id, "offered on", planet, pd, building.as_deref(), p);
         }
         // surface objectives
         match &def.objective {
             Objective::LandOnPlanet { planet } => {
-                if let Some(pd) = find_planet(iu, planet) {
-                    if !is_landable(pd) {
-                        p.push(format!(
-                            "mission '{id}': land objective '{planet}' is \
+                if let Some(pd) = find_planet(iu, planet)
+                    && !is_landable(pd)
+                {
+                    p.push(format!(
+                        "mission '{id}': land objective '{planet}' is \
                              uncolonised — nowhere to set down"
-                        ));
-                    }
+                    ));
                 }
             }
             Objective::MeetNpc {
@@ -1238,12 +1237,12 @@ fn check_surface(
         ));
         return;
     }
-    if let Some(b) = building {
-        if !planet_has_building(pd, b) {
-            p.push(format!(
-                "mission '{id}': {verb} '{planet}' at building '{b}', \
+    if let Some(b) = building
+        && !planet_has_building(pd, b)
+    {
+        p.push(format!(
+            "mission '{id}': {verb} '{planet}' at building '{b}', \
                  which that planet does not have"
-            ));
-        }
+        ));
     }
 }

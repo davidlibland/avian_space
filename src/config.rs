@@ -301,13 +301,13 @@ impl TrainingConfig {
 
     /// Serialize as YAML to `path`, creating any missing parent directories.
     pub fn write_to_path(&self, path: &Path) -> Result<(), ConfigError> {
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).map_err(|e| ConfigError::Io {
-                    path: parent.to_path_buf(),
-                    source: e,
-                })?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| ConfigError::Io {
+                path: parent.to_path_buf(),
+                source: e,
+            })?;
         }
         let s = serde_yaml::to_string(self).map_err(|e| ConfigError::Serialize {
             path: path.to_path_buf(),

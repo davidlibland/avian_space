@@ -99,7 +99,7 @@ impl TracerSlots {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct WeaponSystems {
     pub primary: HashMap<String, WeaponSystem>,
     pub secondary: HashMap<String, WeaponSystem>,
@@ -127,7 +127,7 @@ impl WeaponSystems {
         let mut secondary: HashMap<String, WeaponSystem> = HashMap::new();
         for (weapon_type, &(count, ammo_quantity)) in layout.iter() {
             if let Some(ws) =
-                WeaponSystem::from_type(weapon_type, count, ammo_quantity, &item_universe)
+                WeaponSystem::from_type(weapon_type, count, ammo_quantity, item_universe)
             {
                 if ws.ammo_quantity.is_some() {
                     secondary.insert(weapon_type.clone(), ws);
@@ -138,7 +138,7 @@ impl WeaponSystems {
         }
         WeaponSystems {
             primary,
-            secondary: secondary,
+            secondary,
             selected_secondary: None,
         }
     }
@@ -163,16 +163,6 @@ impl WeaponSystems {
     }
     pub fn iter_all_mut(&mut self) -> impl Iterator<Item = (&String, &mut WeaponSystem)> {
         self.primary.iter_mut().chain(self.secondary.iter_mut())
-    }
-}
-
-impl Default for WeaponSystems {
-    fn default() -> Self {
-        WeaponSystems {
-            primary: HashMap::new(),
-            secondary: HashMap::new(),
-            selected_secondary: None,
-        }
     }
 }
 
@@ -440,20 +430,20 @@ impl WeaponSystem {
         // (tick(), not set_elapsed(): only tick() updates the finished flag.)
         let duration = cooldown.duration();
         cooldown.tick(duration);
-        return Some(WeaponSystem {
+        Some(WeaponSystem {
             weapon: weapon.clone(),
             cooldown,
-            number: number,
+            number,
             space_per_system: outfitter_item.space() as i32,
             ammo_quantity: weapon.ammo.clone().map(|_| ammo_quantity.unwrap_or(0)),
-        });
+        })
     }
     pub fn space_consumed(&self) -> i32 {
         let base_space = self.space_per_system * self.number as i32;
         let ammo_space = self
             .ammo_quantity
             .and_then(|q| self.weapon.ammo.clone().map(|a| q * a.space));
-        return base_space + ammo_space.unwrap_or(0) as i32;
+        base_space + ammo_space.unwrap_or(0) as i32
     }
 }
 
@@ -673,12 +663,12 @@ pub fn weapon_fire(
                 .iter_all()
                 .map(|(name, _)| name.as_str())
                 .collect();
-            if ts.should_trace(&cmd.weapon_type, &weapon_names) {
-                if let Some(slot) = ts.next_free_slot() {
-                    let proj_entity = entity_cmd.id();
-                    entity_cmd.insert(Tracer);
-                    ts.assign(slot, proj_entity);
-                }
+            if ts.should_trace(&cmd.weapon_type, &weapon_names)
+                && let Some(slot) = ts.next_free_slot()
+            {
+                let proj_entity = entity_cmd.id();
+                entity_cmd.insert(Tracer);
+                ts.assign(slot, proj_entity);
             }
         }
         writer.write(WeaponFired {
@@ -709,10 +699,10 @@ fn cleanup_tracer_slots(
 ) {
     for mut ts in &mut ships {
         for slot in &mut ts.slots {
-            if let Some(e) = *slot {
-                if projectiles.get(e).is_err() {
-                    *slot = None;
-                }
+            if let Some(e) = *slot
+                && projectiles.get(e).is_err()
+            {
+                *slot = None;
             }
         }
     }
