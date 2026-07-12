@@ -13,8 +13,8 @@
 //! The key invariant maintained throughout: no two adjacent tiles
 //! (8-connected) differ by more than 1 terrain index.
 
-use crate::surface_pathfinding;
 use crate::surface::BuildingKind;
+use crate::surface_pathfinding;
 
 /// Result of terrain generation.
 pub struct GeneratedTerrain {
@@ -58,10 +58,7 @@ pub fn generate_constrained_terrain(
     let mut terrain = base_terrain;
     debug_assert_eq!(terrain.len(), (map_w * map_h) as usize);
 
-    let walkable_terrain: u32 = collision_codes
-        .iter()
-        .position(|&c| c == 0)
-        .unwrap_or(0) as u32;
+    let walkable_terrain: u32 = collision_codes.iter().position(|&c| c == 0).unwrap_or(0) as u32;
 
     // ── Step 2: Force tiles near buildings to walkable ────────────────────
     force_walkable_near_buildings(
@@ -182,8 +179,14 @@ fn force_paths_for_connectivity(
 
             // Disconnected — find cheapest crossing using high-cost solid tiles.
             let crossing = find_crossing_path(
-                pos_a, pos_b, terrain, collision_codes, movement_costs,
-                solid_building_tiles, map_w, map_h,
+                pos_a,
+                pos_b,
+                terrain,
+                collision_codes,
+                movement_costs,
+                solid_building_tiles,
+                map_w,
+                map_h,
             );
 
             for (tx, ty) in &crossing {
@@ -266,8 +269,14 @@ fn find_crossing_path(
                 continue;
             }
 
-            let col_code = collision_codes.get(terrain[idx] as usize).copied().unwrap_or(0);
-            let base_cost = movement_costs.get(terrain[idx] as usize).copied().unwrap_or(1.0);
+            let col_code = collision_codes
+                .get(terrain[idx] as usize)
+                .copied()
+                .unwrap_or(0);
+            let base_cost = movement_costs
+                .get(terrain[idx] as usize)
+                .copied()
+                .unwrap_or(1.0);
 
             if col_code == 1 {
                 // Solid terrain — high cost but passable (can be fixed
@@ -279,6 +288,5 @@ fn find_crossing_path(
         }
     }
 
-    surface_pathfinding::dijkstra_path_pub(start, goal, &cost_map, map_w, map_h)
-        .unwrap_or_default()
+    surface_pathfinding::dijkstra_path_pub(start, goal, &cost_map, map_w, map_h).unwrap_or_default()
 }

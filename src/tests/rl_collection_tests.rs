@@ -242,10 +242,7 @@ fn multiple_allies_averaged() {
         (ally_b, rewards_b, Some("Federation")),
     ]);
 
-    let slot_targets = vec![
-        Some(Target::Ship(ally_a)),
-        Some(Target::Ship(ally_b)),
-    ];
+    let slot_targets = vec![Some(Target::Ship(ally_a)), Some(Target::Ship(ally_b))];
     let allies = vec!["Federation".to_string(), "Merchant".to_string()];
 
     let mut rewards = zero_rewards();

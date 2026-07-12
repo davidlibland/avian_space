@@ -15,8 +15,7 @@ use std::path::Path;
 
 fn universe() -> ItemUniverse {
     let mut iu: ItemUniverse =
-        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse")
-;
+        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse");
     iu.finalize();
     iu
 }
@@ -152,7 +151,10 @@ fn arrest_generates_case_and_fine_resolution_restores_standing() {
     ));
     for id in ids.iter().filter(|i| !i.ends_with("__meet")) {
         assert!(
-            matches!(app.world().resource::<MissionLog>().status(id), MissionStatus::Locked),
+            matches!(
+                app.world().resource::<MissionLog>().status(id),
+                MissionStatus::Locked
+            ),
             "resolutions stay locked until the enforcers reach you: {id}"
         );
     }
@@ -166,7 +168,11 @@ fn arrest_generates_case_and_fine_resolution_restores_standing() {
     app.update();
     let ids = arrest_ids(&mut app);
     let fine_id = ids.iter().find(|i| i.ends_with("__fine")).unwrap().clone();
-    let bounty_id = ids.iter().find(|i| i.ends_with("__bounty")).unwrap().clone();
+    let bounty_id = ids
+        .iter()
+        .find(|i| i.ends_with("__bounty"))
+        .unwrap()
+        .clone();
     let service_id = ids
         .iter()
         .find(|i| i.ends_with("__service"))
@@ -174,7 +180,10 @@ fn arrest_generates_case_and_fine_resolution_restores_standing() {
         .clone();
     for id in [&fine_id, &bounty_id, &service_id] {
         assert!(
-            matches!(app.world().resource::<MissionLog>().status(id), MissionStatus::Active(_)),
+            matches!(
+                app.world().resource::<MissionLog>().status(id),
+                MissionStatus::Active(_)
+            ),
             "all three resolutions auto-start: {id}"
         );
     }
@@ -188,10 +197,7 @@ fn arrest_generates_case_and_fine_resolution_restores_standing() {
     app.update();
     app.update();
 
-    let standing = app
-        .world()
-        .resource::<FactionStandings>()
-        .get("Federation");
+    let standing = app.world().resource::<FactionStandings>().get("Federation");
     assert!(
         (standing - POST_ARREST_STANDING).abs() < 1e-3,
         "fine restores standing to just above hostile, got {standing}"
@@ -201,14 +207,21 @@ fn arrest_generates_case_and_fine_resolution_restores_standing() {
     assert_eq!(credits_before - credits_after, 5500, "fine charged");
     for id in [&bounty_id, &service_id] {
         assert!(
-            matches!(app.world().resource::<MissionLog>().status(id), MissionStatus::Failed),
+            matches!(
+                app.world().resource::<MissionLog>().status(id),
+                MissionStatus::Failed
+            ),
             "sibling resolutions retire when the case closes: {id}"
         );
     }
     // No re-arrest while nothing changed… standing is above the threshold
     // now, and the next landing's prune sweeps the closed case away entirely.
     land(&mut app, "earth");
-    assert_eq!(arrest_ids(&mut app).len(), 0, "closed case pruned, no new case filed");
+    assert_eq!(
+        arrest_ids(&mut app).len(),
+        0,
+        "closed case pruned, no new case filed"
+    );
 }
 
 #[test]
@@ -311,7 +324,10 @@ fn hostility_derived_from_standing_thresholds() {
 #[test]
 fn standings_and_galaxy_persist() {
     use crate::session::SessionResource;
-    assert!(FactionStandings::SAVE_KEY.is_some(), "standings must persist");
+    assert!(
+        FactionStandings::SAVE_KEY.is_some(),
+        "standings must persist"
+    );
     assert!(
         crate::galaxy::GalaxyControl::SAVE_KEY.is_some(),
         "the war state must persist"
@@ -326,7 +342,10 @@ fn standings_and_galaxy_persist() {
     let mut g = crate::galaxy::GalaxyControl::seeded_from(&iu);
     g.apply_shift("drift", "Rebel", 0.7);
     let restored = crate::galaxy::GalaxyControl::from_save(g.to_save(), &iu);
-    assert_eq!(restored.influence_of("drift", "Rebel"), g.influence_of("drift", "Rebel"));
+    assert_eq!(
+        restored.influence_of("drift", "Rebel"),
+        g.influence_of("drift", "Rebel")
+    );
     assert_eq!(restored.controllers, g.controllers);
 }
 

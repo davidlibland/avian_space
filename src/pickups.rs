@@ -40,7 +40,13 @@ fn load_pickup_atlas(
     mut commands: Commands,
 ) {
     let layout = layouts.map(|mut l| {
-        l.add(TextureAtlasLayout::from_grid(UVec2::splat(64), 4, 4, None, None))
+        l.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(64),
+            4,
+            4,
+            None,
+            None,
+        ))
     });
     let image = asset_server.load("sprites/pickups/crystal.png");
     commands.insert_resource(PickupAtlas { image, layout });
@@ -52,8 +58,7 @@ fn tumble_pickups(time: Res<Time>, mut q: Query<(&PickupTumble, &mut Sprite)>) {
     for (tumble, mut sprite) in &mut q {
         if let Some(atlas) = sprite.texture_atlas.as_mut() {
             let frac = (t * tumble.speed + tumble.phase).rem_euclid(1.0);
-            atlas.index =
-                ((frac * PICKUP_TUMBLE_FRAMES as f32) as usize) % PICKUP_TUMBLE_FRAMES;
+            atlas.index = ((frac * PICKUP_TUMBLE_FRAMES as f32) as usize) % PICKUP_TUMBLE_FRAMES;
         }
     }
 }
@@ -71,8 +76,7 @@ pub fn pickup_plugin(app: &mut App) {
         .add_systems(Startup, load_pickup_atlas)
         .add_systems(
             Update,
-            (spawn_pickups, collect_pickups, tumble_pickups)
-                .run_if(in_state(PlayState::Flying)),
+            (spawn_pickups, collect_pickups, tumble_pickups).run_if(in_state(PlayState::Flying)),
         );
 }
 
@@ -93,7 +97,10 @@ fn spawn_pickups(
         let mut sprite = match &atlas.layout {
             Some(l) => Sprite::from_atlas_image(
                 atlas.image.clone(),
-                TextureAtlas { layout: l.clone(), index: 0 },
+                TextureAtlas {
+                    layout: l.clone(),
+                    index: 0,
+                },
             ),
             None => Sprite::from_image(atlas.image.clone()),
         };

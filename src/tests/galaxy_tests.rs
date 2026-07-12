@@ -63,7 +63,10 @@ fn control_gained_at_60_kept_to_50() {
     let mut g = GalaxyControl::default();
 
     g.apply_shift("s", "Rebel", 0.55);
-    assert!(g.recompute_controller("s").is_none(), "0.55 < gain threshold");
+    assert!(
+        g.recompute_controller("s").is_none(),
+        "0.55 < gain threshold"
+    );
     assert_eq!(g.controller("s"), None);
 
     g.apply_shift("s", "Rebel", 0.1); // 0.65 → gain
@@ -125,9 +128,8 @@ fn seeded_galaxy_matches_static_assets() {
 #[test]
 fn control_flip_restocks_markets() {
     let mut iu = universe();
-    let procyon_prime = |iu: &ItemUniverse| {
-        iu.find_gameplay_planet("procyon_prime").unwrap().1.clone()
-    };
+    let procyon_prime =
+        |iu: &ItemUniverse| iu.find_gameplay_planet("procyon_prime").unwrap().1.clone();
     // Rebel-held: rebel-fenced gear on the shelves. (javelin/rebel_fighter
     // now sell in Federation space too — espionage licensed copies — so the
     // discriminators are pirate_laser and the rebel frigate, still fenced.)
@@ -162,7 +164,10 @@ fn control_flip_restocks_markets() {
 fn derived_traffic_reflects_presence_and_wealth() {
     let iu = universe();
     let sol = &iu.star_systems.get("sol").unwrap().ships;
-    assert!(!sol.types.is_empty(), "derived distribution must be non-empty");
+    assert!(
+        !sol.types.is_empty(),
+        "derived distribution must be non-empty"
+    );
     assert!(sol.min >= 1 && sol.min <= sol.max && sol.max <= 10);
     assert!(
         sol.types.contains_key("fed_patrol"),
@@ -188,9 +193,10 @@ fn derived_traffic_reflects_presence_and_wealth() {
     // Pirates follow wealth in unaligned space.
     let drift = &iu.star_systems.get("drift").unwrap().ships;
     assert!(
-        drift.types.keys().any(|k| {
-            iu.ships.get(k).and_then(|s| s.faction.as_deref()) == Some("Pirate")
-        }),
+        drift
+            .types
+            .keys()
+            .any(|k| { iu.ships.get(k).and_then(|s| s.faction.as_deref()) == Some("Pirate") }),
         "unaligned systems crawl with pirates: {:?}",
         drift.types.keys().collect::<Vec<_>>()
     );
@@ -263,7 +269,9 @@ fn mission_shift_flips_system_and_restocks() {
         preconditions: vec![],
         offer: OfferKind::Auto,
         start_effects: vec![],
-        objective: Objective::TravelToSystem { system: "sol".into() },
+        objective: Objective::TravelToSystem {
+            system: "sol".into(),
+        },
         requires: vec![],
         completion_effects: vec![CompletionEffect::ShiftInfluence {
             system: system.into(),
@@ -281,19 +289,23 @@ fn mission_shift_flips_system_and_restocks() {
             .insert(id.into(), mk_mission("procyon", delta));
     }
     // Also try to grab Sol for the Rebels — non-contestable, must be ignored.
-    app.world_mut().resource_mut::<MissionCatalog>().defs.insert(
-        "illegal".into(),
-        MissionDef {
-            completion_effects: vec![CompletionEffect::ShiftInfluence {
-                system: "sol".into(),
-                faction: "Rebel".into(),
-                delta: 1.0,
-            }],
-            ..mk_mission("sol", 0.0)
-        },
-    );
+    app.world_mut()
+        .resource_mut::<MissionCatalog>()
+        .defs
+        .insert(
+            "illegal".into(),
+            MissionDef {
+                completion_effects: vec![CompletionEffect::ShiftInfluence {
+                    system: "sol".into(),
+                    faction: "Rebel".into(),
+                    delta: 1.0,
+                }],
+                ..mk_mission("sol", 0.0)
+            },
+        );
 
-    app.world_mut().write_message(MissionCompleted("war1".into()));
+    app.world_mut()
+        .write_message(MissionCompleted("war1".into()));
     app.update();
     app.update();
     {
@@ -305,7 +317,8 @@ fn mission_shift_flips_system_and_restocks() {
         );
     }
 
-    app.world_mut().write_message(MissionCompleted("war2".into()));
+    app.world_mut()
+        .write_message(MissionCompleted("war2".into()));
     app.update();
     app.update();
     {
@@ -325,7 +338,8 @@ fn mission_shift_flips_system_and_restocks() {
     assert!(pp.shipyard.contains(&"fed_patrol".to_string()));
 
     // The illegal grab on Sol did nothing.
-    app.world_mut().write_message(MissionCompleted("illegal".into()));
+    app.world_mut()
+        .write_message(MissionCompleted("illegal".into()));
     app.update();
     app.update();
     let g = app.world().resource::<GalaxyControl>();
@@ -347,8 +361,7 @@ fn controller_recompute_does_not_retrigger_change_gate() {
         .add_message::<crate::galaxy::SystemControlChanged>()
         .add_systems(
             Update,
-            crate::galaxy::update_controllers
-                .run_if(resource_changed::<GalaxyControl>),
+            crate::galaxy::update_controllers.run_if(resource_changed::<GalaxyControl>),
         );
     // Insertion counts as a change: the first frame legitimately runs.
     app.update();
@@ -356,10 +369,7 @@ fn controller_recompute_does_not_retrigger_change_gate() {
     for _ in 0..3 {
         app.update();
         assert!(
-            !app
-                .world()
-                .resource_ref::<GalaxyControl>()
-                .is_changed(),
+            !app.world().resource_ref::<GalaxyControl>().is_changed(),
             "controller recompute must not dirty GalaxyControl"
         );
     }

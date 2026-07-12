@@ -103,10 +103,7 @@ fn completed_precondition_met_when_completed() {
 #[test]
 fn completed_precondition_not_met_when_active() {
     let mut log = MissionLog::default();
-    log.set(
-        "m1",
-        MissionStatus::Active(ObjectiveProgress::default()),
-    );
+    log.set("m1", MissionStatus::Active(ObjectiveProgress::default()));
     let unlocks = PlayerUnlocks::default();
     let pres = vec![Precondition::Completed {
         mission: "m1".into(),
@@ -594,7 +591,6 @@ fn mission_def_yaml_roundtrip_destroy_ships_no_collect() {
 
 // ── Mission state machine scenarios ─────────────────────────────────────────
 
-
 #[test]
 fn scenario_gated_mission_unlocks_after_prerequisite_completes() {
     let mut log = MissionLog::default();
@@ -678,8 +674,6 @@ fn scenario_completion_requirement_prevents_completion() {
     assert!(!requirements_met(&def, &ship_insufficient, &unlocks));
     assert!(requirements_met(&def, &ship_sufficient, &unlocks));
 }
-
-
 
 // ── Ship.reserved_cargo integration ─────────────────────────────────────────
 
@@ -844,7 +838,7 @@ mod template_targets {
             enemies: HashMap::new(),
             allies: HashMap::new(),
             npcs: HashMap::new(),
-        companions: HashMap::new(),
+            companions: HashMap::new(),
         }
     }
 
@@ -916,8 +910,14 @@ mod template_targets {
             else {
                 panic!("collect template must produce CollectPickups");
             };
-            assert_eq!(system, "sol", "seed {seed}: unreachable training system picked");
-            assert_eq!(commodity, "iron", "seed {seed}: training-only commodity picked");
+            assert_eq!(
+                system, "sol",
+                "seed {seed}: unreachable training system picked"
+            );
+            assert_eq!(
+                commodity, "iron",
+                "seed {seed}: training-only commodity picked"
+            );
         }
     }
 
@@ -1024,7 +1024,10 @@ mod toast_queue {
         toast.push("mission complete");
         toast.push("new mission briefing");
         assert_eq!(toast.queue.len(), 2);
-        assert_eq!(toast.queue.front().map(String::as_str), Some("mission complete"));
+        assert_eq!(
+            toast.queue.front().map(String::as_str),
+            Some("mission complete")
+        );
         toast.queue.pop_front();
         assert_eq!(
             toast.queue.front().map(String::as_str),
@@ -1066,7 +1069,7 @@ pub(super) mod runtime {
             .init_resource::<MissionLog>()
             .init_resource::<MissionCatalog>()
             .init_resource::<MissionOffers>()
-        .init_resource::<crate::missions::OfferBackoff>()
+            .init_resource::<crate::missions::OfferBackoff>()
             .init_resource::<PlayerUnlocks>()
             .add_message::<PlayerLandedOnPlanet>()
             .add_message::<PlayerEnteredSystem>()
@@ -1162,7 +1165,11 @@ pub(super) mod runtime {
         app.update();
         assert!(matches!(status(&mut app, "m"), MissionStatus::Active(_)));
         let ship = app.world().get::<Ship>(player).unwrap();
-        assert_eq!(ship.cargo.get("food"), Some(&10), "start effect loads cargo");
+        assert_eq!(
+            ship.cargo.get("food"),
+            Some(&10),
+            "start effect loads cargo"
+        );
         assert_eq!(
             ship.reserved_cargo.get("food"),
             Some(&10),
@@ -1204,7 +1211,10 @@ pub(super) mod runtime {
         assert_eq!(ship.cargo.get("food"), None, "delivered cargo removed");
         assert_eq!(ship.reserved_cargo.get("food"), None, "reservation cleared");
         // from_ship_data starts ships at 10_000 credits; the mission pays 5_000.
-        assert_eq!(ship.credits, 15_000, "payment applied on top of starting credits");
+        assert_eq!(
+            ship.credits, 15_000,
+            "payment applied on top of starting credits"
+        );
         assert!(
             app.world().resource::<PlayerUnlocks>().has("test_license"),
             "grant_unlock applied"
@@ -1219,7 +1229,11 @@ pub(super) mod runtime {
         app.world_mut().write_message(AcceptMission("m".into()));
         app.update();
         // Lose the cargo (jettison/sell equivalent), then land.
-        app.world_mut().get_mut::<Ship>(player).unwrap().cargo.clear();
+        app.world_mut()
+            .get_mut::<Ship>(player)
+            .unwrap()
+            .cargo
+            .clear();
         app.world_mut().write_message(PlayerLandedOnPlanet {
             planet: "mars".into(),
         });
@@ -1287,7 +1301,10 @@ pub(super) mod runtime {
         insert_mission(&mut app, "offered_follow", offered_follow);
 
         app.update();
-        assert!(matches!(status(&mut app, "auto_follow"), MissionStatus::Locked));
+        assert!(matches!(
+            status(&mut app, "auto_follow"),
+            MissionStatus::Locked
+        ));
 
         app.world_mut().write_message(AcceptMission("first".into()));
         app.update();
@@ -1383,7 +1400,7 @@ pub(super) mod runtime {
             .init_resource::<MissionLog>()
             .init_resource::<MissionCatalog>()
             .init_resource::<MissionOffers>()
-        .init_resource::<crate::missions::OfferBackoff>()
+            .init_resource::<crate::missions::OfferBackoff>()
             .init_resource::<PlayerUnlocks>()
             .init_resource::<crate::standing::FactionStandings>()
             .insert_resource({
@@ -1463,13 +1480,17 @@ mod tutorial {
         app.update();
         assert!(
             matches!(
-                app.world().resource::<MissionLog>().status("tutorial_flight"),
+                app.world()
+                    .resource::<MissionLog>()
+                    .status("tutorial_flight"),
                 MissionStatus::Active(_)
             ),
             "the tutorial greets a fresh pilot unprompted"
         );
         assert!(matches!(
-            app.world().resource::<MissionLog>().status("tutorial_mining"),
+            app.world()
+                .resource::<MissionLog>()
+                .status("tutorial_mining"),
             MissionStatus::Locked
         ));
 
@@ -1480,7 +1501,9 @@ mod tutorial {
             app.update();
         }
         assert!(matches!(
-            app.world().resource::<MissionLog>().status("tutorial_flight"),
+            app.world()
+                .resource::<MissionLog>()
+                .status("tutorial_flight"),
             MissionStatus::Failed
         ));
         for stage in ["tutorial_mining", "tutorial_jump", "tutorial_trade"] {
@@ -1531,22 +1554,27 @@ mod tutorial {
         app.update();
         let b = app.world().resource::<OfferBackoff>();
         assert_eq!(b.0.get("deliver_wheat_intro"), Some(&1));
-        assert_eq!(b.0.get("proc__one_off"), None, "procedural ids don't accumulate");
+        assert_eq!(
+            b.0.get("proc__one_off"),
+            None,
+            "procedural ids don't accumulate"
+        );
     }
 
     // ── Story-chart fog of war ──────────────────────────────────────────
     #[test]
     fn story_chart_fog_of_war() {
-        use crate::missions::story_chart::{build_story_graph, NodeUi};
         use crate::missions::PlayerUnlocks;
+        use crate::missions::story_chart::{NodeUi, build_story_graph};
 
         // Chain a1 -> a2 -> a3 (faction Fed), plus a branch b (needs a2 FAILED).
         let chain = |after: Option<&str>, needs_fail: Option<&str>| {
             let mut d = dummy_def();
             d.faction = Some("Federation".into());
             if let Some(prev) = after {
-                d.preconditions
-                    .push(Precondition::Completed { mission: prev.into() });
+                d.preconditions.push(Precondition::Completed {
+                    mission: prev.into(),
+                });
             }
             if let Some(f) = needs_fail {
                 d.preconditions
@@ -1558,7 +1586,8 @@ mod tutorial {
         iu.missions.insert("a1".into(), chain(None, None));
         iu.missions.insert("a2".into(), chain(Some("a1"), None));
         iu.missions.insert("a3".into(), chain(Some("a2"), None));
-        iu.missions.insert("b".into(), chain(Some("a1"), Some("a2")));
+        iu.missions
+            .insert("b".into(), chain(Some("a1"), Some("a2")));
         // A non-story mission (no faction) must be excluded.
         iu.missions.insert("side".into(), dummy_def());
 
@@ -1576,7 +1605,10 @@ mod tutorial {
         assert_eq!(ui_of("a3"), None, "a3 requirements unmet → hidden");
         assert_eq!(ui_of("b"), None, "b requirements unmet → hidden");
         assert_eq!(ui_of("side"), None, "non-story mission excluded");
-        assert!(ui_of("a2").unwrap().shows_name() == false, "next hides its name");
+        assert!(
+            ui_of("a2").unwrap().shows_name() == false,
+            "next hides its name"
+        );
 
         // Now complete a2: a3 becomes Next; branch b becomes Impossible
         // (needs a2 FAILED, but a2 is Completed) and is revealed at its

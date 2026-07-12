@@ -94,11 +94,7 @@ fn sample_categorical(
         return argmax(logits);
     }
     let inv_t = 1.0 / temperature;
-    let max_logit = logits
-        .iter()
-        .cloned()
-        .fold(f32::NEG_INFINITY, f32::max)
-        * inv_t;
+    let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max) * inv_t;
     let exp_sum: f32 = logits.iter().map(|l| (l * inv_t - max_logit).exp()).sum();
     let log_sum_exp = max_logit + exp_sum.ln();
 
@@ -160,11 +156,7 @@ pub(super) fn coupled_gumbel_sample(
 
 /// log-sum-exp of `logits[i] * scale`, numerically stabilised.
 fn log_sum_exp_scaled(logits: &[f32], scale: f32) -> f32 {
-    let max_logit = logits
-        .iter()
-        .cloned()
-        .fold(f32::NEG_INFINITY, f32::max)
-        * scale;
+    let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max) * scale;
     let exp_sum: f32 = logits.iter().map(|l| (l * scale - max_logit).exp()).sum();
     max_logit + exp_sum.ln()
 }

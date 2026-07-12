@@ -50,9 +50,7 @@ pub struct CompanionDef {
 }
 
 /// How a companion fights. One enum; the escort AI derives the rest.
-#[derive(
-    Component, Clone, Copy, PartialEq, Eq, Debug, serde::Deserialize, serde::Serialize,
-)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Temperament {
     /// Hunts anything hostile in a wide radius; chases kills.
@@ -156,8 +154,8 @@ const HIRE_FIRST_NAMES: &[&str] = &[
     "Juno", "Silas", "Petra", "Moss", "Katya",
 ];
 const HIRE_SURNAMES: &[&str] = &[
-    "Calloway", "Iri", "Stroud", "Vance", "Okafor", "Reyes", "Holt", "Drummond", "Sarti",
-    "Kesler", "Nyx", "Ferrow",
+    "Calloway", "Iri", "Stroud", "Vance", "Okafor", "Reyes", "Holt", "Drummond", "Sarti", "Kesler",
+    "Nyx", "Ferrow",
 ];
 
 /// Pilots for hire at this planet's bar: fighter hulls from the LOCAL
@@ -181,9 +179,9 @@ pub fn hire_pool(iu: &ItemUniverse, planet_name: &str) -> Vec<HireOffer> {
     if hulls.is_empty() {
         return Vec::new();
     }
-    let seed = planet_name
-        .bytes()
-        .fold(0xC0FFEEu64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+    let seed = planet_name.bytes().fold(0xC0FFEEu64, |acc, b| {
+        acc.wrapping_mul(31).wrapping_add(b as u64)
+    });
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     let mut offers = Vec::new();
     let count = hulls.len().min(3);
@@ -315,8 +313,8 @@ fn apply_temperament(
                 threat_to_player && (hpos.0 - anchor).length() <= engage_range
             })
             .min_by(|a, b| {
-                let da = (a.3 .0 - pos.0).length();
-                let db = (b.3 .0 - pos.0).length();
+                let da = (a.3.0 - pos.0).length();
+                let db = (b.3.0 - pos.0).length();
                 da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
             });
         if let Some((target, ..)) = candidate {
@@ -494,14 +492,13 @@ pub fn render_companions_section(
         .cloned()
         .collect();
     for key in here {
-        let Some(def) = iu.companions.get(&key) else { continue };
+        let Some(def) = iu.companions.get(&key) else {
+            continue;
+        };
         ui.horizontal(|ui| {
             ui.label(format!("{} is here, nursing a drink.", def.name));
             let can = companion_count(roster) < MAX_COMPANIONS;
-            if ui
-                .add_enabled(can, egui::Button::new("Rejoin"))
-                .clicked()
-            {
+            if ui.add_enabled(can, egui::Button::new("Rejoin")).clicked() {
                 let health = iu
                     .ships
                     .get(&def.ship_type)
@@ -522,14 +519,13 @@ pub fn render_companions_section(
     if !pool.is_empty() {
         ui.add_space(4.0);
         ui.label(
-            egui::RichText::new("Pilots for hire")
-                .color(egui::Color32::from_rgb(200, 200, 210)),
+            egui::RichText::new("Pilots for hire").color(egui::Color32::from_rgb(200, 200, 210)),
         );
         for offer in pool {
             // One copy of each pilot: skip if already flying with us.
-            let taken = roster.entries.iter().any(|e| {
-                matches!(&e.kind, EscortKind::Hired { name, .. } if *name == offer.pilot_name)
-            });
+            let taken = roster.entries.iter().any(
+                |e| matches!(&e.kind, EscortKind::Hired { name, .. } if *name == offer.pilot_name),
+            );
             if taken {
                 continue;
             }
@@ -541,8 +537,7 @@ pub fn render_companions_section(
                     offer.temperament.key(),
                     offer.fee
                 ));
-                let can = companion_count(roster) < MAX_COMPANIONS
-                    && ship.credits >= offer.fee;
+                let can = companion_count(roster) < MAX_COMPANIONS && ship.credits >= offer.fee;
                 if ui.add_enabled(can, egui::Button::new("Hire")).clicked() {
                     ship.credits -= offer.fee;
                     let health = iu

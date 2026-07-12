@@ -18,10 +18,12 @@ pub mod ui;
 
 pub use events::*;
 pub use log::{
-    OfferBackoff,
-    MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, PlayerUnlocks,
+    MissionCatalog, MissionCatalogSave, MissionLog, MissionLogSave, MissionOffers, OfferBackoff,
+    PlayerUnlocks,
 };
-pub use types::{MissionDef, MissionStatus, MissionTarget, MissionTemplate, NpcApproach, Objective, OfferKind};
+pub use types::{
+    MissionDef, MissionStatus, MissionTarget, MissionTemplate, NpcApproach, Objective, OfferKind,
+};
 pub use ui::{missions_ui_plugin, render_missions_tab};
 
 pub fn missions_plugin(app: &mut App) {
@@ -62,9 +64,8 @@ pub fn missions_plugin(app: &mut App) {
                 progress::roll_offers_on_land,
                 // New offers can only appear when a status or the offer set
                 // changed; don't scan the catalog every frame while landed.
-                progress::roll_new_offers_while_landed.run_if(
-                    resource_changed::<MissionLog>.or(resource_changed::<MissionOffers>),
-                ),
+                progress::roll_new_offers_while_landed
+                    .run_if(resource_changed::<MissionLog>.or(resource_changed::<MissionOffers>)),
                 progress::advance_travel_objectives,
                 progress::advance_land_objectives,
                 progress::advance_collect_objectives,

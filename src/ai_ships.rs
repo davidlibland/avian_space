@@ -6,7 +6,9 @@ use crate::optimal_control::{pursuit_controls_ego, turn_to_angle};
 use crate::planets::Planet;
 use crate::rl_collection::{RLAgent, RLReward, RLShipJumped, build_rl_ship_jumped};
 use crate::ship::{Personality, Ship, ShipHostility, Target, ship_bundle};
-use crate::ship_anim::{self, PLANET_ANIM_DURATION, ScalingDown, ScalingUp, ScaleDownFinished, ScaleUpFinished};
+use crate::ship_anim::{
+    self, PLANET_ANIM_DURATION, ScaleDownFinished, ScaleUpFinished, ScalingDown, ScalingUp,
+};
 use crate::utils::{angle_indicator, angle_to_hit};
 use crate::{CurrentStarSystem, GameLayer, PlayState};
 use avian2d::prelude::*;
@@ -82,8 +84,11 @@ pub fn ai_ship_bundle(app: &mut App) {
     // Cooperation-behavior sampler — only registered when DIAG_COOP is set, so
     // it costs nothing in normal runs. Emits aggregate [COOP] lines.
     if std::env::var("DIAG_COOP").is_ok() {
-        app.insert_resource(CoopSampleTimer(Timer::from_seconds(5.0, TimerMode::Repeating)))
-            .add_systems(Update, coop_sampler.run_if(in_state(PlayState::Flying)));
+        app.insert_resource(CoopSampleTimer(Timer::from_seconds(
+            5.0,
+            TimerMode::Repeating,
+        )))
+        .add_systems(Update, coop_sampler.run_if(in_state(PlayState::Flying)));
     }
 }
 
@@ -132,11 +137,16 @@ fn coop_sampler(
         _ => None,
     };
     let is_fighter = |i: usize| matches!(infos[i].3.personality, Personality::Fighter);
-    let is_merchant =
-        |i: usize| matches!(infos[i].3.personality, Personality::Trader | Personality::Miner);
+    let is_merchant = |i: usize| {
+        matches!(
+            infos[i].3.personality,
+            Personality::Trader | Personality::Miner
+        )
+    };
 
     // Focus-fire + local outnumbering among engaging fighters.
-    let (mut eng, mut shared, mut allies_near_sum, mut enemies_near_sum) = (0u32, 0u32, 0.0f32, 0.0f32);
+    let (mut eng, mut shared, mut allies_near_sum, mut enemies_near_sum) =
+        (0u32, 0u32, 0.0f32, 0.0f32);
     for i in 0..n {
         if !is_fighter(i) {
             continue;
@@ -209,16 +219,39 @@ fn coop_sampler(
         }
     }
 
-    let f = |num: u32, den: u32| if den > 0 { num as f32 / den as f32 } else { f32::NAN };
+    let f = |num: u32, den: u32| {
+        if den > 0 {
+            num as f32 / den as f32
+        } else {
+            f32::NAN
+        }
+    };
     println!(
         "[COOP] sys={} ships={} | focus_fire={:.3} eng={} allies_near={:.2} enemies_near={:.2} | escort_cov={:.3} merch={} mean_def_dist={:.0} | threatened={} threat_resp={:.3} merch_def={:.3}",
-        system.0, n,
-        f(shared, eng), eng,
-        if eng > 0 { allies_near_sum / eng as f32 } else { f32::NAN },
-        if eng > 0 { enemies_near_sum / eng as f32 } else { f32::NAN },
-        f(covered, merch), merch,
-        if dist_n > 0 { dist_sum / dist_n as f32 } else { f32::NAN },
-        threatened, f(threat_defended, threatened), f(self_def, threatened),
+        system.0,
+        n,
+        f(shared, eng),
+        eng,
+        if eng > 0 {
+            allies_near_sum / eng as f32
+        } else {
+            f32::NAN
+        },
+        if eng > 0 {
+            enemies_near_sum / eng as f32
+        } else {
+            f32::NAN
+        },
+        f(covered, merch),
+        merch,
+        if dist_n > 0 {
+            dist_sum / dist_n as f32
+        } else {
+            f32::NAN
+        },
+        threatened,
+        f(threat_defended, threatened),
+        f(self_def, threatened),
     );
 }
 
@@ -756,7 +789,13 @@ fn land_ship(
     planets: Query<(&Planet, &Position)>,
     ships: Query<
         (Entity, &Ship, &Position, &LinearVelocity, &Sprite),
-        (With<AIShip>, Without<AILanding>, Without<AILanded>, Without<JumpingOut>, Without<JumpingIn>),
+        (
+            With<AIShip>,
+            Without<AILanding>,
+            Without<AILanded>,
+            Without<JumpingOut>,
+            Without<JumpingIn>,
+        ),
     >,
     mut commands: Commands,
     images: Res<Assets<Image>>,
@@ -799,7 +838,14 @@ fn land_ship(
 fn finish_ai_landing(
     time: Res<Time>,
     mut reader: MessageReader<ScaleDownFinished>,
-    mut ships: Query<(Entity, &mut Ship, &Position, &AIShip, &AILanding, Option<&RLAgent>)>,
+    mut ships: Query<(
+        Entity,
+        &mut Ship,
+        &Position,
+        &AIShip,
+        &AILanding,
+        Option<&RLAgent>,
+    )>,
     planets: Query<&Planet>,
     item_universe: Res<ItemUniverse>,
     current_star_system: Res<CurrentStarSystem>,
@@ -886,12 +932,12 @@ fn finish_ai_landing(
                 }
             }
 
-            let targeting_mult =
-                if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity) {
-                    reward_cfg.landing_on_target_multiplier
-                } else {
-                    reward_cfg.landing_off_target_multiplier
-                };
+            let targeting_mult = if matches!(ship.nav_target, Some(Target::Planet(e)) if e == planet_entity)
+            {
+                reward_cfg.landing_on_target_multiplier
+            } else {
+                reward_cfg.landing_off_target_multiplier
+            };
             reward *= targeting_mult;
 
             if reward > 0.0 {
@@ -1039,7 +1085,10 @@ fn finish_ai_takeoff(
     mut reader: MessageReader<ScaleUpFinished>,
     ships: Query<
         (Entity, &Ship, &Position, &AIShip),
-        (Without<crate::carrier::Escort>, Without<crate::missions::MissionTarget>),
+        (
+            Without<crate::carrier::Escort>,
+            Without<crate::missions::MissionTarget>,
+        ),
     >,
     ship_factions: Query<(Entity, &ShipHostility, &Position), With<Ship>>,
     mut commands: Commands,

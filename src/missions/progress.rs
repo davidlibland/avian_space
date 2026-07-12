@@ -485,8 +485,11 @@ pub fn spawn_mission_targets(
         // If kills are done but the collect requirement isn't, spawn a
         // single replacement carrier so the mission isn't stuck in limbo
         // when the player re-enters the system.
-        let scavenger_need =
-            if kill_need == 0 && alive == 0 && outstanding_collect > 0 { 1 } else { 0 };
+        let scavenger_need = if kill_need == 0 && alive == 0 && outstanding_collect > 0 {
+            1
+        } else {
+            0
+        };
         let need = kill_need + scavenger_need;
         if need == 0 {
             continue;
@@ -825,9 +828,7 @@ pub fn roll_offers_on_land(
                 }
                 OfferKind::NpcOffer {
                     planet: p, weight, ..
-                } if p == planet => {
-                    npc.push((id.clone(), backoff.effective_weight(id, *weight)))
-                }
+                } if p == planet => npc.push((id.clone(), backoff.effective_weight(id, *weight))),
                 _ => {}
             }
         }
@@ -840,9 +841,7 @@ pub fn roll_offers_on_land(
         // currently intersect this planet (weights keep their ratios).
         let npc_total: f32 = npc.iter().map(|(_, w)| w.clamp(0.0, 1.0)).sum();
         let npc: Vec<(String, f32)> = if npc_total > 1.0 {
-            npc.into_iter()
-                .map(|(id, w)| (id, w / npc_total))
-                .collect()
+            npc.into_iter().map(|(id, w)| (id, w / npc_total)).collect()
         } else {
             npc
         };
@@ -1429,7 +1428,7 @@ pub(super) fn instantiate_template(
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
                 objective: Objective::CatchNpc {
-                        hint: None,
+                    hint: None,
                     planet: chase_planet,
                     npc_name: target_name.clone(),
                     building: None,

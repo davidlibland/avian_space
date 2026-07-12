@@ -40,7 +40,10 @@ fn every_friend_exists_and_is_granted_by_an_arc() {
     ];
     assert_eq!(iu.companions.len(), cast.len(), "cast list is exhaustive");
     for key in cast {
-        let def = iu.companions.get(key).unwrap_or_else(|| panic!("{key} in companions.yaml"));
+        let def = iu
+            .companions
+            .get(key)
+            .unwrap_or_else(|| panic!("{key} in companions.yaml"));
         assert!(iu.npcs.contains_key(&def.npc), "{key}: face in npcs.yaml");
         assert!(iu.ships.contains_key(&def.ship_type), "{key}: hull exists");
         assert!(
@@ -54,10 +57,12 @@ fn every_friend_exists_and_is_granted_by_an_arc() {
         );
         // Some mission grants them.
         assert!(
-            iu.missions.values().any(|m| m.completion_effects.iter().any(|e| matches!(
-                e,
-                CompletionEffect::GrantCompanion { companion } if companion == key
-            ))),
+            iu.missions
+                .values()
+                .any(|m| m.completion_effects.iter().any(|e| matches!(
+                    e,
+                    CompletionEffect::GrantCompanion { companion } if companion == key
+                ))),
             "{key}: granted by an arc"
         );
     }
@@ -183,7 +188,10 @@ fn roster_save_round_trips_both_ledgers() {
     let restored = EscortRoster::from_save(r.to_save(), &universe());
     assert!(restored.is_enrolled("vex_marlowe"));
     assert!(restored.fallen.contains("tinny"), "the dead stay dead");
-    assert!(restored.parked.contains("sable_dune"), "the parked stay home");
+    assert!(
+        restored.parked.contains("sable_dune"),
+        "the parked stay home"
+    );
 }
 
 // ── Hire pool ────────────────────────────────────────────────────────────────
@@ -289,21 +297,36 @@ fn cautious_companions_break_off_at_low_hull_and_resume_when_patched() {
     let _threat = spawn_threat(&mut app, player, 300.0);
     app.update();
     assert!(
-        matches!(app.world().get::<EscortMode>(companion), Some(EscortMode::Escort)),
+        matches!(
+            app.world().get::<EscortMode>(companion),
+            Some(EscortMode::Escort)
+        ),
         "30% hull: holds formation instead of engaging"
     );
-    assert!(app.world().get::<super::CautiousRetreat>(companion).is_some());
+    assert!(
+        app.world()
+            .get::<super::CautiousRetreat>(companion)
+            .is_some()
+    );
 
     // Mid-band (50%): still retreating — hysteresis, not a hard line.
     app.world_mut().get_mut::<Ship>(companion).unwrap().health = 50;
     app.update();
-    assert!(app.world().get::<super::CautiousRetreat>(companion).is_some());
+    assert!(
+        app.world()
+            .get::<super::CautiousRetreat>(companion)
+            .is_some()
+    );
 
     // Patched to 80%: back in the fight.
     app.world_mut().get_mut::<Ship>(companion).unwrap().health = 80;
     app.update();
     app.update();
-    assert!(app.world().get::<super::CautiousRetreat>(companion).is_none());
+    assert!(
+        app.world()
+            .get::<super::CautiousRetreat>(companion)
+            .is_none()
+    );
     assert!(
         matches!(
             app.world().get::<EscortMode>(companion),
@@ -323,7 +346,10 @@ fn player_orders_override_temperament() {
     *app.world_mut().get_mut::<EscortMode>(companion).unwrap() = EscortMode::Dock;
     app.update();
     assert!(
-        matches!(app.world().get::<EscortMode>(companion), Some(EscortMode::Dock)),
+        matches!(
+            app.world().get::<EscortMode>(companion),
+            Some(EscortMode::Dock)
+        ),
         "explicit orders stand"
     );
 }
@@ -362,7 +388,11 @@ fn chatter_speaks_once_then_rate_limits() {
             system: "sol".into(),
         });
     app.update();
-    let first = app.world().resource::<crate::hud::CommsChannel>().message.clone();
+    let first = app
+        .world()
+        .resource::<crate::hud::CommsChannel>()
+        .message
+        .clone();
     assert!(
         first.starts_with("Vex Marlowe:"),
         "she greets the new system: {first}"

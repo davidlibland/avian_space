@@ -464,7 +464,6 @@ fn default_true() -> bool {
     true
 }
 
-
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub enum MissionStatus {
     #[default]

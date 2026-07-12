@@ -70,13 +70,11 @@ struct Spine {
 
 /// Generate a station-interior terrain map. Same contract as
 /// [`crate::fbm::generate_terrain_map`].
-pub fn generate_station_map(
-    width: u32,
-    height: u32,
-    n_terrain_types: u32,
-    seed: u64,
-) -> Vec<u32> {
-    assert!(n_terrain_types >= 4, "station generator needs floor/plating/grate/wall tiers");
+pub fn generate_station_map(width: u32, height: u32, n_terrain_types: u32, seed: u64) -> Vec<u32> {
+    assert!(
+        n_terrain_types >= 4,
+        "station generator needs floor/plating/grate/wall tiers"
+    );
     let (w, h) = (width as i32, height as i32);
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed.wrapping_mul(0x9e37_79b9).wrapping_add(7));
     let top = n_terrain_types - 1;
@@ -115,8 +113,16 @@ pub fn generate_station_map(
     // One horizontal + one vertical pass close to the plaza (guaranteeing it
     // connects), plus 1-2 more at jittered offsets. One spine becomes a hall.
     let mut spines: Vec<Spine> = vec![
-        Spine { horizontal: true, pos: cy + rng.gen_range(-4..=4), half: 1 },
-        Spine { horizontal: false, pos: cx + rng.gen_range(-4..=4), half: 1 },
+        Spine {
+            horizontal: true,
+            pos: cy + rng.gen_range(-4..=4),
+            half: 1,
+        },
+        Spine {
+            horizontal: false,
+            pos: cx + rng.gen_range(-4..=4),
+            half: 1,
+        },
     ];
     for _ in 0..rng.gen_range(1..=2) {
         let horizontal = rng.r#gen::<bool>();
@@ -133,9 +139,19 @@ pub fn generate_station_map(
 
     for s in &spines {
         let r = if s.horizontal {
-            Rect { x0: MARGIN, y0: s.pos - s.half, x1: w - MARGIN, y1: s.pos + s.half + 1 }
+            Rect {
+                x0: MARGIN,
+                y0: s.pos - s.half,
+                x1: w - MARGIN,
+                y1: s.pos + s.half + 1,
+            }
         } else {
-            Rect { x0: s.pos - s.half, y0: MARGIN, x1: s.pos + s.half + 1, y1: h - MARGIN }
+            Rect {
+                x0: s.pos - s.half,
+                y0: MARGIN,
+                x1: s.pos + s.half + 1,
+                y1: h - MARGIN,
+            }
         };
         carve_rect(&mut open, r, 0);
     }
@@ -145,7 +161,11 @@ pub fn generate_station_map(
         let s = spines[rng.gen_range(0..spines.len())];
         let along_extent = if s.horizontal { w } else { h };
         let along = rng.gen_range(MARGIN + 4..along_extent - MARGIN - 4);
-        if s.horizontal { (along, s.pos) } else { (s.pos, along) }
+        if s.horizontal {
+            (along, s.pos)
+        } else {
+            (s.pos, along)
+        }
     }
 
     // ── Town squares: big octagonal plazas with a central pedestal ───────
@@ -168,10 +188,18 @@ pub fn generate_station_map(
         if r.w() < 4 || r.h() < 4 {
             continue;
         }
-        let chamfer = if rng.gen_bool(0.35) { r.w().min(r.h()) / 4 } else { 0 };
+        let chamfer = if rng.gen_bool(0.35) {
+            r.w().min(r.h()) / 4
+        } else {
+            0
+        };
         carve_rect(&mut open, r, chamfer);
         // Vary the floor material: most rooms are floor, some full plating.
-        let material = if rng.gen_bool(0.35) { T_PLATING } else { T_FLOOR };
+        let material = if rng.gen_bool(0.35) {
+            T_PLATING
+        } else {
+            T_FLOOR
+        };
         rooms.push((r, material));
     }
 
@@ -186,7 +214,12 @@ pub fn generate_station_map(
             }
         }
         if r.w() >= 8 && r.h() >= 7 && rng.gen_bool(0.7) {
-            let panel = Rect { x0: r.x0 + 2, y0: r.y0 + 2, x1: r.x1 - 2, y1: r.y1 - 2 };
+            let panel = Rect {
+                x0: r.x0 + 2,
+                y0: r.y0 + 2,
+                x1: r.x1 - 2,
+                y1: r.y1 - 2,
+            };
             for y in panel.y0..panel.y1 {
                 for x in panel.x0..panel.x1 {
                     over[idx(x, y)] = Some(material + 1); // floor→plating / plating→grate
@@ -224,7 +257,11 @@ pub fn generate_station_map(
                 let o = &mut over[idx(x, y)];
                 // Don't overwrite room interiors the walkway passes through.
                 if o.is_none() {
-                    *o = Some(if off == 0 && centre_ok { T_GRATE } else { T_PLATING });
+                    *o = Some(if off == 0 && centre_ok {
+                        T_GRATE
+                    } else {
+                        T_PLATING
+                    });
                 }
             }
         }
@@ -234,7 +271,11 @@ pub fn generate_station_map(
         let s = spines[hall_idx];
         let extent = if s.horizontal { w } else { h };
         for along in MARGIN + 3..extent - MARGIN - 3 {
-            let (x, y) = if s.horizontal { (along, s.pos) } else { (s.pos, along) };
+            let (x, y) = if s.horizontal {
+                (along, s.pos)
+            } else {
+                (s.pos, along)
+            };
             if over[idx(x, y)].is_none() {
                 over[idx(x, y)] = Some(T_PLATING);
             }
@@ -275,7 +316,16 @@ pub fn generate_station_map(
         for &y in &ys {
             for &x in &xs {
                 let mut best = dist[idx(x, y)];
-                for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+                for (dx, dy) in [
+                    (-1, 0),
+                    (1, 0),
+                    (0, -1),
+                    (0, 1),
+                    (-1, -1),
+                    (1, -1),
+                    (-1, 1),
+                    (1, 1),
+                ] {
                     let (nx, ny) = (x + dx, y + dy);
                     if nx >= 0 && ny >= 0 && nx < w && ny < h {
                         best = best.min(dist[idx(nx, ny)] + 1);
@@ -412,7 +462,10 @@ mod tests {
                 }
             }
             let unreachable = (0..m.len()).filter(|&i| walkable(i) && !seen[i]).count();
-            assert_eq!(unreachable, 0, "seed {seed}: {unreachable} stranded walkable tiles");
+            assert_eq!(
+                unreachable, 0,
+                "seed {seed}: {unreachable} stranded walkable tiles"
+            );
         }
     }
 

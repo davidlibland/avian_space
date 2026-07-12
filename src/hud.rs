@@ -4,9 +4,9 @@ use crate::asteroids::Asteroid;
 use crate::item_universe::ItemUniverse;
 use crate::pickups::Pickup;
 use crate::planets::Planet;
+use crate::session::SessionResourceExt;
 use crate::ship::Target;
 use crate::utils::safe_despawn;
-use crate::session::SessionResourceExt;
 use crate::{CurrentStarSystem, PlayState, Player, Ship};
 
 const RADAR_SIZE: f32 = 144.0;
@@ -107,8 +107,12 @@ pub struct CommsChannel {
 
 impl crate::session::SessionResource for CommsChannel {
     type SaveData = ();
-    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
-    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
 }
 
 impl CommsChannel {
@@ -169,13 +173,11 @@ impl Plugin for HudPlugin {
         )
         .add_systems(
             Update,
-            toggle_space_hud_visibility
-                .run_if(state_changed::<PlayState>),
+            toggle_space_hud_visibility.run_if(state_changed::<PlayState>),
         )
         .add_systems(
             Update,
-            update_minimap_player_dot
-                .run_if(in_state(PlayState::Exploring)),
+            update_minimap_player_dot.run_if(in_state(PlayState::Exploring)),
         );
     }
 }
@@ -527,8 +529,12 @@ fn update_escort_panel(
     rows_query: Query<(Entity, &EscortRow)>,
     mut fills_query: Query<(&mut Node, &mut BackgroundColor, &EscortBarFill), Without<EscortPanel>>,
 ) {
-    let Ok(player_entity) = player_query.single() else { return };
-    let Ok((panel_entity, mut panel_node)) = panel_query.single_mut() else { return };
+    let Ok(player_entity) = player_query.single() else {
+        return;
+    };
+    let Ok((panel_entity, mut panel_node)) = panel_query.single_mut() else {
+        return;
+    };
 
     // The player's escorts, in a stable order.
     let mut escorts: Vec<(Entity, &Ship)> = escorts_query
@@ -894,8 +900,7 @@ fn update_target_display(
     **text = match &player_ship.nav_target {
         Some(Target::Ship(entity)) => {
             if let Ok(target_ship) = ships_query.get(*entity) {
-                hostile_target =
-                    matches!(&target_ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
+                hostile_target = matches!(&target_ship.weapons_target, Some(Target::Ship(e)) if *e == player_entity);
                 // Prefer mission target display name over generic ship type.
                 // Hostility is shown as a badge on the wireframe, NOT in this
                 // line — appending it made long names reflow the HUD (blink).
@@ -1156,7 +1161,10 @@ fn dot_bundle(left: f32, top: f32, color: Color) -> impl Bundle {
 fn toggle_space_hud_visibility(
     state: Res<State<PlayState>>,
     mut space_q: Query<(&mut Visibility, &mut Node), (With<SpaceOnlyHud>, Without<SurfaceOnlyHud>)>,
-    mut surface_q: Query<(&mut Visibility, &mut Node), (With<SurfaceOnlyHud>, Without<SpaceOnlyHud>)>,
+    mut surface_q: Query<
+        (&mut Visibility, &mut Node),
+        (With<SurfaceOnlyHud>, Without<SpaceOnlyHud>),
+    >,
     mut minimap_q: Query<&mut ImageNode, With<MiniMapImage>>,
     minimap_res: Option<Res<crate::surface::SurfaceMiniMap>>,
 ) {

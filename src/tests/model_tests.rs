@@ -1,11 +1,12 @@
-use super::*;
 use super::sampling::{coupled_gumbel_sample, logits_to_discrete_action};
-use burn::tensor::{Tensor, TensorData};
+use super::*;
 use crate::rl_obs::{
-    self, AsteroidSlotData, CoreSlotData, EntityKind, EntitySlotData, ObsInput, PlanetSlotData,
-    ShipSlotData, CORE_BLOCK_START, CORE_FEAT_SIZE, OBS_DIM, SLOT_IS_PRESENT, TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
+    self, AsteroidSlotData, CORE_BLOCK_START, CORE_FEAT_SIZE, CoreSlotData, EntityKind,
+    EntitySlotData, OBS_DIM, ObsInput, PlanetSlotData, SLOT_IS_PRESENT, ShipSlotData,
+    TYPE_BLOCK_SIZE, TYPE_BLOCK_START, TYPE_ONEHOT_SIZE,
 };
 use crate::ship::{Personality, Ship, ShipData};
+use burn::tensor::{Tensor, TensorData};
 use std::collections::HashMap;
 
 // ── split_obs ─────────────────────────────────────────────────────────────
@@ -36,10 +37,7 @@ fn test_split_obs_entity_features() {
         *v = (i + 1) as f32 * 0.5;
     }
     let (_, o) = split_obs(&obs);
-    assert_eq!(
-        &o[0..SLOT_SIZE],
-        &obs[SELF_SIZE..SELF_SIZE + SLOT_SIZE],
-    );
+    assert_eq!(&o[0..SLOT_SIZE], &obs[SELF_SIZE..SELF_SIZE + SLOT_SIZE],);
 }
 
 // ── Block extraction (tensor-level) ──────────────────────────────────────
@@ -66,12 +64,10 @@ fn test_obj_feat_block_extraction() {
     // Use the same function that forward() calls.
     let (type_oh, is_pres, core, tspec) = split_obj_feat(obj);
 
-    let to_vec3 = |t: Tensor<InferBackend, 3>| -> Vec<f32> {
-        t.into_data().into_vec::<f32>().unwrap()
-    };
-    let to_vec2 = |t: Tensor<InferBackend, 2>| -> Vec<f32> {
-        t.into_data().into_vec::<f32>().unwrap()
-    };
+    let to_vec3 =
+        |t: Tensor<InferBackend, 3>| -> Vec<f32> { t.into_data().into_vec::<f32>().unwrap() };
+    let to_vec2 =
+        |t: Tensor<InferBackend, 2>| -> Vec<f32> { t.into_data().into_vec::<f32>().unwrap() };
 
     // Verify slot 0's type_onehot block (first 4 floats of slot 0).
     let th = to_vec3(type_oh);
@@ -255,10 +251,18 @@ fn test_roundtrip_entity_slot_to_blocks() {
     assert_eq!(tf[0 * s + 4], 15.0, "slot0 torque");
     assert_eq!(tf[0 * s + 5], 1.0, "slot0 is_hostile");
     assert_eq!(tf[0 * s + 6], 1.0, "slot0 should_engage");
-    assert_eq!(&tf[0 * s + 7..0 * s + 10], &[0.0, 1.0, 0.0], "slot0 personality (Fighter)");
+    assert_eq!(
+        &tf[0 * s + 7..0 * s + 10],
+        &[0.0, 1.0, 0.0],
+        "slot0 personality (Fighter)"
+    );
 
     // ── Slot 1: planet ──────────────────────────────────────────────────
-    assert_eq!(&oh[1 * t..1 * t + t], &[0.0, 0.0, 1.0, 0.0], "slot1 type_onehot (Planet)");
+    assert_eq!(
+        &oh[1 * t..1 * t + t],
+        &[0.0, 0.0, 1.0, 0.0],
+        "slot1 type_onehot (Planet)"
+    );
     assert_eq!(ip[1], 1.0, "slot1 is_present");
     assert_eq!(cf[1 * c], 800.0, "slot1 rel_pos_x");
     assert_eq!(cf[1 * c + 4], 0.0, "slot1 is_nav_target");
@@ -274,7 +278,11 @@ fn test_roundtrip_entity_slot_to_blocks() {
     }
 
     // ── Slot 2: asteroid ────────────────────────────────────────────────
-    assert_eq!(&oh[2 * t..2 * t + t], &[0.0, 1.0, 0.0, 0.0], "slot2 type_onehot (Asteroid)");
+    assert_eq!(
+        &oh[2 * t..2 * t + t],
+        &[0.0, 1.0, 0.0, 0.0],
+        "slot2 type_onehot (Asteroid)"
+    );
     assert_eq!(ip[2], 1.0, "slot2 is_present");
     assert_eq!(cf[2 * c], 200.0, "slot2 rel_pos_x");
     assert_eq!(cf[2 * c + 1], -50.0, "slot2 rel_pos_y");
@@ -306,7 +314,7 @@ fn test_roundtrip_entity_slot_to_blocks() {
 #[test]
 fn test_logits_to_discrete_action_argmax() {
     // Craft logits so each head has an obvious winner.
-    let action_logits = [1.0_f32, 5.0, 0.0,   0.0, 3.0,   2.0, 0.0,   0.0, 4.0];
+    let action_logits = [1.0_f32, 5.0, 0.0, 0.0, 3.0, 2.0, 0.0, 0.0, 4.0];
     // Target logits: slot 3 is the winner.
     let mut nav_target_logits = vec![-1e9_f32; TARGET_OUTPUT_DIM];
     nav_target_logits[3] = 5.0;
@@ -350,10 +358,7 @@ fn zero_inputs(
     let device = Default::default();
     let s = Tensor::<InferBackend, 2>::zeros([batch, SELF_INPUT_DIM], &device);
     let o = Tensor::<InferBackend, 3>::zeros([batch, N_OBJECTS, OBJECT_INPUT_DIM], &device);
-    let p = Tensor::<InferBackend, 3>::zeros(
-        [batch, N_PROJECTILE_SLOTS, PROJ_INPUT_DIM],
-        &device,
-    );
+    let p = Tensor::<InferBackend, 3>::zeros([batch, N_PROJECTILE_SLOTS, PROJ_INPUT_DIM], &device);
     (s, o, p)
 }
 
@@ -541,17 +546,35 @@ fn test_inference_net_produces_valid_action() {
     let (action_logits, nav_target_logits, wep_target_logits) =
         inference.run_inference(s.to_vec(), o.to_vec(), proj_obs, 1);
 
-    assert_eq!(action_logits.len(), POLICY_OUTPUT_DIM, "wrong action logit count");
-    assert_eq!(nav_target_logits.len(), TARGET_OUTPUT_DIM, "wrong nav target logit count");
-    assert_eq!(wep_target_logits.len(), TARGET_OUTPUT_DIM, "wrong wep target logit count");
+    assert_eq!(
+        action_logits.len(),
+        POLICY_OUTPUT_DIM,
+        "wrong action logit count"
+    );
+    assert_eq!(
+        nav_target_logits.len(),
+        TARGET_OUTPUT_DIM,
+        "wrong nav target logit count"
+    );
+    assert_eq!(
+        wep_target_logits.len(),
+        TARGET_OUTPUT_DIM,
+        "wrong wep target logit count"
+    );
     let (turn, thrust, fp, fs, nav_tgt, wep_tgt) =
         logits_to_discrete_action(&action_logits, &nav_target_logits, &wep_target_logits);
     assert!(turn <= 2, "turn_idx out of range: {turn}");
     assert!(thrust <= 1, "thrust_idx out of range: {thrust}");
     assert!(fp <= 1, "fire_primary out of range: {fp}");
     assert!(fs <= 1, "fire_secondary out of range: {fs}");
-    assert!((nav_tgt as usize) < TARGET_OUTPUT_DIM, "nav_target_idx out of range: {nav_tgt}");
-    assert!((wep_tgt as usize) < TARGET_OUTPUT_DIM, "wep_target_idx out of range: {wep_tgt}");
+    assert!(
+        (nav_tgt as usize) < TARGET_OUTPUT_DIM,
+        "nav_target_idx out of range: {nav_tgt}"
+    );
+    assert!(
+        (wep_tgt as usize) < TARGET_OUTPUT_DIM,
+        "wep_target_idx out of range: {wep_tgt}"
+    );
 }
 
 #[test]
@@ -560,8 +583,18 @@ fn test_inference_net_batched() {
     let batch_size = 5;
     let obs = vec![0.0_f32; OBS_DIM];
     let (s, o) = split_obs(&obs);
-    let self_flat: Vec<f32> = s.iter().cloned().cycle().take(batch_size * s.len()).collect();
-    let obj_flat: Vec<f32> = o.iter().cloned().cycle().take(batch_size * o.len()).collect();
+    let self_flat: Vec<f32> = s
+        .iter()
+        .cloned()
+        .cycle()
+        .take(batch_size * s.len())
+        .collect();
+    let obj_flat: Vec<f32> = o
+        .iter()
+        .cloned()
+        .cycle()
+        .take(batch_size * o.len())
+        .collect();
     let proj_flat: Vec<f32> = vec![0.0; batch_size * N_PROJECTILE_SLOTS * PROJ_INPUT_DIM];
     let (action_logits, nav_target_logits, wep_target_logits) =
         inference.run_inference(self_flat, obj_flat, proj_flat, batch_size);

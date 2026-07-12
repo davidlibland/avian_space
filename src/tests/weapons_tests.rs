@@ -197,7 +197,10 @@ fn sell_all_ammo_empties_rack_and_pays() {
     ship.sell_all_ammo("javelin", &iu);
     assert_eq!(ship.credits, before + 4 * ammo_price);
     assert_eq!(
-        ship.weapon_systems.find_weapon("javelin").unwrap().ammo_quantity,
+        ship.weapon_systems
+            .find_weapon("javelin")
+            .unwrap()
+            .ammo_quantity,
         Some(0),
         "rack empty, launcher retained"
     );
@@ -395,7 +398,10 @@ fn ammoless_lure_fires_repeatedly() {
     let iu = real_universe();
     let lure = iu.weapons.get("precursor_lure").expect("lure exists");
     assert!(matches!(lure.behavior, WeaponBehavior::Decoy { strength } if strength >= 0.9));
-    assert!(lure.ammo.is_none(), "no ammo: the lure recharges, never runs dry");
+    assert!(
+        lure.ammo.is_none(),
+        "no ammo: the lure recharges, never runs dry"
+    );
 
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
@@ -450,7 +456,8 @@ fn precursor_ships_get_their_aura() {
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
         .add_systems(Update, crate::explosions::attach_ship_auras_for_tests);
-    let seeker = crate::ship::Ship::from_ship_data(&iu.ships["precursor_seeker"], "precursor_seeker");
+    let seeker =
+        crate::ship::Ship::from_ship_data(&iu.ships["precursor_seeker"], "precursor_seeker");
     let plain = crate::ship::Ship::from_ship_data(&iu.ships["shuttle"], "shuttle");
     let alien = app.world_mut().spawn(seeker).id();
     let normie = app.world_mut().spawn(plain).id();

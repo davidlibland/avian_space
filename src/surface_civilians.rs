@@ -9,10 +9,10 @@ use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 
+use crate::PlayState;
 use crate::surface::{BuildingKind, TILE_PX, Walker};
 use crate::surface_objects::depth_z;
 use crate::surface_pathfinding::SurfacePaths;
-use crate::PlayState;
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ const TARGET_CIVILIAN_COUNT: f32 = 2.0;
 
 use crate::character_compositor::CharacterLayers;
 use crate::surface_character::CharacterAnim;
-use crate::surface_npc::{Npc, NpcBehavior, Behavior};
+use crate::surface_npc::{Behavior, Npc, NpcBehavior};
 
 // ── Resource ─────────────────────────────────────────────────────────────
 
@@ -57,7 +57,9 @@ pub fn spawn_civilians(
     time: Res<Time>,
     existing: Query<(), With<Npc>>,
 ) {
-    let (Some(mut layers), Some(paths)) = (layers, paths_res) else { return };
+    let (Some(mut layers), Some(paths)) = (layers, paths_res) else {
+        return;
+    };
     if paths.paths.is_empty() || layers.items.is_empty() {
         return;
     }
@@ -129,16 +131,19 @@ pub fn spawn_civilians(
                 index: 0,
             },
         ),
-        Transform::from_xyz(start.x, start.y, depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
+        Transform::from_xyz(
+            start.x,
+            start.y,
+            depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET),
+        ),
     ));
 }
 
 /// Update NPC z for depth sorting.
-pub fn depth_sort_npcs(
-    mut npcs: Query<&mut Transform, (With<Npc>, Without<Walker>)>,
-) {
+pub fn depth_sort_npcs(mut npcs: Query<&mut Transform, (With<Npc>, Without<Walker>)>) {
     for mut tf in &mut npcs {
-        tf.translation.z = depth_z(tf.translation.y - crate::surface_objects::CHARACTER_FOOT_OFFSET);
+        tf.translation.z =
+            depth_z(tf.translation.y - crate::surface_objects::CHARACTER_FOOT_OFFSET);
     }
 }
 

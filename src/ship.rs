@@ -144,7 +144,13 @@ pub fn ship_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (apply_damage, sync_hostilites, score_hits, tick_distressed, repair_bot_tick)
+            (
+                apply_damage,
+                sync_hostilites,
+                score_hits,
+                tick_distressed,
+                repair_bot_tick,
+            )
                 .run_if(in_state(PlayState::Flying)),
         )
         .add_systems(
@@ -626,7 +632,9 @@ impl Ship {
     }
     /// Total hold: own hull + the wing's contributed holds.
     pub fn cargo_capacity(&self) -> u16 {
-        self.data.cargo_space.saturating_add(self.escort_cargo_bonus)
+        self.data
+            .cargo_space
+            .saturating_add(self.escort_cargo_bonus)
     }
 
     /// Free space. Losing a contributing escort while loaded can leave the
@@ -919,8 +927,7 @@ impl Ship {
     /// top speed, and max turn rate, so a damaged ship handles like itself — just
     /// more sluggishly.
     pub fn handling_factor(&self) -> f32 {
-        let hp_frac =
-            (self.health.max(0) as f32 / self.max_health().max(1) as f32).clamp(0.0, 1.0);
+        let hp_frac = (self.health.max(0) as f32 / self.max_health().max(1) as f32).clamp(0.0, 1.0);
         // Sub-linear roll-off: handling barely sags from light damage and falls off
         // faster as the hull nears destruction. 1.0 at full health -> 0.5 at 0.
         0.5 + 0.5 * hp_frac.sqrt()
@@ -1175,8 +1182,7 @@ fn ship_movement(
     >,
 ) {
     for cmd in reader.read() {
-        let Ok((mut velocity, mut ang_vel, transform, ship, mut drive)) =
-            query.get_mut(cmd.entity)
+        let Ok((mut velocity, mut ang_vel, transform, ship, mut drive)) = query.get_mut(cmd.entity)
         else {
             continue;
         };
@@ -1225,8 +1231,17 @@ fn ship_movement(
 fn apply_damage_handicap(
     travel: Res<TravelContext>,
     mut query: Query<
-        (&Ship, &mut MaxLinearSpeed, &mut MaxAngularSpeed, Has<Player>),
-        (Without<JumpingIn>, Without<JumpingOut>, Without<DockingEscort>),
+        (
+            &Ship,
+            &mut MaxLinearSpeed,
+            &mut MaxAngularSpeed,
+            Has<Player>,
+        ),
+        (
+            Without<JumpingIn>,
+            Without<JumpingOut>,
+            Without<DockingEscort>,
+        ),
     >,
 ) {
     // The player's jump (accelerate_for_jump) drives the player's speed cap up to

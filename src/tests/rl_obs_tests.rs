@@ -135,13 +135,21 @@ fn test_ego_centric_encoding() {
     let (sin_a, cos_a) = ego_frame_sincos([1.0_f32, 0.0]);
     let world_offset = [100.0_f32, 0.0];
     let ego = rotate_to_ego(world_offset, sin_a, cos_a);
-    assert!((ego[0] - 100.0).abs() < 1e-4, "ego x should be ~100, got {}", ego[0]);
+    assert!(
+        (ego[0] - 100.0).abs() < 1e-4,
+        "ego x should be ~100, got {}",
+        ego[0]
+    );
     assert!(ego[1].abs() < 1e-4, "ego y should be ~0, got {}", ego[1]);
 
     let (sin_a, cos_a) = ego_frame_sincos([0.0_f32, 1.0]);
     let world_offset = [0.0_f32, 100.0];
     let ego = rotate_to_ego(world_offset, sin_a, cos_a);
-    assert!((ego[0] - 100.0).abs() < 1e-4, "ego x should be ~100, got {}", ego[0]);
+    assert!(
+        (ego[0] - 100.0).abs() < 1e-4,
+        "ego x should be ~100, got {}",
+        ego[0]
+    );
     assert!(ego[1].abs() < 1e-4, "ego y should be ~0, got {}", ego[1]);
 }
 
@@ -166,8 +174,16 @@ fn test_controls_to_discrete_roundtrip() {
         for turn_idx in [0u8, 1, 2] {
             let (t, r) = discrete_to_controls(thrust_idx, turn_idx);
             let (t2, r2) = controls_to_discrete(t, r);
-            assert_eq!(thrust_idx, t2, "thrust mismatch for ({}, {})", thrust_idx, turn_idx);
-            assert_eq!(turn_idx, r2, "turn mismatch for ({}, {})", thrust_idx, turn_idx);
+            assert_eq!(
+                thrust_idx, t2,
+                "thrust mismatch for ({}, {})",
+                thrust_idx, turn_idx
+            );
+            assert_eq!(
+                turn_idx, r2,
+                "turn mismatch for ({}, {})",
+                thrust_idx, turn_idx
+            );
         }
     }
 }
@@ -194,8 +210,14 @@ fn test_action_bc_roundtrip() {
         let action: DiscreteAction = (turn_idx, thrust_idx, 0, 0, 0, 0);
         let (turn_out, thrust_out, _, _, _, _) = action;
         let (t_back, r_back) = discrete_to_controls(thrust_out, turn_out);
-        assert_eq!(t_back, thrust, "thrust mismatch for input ({thrust}, {turn}): got {t_back}");
-        assert_eq!(r_back, turn, "turn mismatch for input ({thrust}, {turn}): got {r_back}");
+        assert_eq!(
+            t_back, thrust,
+            "thrust mismatch for input ({thrust}, {turn}): got {t_back}"
+        );
+        assert_eq!(
+            r_back, turn,
+            "turn mismatch for input ({thrust}, {turn}): got {r_back}"
+        );
     }
 }
 
@@ -210,13 +232,21 @@ fn test_intercept_angle_directly_ahead() {
 #[test]
 fn test_intercept_angle_left() {
     let angle = intercept_angle(200.0, [0.0, 500.0], [0.0, 0.0]).unwrap();
-    assert!((angle - PI / 2.0).abs() < 1e-4, "expected ~π/2, got {}", angle);
+    assert!(
+        (angle - PI / 2.0).abs() < 1e-4,
+        "expected ~π/2, got {}",
+        angle
+    );
 }
 
 #[test]
 fn test_intercept_angle_right() {
     let angle = intercept_angle(200.0, [0.0, -500.0], [0.0, 0.0]).unwrap();
-    assert!((angle + PI / 2.0).abs() < 1e-4, "expected ~−π/2, got {}", angle);
+    assert!(
+        (angle + PI / 2.0).abs() < 1e-4,
+        "expected ~−π/2, got {}",
+        angle
+    );
 }
 
 #[test]
@@ -231,7 +261,13 @@ fn test_intercept_angle_always_in_range() {
     ];
     for &(pos, vel) in cases {
         if let Some(a) = intercept_angle(200.0, pos, vel) {
-            assert!(a >= -PI && a <= PI, "angle {} out of [-π, π] for pos={:?} vel={:?}", a, pos, vel);
+            assert!(
+                a >= -PI && a <= PI,
+                "angle {} out of [-π, π] for pos={:?} vel={:?}",
+                a,
+                pos,
+                vel
+            );
         }
     }
 }
@@ -279,7 +315,10 @@ fn test_intercept_angle_moving_target_ahead() {
 #[test]
 fn test_obs_dim_matches_constant() {
     let expected = SELF_SIZE + N_ENTITY_SLOTS * SLOT_SIZE;
-    assert_eq!(OBS_DIM, expected, "OBS_DIM constant does not match slot layout");
+    assert_eq!(
+        OBS_DIM, expected,
+        "OBS_DIM constant does not match slot layout"
+    );
 
     let ship = dummy_ship();
     let obs = encode_observation(&minimal_obs_input(&ship));
@@ -296,7 +335,11 @@ fn test_target_pursuit_angle_ahead() {
             rel_pos: [500.0, 0.0],
             rel_vel: [0.0, 0.0],
         },
-        kind: EntityKind::Asteroid(AsteroidSlotData { size: 10.0, value: 1.0, collision_indicator: 0.0 }),
+        kind: EntityKind::Asteroid(AsteroidSlotData {
+            size: 10.0,
+            value: 1.0,
+            collision_indicator: 0.0,
+        }),
         value: 1.0,
         is_nav_target: true,
         is_weapons_target: false,
@@ -329,7 +372,11 @@ fn test_target_pursuit_angle_ahead() {
     // The asteroid is in slot 0 (first and only entity).
     let slot_offset = SELF_SIZE;
     let pursuit_angle = obs[slot_offset + SLOT_PURSUIT_ANGLE];
-    assert!(pursuit_angle.abs() < 1e-4, "expected ~0, got {}", pursuit_angle);
+    assert!(
+        pursuit_angle.abs() < 1e-4,
+        "expected ~0, got {}",
+        pursuit_angle
+    );
     let aim_ind = obs[slot_offset + SLOT_PURSUIT_INDICATOR];
     assert!((aim_ind - 1.0).abs() < 1e-4, "expected ~1, got {}", aim_ind);
     let in_range = obs[slot_offset + SLOT_IN_RANGE];
@@ -466,7 +513,8 @@ fn test_empty_slot_all_zeros() {
     let s = SELF_SIZE;
     for i in 0..SLOT_SIZE {
         assert_eq!(
-            obs[s + i], 0.0,
+            obs[s + i],
+            0.0,
             "empty slot byte {i} should be 0, got {}",
             obs[s + i]
         );
@@ -534,6 +582,10 @@ fn test_planet_slot_block_extraction() {
     assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + 3], 0.0, "is_recently_visited");
     // Remaining type-specific should be zero-padded.
     for i in 4..TYPE_SPECIFIC_SIZE {
-        assert_eq!(obs[s + SLOT_TYPE_SPECIFIC + i], 0.0, "type_specific[{i}] should be 0");
+        assert_eq!(
+            obs[s + SLOT_TYPE_SPECIFIC + i],
+            0.0,
+            "type_specific[{i}] should be 0"
+        );
     }
 }

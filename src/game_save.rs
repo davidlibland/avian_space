@@ -17,7 +17,6 @@ pub enum Gender {
     Girl,
 }
 
-
 // ── Serialisable save ────────────────────────────────────────────────────────
 
 /// On-disk format for a pilot save file.
@@ -164,10 +163,9 @@ impl PlayerGameState {
         Self {
             pilot_name: save.pilot_name.clone(),
             gender: save.gender,
-            avatar: save
-                .avatar
-                .clone()
-                .unwrap_or_else(|| crate::character_compositor::AvatarSpec::for_gender(save.gender)),
+            avatar: save.avatar.clone().unwrap_or_else(|| {
+                crate::character_compositor::AvatarSpec::for_gender(save.gender)
+            }),
             current_star_system: save.current_star_system.clone(),
             player_ship: ship,
             weapon_loadout: save.weapon_loadout.clone(),

@@ -52,14 +52,14 @@ pub fn generate_terrain_map(
     let h = height as usize;
     let mut pinned = vec![false; w * h];
     for x in 0..w {
-        field[x] = 1.0;                 // top row
-        field[(h - 1) * w + x] = 1.0;   // bottom row
+        field[x] = 1.0; // top row
+        field[(h - 1) * w + x] = 1.0; // bottom row
         pinned[x] = true;
         pinned[(h - 1) * w + x] = true;
     }
     for y in 0..h {
-        field[y * w] = 1.0;             // left column
-        field[y * w + (w - 1)] = 1.0;   // right column
+        field[y * w] = 1.0; // left column
+        field[y * w + (w - 1)] = 1.0; // right column
         pinned[y * w] = true;
         pinned[y * w + (w - 1)] = true;
     }
@@ -75,9 +75,7 @@ pub fn generate_terrain_map(
     let n = n_terrain_types as f32;
     field
         .iter()
-        .map(|&v| {
-            ((v * n) as u32).min(n_terrain_types - 1)
-        })
+        .map(|&v| ((v * n) as u32).min(n_terrain_types - 1))
         .collect()
 }
 
@@ -88,17 +86,30 @@ pub fn generate_terrain_map(
 /// to ensure walkable terrain near buildings).
 pub fn clamp_terrain_indices(terrain: &mut [u32], w: usize, h: usize, pinned: &[bool]) {
     let neighbours: [(i32, i32); 8] = [
-        (-1, -1), (0, -1), (1, -1),
-        (-1,  0),          (1,  0),
-        (-1,  1), (0,  1), (1,  1),
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
     ];
 
     /// Clamp `v` toward its neighbours.  When constraints conflict
     /// (lo > hi — e.g. a pinned 2 next to a pinned 4 with one cell
     /// between), pick the midpoint so we converge rather than panic.
     #[inline]
-    fn clamp_toward(v: i32, terrain: &[u32], idx: usize, x: usize, y: usize,
-                    w: usize, h: usize, neighbours: &[(i32, i32); 8]) -> Option<u32> {
+    fn clamp_toward(
+        v: i32,
+        terrain: &[u32],
+        idx: usize,
+        x: usize,
+        y: usize,
+        w: usize,
+        h: usize,
+        neighbours: &[(i32, i32); 8],
+    ) -> Option<u32> {
         let mut lo = i32::MIN;
         let mut hi = i32::MAX;
         for &(dx, dy) in neighbours {
@@ -116,7 +127,11 @@ pub fn clamp_terrain_indices(terrain: &mut [u32], w: usize, h: usize, pinned: &[
             hi = lo;
         }
         let clamped = v.clamp(lo, hi).max(0) as u32;
-        if clamped != terrain[idx] { Some(clamped) } else { None }
+        if clamped != terrain[idx] {
+            Some(clamped)
+        } else {
+            None
+        }
     }
 
     loop {
@@ -125,8 +140,12 @@ pub fn clamp_terrain_indices(terrain: &mut [u32], w: usize, h: usize, pinned: &[
         for y in 0..h {
             for x in 0..w {
                 let idx = y * w + x;
-                if pinned[idx] { continue; }
-                if let Some(c) = clamp_toward(terrain[idx] as i32, terrain, idx, x, y, w, h, &neighbours) {
+                if pinned[idx] {
+                    continue;
+                }
+                if let Some(c) =
+                    clamp_toward(terrain[idx] as i32, terrain, idx, x, y, w, h, &neighbours)
+                {
                     terrain[idx] = c;
                     changed = true;
                 }
@@ -136,8 +155,12 @@ pub fn clamp_terrain_indices(terrain: &mut [u32], w: usize, h: usize, pinned: &[
         for y in (0..h).rev() {
             for x in (0..w).rev() {
                 let idx = y * w + x;
-                if pinned[idx] { continue; }
-                if let Some(c) = clamp_toward(terrain[idx] as i32, terrain, idx, x, y, w, h, &neighbours) {
+                if pinned[idx] {
+                    continue;
+                }
+                if let Some(c) =
+                    clamp_toward(terrain[idx] as i32, terrain, idx, x, y, w, h, &neighbours)
+                {
                     terrain[idx] = c;
                     changed = true;
                 }
@@ -408,7 +431,8 @@ mod tests {
                         map[x as usize]
                     );
                     assert_eq!(
-                        map[((h - 1) * w + x) as usize], max_t,
+                        map[((h - 1) * w + x) as usize],
+                        max_t,
                         "seed={seed} bottom border ({x},{}) = {}",
                         h - 1,
                         map[((h - 1) * w + x) as usize]
@@ -416,12 +440,14 @@ mod tests {
                 }
                 for y in 0..h {
                     assert_eq!(
-                        map[(y * w) as usize], max_t,
+                        map[(y * w) as usize],
+                        max_t,
                         "seed={seed} left border (0,{y}) = {}",
                         map[(y * w) as usize]
                     );
                     assert_eq!(
-                        map[(y * w + w - 1) as usize], max_t,
+                        map[(y * w + w - 1) as usize],
+                        max_t,
                         "seed={seed} right border ({},{y}) = {}",
                         w - 1,
                         map[(y * w + w - 1) as usize]

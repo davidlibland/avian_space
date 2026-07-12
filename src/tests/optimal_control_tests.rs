@@ -152,8 +152,8 @@ fn simulate_landing(ship: &SimShip, distance: f32, budget: f32, seed: u64) -> Op
 /// the hauler-circling / PD-too-aggressive failure mode.
 #[test]
 fn test_all_ships_can_land() {
-    let yaml = std::fs::read_to_string("assets/ships.yaml")
-        .expect("failed to read assets/ships.yaml");
+    let yaml =
+        std::fs::read_to_string("assets/ships.yaml").expect("failed to read assets/ships.yaml");
     let ships: std::collections::HashMap<String, SimShip> =
         serde_yaml::from_str(&yaml).expect("failed to parse ships.yaml");
     assert!(!ships.is_empty(), "no ships loaded from assets/ships.yaml");

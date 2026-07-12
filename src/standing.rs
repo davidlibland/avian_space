@@ -146,8 +146,6 @@ pub fn tariff_price(price: i128, markup: f32) -> i128 {
     }
 }
 
-
-
 // ── Systems ──────────────────────────────────────────────────────────────────
 
 /// Standing consequences of the player's intentional weapon hits.
@@ -414,7 +412,7 @@ fn arrest_on_landing(
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
                 objective: Objective::MeetNpc {
-                        hint: None,
+                    hint: None,
                     planet: planet.clone(),
                     npc_name: format!("the {faction} enforcers"),
                     building: None,
@@ -439,7 +437,7 @@ fn arrest_on_landing(
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
                 objective: Objective::MeetNpc {
-                        hint: None,
+                    hint: None,
                     planet: planet.clone(),
                     npc_name: "the fines clerk".to_string(),
                     building: Some("market".to_string()),
@@ -557,16 +555,16 @@ pub fn standing_plugin(app: &mut App) {
     app.init_session_resource::<FactionStandings>()
         .init_session_resource::<FactionServiceRecord>()
         .add_systems(
-        Update,
-        (
-            standing_on_hits,
-            standing_on_mission_complete,
-            arrest_on_landing,
-            close_arrest_case,
-            derive_player_hostility.run_if(resource_changed::<FactionStandings>),
-        )
-            .run_if(not(in_state(PlayState::MainMenu))),
-    );
+            Update,
+            (
+                standing_on_hits,
+                standing_on_mission_complete,
+                arrest_on_landing,
+                close_arrest_case,
+                derive_player_hostility.run_if(resource_changed::<FactionStandings>),
+            )
+                .run_if(not(in_state(PlayState::MainMenu))),
+        );
 }
 
 #[cfg(test)]

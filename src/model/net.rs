@@ -231,8 +231,7 @@ impl<B: Backend> RLNet<B> {
     pub fn migrate_type_block(mut self, device: &B::Device) -> Self {
         let dims = self.type_embed_w.val().dims();
         if dims[2] < TYPE_BLOCK_SIZE {
-            let pad =
-                Tensor::<B, 3>::zeros([dims[0], dims[1], TYPE_BLOCK_SIZE - dims[2]], device);
+            let pad = Tensor::<B, 3>::zeros([dims[0], dims[1], TYPE_BLOCK_SIZE - dims[2]], device);
             let w = Tensor::cat(vec![self.type_embed_w.val(), pad], 2);
             self.type_embed_w = Param::from_tensor(w);
         }

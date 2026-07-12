@@ -139,8 +139,9 @@ fn load_sfx(mut commands: Commands, asset_server: Res<AssetServer>) {
             .map(|surface| {
                 let variants = (0..5)
                     .map(|v| {
-                        asset_server
-                            .load(format!("sounds/people/walking/footstep_{surface}_{v:03}.ogg"))
+                        asset_server.load(format!(
+                            "sounds/people/walking/footstep_{surface}_{v:03}.ogg"
+                        ))
                     })
                     .collect();
                 (surface.to_string(), variants)

@@ -16,7 +16,7 @@ use crate::model::{
     self, InferenceNet, N_OBJECTS, OBJECT_INPUT_DIM, POLICY_OUTPUT_DIM, SELF_INPUT_DIM,
     TARGET_OUTPUT_DIM,
 };
-use crate::rl_collection::{load_bc_buffer, BCTransition};
+use crate::rl_collection::{BCTransition, load_bc_buffer};
 use crate::rl_obs::*;
 use crate::ship::Personality;
 use std::collections::VecDeque;
@@ -150,7 +150,8 @@ fn infer_one(net: &InferenceNet, obs: &[f32]) -> (DiscreteAction, Vec<f32>, Vec<
     let proj = vec![0.0_f32; model::PROJECTILES_FLAT_DIM];
     let (action_logits, nav_target_logits, wep_target_logits) =
         net.run_inference(s.to_vec(), o.to_vec(), proj, 1);
-    let action = model::logits_to_discrete_action(&action_logits, &nav_target_logits, &wep_target_logits);
+    let action =
+        model::logits_to_discrete_action(&action_logits, &nav_target_logits, &wep_target_logits);
     (action, action_logits, nav_target_logits, wep_target_logits)
 }
 
@@ -222,12 +223,12 @@ fn test_miner_targets_asteroid() {
     let self_feat = self_state(&Personality::Miner, 1.0);
 
     let asteroid = make_slot(
-        1,                // Asteroid
-        [300.0, 100.0],   // nearby
-        [0.0, 0.0],       // stationary
-        false,            // not nav target
-        false,            // not weapons target
-        &[20.0, 50.0],    // size=20, value=50
+        1,              // Asteroid
+        [300.0, 100.0], // nearby
+        [0.0, 0.0],     // stationary
+        false,          // not nav target
+        false,          // not weapons target
+        &[20.0, 50.0],  // size=20, value=50
         50.0,
     );
 
@@ -257,12 +258,12 @@ fn test_trader_targets_planet() {
     self_feat[5] = 0.8; // cargo_frac = 80% full
 
     let planet = make_slot(
-        2,                       // Planet
-        [800.0, 0.0],            // ahead
-        [0.0, 0.0],              // stationary
-        false,                   // not nav target
-        false,                   // not weapons target
-        &[500.0, 0.0, -100.0, 0.0],  // cargo_profit_value=500, has_ammo=0, commodity_margin=-100, not recently visited
+        2,                          // Planet
+        [800.0, 0.0],               // ahead
+        [0.0, 0.0],                 // stationary
+        false,                      // not nav target
+        false,                      // not weapons target
+        &[500.0, 0.0, -100.0, 0.0], // cargo_profit_value=500, has_ammo=0, commodity_margin=-100, not recently visited
         500.0,
     );
 
@@ -300,10 +301,10 @@ fn test_bc_confusion_matrix() {
     println!("Buffer size: {} transitions\n", buffer.len());
 
     // Accumulators: [predicted][label] for each head.
-    let mut turn_cm = [[0u32; 3]; 3];           // 3×3
-    let mut thrust_cm = [[0u32; 2]; 2];          // 2×2
-    let mut fire_primary_cm = [[0u32; 2]; 2];    // 2×2
-    let mut fire_secondary_cm = [[0u32; 2]; 2];  // 2×2
+    let mut turn_cm = [[0u32; 3]; 3]; // 3×3
+    let mut thrust_cm = [[0u32; 2]; 2]; // 2×2
+    let mut fire_primary_cm = [[0u32; 2]; 2]; // 2×2
+    let mut fire_secondary_cm = [[0u32; 2]; 2]; // 2×2
     let mut target_cm = vec![vec![0u32; TARGET_OUTPUT_DIM]; TARGET_OUTPUT_DIM];
 
     let mut total = 0usize;
@@ -366,10 +367,22 @@ fn test_bc_confusion_matrix() {
     let target_bal = balanced_accuracy_dyn(&target_cm);
 
     println!("\n=== Accuracy Summary (overall / balanced) ===");
-    println!("Turn:           {turn_acc:5.1}% / {turn_bal:5.1}%   {}", per_class_recall_2d(&turn_cm, &["left", "straight", "right"]));
-    println!("Thrust:         {thrust_acc:5.1}% / {thrust_bal:5.1}%   {}", per_class_recall_2d(&thrust_cm, &["off", "on"]));
-    println!("Fire Primary:   {fp_acc:5.1}% / {fp_bal:5.1}%   {}", per_class_recall_2d(&fire_primary_cm, &["no", "yes"]));
-    println!("Fire Secondary: {fs_acc:5.1}% / {fs_bal:5.1}%   {}", per_class_recall_2d(&fire_secondary_cm, &["no", "yes"]));
+    println!(
+        "Turn:           {turn_acc:5.1}% / {turn_bal:5.1}%   {}",
+        per_class_recall_2d(&turn_cm, &["left", "straight", "right"])
+    );
+    println!(
+        "Thrust:         {thrust_acc:5.1}% / {thrust_bal:5.1}%   {}",
+        per_class_recall_2d(&thrust_cm, &["off", "on"])
+    );
+    println!(
+        "Fire Primary:   {fp_acc:5.1}% / {fp_bal:5.1}%   {}",
+        per_class_recall_2d(&fire_primary_cm, &["no", "yes"])
+    );
+    println!(
+        "Fire Secondary: {fs_acc:5.1}% / {fs_bal:5.1}%   {}",
+        per_class_recall_2d(&fire_secondary_cm, &["no", "yes"])
+    );
     println!("Target:         {target_acc:5.1}% / {target_bal:5.1}%");
 
     // Sanity check: accuracy should be above chance.
@@ -408,9 +421,7 @@ fn print_confusion_matrix_dyn(name: &str, cm: &[Vec<u32>]) {
     let n = cm.len();
     // Only print rows/cols that have any counts to keep output manageable.
     let active: Vec<usize> = (0..n)
-        .filter(|&i| {
-            cm[i].iter().any(|&v| v > 0) || (0..n).any(|j| cm[j][i] > 0)
-        })
+        .filter(|&i| cm[i].iter().any(|&v| v > 0) || (0..n).any(|j| cm[j][i] > 0))
         .collect();
     if active.is_empty() {
         println!("── {name} ── (no data)");
@@ -472,7 +483,11 @@ fn balanced_accuracy_2d<const N: usize>(cm: &[[u32; N]; N]) -> f64 {
             n_classes += 1;
         }
     }
-    if n_classes == 0 { 0.0 } else { 100.0 * sum_recall / n_classes as f64 }
+    if n_classes == 0 {
+        0.0
+    } else {
+        100.0 * sum_recall / n_classes as f64
+    }
 }
 
 fn balanced_accuracy_dyn(cm: &[Vec<u32>]) -> f64 {
@@ -486,7 +501,11 @@ fn balanced_accuracy_dyn(cm: &[Vec<u32>]) -> f64 {
             n_classes += 1;
         }
     }
-    if n_classes == 0 { 0.0 } else { 100.0 * sum_recall / n_classes as f64 }
+    if n_classes == 0 {
+        0.0
+    } else {
+        100.0 * sum_recall / n_classes as f64
+    }
 }
 
 /// Per-class recall for a fixed-size confusion matrix.
@@ -541,9 +560,9 @@ fn test_bc_buffer_has_nontrivial_target_data() {
 
     let mut total = 0usize;
     let mut target_matches_is_current = 0usize; // label == is_nav_target slot
-    let mut target_is_new = 0usize;             // label != is_nav_target slot (new target chosen)
-    let mut target_dropped = 0usize;            // label = "no target" but is_nav_target exists
-    let mut no_target_no_current = 0usize;      // label = "no target" and no is_nav_target
+    let mut target_is_new = 0usize; // label != is_nav_target slot (new target chosen)
+    let mut target_dropped = 0usize; // label = "no target" but is_nav_target exists
+    let mut no_target_no_current = 0usize; // label = "no target" and no is_nav_target
     let mut label_is_none = 0usize;
     let mut label_is_entity = 0usize;
     let mut has_current_target = 0usize;

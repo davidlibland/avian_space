@@ -84,10 +84,7 @@ fn test_universe() -> ItemUniverse {
             location: Vec2::new(500.0, 0.0),
             radius: 200.0,
             number: 10,
-            commodities: HashMap::from([
-                ("iron".to_string(), 0.8),
-                ("gold".to_string(), 0.2),
-            ]),
+            commodities: HashMap::from([("iron".to_string(), 0.8), ("gold".to_string(), 0.2)]),
         }],
         ships: Default::default(),
     };
@@ -235,7 +232,10 @@ fn test_full_assets_parse_like_the_game() {
     let iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
         .expect("assets/ must parse into ItemUniverse (check every .yaml is valid)");
     assert!(!iu.ships.is_empty(), "no ships parsed from assets/");
-    assert!(!iu.star_systems.is_empty(), "no star systems parsed from assets/");
+    assert!(
+        !iu.star_systems.is_empty(),
+        "no star systems parsed from assets/"
+    );
     assert!(!iu.missions.is_empty(), "no missions parsed from assets/");
     // touching required Vec/HashMap fields proves they deserialized for every system
     for (name, sys) in &iu.star_systems {
@@ -291,8 +291,8 @@ fn story_npc_references_resolve() {
 #[test]
 fn test_asset_validators_pass() {
     use std::path::Path;
-    let mut iu: ItemUniverse = crate::item_universe::parse_dir(Path::new("assets"))
-        .expect("assets/ must parse");
+    let mut iu: ItemUniverse =
+        crate::item_universe::parse_dir(Path::new("assets")).expect("assets/ must parse");
     iu.finalize();
     let problems = crate::validate_assets::collect_problems(&iu);
     assert!(
@@ -313,8 +313,11 @@ fn market_catalogs_derive_from_tech_and_faction() {
         .expect("assets/ must parse");
     iu.finalize();
 
-    let planet =
-        |name: &str| iu.find_gameplay_planet(name).unwrap_or_else(|| panic!("planet {name}")).1;
+    let planet = |name: &str| {
+        iu.find_gameplay_planet(name)
+            .unwrap_or_else(|| panic!("planet {name}"))
+            .1
+    };
 
     // Earth: Federation tech 4 — universal + Federation gear, all tech.
     let earth = planet("earth");

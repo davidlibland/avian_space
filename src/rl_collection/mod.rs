@@ -37,9 +37,9 @@ use crate::ai_ships::{AIShip, compute_ai_action};
 use crate::asteroids::{Asteroid, AsteroidField};
 use crate::item_universe::ItemUniverse;
 use crate::model::{self, RLResource};
-use crate::policy_asset::{DEFAULT_POLICY_ASSET_PATH, PolicyAsset};
 use crate::pickups::Pickup;
 use crate::planets::Planet;
+use crate::policy_asset::{DEFAULT_POLICY_ASSET_PATH, PolicyAsset};
 use crate::rl_obs::{
     self, AsteroidSlotData, CoreSlotData, DETECTION_RADIUS, DiscreteAction, EntityKind,
     EntitySlotData, K_ASTEROIDS, K_FRIENDLY_SHIPS, K_HOSTILE_SHIPS, K_OTHER_PROJECTILES, K_PICKUPS,
@@ -304,7 +304,12 @@ impl Plugin for RLCollectionPlugin {
             let res = RLResource {
                 inference_net: Arc::clone(&shared.inference_net),
             };
-            (res, shared.segment_tx.clone(), shared.swap_phase_segments, true)
+            (
+                res,
+                shared.segment_tx.clone(),
+                shared.swap_phase_segments,
+                true,
+            )
         } else {
             let rl_resource = RLResource::new();
             let inference_net_arc = Arc::clone(&rl_resource.inference_net);
@@ -340,8 +345,7 @@ impl Plugin for RLCollectionPlugin {
                     // `apply_loaded_policy` system below applies its bytes to the
                     // shared inference net once the asset is ready.
                     let asset_server = app.world().resource::<AssetServer>();
-                    let handle: Handle<PolicyAsset> =
-                        asset_server.load(DEFAULT_POLICY_ASSET_PATH);
+                    let handle: Handle<PolicyAsset> = asset_server.load(DEFAULT_POLICY_ASSET_PATH);
                     app.insert_resource(PendingPolicyHandle(handle));
                     drop(bc_rx);
                     drop(rl_rx);
@@ -479,7 +483,10 @@ fn apply_loaded_policy(
     match rl_resource.inference_net.lock() {
         Ok(mut net) => {
             net.load_bytes(asset.bytes);
-            println!("[inference] Loaded policy from {}", crate::policy_asset::DEFAULT_POLICY_ASSET_PATH);
+            println!(
+                "[inference] Loaded policy from {}",
+                crate::policy_asset::DEFAULT_POLICY_ASSET_PATH
+            );
         }
         Err(e) => eprintln!("[inference] failed to lock inference net: {e}"),
     }
@@ -794,8 +801,7 @@ fn check_system_swap(
             // Exclude all isolated training-only systems (combat/escort/mining
             // arenas) from random swaps — they're reserved for pinned worlds.
             .filter(|name| {
-                !crate::item_universe::ItemUniverse::TRAINING_SYSTEM_KEYS
-                    .contains(&name.as_str())
+                !crate::item_universe::ItemUniverse::TRAINING_SYSTEM_KEYS.contains(&name.as_str())
             })
             .collect();
         candidates
@@ -910,7 +916,10 @@ fn build_all_observations(
             continue;
         };
         let vel = all_velocities.get(e).map(|v| v.0).unwrap_or(Vec2::ZERO);
-        let distressed = all_distressed.get(e).map(|d| d.level > 0.0).unwrap_or(false);
+        let distressed = all_distressed
+            .get(e)
+            .map(|d| d.level > 0.0)
+            .unwrap_or(false);
         ally_snapshot.push((
             e,
             AllyInfo {
@@ -1707,8 +1716,7 @@ fn choose_target_slot(personality: &Personality, has_cargo: bool, obs: &[f32]) -
     //    trading/mining. (Pirates already register hostile to merchants, and an
     //    intentional hit flips the merchant's should_engage on the attacker.)
     const DISTRESS_DEFEND_THRESHOLD: f32 = 0.3;
-    let is_hostile_slot =
-        |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_IS_HOSTILE] > 0.5;
+    let is_hostile_slot = |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_IS_HOSTILE] > 0.5;
     let is_targeting_me =
         |i: usize| obs[slot_base(i) + SLOT_TYPE_SPECIFIC + SHIP_IS_TARGETING_ME] > 0.5;
     let engageable_ship = |i: usize| is_ship(i) && (is_hostile_slot(i) || should_engage(i));

@@ -85,13 +85,12 @@ fn movement_app() -> (App, Entity) {
 }
 
 fn send_command(app: &mut App, entity: Entity, thrust: f32) {
-    app.world_mut()
-        .write_message(ShipCommand {
-            entity,
-            thrust,
-            turn: 0.0,
-            reverse: 0.0,
-        });
+    app.world_mut().write_message(ShipCommand {
+        entity,
+        thrust,
+        turn: 0.0,
+        reverse: 0.0,
+    });
 }
 
 /// Regression: the plume must track the LAST command — including an all-zero
@@ -123,7 +122,10 @@ fn thrust_accelerates_forward() {
     app.update();
     let vel = app.world().get::<LinearVelocity>(entity).unwrap().0;
     // Transform::default() faces +Y.
-    assert!(vel.y > 0.0, "forward thrust must accelerate +Y, got {vel:?}");
+    assert!(
+        vel.y > 0.0,
+        "forward thrust must accelerate +Y, got {vel:?}"
+    );
     assert!(vel.x.abs() < 1e-4);
 }
 
@@ -254,10 +256,7 @@ fn repair_bot_heals_toward_effective_max() {
     );
     ship.health = 90;
     ship.mod_stats.repair_per_sec = 2.0; // 0.5 hp per 250ms tick
-    let entity = app
-        .world_mut()
-        .spawn((ship, RepairBuffer::default()))
-        .id();
+    let entity = app.world_mut().spawn((ship, RepairBuffer::default())).id();
     app.update(); // time baseline
     for _ in 0..8 {
         app.update(); // 2s of repair = +4 hp
@@ -295,18 +294,30 @@ fn weapon_mounts_limit_guns_and_turrets() {
     assert_eq!(ship.mounts_used(), (3, 0));
     let credits = ship.credits;
     ship.buy_weapon("laser", &iu, 1.0);
-    assert_eq!(ship.mounts_used(), (3, 0), "no fourth gun on a 3-mount hull");
+    assert_eq!(
+        ship.mounts_used(),
+        (3, 0),
+        "no fourth gun on a 3-mount hull"
+    );
     assert_eq!(ship.credits, credits, "refused purchases charge nothing");
 
     // No turret ring on a fighter, whatever the credits.
     ship.buy_weapon("laser_turret", &iu, 1.0);
-    assert_eq!(ship.mounts_used(), (3, 0), "small hulls can't mount turrets");
+    assert_eq!(
+        ship.mounts_used(),
+        (3, 0),
+        "small hulls can't mount turrets"
+    );
     assert_eq!(ship.credits, credits);
 
     // Decoy pods use item space, not mounts.
     ship.buy_weapon("flare_pod", &iu, 1.0);
     assert!(ship.weapon_systems.find_weapon("flare_pod").is_some());
-    assert_eq!(ship.mounts_used(), (3, 0), "countermeasures don't take mounts");
+    assert_eq!(
+        ship.mounts_used(),
+        (3, 0),
+        "countermeasures don't take mounts"
+    );
 
     // A carrier has real turret rings.
     let carrier = iu.ships.get("fed_carrier").unwrap();
@@ -318,7 +329,10 @@ fn weapon_mounts_limit_guns_and_turrets() {
     // Mount-wise there's room for more turrets (item space is the binding
     // constraint at factory fit, which is its own limit).
     let turret = iu.weapons.get("proton_beam_turret").unwrap();
-    assert!(big.mount_free_for(turret), "carriers have spare turret rings");
+    assert!(
+        big.mount_free_for(turret),
+        "carriers have spare turret rings"
+    );
     let small = iu.ships.get("fighter").unwrap();
     let s2 = Ship::from_ship_data(small, "fighter");
     assert!(!s2.mount_free_for(turret) || small.turret_mounts > 0);

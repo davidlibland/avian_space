@@ -9,15 +9,15 @@ use crate::{
     CurrentStarSystem, PlayState, TravelContext, TravelPhase,
     game_save::PlayerGameState,
     item_universe::{ItemUniverse, StarSystem},
-    missions::{MissionCatalog, MissionLog},
     missions::types::{MissionStatus, Objective},
+    missions::{MissionCatalog, MissionLog},
 };
 
 // The scrollable canvas is sized at runtime to the galaxy's actual extent (see
 // the map-bounds computation below), so every system is reachable by panning no
 // matter how far the map expands. This padding rings the outermost systems.
 const MAP_PAD: f32 = 120.0;
-const NODE_R: f32 = 3.5;   // visual dot radius
+const NODE_R: f32 = 3.5; // visual dot radius
 const CLICK_R: f32 = 12.0; // invisible click hit radius
 
 /// Map factions shown in the legend: the territorial powers, from the
@@ -108,16 +108,17 @@ pub struct JumpUiOpen {
 
 impl crate::session::SessionResource for JumpUiOpen {
     type SaveData = ();
-    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
-    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
 }
 
 pub fn jump_ui_plugin(app: &mut App) {
     app.init_session_resource::<JumpUiOpen>()
-        .add_systems(
-            Update,
-            toggle_jump_ui.run_if(in_state(PlayState::Flying)),
-        )
+        .add_systems(Update, toggle_jump_ui.run_if(in_state(PlayState::Flying)))
         .add_systems(
             EguiPrimaryContextPass,
             (
@@ -173,7 +174,11 @@ fn jump_flash(mut egui_contexts: EguiContexts, travel_ctx: Res<TravelContext>) {
             );
 
             // Overall white-out overlay — peaks at the midpoint.
-            p.rect_filled(screen, 0.0, Color32::from_white_alpha((alpha * 200.0) as u8));
+            p.rect_filled(
+                screen,
+                0.0,
+                Color32::from_white_alpha((alpha * 200.0) as u8),
+            );
         });
 }
 
@@ -249,8 +254,7 @@ fn jump_ui(
         .filter_map(|(id, status)| {
             if let MissionStatus::Active(_) = status {
                 let def = mission_catalog.defs.get(id)?;
-                objective_system(&def.objective, &item_universe)
-                    .map(|s| s.to_string())
+                objective_system(&def.objective, &item_universe).map(|s| s.to_string())
             } else {
                 None
             }
@@ -300,8 +304,8 @@ fn jump_ui(
                     .unwrap_or_default();
                 let offset_x = (map_pos.x - min_x) + MAP_PAD - map_w * 0.5;
                 let offset_y = (map_pos.y - min_y) + MAP_PAD - map_h * 0.5;
-                scroll = scroll
-                    .scroll_offset(egui::Vec2::new(offset_x.max(0.0), offset_y.max(0.0)));
+                scroll =
+                    scroll.scroll_offset(egui::Vec2::new(offset_x.max(0.0), offset_y.max(0.0)));
                 ui_state.scroll_initialized = true;
             }
 
@@ -319,9 +323,8 @@ fn jump_ui(
 
                 painter.rect_filled(response.rect, 0.0, Color32::from_rgb(4, 4, 18));
 
-                let is_visible = |name: &String| -> bool {
-                    visited.contains(name) || discovered.contains(name)
-                };
+                let is_visible =
+                    |name: &String| -> bool { visited.contains(name) || discovered.contains(name) };
 
                 // Edges — only when both endpoints are visible AND at least one is visited.
                 for (sys_name, sys) in &item_universe.star_systems {
@@ -362,8 +365,7 @@ fn jump_ui(
                     let is_jumpable = jumpable_neighbors.contains(sys_name);
 
                     if is_jumpable {
-                        let hovered =
-                            hover_pos.map_or(false, |hp| (hp - pos).length() < CLICK_R);
+                        let hovered = hover_pos.map_or(false, |hp| (hp - pos).length() < CLICK_R);
                         if hovered {
                             painter.circle_filled(
                                 pos,
@@ -382,7 +384,8 @@ fn jump_ui(
                         .influence
                         .contains_key(sys_name.as_str())
                         .then(|| galaxy.controller(sys_name.as_str()));
-                    let base = faction_color(&map_faction(sys, &item_universe, live), &item_universe);
+                    let base =
+                        faction_color(&map_faction(sys, &item_universe, live), &item_universe);
                     let fill = if is_current || is_visited {
                         base
                     } else {
@@ -415,10 +418,7 @@ fn jump_ui(
                     // Red mission marker for systems with active objectives.
                     if mission_systems.contains(sys_name) {
                         let half = NODE_R + 6.0;
-                        let rect = egui::Rect::from_center_size(
-                            pos,
-                            egui::Vec2::splat(half * 2.0),
-                        );
+                        let rect = egui::Rect::from_center_size(pos, egui::Vec2::splat(half * 2.0));
                         painter.rect_stroke(
                             rect,
                             1.0,
@@ -465,7 +465,10 @@ fn jump_ui(
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 12.0;
                 for fac in &legend_factions(&item_universe) {
-                    ui.colored_label(faction_color(fac, &item_universe), faction_label(fac, &item_universe));
+                    ui.colored_label(
+                        faction_color(fac, &item_universe),
+                        faction_label(fac, &item_universe),
+                    );
                 }
             });
             ui.label(format!("Fuel: {fuel}/{fuel_cap} jumps"));

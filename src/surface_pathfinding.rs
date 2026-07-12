@@ -9,7 +9,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::surface::{BuildingKind, TILE_PX, WORLD_WIDTH, WORLD_HEIGHT};
+use crate::surface::{BuildingKind, TILE_PX, WORLD_HEIGHT, WORLD_WIDTH};
 
 // ── Public types ─────────────────────────────────────────────────────────
 
@@ -86,14 +86,22 @@ fn dijkstra_path(
     let idx = |x: u32, y: u32| (y * map_w + x) as usize;
 
     #[derive(PartialEq)]
-    struct State { cost: f32, pos: (u32, u32) }
+    struct State {
+        cost: f32,
+        pos: (u32, u32),
+    }
     impl Eq for State {}
     impl PartialOrd for State {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
     }
     impl Ord for State {
         fn cmp(&self, other: &Self) -> Ordering {
-            other.cost.partial_cmp(&self.cost).unwrap_or(Ordering::Equal)
+            other
+                .cost
+                .partial_cmp(&self.cost)
+                .unwrap_or(Ordering::Equal)
         }
     }
 
@@ -102,15 +110,20 @@ fn dijkstra_path(
     let mut heap = BinaryHeap::new();
 
     dist[idx(start.0, start.1)] = 0.0;
-    heap.push(State { cost: 0.0, pos: start });
+    heap.push(State {
+        cost: 0.0,
+        pos: start,
+    });
 
     // Cardinal directions only — diagonal movement through tight gaps
     // is unreliable with physics-based character colliders.
-    const DIRS: [(i32, i32); 4] = [
-        (0, -1), (-1, 0), (1, 0), (0, 1),
-    ];
+    const DIRS: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
 
-    while let Some(State { cost, pos: (cx, cy) }) = heap.pop() {
+    while let Some(State {
+        cost,
+        pos: (cx, cy),
+    }) = heap.pop()
+    {
         if (cx, cy) == goal {
             // Reconstruct path.
             let mut path = vec![goal];
@@ -144,7 +157,10 @@ fn dijkstra_path(
             if new_cost < dist[ni] {
                 dist[ni] = new_cost;
                 parent[ni] = Some((cx, cy));
-                heap.push(State { cost: new_cost, pos: (nx, ny) });
+                heap.push(State {
+                    cost: new_cost,
+                    pos: (nx, ny),
+                });
             }
         }
     }
@@ -245,8 +261,12 @@ pub fn compute_all_paths(
                 None => {
                     bevy::log::debug!(
                         "[pathfinding] No path: {:?} at ({},{}) → {:?} at ({},{}), skipping",
-                        kind_a, pos_a.0, pos_a.1,
-                        kind_b, pos_b.0, pos_b.1,
+                        kind_a,
+                        pos_a.0,
+                        pos_a.1,
+                        kind_b,
+                        pos_b.0,
+                        pos_b.1,
                     );
                 }
             }

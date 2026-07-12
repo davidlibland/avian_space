@@ -343,9 +343,7 @@ fn spawn_escort_ships(
 ) {
     let player_entity = player.single().ok();
     for event in reader.read() {
-        let Ok((_, mother_vel, mother_tf, mother_ship)) =
-            mother_ships.get(event.mother)
-        else {
+        let Ok((_, mother_vel, mother_tf, mother_ship)) = mother_ships.get(event.mother) else {
             continue;
         };
         // Squadron wings start in formation; bay launches engage the
@@ -399,10 +397,9 @@ fn spawn_escort_ships(
                 bundle.set_ship_health(entry.health);
                 bundle.set_ship_ammo(&entry.ammo);
                 roster_temperament = match &entry.kind {
-                    EscortKind::Companion { name } => item_universe
-                        .companions
-                        .get(name)
-                        .map(|d| d.temperament),
+                    EscortKind::Companion { name } => {
+                        item_universe.companions.get(name).map(|d| d.temperament)
+                    }
                     EscortKind::Hired { temperament, .. } => {
                         Some(crate::companions::Temperament::parse(temperament))
                     }
@@ -448,10 +445,7 @@ fn spawn_escort_ships(
                 },
                 || is_bay_launch,
             )
-            .insert((
-                Position(event.position),
-                LinearVelocity(mother_vel.0),
-            ))
+            .insert((Position(event.position), LinearVelocity(mother_vel.0)))
             .insert_if(
                 CarriedBy {
                     weapon_type: event.carried.clone().unwrap_or_default(),
@@ -493,10 +487,7 @@ fn spawn_escort_ships(
 /// mother ship.  The sprite scaling is handled by [`ship_anim::animate_scale_up`].
 fn escort_launch_movement(
     time: Res<Time>,
-    mut escorts: Query<
-        (&ScalingUp, &mut LinearVelocity, &Escort),
-        Without<DockingEscort>,
-    >,
+    mut escorts: Query<(&ScalingUp, &mut LinearVelocity, &Escort), Without<DockingEscort>>,
     mother_transforms: Query<&Transform, Without<Escort>>,
 ) {
     for (scaling, mut vel, escort) in &mut escorts {
@@ -526,10 +517,7 @@ fn escort_launch_movement(
 /// returns to escort mode (player escorts always disengage on kill).
 fn update_escort_modes(
     mother_ships: Query<(&Ship, Has<Player>), Without<Escort>>,
-    mut escorts: Query<
-        (&Escort, &mut EscortMode, &mut Ship),
-        Without<DockingEscort>,
-    >,
+    mut escorts: Query<(&Escort, &mut EscortMode, &mut Ship), Without<DockingEscort>>,
     target_alive: Query<(), With<Position>>,
     mut sfx_writer: MessageWriter<EscortSfx>,
 ) {
@@ -655,8 +643,7 @@ fn escort_act(
     mut weapons_writer: MessageWriter<FireCommand>,
 ) {
     let mut rng = rand::thread_rng();
-    for (entity, position, ship_vel, ang_vel, max_speed, ship_transform, mut ship) in &mut escorts
-    {
+    for (entity, position, ship_vel, ang_vel, max_speed, ship_transform, mut ship) in &mut escorts {
         if ship.nav_target.is_none() {
             continue;
         }
@@ -704,11 +691,7 @@ fn begin_escort_dock(
     mut commands: Commands,
     escorts: Query<
         (Entity, &Escort, &EscortMode, &Position, &Ship),
-        (
-            With<CarriedBy>,
-            Without<ScalingUp>,
-            Without<DockingEscort>,
-        ),
+        (With<CarriedBy>, Without<ScalingUp>, Without<DockingEscort>),
     >,
     mother_ships: Query<(&Ship, &Position), Without<Escort>>,
 ) {
@@ -1111,7 +1094,14 @@ fn orphan_escorts(
             sprite.custom_size = Some(crate::ship::ship_display_size(ship.data.radius));
             commands
                 .entity(entity)
-                .remove::<(Escort, EscortMode, ScalingUp, DockingEscort, CarriedBy, MissionSquadron)>()
+                .remove::<(
+                    Escort,
+                    EscortMode,
+                    ScalingUp,
+                    DockingEscort,
+                    CarriedBy,
+                    MissionSquadron,
+                )>()
                 .insert(RLAgent::new(ai_ship.personality.clone()));
         }
     }

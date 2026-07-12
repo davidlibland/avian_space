@@ -124,7 +124,11 @@ impl Default for AvatarSpec {
         colors.insert("hair".into(), "brown".into());
         colors.insert("eye".into(), "brown".into());
         colors.insert("cloth".into(), "blue".into());
-        AvatarSpec { sex: "male".into(), slots, colors }
+        AvatarSpec {
+            sex: "male".into(),
+            slots,
+            colors,
+        }
     }
 }
 
@@ -176,18 +180,20 @@ pub fn setup_character_layers(
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
-    let manifest: LayersManifest = match crate::embedded_assets::read_to_string(
-        "assets/sprites/people/layers.ron",
-    )
-    .ok()
-    .and_then(|t| ron::from_str(&t).map_err(|e| eprintln!("[avatar] layers.ron: {e}")).ok())
-    {
-        Some(m) => m,
-        None => {
-            eprintln!("[avatar] WARNING: could not load layers.ron — no character compositing");
-            return;
-        }
-    };
+    let manifest: LayersManifest =
+        match crate::embedded_assets::read_to_string("assets/sprites/people/layers.ron")
+            .ok()
+            .and_then(|t| {
+                ron::from_str(&t)
+                    .map_err(|e| eprintln!("[avatar] layers.ron: {e}"))
+                    .ok()
+            }) {
+            Some(m) => m,
+            None => {
+                eprintln!("[avatar] WARNING: could not load layers.ron — no character compositing");
+                return;
+            }
+        };
 
     let palettes = manifest
         .palettes
@@ -263,8 +269,11 @@ impl CharacterLayers {
             .iter()
             .filter(|i| i.slot == slot && i.layer == 1 && i.sexes.iter().any(|s| s == sex))
             .collect();
-        let role_specific: Vec<&LayerItem> =
-            all.iter().copied().filter(|i| i.roles.iter().any(|r| r == role)).collect();
+        let role_specific: Vec<&LayerItem> = all
+            .iter()
+            .copied()
+            .filter(|i| i.roles.iter().any(|r| r == role))
+            .collect();
         if !role_specific.is_empty() {
             return role_specific;
         }
@@ -316,7 +325,9 @@ impl CharacterLayers {
         // Hat first: it constrains which hair fits underneath.
         let hat = if rng.gen_bool(0.15) {
             let cands = self.candidates("hat", &sex, role);
-            cands.get(rng.gen_range(0..cands.len().max(1))).map(|i| i.id.clone())
+            cands
+                .get(rng.gen_range(0..cands.len().max(1)))
+                .map(|i| i.id.clone())
         } else {
             None
         };
@@ -361,7 +372,10 @@ impl CharacterLayers {
         ] {
             let names = self.ramp_names(mat, group);
             if !names.is_empty() {
-                colors.insert(mat.to_string(), names[rng.gen_range(0..names.len())].to_string());
+                colors.insert(
+                    mat.to_string(),
+                    names[rng.gen_range(0..names.len())].to_string(),
+                );
             }
         }
 
@@ -391,7 +405,9 @@ impl CharacterLayers {
             else {
                 continue;
             };
-            let Some(ramp) = pal.ramps.get(ramp_name) else { continue };
+            let Some(ramp) = pal.ramps.get(ramp_name) else {
+                continue;
+            };
             let (nb, nt) = (pal.base.len(), ramp.colors.len());
             if nb == 0 || nt == 0 {
                 continue;
@@ -444,7 +460,10 @@ impl CharacterLayers {
                 if sa == 0 {
                     continue;
                 }
-                let rgb = lut.get(&[s[0], s[1], s[2]]).copied().unwrap_or([s[0], s[1], s[2]]);
+                let rgb = lut
+                    .get(&[s[0], s[1], s[2]])
+                    .copied()
+                    .unwrap_or([s[0], s[1], s[2]]);
                 let d = &mut out[px * 4..px * 4 + 4];
                 if sa == 255 {
                     d[0] = rgb[0];
@@ -475,7 +494,8 @@ impl CharacterLayers {
             bevy::render::render_resource::TextureDimension::D2,
             out,
             bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
-            bevy::asset::RenderAssetUsages::MAIN_WORLD | bevy::asset::RenderAssetUsages::RENDER_WORLD,
+            bevy::asset::RenderAssetUsages::MAIN_WORLD
+                | bevy::asset::RenderAssetUsages::RENDER_WORLD,
         );
         img.sampler = bevy::image::ImageSampler::nearest();
         Some(images.add(img))
@@ -493,11 +513,9 @@ impl CharacterLayers {
         if let Some(spec) = authored {
             return spec.clone();
         }
-        let seed = npc_id
-            .bytes()
-            .fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
-                (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3)
-            });
+        let seed = npc_id.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+            (h ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3)
+        });
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         self.random_spec(&mut rng, role)
     }
@@ -579,7 +597,11 @@ mod tests {
         }
         for item in &m.items {
             for mat in &item.materials {
-                assert!(m.palettes.contains_key(mat), "{}: unknown material {mat}", item.id);
+                assert!(
+                    m.palettes.contains_key(mat),
+                    "{}: unknown material {mat}",
+                    item.id
+                );
             }
         }
         // Alien skin tones exist and are a distinct group from human ones.
@@ -602,11 +624,9 @@ mod tests {
 
         // npcs.yaml is loaded as ItemUniverse.npcs — a flat id→NpcDef map
         // (file stem must match the field name; no wrapper key).
-        let npc_txt = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/assets/npcs.yaml"
-        ))
-        .expect("npcs.yaml missing");
+        let npc_txt =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/npcs.yaml"))
+                .expect("npcs.yaml missing");
         let npcs: std::collections::HashMap<String, crate::item_universe::NpcDef> =
             serde_yaml::from_str(&npc_txt).expect("npcs.yaml failed to parse");
 

@@ -126,15 +126,15 @@ fn planet_message(
     }
     // Landing is never barred — but a wanted pilot gets fair warning of the
     // reception waiting on the pad (the arrest flow in standing.rs).
-    let standing = crate::galaxy::effective_planet_faction(galaxy, iu, planet_key)
-        .map(|f| standings.get(&f));
+    let standing =
+        crate::galaxy::effective_planet_faction(galaxy, iu, planet_key).map(|f| standings.get(&f));
     match standing {
-        Some(s) if s <= crate::standing::ARREST_THRESHOLD => format!(
-            "{name}: You are a wanted criminal here. Land and you WILL be detained."
-        ),
-        Some(s) if s < 0.0 => format!(
-            "{name}: Docking permitted. Don't expect hospitality — or fair prices."
-        ),
+        Some(s) if s <= crate::standing::ARREST_THRESHOLD => {
+            format!("{name}: You are a wanted criminal here. Land and you WILL be detained.")
+        }
+        Some(s) if s < 0.0 => {
+            format!("{name}: Docking permitted. Don't expect hospitality — or fair prices.")
+        }
         _ => format!("Welcome to {name}. Press L to land."),
     }
 }

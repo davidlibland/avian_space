@@ -78,7 +78,6 @@ impl ExperimentSetup {
     pub fn rl_buffer_checkpoint_path(&self) -> String {
         format!("{}/rl_buffer.bin", self.run_dir)
     }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +100,10 @@ pub fn setup_experiment(fresh: bool) -> ExperimentSetup {
         if let Some(id) = highest_id {
             let dir = format!("{EXPERIMENTS_DIR}/run_{id}");
             println!("[experiment] Resuming run {id} from {dir}");
-            return ExperimentSetup { run_dir: dir, is_fresh: false };
+            return ExperimentSetup {
+                run_dir: dir,
+                is_fresh: false,
+            };
         }
     }
 
@@ -111,7 +113,10 @@ pub fn setup_experiment(fresh: bool) -> ExperimentSetup {
         .unwrap_or_else(|e| eprintln!("[experiment] Failed to create {dir}: {e}"));
     println!("[experiment] Starting fresh run {new_id} at {dir}");
 
-    ExperimentSetup { run_dir: dir, is_fresh: true }
+    ExperimentSetup {
+        run_dir: dir,
+        is_fresh: true,
+    }
 }
 
 // ---------------------------------------------------------------------------

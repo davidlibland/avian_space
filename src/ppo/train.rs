@@ -423,7 +423,11 @@ pub fn spawn_ppo_training_thread(
                         let lr_len = ppo.finalize_lr_decay_cycles;
                         let p =
                             ((c - ppo.finalize_bc_decay_cycles) as f64 / lr_len as f64).min(1.0);
-                        (floor, ppo.policy_lr * (1.0 - p), ppo.entropy_coeff * (1.0 - p as f32))
+                        (
+                            floor,
+                            ppo.policy_lr * (1.0 - p),
+                            ppo.entropy_coeff * (1.0 - p as f32),
+                        )
                     }
                 } else {
                     (ppo.bc_coeff, ppo.policy_lr, ppo.entropy_coeff)
@@ -750,7 +754,8 @@ pub fn spawn_ppo_training_thread(
 
             // ── Phase 5b: Extra value training from replay buffer ────────
             if value_replay.len() > 0 {
-                let replay_mb_size = (ppo.mini_batch_size as f32 * ppo.value_replay_fraction) as usize;
+                let replay_mb_size =
+                    (ppo.mini_batch_size as f32 * ppo.value_replay_fraction) as usize;
                 for _ in 0..ppo.value_replay_extra_batches {
                     if let Some((r_self, r_obj, r_proj, r_ret)) =
                         value_replay.sample(replay_mb_size.max(1), &mut rng)

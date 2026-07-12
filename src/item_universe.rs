@@ -223,7 +223,10 @@ impl ItemUniverse {
         self.factions.get(name).map(|f| f.lawless).unwrap_or(false)
     }
     pub fn faction_is_stateless(&self, name: &str) -> bool {
-        self.factions.get(name).map(|f| f.stateless).unwrap_or(false)
+        self.factions
+            .get(name)
+            .map(|f| f.stateless)
+            .unwrap_or(false)
     }
 
     /// Find a planet by name across GAMEPLAY systems only. The RL-training
@@ -453,8 +456,12 @@ impl ItemUniverse {
                     *v /= total_presence.max(1.0);
                 }
             }
-            let local_unaligned =
-                1.0 - galaxy.influence.get(name).map(|m| m.values().sum()).unwrap_or(0.0);
+            let local_unaligned = 1.0
+                - galaxy
+                    .influence
+                    .get(name)
+                    .map(|m| m.values().sum())
+                    .unwrap_or(0.0);
 
             let sys = &self.star_systems[name];
             let tech: f32 = sys.planets.values().map(|p| p.tech_level as f32).sum();
@@ -485,9 +492,8 @@ impl ItemUniverse {
             let miners_w = Self::MINERS_PER_FIELD * fields;
             // Pirates follow wealth but never vanish: lawless transit systems
             // are exactly where they lurk.
-            let pirates_w = Self::PIRATE_SHARE_OF_MERCHANTS
-                * merchants_w.max(1.5)
-                * (0.4 + local_unaligned);
+            let pirates_w =
+                Self::PIRATE_SHARE_OF_MERCHANTS * merchants_w.max(1.5) * (0.4 + local_unaligned);
 
             // tech-weighted share within a role bucket: small ships common.
             let techw = |t: u8| 1.0 / f32::powi(2.0, t.saturating_sub(1) as i32);
@@ -788,8 +794,7 @@ impl ItemUniverse {
                 .iter_all()
                 .map(|(_, s)| s.space_consumed())
                 .sum();
-            let remaining_item_space =
-                (ship_data.item_space as i32 - consumed).max(0) as f64;
+            let remaining_item_space = (ship_data.item_space as i32 - consumed).max(0) as f64;
 
             let ammo_fill_cost = remaining_item_space * max_ammo_cost_per_space;
 
@@ -885,9 +890,15 @@ impl OutfitterItem {
     }
     pub fn required_unlocks(&self) -> &[String] {
         match self {
-            OutfitterItem::PrimaryWeapon { required_unlocks, .. } => required_unlocks,
-            OutfitterItem::SecondaryWeapon { required_unlocks, .. } => required_unlocks,
-            OutfitterItem::ShipMod { required_unlocks, .. } => required_unlocks,
+            OutfitterItem::PrimaryWeapon {
+                required_unlocks, ..
+            } => required_unlocks,
+            OutfitterItem::SecondaryWeapon {
+                required_unlocks, ..
+            } => required_unlocks,
+            OutfitterItem::ShipMod {
+                required_unlocks, ..
+            } => required_unlocks,
         }
     }
     pub fn tech_level(&self) -> u8 {
@@ -961,7 +972,11 @@ pub struct ShipDistribution {
 
 impl Default for ShipDistribution {
     fn default() -> Self {
-        ShipDistribution { min: 0, max: 0, types: HashMap::new() }
+        ShipDistribution {
+            min: 0,
+            max: 0,
+            types: HashMap::new(),
+        }
     }
 }
 
@@ -1019,10 +1034,8 @@ pub struct StarSystem {
 
 pub fn item_universe_plugin(app: &mut App) {
     // Load the ItemUniverse from disk
-    let mut item_universe: ItemUniverse =
-        parse_dir::<ItemUniverse>(Path::new("assets")).expect(
-            "failed to parse asset config — check that all .yaml files in assets/ are valid",
-        );
+    let mut item_universe: ItemUniverse = parse_dir::<ItemUniverse>(Path::new("assets"))
+        .expect("failed to parse asset config — check that all .yaml files in assets/ are valid");
 
     item_universe.finalize();
     item_universe.validate();

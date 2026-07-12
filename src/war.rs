@@ -25,8 +25,7 @@ use crate::missions::types::{
     OfferKind, StartEffect,
 };
 use crate::missions::{
-    MissionCatalog, MissionLog, MissionOffers, MissionStatus, MissionTemplate,
-    PlayerLandedOnPlanet,
+    MissionCatalog, MissionLog, MissionOffers, MissionStatus, MissionTemplate, PlayerLandedOnPlanet,
 };
 use crate::standing::FactionStandings;
 
@@ -206,7 +205,10 @@ fn offer_war_missions(
             catalog.defs.iter().any(|(id, def)| {
                 id.starts_with("war__")
                     && def.shift_target() == Some(front.target.as_str())
-                    && matches!(log.status(id), MissionStatus::Active(_) | MissionStatus::Available)
+                    && matches!(
+                        log.status(id),
+                        MissionStatus::Active(_) | MissionStatus::Available
+                    )
             })
         };
         let mut offered = 0usize;
@@ -507,12 +509,14 @@ fn instantiate_war_mission(
                     let (home_planet, home_display) = landable_planet(iu, &front.home)?;
                     vars.push(("{dest_display}", home_display));
                     stage2 = Some((
-                        Objective::LandOnPlanet { planet: home_planet },
+                        Objective::LandOnPlanet {
+                            planet: home_planet,
+                        },
                         Vec::new(),
                     ));
                     (
                         Objective::MeetNpc {
-                        hint: None,
+                            hint: None,
                             planet: planet_id.clone(),
                             npc_name: npc_name.clone(),
                             building: None,
@@ -533,7 +537,7 @@ fn instantiate_war_mission(
                     vars.push(("{quantity}", quantity.to_string()));
                     stage2 = Some((
                         Objective::MeetNpc {
-                        hint: None,
+                            hint: None,
                             planet: planet_id.clone(),
                             npc_name: npc_name.clone(),
                             building: None,

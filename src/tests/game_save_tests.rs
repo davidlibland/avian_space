@@ -226,11 +226,9 @@ fn yaml_file_roundtrip() {
 
     let original = sample_save();
     std::fs::write(&path, serde_yaml::to_string(&original).unwrap()).unwrap();
-    let loaded: PilotSave =
-        serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let loaded: PilotSave = serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
 
     assert_eq!(original, loaded);
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_dir(&tmp);
 }
-

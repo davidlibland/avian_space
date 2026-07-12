@@ -1,14 +1,14 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 
 use super::events::*;
 use super::log::{MissionCatalog, MissionLog, MissionOffers};
 use super::types::*;
+use crate::Player;
 use crate::game_save::PlayerGameState;
 use crate::item_universe::ItemUniverse;
 use crate::pickups::PickupDrop;
 use crate::ship::Ship;
-use crate::Player;
 
 /// Render the list of active missions into any `egui::Ui`.
 /// When `abandon` is provided, an Abandon button is shown for each mission.
@@ -178,8 +178,12 @@ impl MissionToast {
 
 impl crate::session::SessionResource for MissionToast {
     type SaveData = ();
-    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
-    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
 }
 
 /// Egui overlay that surfaces the latest mission success/failure message.
@@ -235,8 +239,12 @@ pub struct MissionLogOpen {
 
 impl crate::session::SessionResource for MissionLogOpen {
     type SaveData = ();
-    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
-    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
 }
 
 fn toggle_mission_log(keyboard: Res<ButtonInput<KeyCode>>, mut state: ResMut<MissionLogOpen>) {
@@ -318,7 +326,7 @@ fn render_story_tab(
     unlocks: &super::log::PlayerUnlocks,
     universe: &ItemUniverse,
 ) {
-    use super::story_chart::{build_story_graph, NodeUi};
+    use super::story_chart::{NodeUi, build_story_graph};
 
     let graph = build_story_graph(log, unlocks, universe);
     if graph.nodes.is_empty() {
@@ -375,7 +383,10 @@ fn render_story_tab(
                     egui::Color32::from_gray(70)
                 };
                 p.line_segment(
-                    [egui::pos2(a.max.x, a.center().y), egui::pos2(b.min.x, b.center().y)],
+                    [
+                        egui::pos2(a.max.x, a.center().y),
+                        egui::pos2(b.min.x, b.center().y),
+                    ],
                     egui::Stroke::new(1.5, col),
                 );
             }
@@ -385,7 +396,11 @@ fn render_story_tab(
                 let rect = node_at(n.col, n.row).translate(origin);
                 let base = egui::Color32::from_rgb(n.color[0], n.color[1], n.color[2]);
                 let (fill, stroke, text_col) = match n.ui {
-                    NodeUi::Completed => (base, egui::Stroke::new(1.0, egui::Color32::from_gray(20)), text_on(base)),
+                    NodeUi::Completed => (
+                        base,
+                        egui::Stroke::new(1.0, egui::Color32::from_gray(20)),
+                        text_on(base),
+                    ),
                     NodeUi::Active => (
                         base,
                         egui::Stroke::new(2.5, egui::Color32::from_rgb(240, 210, 90)),
@@ -434,11 +449,21 @@ fn render_story_tab(
                         );
                     }
                 } else if matches!(n.ui, NodeUi::Next) {
-                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "?",
-                        egui::FontId::proportional(15.0), mute(base, 0.9));
+                    p.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "?",
+                        egui::FontId::proportional(15.0),
+                        mute(base, 0.9),
+                    );
                 } else if matches!(n.ui, NodeUi::Impossible) {
-                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "\u{1f512}",
-                        egui::FontId::proportional(12.0), egui::Color32::from_gray(90));
+                    p.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "\u{1f512}",
+                        egui::FontId::proportional(12.0),
+                        egui::Color32::from_gray(90),
+                    );
                 }
             }
         });
@@ -495,13 +520,22 @@ fn render_info_tab(
             ui.label(format!("{} / {}", ship.health, ship.max_health()));
             ui.end_row();
             ui.label("Max speed:");
-            ui.label(format!("{} m/s", (ship.data.max_speed * ship.mod_stats.speed_mult) as i32));
+            ui.label(format!(
+                "{} m/s",
+                (ship.data.max_speed * ship.mod_stats.speed_mult) as i32
+            ));
             ui.end_row();
             ui.label("Thrust:");
-            ui.label(format!("{} N", (ship.data.thrust * ship.mod_stats.thrust_mult) as i32));
+            ui.label(format!(
+                "{} N",
+                (ship.data.thrust * ship.mod_stats.thrust_mult) as i32
+            ));
             ui.end_row();
             ui.label("Turning torque:");
-            ui.label(format!("{} N·m", (ship.data.torque * ship.mod_stats.torque_mult) as i32));
+            ui.label(format!(
+                "{} N·m",
+                (ship.data.torque * ship.mod_stats.torque_mult) as i32
+            ));
             ui.end_row();
             ui.label("Cargo space:");
             ui.label(format!(
@@ -631,8 +665,8 @@ fn render_cargo_tab(
 }
 
 pub fn missions_ui_plugin(app: &mut App) {
-    use bevy_egui::EguiPrimaryContextPass;
     use crate::session::SessionResourceExt;
+    use bevy_egui::EguiPrimaryContextPass;
     app.init_session_resource::<MissionToast>()
         .init_session_resource::<MissionLogOpen>()
         .add_systems(
@@ -679,7 +713,6 @@ pub fn drain_completion_toasts(
         }
     }
 }
-
 
 /// Faction standings summary for the info tab.
 fn render_standings(ui: &mut egui::Ui, standings: &crate::standing::FactionStandings) {

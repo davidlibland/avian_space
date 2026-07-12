@@ -23,6 +23,7 @@ mod planets;
 mod policy_asset;
 use planets::planets_plugin;
 mod ai_ships;
+mod character_compositor;
 mod config;
 mod consts;
 mod embedded_assets;
@@ -40,9 +41,8 @@ mod ship_anim;
 mod space;
 mod standing;
 mod starfield;
-mod surface;
-mod character_compositor;
 mod station_layout;
+mod surface;
 mod surface_character;
 mod surface_civilians;
 mod surface_fauna;
@@ -53,8 +53,8 @@ mod surface_pathfinding;
 mod surface_terrain;
 mod utils;
 mod validate_assets;
-mod war;
 mod value_fn;
+mod war;
 mod weapons;
 mod world_assets;
 
@@ -316,7 +316,10 @@ fn main() {
             eprintln!("error: {e}");
             std::process::exit(1);
         }
-        println!("[config] wrote default training config to {}", path.display());
+        println!(
+            "[config] wrote default training config to {}",
+            path.display()
+        );
         return;
     }
 
@@ -406,10 +409,10 @@ fn build_app(
             // Run frames back-to-back with no inter-frame sleep so headless
             // training saturates the CPU instead of idling ~1ms/frame.
             .add_plugins(ScheduleRunnerPlugin::run_loop(std::time::Duration::ZERO))
-        // Advance 50ms of game time per frame (~10-25x real-time).
-        .insert_resource(TimeUpdateStrategy::ManualDuration(
-            std::time::Duration::from_millis(50),
-        ));
+            // Advance 50ms of game time per frame (~10-25x real-time).
+            .insert_resource(TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(50),
+            ));
     } else {
         // Game uses pixel-scale world units (radii in tens, distances in hundreds-to-thousands).
         // Default spatial scale (1.0) attenuates anything beyond a few units to silence — shrink
@@ -457,8 +460,8 @@ fn build_app(
 
     // ── Game-logic plugins ──────────────────────────────────────────────
     app.add_plugins((
-        space::space_plugin,    // consolidated space-flight systems
-        planets_plugin,         // planet spawning (shared)
+        space::space_plugin, // consolidated space-flight systems
+        planets_plugin,      // planet spawning (shared)
         RLCollectionPlugin {
             mode: app_mode,
             fresh,
@@ -508,13 +511,15 @@ fn build_app(
     } else {
         app.add_systems(
             Update,
-            (keyboard_input, click_to_target, collision_system, accelerate_for_jump)
+            (
+                keyboard_input,
+                click_to_target,
+                collision_system,
+                accelerate_for_jump,
+            )
                 .run_if(in_state(PlayState::Flying)),
         )
-        .add_systems(
-            Update,
-            escape_router.run_if(in_state(PlayState::Flying)),
-        )
+        .add_systems(Update, escape_router.run_if(in_state(PlayState::Flying)))
         // UI-open resources only exist with the UI plugins (non-headless).
         .add_systems(Update, sync_ui_pause)
         .add_systems(OnEnter(PlayState::MainMenu), close_uis_on_main_menu);
@@ -701,8 +706,7 @@ fn sync_ui_pause(
     play_state: Res<State<PlayState>>,
     mut virtual_time: ResMut<Time<Virtual>>,
 ) {
-    let want_paused =
-        help.open || jump.open || log.open || *play_state.get() == PlayState::Landed;
+    let want_paused = help.open || jump.open || log.open || *play_state.get() == PlayState::Landed;
     if want_paused != virtual_time.is_paused() {
         if want_paused {
             virtual_time.pause();
@@ -804,10 +808,18 @@ fn click_to_target(
         return;
     }
     let Ok(window) = windows.single() else { return };
-    let Some(cursor) = window.cursor_position() else { return };
-    let Ok((camera, cam_tf)) = cameras.single() else { return };
-    let Ok(world) = camera.viewport_to_world_2d(cam_tf, cursor) else { return };
-    let Ok((player_entity, mut player_ship)) = player_query.single_mut() else { return };
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
+    let Ok((camera, cam_tf)) = cameras.single() else {
+        return;
+    };
+    let Ok(world) = camera.viewport_to_world_2d(cam_tf, cursor) else {
+        return;
+    };
+    let Ok((player_entity, mut player_ship)) = player_query.single_mut() else {
+        return;
+    };
 
     // Nearest entity whose circle contains the cursor wins.
     fn consider(best: &mut Option<(f32, Target)>, dist: f32, hit_r: f32, t: Target) {
@@ -861,7 +873,12 @@ fn keyboard_input(
         With<Player>,
     >,
     enemy_ships_query: Query<
-        (Entity, &Transform, Option<&missions::MissionTarget>, &ship::ShipHostility),
+        (
+            Entity,
+            &Transform,
+            Option<&missions::MissionTarget>,
+            &ship::ShipHostility,
+        ),
         (With<Ship>, Without<Player>),
     >,
     asteroids_query: Query<(Entity, &Transform), With<Asteroid>>,
@@ -930,9 +947,7 @@ fn keyboard_input(
             ))
         })
         // 3. Nearest any ship
-        .or_else(|| {
-            nearest_by(Box::new(enemy_ships_query.iter().map(|(e, ..)| e)))
-        });
+        .or_else(|| nearest_by(Box::new(enemy_ships_query.iter().map(|(e, ..)| e))));
 
         if let Some(entity) = target {
             player_ship.nav_target = Some(Target::Ship(entity));

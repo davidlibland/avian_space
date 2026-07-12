@@ -222,13 +222,7 @@ pub fn reduce_to_47(mut mask: u8) -> u8 {
     mask
 }
 
-pub fn compute_bitmask(
-    terrain_map: &[Vec<u32>],
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-) -> u8 {
+pub fn compute_bitmask(terrain_map: &[Vec<u32>], x: i32, y: i32, width: i32, height: i32) -> u8 {
     let terrain = terrain_map[y as usize][x as usize];
     // A neighbour counts as "same" when its terrain index is >= ours.
     // The atlas only contains downward transitions (from higher terrain
@@ -247,14 +241,30 @@ pub fn compute_bitmask(
     // Bottom-up convention: y increases upward.
     // y+1 = up (T), y-1 = down (B).
     let mut mask = 0u8;
-    if same(0, 1) { mask |= T; }
-    if same(1, 0) { mask |= R; }
-    if same(0, -1) { mask |= B; }
-    if same(-1, 0) { mask |= L; }
-    if same(-1, 1) { mask |= TL; }
-    if same(1, 1) { mask |= TR; }
-    if same(1, -1) { mask |= BR; }
-    if same(-1, -1) { mask |= BL; }
+    if same(0, 1) {
+        mask |= T;
+    }
+    if same(1, 0) {
+        mask |= R;
+    }
+    if same(0, -1) {
+        mask |= B;
+    }
+    if same(-1, 0) {
+        mask |= L;
+    }
+    if same(-1, 1) {
+        mask |= TL;
+    }
+    if same(1, 1) {
+        mask |= TR;
+    }
+    if same(1, -1) {
+        mask |= BR;
+    }
+    if same(-1, -1) {
+        mask |= BL;
+    }
     mask
 }
 
@@ -358,8 +368,8 @@ pub fn spawn_collision_entities(
             let code = CollisionType::from(col_asset.data[idx]);
             let terrain_idx = terrain_indices.get(idx).copied().unwrap_or(0) as usize;
             let cost = movement_costs.get(terrain_idx).copied().unwrap_or(1.0);
-            let world_pos = map_origin
-                + Vec2::new(tx as f32 * tile_size + half, ty as f32 * tile_size + half);
+            let world_pos =
+                map_origin + Vec2::new(tx as f32 * tile_size + half, ty as f32 * tile_size + half);
             match code {
                 CollisionType::Solid => {
                     commands.spawn((
@@ -407,13 +417,53 @@ mod tests {
     /// Boris The Brave's canonical pick_tile dictionary.
     /// https://www.boristhebrave.com/2013/07/14/tileset-roundup/
     const PICK_TILE: [(u8, u8); 47] = [
-        (0, 0), (2, 1), (8, 2), (10, 3), (11, 4), (16, 5), (18, 6),
-        (22, 7), (24, 8), (26, 9), (27, 10), (30, 11), (31, 12), (64, 13),
-        (66, 14), (72, 15), (74, 16), (75, 17), (80, 18), (82, 19), (86, 20),
-        (88, 21), (90, 22), (91, 23), (94, 24), (95, 25), (104, 26), (106, 27),
-        (107, 28), (120, 29), (122, 30), (123, 31), (126, 32), (127, 33),
-        (208, 34), (210, 35), (214, 36), (216, 37), (218, 38), (219, 39),
-        (222, 40), (223, 41), (248, 42), (250, 43), (251, 44), (254, 45), (255, 46),
+        (0, 0),
+        (2, 1),
+        (8, 2),
+        (10, 3),
+        (11, 4),
+        (16, 5),
+        (18, 6),
+        (22, 7),
+        (24, 8),
+        (26, 9),
+        (27, 10),
+        (30, 11),
+        (31, 12),
+        (64, 13),
+        (66, 14),
+        (72, 15),
+        (74, 16),
+        (75, 17),
+        (80, 18),
+        (82, 19),
+        (86, 20),
+        (88, 21),
+        (90, 22),
+        (91, 23),
+        (94, 24),
+        (95, 25),
+        (104, 26),
+        (106, 27),
+        (107, 28),
+        (120, 29),
+        (122, 30),
+        (123, 31),
+        (126, 32),
+        (127, 33),
+        (208, 34),
+        (210, 35),
+        (214, 36),
+        (216, 37),
+        (218, 38),
+        (219, 39),
+        (222, 40),
+        (223, 41),
+        (248, 42),
+        (250, 43),
+        (251, 44),
+        (254, 45),
+        (255, 46),
     ];
 
     /// Build the 256-entry LUT from the pick_tile table (same logic as tilegen.py).
@@ -422,7 +472,10 @@ mod tests {
         for &(mask, col) in &PICK_TILE {
             lut[mask as usize] = col;
         }
-        Blob47Lut { atlas_cols: 50, lut }
+        Blob47Lut {
+            atlas_cols: 50,
+            lut,
+        }
     }
 
     #[test]
@@ -430,7 +483,8 @@ mod tests {
         // Every reduced mask in pick_tile must be a fixed point of reduce_to_47.
         for &(mask, _col) in &PICK_TILE {
             assert_eq!(
-                reduce_to_47(mask), mask,
+                reduce_to_47(mask),
+                mask,
                 "pick_tile mask {mask} is not a fixed point of reduce_to_47"
             );
         }
@@ -441,7 +495,10 @@ mod tests {
         for m in 0..=255u8 {
             let once = reduce_to_47(m);
             let twice = reduce_to_47(once);
-            assert_eq!(once, twice, "mask {m}: reduce({m})={once}, reduce({once})={twice}");
+            assert_eq!(
+                once, twice,
+                "mask {m}: reduce({m})={once}, reduce({once})={twice}"
+            );
         }
     }
 
@@ -473,14 +530,30 @@ mod tests {
         assert_eq!(rows.len(), 3, "expected 3 rows");
         let chars: Vec<Vec<char>> = rows.iter().map(|r| r.chars().collect()).collect();
         let mut mask = 0u8;
-        if chars[0][0] == '#' { mask |= TL; }
-        if chars[0][1] == '#' { mask |= T; }
-        if chars[0][2] == '#' { mask |= TR; }
-        if chars[1][0] == '#' { mask |= L; }
-        if chars[1][2] == '#' { mask |= R; }
-        if chars[2][0] == '#' { mask |= BL; }
-        if chars[2][1] == '#' { mask |= B; }
-        if chars[2][2] == '#' { mask |= BR; }
+        if chars[0][0] == '#' {
+            mask |= TL;
+        }
+        if chars[0][1] == '#' {
+            mask |= T;
+        }
+        if chars[0][2] == '#' {
+            mask |= TR;
+        }
+        if chars[1][0] == '#' {
+            mask |= L;
+        }
+        if chars[1][2] == '#' {
+            mask |= R;
+        }
+        if chars[2][0] == '#' {
+            mask |= BL;
+        }
+        if chars[2][1] == '#' {
+            mask |= B;
+        }
+        if chars[2][2] == '#' {
+            mask |= BR;
+        }
         mask
     }
 
@@ -494,12 +567,12 @@ mod tests {
 
     #[test]
     fn yaml_test_cases() {
-        let yaml_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("scripts/blob47_test_cases.yaml");
+        let yaml_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/blob47_test_cases.yaml");
         let yaml_str = std::fs::read_to_string(&yaml_path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", yaml_path.display()));
-        let cases: Vec<TestCase> = serde_yaml::from_str(&yaml_str)
-            .expect("Failed to parse YAML test cases");
+        let cases: Vec<TestCase> =
+            serde_yaml::from_str(&yaml_str).expect("Failed to parse YAML test cases");
 
         let lut = build_lut();
 
@@ -528,8 +601,7 @@ mod tests {
             .join("assets/sprites/worlds/blob47_lut.ron");
         let ron_str = std::fs::read_to_string(&ron_path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", ron_path.display()));
-        let ron_lut: Blob47Lut = ron::from_str(&ron_str)
-            .expect("Failed to parse blob47_lut.ron");
+        let ron_lut: Blob47Lut = ron::from_str(&ron_str).expect("Failed to parse blob47_lut.ron");
 
         let rust_lut = build_lut();
 
@@ -539,9 +611,11 @@ mod tests {
             ron_lut.atlas_cols, rust_lut.atlas_cols
         );
         assert_eq!(
-            ron_lut.lut.len(), rust_lut.lut.len(),
+            ron_lut.lut.len(),
+            rust_lut.lut.len(),
             "LUT length mismatch: ron={}, rust={}",
-            ron_lut.lut.len(), rust_lut.lut.len()
+            ron_lut.lut.len(),
+            rust_lut.lut.len()
         );
         for (i, (&ron_val, &rust_val)) in ron_lut.lut.iter().zip(rust_lut.lut.iter()).enumerate() {
             assert_eq!(
@@ -555,36 +629,31 @@ mod tests {
     #[test]
     fn compute_bitmask_isolated_by_higher() {
         // Center=1 surrounded by 0 (lower) → all neighbours are "different"
-        let map = vec![
-            vec![0, 0, 0],
-            vec![0, 1, 0],
-            vec![0, 0, 0],
-        ];
+        let map = vec![vec![0, 0, 0], vec![0, 1, 0], vec![0, 0, 0]];
         let mask = compute_bitmask(&map, 1, 1, 3, 3);
-        assert_eq!(reduce_to_47(mask), 0, "higher tile surrounded by lower should be isolated");
+        assert_eq!(
+            reduce_to_47(mask),
+            0,
+            "higher tile surrounded by lower should be isolated"
+        );
     }
 
     #[test]
     fn compute_bitmask_lowest_terrain_always_interior() {
         // Center=0 surrounded by higher terrains → all >= 0 → all "same"
-        let map = vec![
-            vec![2, 1, 3],
-            vec![1, 0, 2],
-            vec![3, 1, 2],
-        ];
+        let map = vec![vec![2, 1, 3], vec![1, 0, 2], vec![3, 1, 2]];
         let mask = compute_bitmask(&map, 1, 1, 3, 3);
         assert_eq!(mask, 255, "lowest terrain sees all neighbours as same (>=)");
     }
 
     #[test]
     fn compute_bitmask_fully_interior() {
-        let map = vec![
-            vec![1, 1, 1],
-            vec![1, 1, 1],
-            vec![1, 1, 1],
-        ];
+        let map = vec![vec![1, 1, 1], vec![1, 1, 1], vec![1, 1, 1]];
         let mask = compute_bitmask(&map, 1, 1, 3, 3);
-        assert_eq!(mask, 255, "fully surrounded by same terrain should have mask 255");
+        assert_eq!(
+            mask, 255,
+            "fully surrounded by same terrain should have mask 255"
+        );
     }
 
     #[test]
@@ -599,7 +668,10 @@ mod tests {
         ];
         let mask = compute_bitmask(&map, 1, 1, 3, 3);
         let reduced = reduce_to_47(mask);
-        assert_eq!(reduced, T, "higher neighbour above should count as same → T bit set");
+        assert_eq!(
+            reduced, T,
+            "higher neighbour above should count as same → T bit set"
+        );
     }
 
     #[test]
@@ -613,6 +685,9 @@ mod tests {
         ];
         let mask = compute_bitmask(&map, 1, 1, 3, 3);
         let reduced = reduce_to_47(mask);
-        assert_eq!(reduced, T, "only top is same/higher, rest are lower → T only");
+        assert_eq!(
+            reduced, T,
+            "only top is same/higher, rest are lower → T only"
+        );
     }
 }

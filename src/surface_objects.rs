@@ -115,9 +115,9 @@ pub fn spawn_landscape_objects(
     building_rects: &[(u32, u32, u32, u32)],
 ) {
     // Load manifest synchronously.
-    let manifest: ObjectsManifest = match crate::embedded_assets::read_to_string(
-        &format!("assets/{WORLDS_DIR}/objects_manifest.ron"),
-    )
+    let manifest: ObjectsManifest = match crate::embedded_assets::read_to_string(&format!(
+        "assets/{WORLDS_DIR}/objects_manifest.ron"
+    ))
     .ok()
     .and_then(|t| ron::from_str(&t).ok())
     {
@@ -148,8 +148,13 @@ pub fn spawn_landscape_objects(
 
     // Generate a density fBm field for modulating spawn probability.
     let density_field = crate::fbm::generate_terrain_map(
-        map_w, map_h, 10, // 10 bins for fine-grained density
-        3.0, 3, 2.0, 0.5,
+        map_w,
+        map_h,
+        10, // 10 bins for fine-grained density
+        3.0,
+        3,
+        2.0,
+        0.5,
         seed.wrapping_add(777),
     );
 
@@ -174,7 +179,11 @@ pub fn spawn_landscape_objects(
             obj_def.n_variants * obj_def.tile_w,
             // Atlas total height doesn't matter for rect-based layouts,
             // but we need a reasonable value.
-            biome_def.objects.iter().map(|o| o.n_frames * o.tile_h).sum(),
+            biome_def
+                .objects
+                .iter()
+                .map(|o| o.n_frames * o.tile_h)
+                .sum(),
         ));
         for frame in 0..obj_def.n_frames {
             for var in 0..obj_def.n_variants {
@@ -200,9 +209,9 @@ pub fn spawn_landscape_objects(
                 }
 
                 // Skip building footprints.
-                let in_building = building_rects.iter().any(|&(bx, by, bw, bh)| {
-                    x >= bx && x < bx + bw && y >= by && y < by + bh
-                });
+                let in_building = building_rects
+                    .iter()
+                    .any(|&(bx, by, bw, bh)| x >= bx && x < bx + bw && y >= by && y < by + bh);
                 if in_building {
                     continue;
                 }
@@ -228,20 +237,14 @@ pub fn spawn_landscape_objects(
                         )
                     };
 
-                    let world_x = (x as f32 - map_w as f32 / 2.0) * tile_px
-                        + tile_px / 2.0
-                        + jx;
-                    let world_y = (y as f32 - map_h as f32 / 2.0) * tile_px
-                        + tile_px / 2.0
-                        + jy;
+                    let world_x = (x as f32 - map_w as f32 / 2.0) * tile_px + tile_px / 2.0 + jx;
+                    let world_y = (y as f32 - map_h as f32 / 2.0) * tile_px + tile_px / 2.0 + jy;
 
                     // Poisson-disk distance check.
                     let min_d_sq = obj_def.min_distance * obj_def.min_distance;
-                    let too_close = positions
-                        .iter()
-                        .any(|&(px, py)| {
-                            (world_x - px).powi(2) + (world_y - py).powi(2) < min_d_sq
-                        });
+                    let too_close = positions.iter().any(|&(px, py)| {
+                        (world_x - px).powi(2) + (world_y - py).powi(2) < min_d_sq
+                    });
                     if too_close {
                         continue;
                     }
@@ -329,10 +332,10 @@ pub fn character_foot_collider(radius: f32) -> avian2d::prelude::Collider {
 }
 
 /// Update the walker's z for depth sorting (every frame).
-pub fn depth_sort_walker(
-    mut walkers: Query<(&mut Transform, Option<&FootOffset>), With<Walker>>,
-) {
-    let Ok((mut tf, foot)) = walkers.single_mut() else { return };
+pub fn depth_sort_walker(mut walkers: Query<(&mut Transform, Option<&FootOffset>), With<Walker>>) {
+    let Ok((mut tf, foot)) = walkers.single_mut() else {
+        return;
+    };
     let foot_y = tf.translation.y - foot.map_or(8.0, |f| f.0);
     tf.translation.z = depth_z(foot_y);
 }
@@ -342,7 +345,9 @@ pub fn update_shy_objects(
     walker_q: Query<&Transform, With<Walker>>,
     mut shy_q: Query<(&Transform, &ShyObject, &mut ObjectAnim, &mut Sprite), Without<Walker>>,
 ) {
-    let Ok(walker_tf) = walker_q.single() else { return };
+    let Ok(walker_tf) = walker_q.single() else {
+        return;
+    };
     let wp = walker_tf.translation.truncate();
 
     for (tf, shy, mut anim, mut sprite) in &mut shy_q {

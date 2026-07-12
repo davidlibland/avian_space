@@ -36,8 +36,7 @@ impl Plugin for ToroidalWrapPlugin {
         })
         .add_systems(
             Update,
-            toroidal_wrap_system
-                .run_if(not(in_state(crate::PlayState::Exploring))),
+            toroidal_wrap_system.run_if(not(in_state(crate::PlayState::Exploring))),
         );
     }
 }
@@ -63,15 +62,12 @@ impl Plugin for StarfieldPlugin {
         )
         .add_systems(
             Update,
-            origin_shift_system.run_if(
-                player_is_far_from_origin
-                    .and(not(in_state(crate::PlayState::Exploring))),
-            ),
+            origin_shift_system
+                .run_if(player_is_far_from_origin.and(not(in_state(crate::PlayState::Exploring)))),
         )
         .add_systems(
             FixedUpdate,
-            camera_follow_player
-                .run_if(not(in_state(crate::PlayState::Exploring))),
+            camera_follow_player.run_if(not(in_state(crate::PlayState::Exploring))),
         );
     }
 }
@@ -144,16 +140,15 @@ fn spawn_starfield(
     window_size.0.y = window.height();
 
     for layer in STAR_LAYERS {
-        let count = (layer.count as f32
-            * window_size.x
-            * window_size.y
-            * STARFIELD_SCALE
-            * STARFIELD_SCALE
-            / (900f32).powi(2)) as usize;
+        let count =
+            (layer.count as f32 * window_size.x * window_size.y * STARFIELD_SCALE * STARFIELD_SCALE
+                / (900f32).powi(2)) as usize;
         // let count = layer.count;
         for _ in 0..count {
-            let x = rng.gen_range(-STARFIELD_SCALE * window_size.x..STARFIELD_SCALE * window_size.x);
-            let y = rng.gen_range(-STARFIELD_SCALE * window_size.y..STARFIELD_SCALE * window_size.y);
+            let x =
+                rng.gen_range(-STARFIELD_SCALE * window_size.x..STARFIELD_SCALE * window_size.x);
+            let y =
+                rng.gen_range(-STARFIELD_SCALE * window_size.y..STARFIELD_SCALE * window_size.y);
             let size = rng.gen_range(layer.size_range.0..layer.size_range.1);
 
             let red_shift = layer.parallax + (1.0 - layer.parallax) * 0.5;
@@ -321,7 +316,11 @@ fn toggle_star_visibility(
 ) {
     let hide = *state.get() == crate::PlayState::Exploring;
     for mut vis in &mut stars {
-        *vis = if hide { Visibility::Hidden } else { Visibility::Inherited };
+        *vis = if hide {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
     }
 }
 

@@ -15,8 +15,8 @@
 use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
-use crate::surface::{Walker, BuildingKind, ActiveBuildingUI, TILE_PX};
-use crate::surface_npc::{Npc, NpcBehavior, Behavior};
+use crate::surface::{ActiveBuildingUI, BuildingKind, TILE_PX, Walker};
+use crate::surface_npc::{Behavior, Npc, NpcBehavior};
 
 // ── Chat state ───────────────────────────────────────────────────────────
 
@@ -26,18 +26,11 @@ enum ChatContent {
     #[default]
     None,
     /// Generic dialogue lines (cycle through with Continue).
-    Dialogue {
-        lines: Vec<String>,
-        current: usize,
-    },
+    Dialogue { lines: Vec<String>, current: usize },
     /// Mission offer with Accept/Decline.
-    MissionOffer {
-        mission_id: String,
-    },
+    MissionOffer { mission_id: String },
     /// Objective completed — brief acknowledgment.
-    ObjectiveComplete {
-        message: String,
-    },
+    ObjectiveComplete { message: String },
 }
 
 /// The current NPC chat state.  Replaces `ActiveNpcInteraction`.
@@ -96,7 +89,9 @@ pub fn npc_chat_interact(
         return;
     }
 
-    let Ok(walker_tf) = walker_q.single() else { return };
+    let Ok(walker_tf) = walker_q.single() else {
+        return;
+    };
     let wp = walker_tf.translation.truncate();
     let planet = landed_context.planet_name.clone().unwrap_or_default();
     let pilot = &game_state.pilot_name;
@@ -110,8 +105,9 @@ pub fn npc_chat_interact(
             let is_mission = mission_npcs.contains(entity);
             let better = match best {
                 None => true,
-                Some((_, d, m)) => (is_mission, std::cmp::Reverse(dist as i64))
-                    > (m, std::cmp::Reverse(d as i64)),
+                Some((_, d, m)) => {
+                    (is_mission, std::cmp::Reverse(dist as i64)) > (m, std::cmp::Reverse(d as i64))
+                }
             };
             if better {
                 best = Some((entity, dist, is_mission));
@@ -120,13 +116,15 @@ pub fn npc_chat_interact(
     }
 
     let Some((npc_entity, ..)) = best else { return };
-    let Ok((_, mut npc, _)) = npcs.get_mut(npc_entity) else { return };
+    let Ok((_, mut npc, _)) = npcs.get_mut(npc_entity) else {
+        return;
+    };
 
     // Determine content from front behavior.
     let content = match npc.queue.front() {
-        Some(Behavior::OfferMission { mission_id }) => {
-            ChatContent::MissionOffer { mission_id: mission_id.clone() }
-        }
+        Some(Behavior::OfferMission { mission_id }) => ChatContent::MissionOffer {
+            mission_id: mission_id.clone(),
+        },
         Some(Behavior::AwaitPlayer { mission_id }) => {
             // Complete the objective immediately.
             npc_met_writer.write(crate::missions::NpcMet {
@@ -142,9 +140,9 @@ pub fn npc_chat_interact(
             npc.queue.pop_front();
             // Check what's next.
             match npc.queue.front() {
-                Some(Behavior::OfferMission { mission_id }) => {
-                    ChatContent::MissionOffer { mission_id: mission_id.clone() }
-                }
+                Some(Behavior::OfferMission { mission_id }) => ChatContent::MissionOffer {
+                    mission_id: mission_id.clone(),
+                },
                 Some(Behavior::AwaitPlayer { mission_id }) => {
                     npc_met_writer.write(crate::missions::NpcMet {
                         planet: planet.clone(),
@@ -154,27 +152,23 @@ pub fn npc_chat_interact(
                     npc.queue.pop_front();
                     ChatContent::ObjectiveComplete { message: msg }
                 }
-                _ => {
-                    ChatContent::Dialogue {
-                        lines: vec!["Wait — I needed to tell you something... never mind.".into()],
-                        current: 0,
-                    }
-                }
+                _ => ChatContent::Dialogue {
+                    lines: vec!["Wait — I needed to tell you something... never mind.".into()],
+                    current: 0,
+                },
             }
         }
         Some(Behavior::Patrol { waypoints, .. }) => {
             let lines = generate_patrol_dialogue(pilot, waypoints);
             ChatContent::Dialogue { lines, current: 0 }
         }
-        Some(Behavior::FollowPlayer { .. }) => {
-            ChatContent::Dialogue {
-                lines: vec![
-                    "I'm coming with you, don't worry.".to_string(),
-                    format!("Lead the way, {}.", pilot),
-                ],
-                current: 0,
-            }
-        }
+        Some(Behavior::FollowPlayer { .. }) => ChatContent::Dialogue {
+            lines: vec![
+                "I'm coming with you, don't worry.".to_string(),
+                format!("Lead the way, {}.", pilot),
+            ],
+            current: 0,
+        },
         Some(Behavior::FleePlayer { .. }) | Some(Behavior::Despawn { .. }) | None => {
             // Can't chat with fleeing/despawning NPCs.
             return;
@@ -203,8 +197,12 @@ pub fn npc_chat_ui(
     identities: Query<&crate::surface_npc::NpcIdentity>,
     mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
 ) {
-    if chat.entity.is_none() { return }
-    let Ok(ctx) = egui_contexts.ctx_mut() else { return };
+    if chat.entity.is_none() {
+        return;
+    }
+    let Ok(ctx) = egui_contexts.ctx_mut() else {
+        return;
+    };
 
     let mut close = false;
 
@@ -247,7 +245,10 @@ pub fn npc_chat_ui(
                     if let Some(def) = catalog.defs.get(&mission_id) {
                         ui.label(&def.briefing);
                         let required = def.required_cargo_space();
-                        let free = player_q.single().map(|s| s.remaining_cargo_space()).unwrap_or(0);
+                        let free = player_q
+                            .single()
+                            .map(|s| s.remaining_cargo_space())
+                            .unwrap_or(0);
                         if required > 0 {
                             ui.label(format!(
                                 "Cargo required: {} units (you have {} free)",
@@ -260,7 +261,8 @@ pub fn npc_chat_ui(
                             ui.add_enabled_ui(has_space, |ui| {
                                 let btn = ui.button("Accept");
                                 if btn.clicked() {
-                                    accept_writer.write(crate::missions::AcceptMission(mission_id.clone()));
+                                    accept_writer
+                                        .write(crate::missions::AcceptMission(mission_id.clone()));
                                     if let Some(npc_e) = chat.entity {
                                         if let Ok(mut npc) = npcs.get_mut(npc_e) {
                                             npc.queue.pop_front();
@@ -275,12 +277,11 @@ pub fn npc_chat_ui(
                             });
                             if ui
                                 .button("Decline")
-                                .on_hover_text(
-                                    "Turn the job down — they'll offer it less often.",
-                                )
+                                .on_hover_text("Turn the job down — they'll offer it less often.")
                                 .clicked()
                             {
-                                decline_writer.write(crate::missions::DeclineMission(mission_id.clone()));
+                                decline_writer
+                                    .write(crate::missions::DeclineMission(mission_id.clone()));
                                 if let Some(npc_e) = chat.entity {
                                     if let Ok(mut npc) = npcs.get_mut(npc_e) {
                                         npc.queue.pop_front();

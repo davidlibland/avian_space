@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::surface::{Walker, BuildingKind, TILE_PX, WORLD_WIDTH, WORLD_HEIGHT};
+use crate::surface::{BuildingKind, TILE_PX, WORLD_HEIGHT, WORLD_WIDTH, Walker};
 use crate::surface_pathfinding::{SurfaceCostMap, SurfacePaths};
 
 // ── Behavior enum ────────────────────────────────────────────────────────
@@ -67,20 +67,14 @@ pub enum Behavior {
 
     /// Stand still with a marker.  Wait for the player to press E while
     /// adjacent.  Completes after the player interacts.
-    OfferMission {
-        mission_id: String,
-    },
+    OfferMission { mission_id: String },
 
     /// Stand still.  When the player gets adjacent, complete a mission
     /// objective and pop this behavior.
-    AwaitPlayer {
-        mission_id: String,
-    },
+    AwaitPlayer { mission_id: String },
 
     /// Countdown then despawn.
-    Despawn {
-        timer: Timer,
-    },
+    Despawn { timer: Timer },
 }
 
 // ── Components ───────────────────────────────────────────────────────────
@@ -137,7 +131,6 @@ pub struct NpcIdentity {
 #[derive(Component)]
 pub struct NpcMarker;
 
-
 // ── Constants ────────────────────────────────────────────────────────────
 
 /// Distance (in tiles) at which SeekPlayer/AwaitPlayer considers the
@@ -163,7 +156,10 @@ pub fn run_npc_behaviors(
     walker_q: Query<&Transform, With<Walker>>,
     cost_map: Option<Res<SurfaceCostMap>>,
     surface_paths: Option<Res<SurfacePaths>>,
-    mut npcs: Query<(Entity, &mut NpcBehavior, &Transform, &mut LinearVelocity), (With<Npc>, Without<Walker>)>,
+    mut npcs: Query<
+        (Entity, &mut NpcBehavior, &Transform, &mut LinearVelocity),
+        (With<Npc>, Without<Walker>),
+    >,
     landed_context: Res<crate::planet_ui::LandedContext>,
     mut npc_met_writer: MessageWriter<crate::missions::NpcMet>,
     mut npc_caught_writer: MessageWriter<crate::missions::NpcCaught>,
@@ -183,7 +179,10 @@ pub fn run_npc_behaviors(
         };
 
         match behavior {
-            Behavior::Patrol { waypoints, current_idx } => {
+            Behavior::Patrol {
+                waypoints,
+                current_idx,
+            } => {
                 // If no waypoints, pick a random building-to-building path.
                 if waypoints.is_empty() {
                     if let (Some(paths), Some(cm)) = (surface_paths.as_ref(), cost_map.as_ref()) {
@@ -234,7 +233,11 @@ pub fn run_npc_behaviors(
                 }
             }
 
-            Behavior::SeekPlayer { path, current_idx, repath_timer } => {
+            Behavior::SeekPlayer {
+                path,
+                current_idx,
+                repath_timer,
+            } => {
                 let Some(wp) = walker_pos else {
                     vel.0 = Vec2::ZERO;
                     continue;
@@ -250,16 +253,16 @@ pub fn run_npc_behaviors(
 
                 // Recompute path when: empty, exhausted, or timer fires.
                 repath_timer.tick(time.delta());
-                let needs_repath = path.is_empty()
-                    || *current_idx >= path.len()
-                    || repath_timer.just_finished();
+                let needs_repath =
+                    path.is_empty() || *current_idx >= path.len() || repath_timer.just_finished();
                 if needs_repath {
                     if let Some(cm) = cost_map.as_ref() {
                         let start = find_nearest_walkable(pos, cm);
                         let goal = find_nearest_walkable(wp, cm);
                         if let Some(new_path) = cm.find_path(start, goal) {
                             // Skip waypoints we're already past.
-                            let skip = new_path.iter()
+                            let skip = new_path
+                                .iter()
                                 .position(|&(tx, ty)| {
                                     let wp = SurfaceCostMap::tile_to_world(tx, ty);
                                     (wp - foot(pos)).length() > TILE_PX * 0.5
@@ -294,7 +297,11 @@ pub fn run_npc_behaviors(
                 }
             }
 
-            Behavior::FollowPlayer { path, current_idx, repath_timer } => {
+            Behavior::FollowPlayer {
+                path,
+                current_idx,
+                repath_timer,
+            } => {
                 let Some(wp) = walker_pos else {
                     vel.0 = Vec2::ZERO;
                     continue;
@@ -312,15 +319,15 @@ pub fn run_npc_behaviors(
 
                 // Same seek logic as SeekPlayer.
                 repath_timer.tick(time.delta());
-                let needs_repath = path.is_empty()
-                    || *current_idx >= path.len()
-                    || repath_timer.just_finished();
+                let needs_repath =
+                    path.is_empty() || *current_idx >= path.len() || repath_timer.just_finished();
                 if needs_repath {
                     if let Some(cm) = cost_map.as_ref() {
                         let start = find_nearest_walkable(pos, cm);
                         let goal = find_nearest_walkable(wp, cm);
                         if let Some(new_path) = cm.find_path(start, goal) {
-                            let skip = new_path.iter()
+                            let skip = new_path
+                                .iter()
                                 .position(|&(tx, ty)| {
                                     let wp = SurfaceCostMap::tile_to_world(tx, ty);
                                     (wp - foot(pos)).length() > TILE_PX * 0.5
@@ -352,7 +359,12 @@ pub fn run_npc_behaviors(
                 }
             }
 
-            Behavior::FleePlayer { mission_id, path, current_idx, repath_timer } => {
+            Behavior::FleePlayer {
+                mission_id,
+                path,
+                current_idx,
+                repath_timer,
+            } => {
                 let Some(wp) = walker_pos else {
                     vel.0 = Vec2::ZERO;
                     continue;
@@ -372,9 +384,8 @@ pub fn run_npc_behaviors(
 
                 // Recompute flee path when empty, exhausted, or timer fires.
                 repath_timer.tick(time.delta());
-                let needs_repath = path.is_empty()
-                    || *current_idx >= path.len()
-                    || repath_timer.just_finished();
+                let needs_repath =
+                    path.is_empty() || *current_idx >= path.len() || repath_timer.just_finished();
                 if needs_repath {
                     if let Some(cm) = cost_map.as_ref() {
                         let my_tile = find_nearest_walkable(pos, cm);
@@ -476,7 +487,10 @@ pub fn run_npc_behaviors(
 /// Update the "!" marker position to float above the NPC.
 pub fn update_npc_markers(
     npcs: Query<(&Transform, &NpcBehavior), With<Npc>>,
-    mut markers: Query<(&mut Transform, &mut Visibility, &ChildOf), (With<NpcMarker>, Without<Npc>)>,
+    mut markers: Query<
+        (&mut Transform, &mut Visibility, &ChildOf),
+        (With<NpcMarker>, Without<Npc>),
+    >,
 ) {
     for (mut marker_tf, mut vis, child_of) in &mut markers {
         if let Ok((_, npc)) = npcs.get(child_of.parent()) {
@@ -484,12 +498,16 @@ pub fn update_npc_markers(
             let show = matches!(
                 npc.queue.front(),
                 Some(Behavior::OfferMission { .. })
-                | Some(Behavior::AwaitPlayer { .. })
-                | Some(Behavior::FleePlayer { .. })
-                | Some(Behavior::SeekPlayer { .. })
-                | Some(Behavior::FollowPlayer { .. })
+                    | Some(Behavior::AwaitPlayer { .. })
+                    | Some(Behavior::FleePlayer { .. })
+                    | Some(Behavior::SeekPlayer { .. })
+                    | Some(Behavior::FollowPlayer { .. })
             );
-            *vis = if show { Visibility::Inherited } else { Visibility::Hidden };
+            *vis = if show {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
             marker_tf.translation.y = 14.0;
             marker_tf.translation.z = 0.1;
         }
@@ -544,27 +562,35 @@ pub fn spawn_mission_npc(
         timer: Timer::from_seconds(2.0, TimerMode::Once),
     });
 
-    let npc_entity = commands.spawn((
-        DespawnOnExit(crate::PlayState::Exploring),
-        Npc,
-        MissionNpc(mission_id.to_string()),
-        behavior,
-        crate::surface_character::CharacterAnim::person(0.11),
-        RigidBody::Dynamic,
-        LockedAxes::ROTATION_LOCKED,
-        crate::surface_objects::character_foot_collider(5.0),
-        CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
-        LinearDamping(10.0),
-        LinearVelocity(Vec2::ZERO),
-        Sprite::from_atlas_image(
-            image,
-            TextureAtlas {
-                layout: layers.layout.clone(),
-                index: 0,
-            },
-        ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
-    )).id();
+    let npc_entity = commands
+        .spawn((
+            DespawnOnExit(crate::PlayState::Exploring),
+            Npc,
+            MissionNpc(mission_id.to_string()),
+            behavior,
+            crate::surface_character::CharacterAnim::person(0.11),
+            RigidBody::Dynamic,
+            LockedAxes::ROTATION_LOCKED,
+            crate::surface_objects::character_foot_collider(5.0),
+            CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+            LinearDamping(10.0),
+            LinearVelocity(Vec2::ZERO),
+            Sprite::from_atlas_image(
+                image,
+                TextureAtlas {
+                    layout: layers.layout.clone(),
+                    index: 0,
+                },
+            ),
+            Transform::from_xyz(
+                start.x,
+                start.y,
+                crate::surface_objects::depth_z(
+                    start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
+                ),
+            ),
+        ))
+        .id();
 
     if let Some((name, _)) = identity {
         commands.entity(npc_entity).insert(NpcIdentity { name });
@@ -575,7 +601,10 @@ pub fn spawn_mission_npc(
         parent.spawn((
             NpcMarker,
             Text2d::new("!"),
-            TextFont { font_size: 20.0, ..default() },
+            TextFont {
+                font_size: 20.0,
+                ..default()
+            },
             TextColor(Color::srgb(1.0, 0.9, 0.2)),
             Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
@@ -730,27 +759,35 @@ pub fn spawn_objective_npc(
         }
     }
 
-    let npc_entity = commands.spawn((
-        DespawnOnExit(crate::PlayState::Exploring),
-        Npc,
-        MissionNpc(mission_id.to_string()),
-        behavior,
-        crate::surface_character::CharacterAnim::person(0.10),
-        RigidBody::Dynamic,
-        LockedAxes::ROTATION_LOCKED,
-        crate::surface_objects::character_foot_collider(5.0),
-        CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
-        LinearDamping(10.0),
-        LinearVelocity(Vec2::ZERO),
-        Sprite::from_atlas_image(
-            image,
-            TextureAtlas {
-                layout: layers.layout.clone(),
-                index: 0,
-            },
-        ),
-        Transform::from_xyz(start.x, start.y, crate::surface_objects::depth_z(start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET)),
-    )).id();
+    let npc_entity = commands
+        .spawn((
+            DespawnOnExit(crate::PlayState::Exploring),
+            Npc,
+            MissionNpc(mission_id.to_string()),
+            behavior,
+            crate::surface_character::CharacterAnim::person(0.10),
+            RigidBody::Dynamic,
+            LockedAxes::ROTATION_LOCKED,
+            crate::surface_objects::character_foot_collider(5.0),
+            CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+            LinearDamping(10.0),
+            LinearVelocity(Vec2::ZERO),
+            Sprite::from_atlas_image(
+                image,
+                TextureAtlas {
+                    layout: layers.layout.clone(),
+                    index: 0,
+                },
+            ),
+            Transform::from_xyz(
+                start.x,
+                start.y,
+                crate::surface_objects::depth_z(
+                    start.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
+                ),
+            ),
+        ))
+        .id();
 
     if let Some((name, _)) = identity {
         commands.entity(npc_entity).insert(NpcIdentity { name });
@@ -760,7 +797,10 @@ pub fn spawn_objective_npc(
         parent.spawn((
             NpcMarker,
             Text2d::new(marker_text),
-            TextFont { font_size: 20.0, ..default() },
+            TextFont {
+                font_size: 20.0,
+                ..default()
+            },
             TextColor(marker_color),
             Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
@@ -839,8 +879,8 @@ pub(crate) fn pick_flee_goal(
         }
         let d_player = (cand.0 as f32 - player_tile.0 as f32).abs()
             + (cand.1 as f32 - player_tile.1 as f32).abs();
-        let d_npc = (cand.0 as f32 - npc_tile.0 as f32).abs()
-            + (cand.1 as f32 - npc_tile.1 as f32).abs();
+        let d_npc =
+            (cand.0 as f32 - npc_tile.0 as f32).abs() + (cand.1 as f32 - npc_tile.1 as f32).abs();
         // Far from the player, mildly preferring nearby escapes; a goal the
         // player stands between us and is fine ONLY if the path says so —
         // reachability is checked for the winner below.
@@ -871,7 +911,9 @@ fn find_nearest_walkable(world_pos: Vec2, cm: &SurfaceCostMap) -> (u32, u32) {
                 }
                 let nx = (tile.0 as i32 + dx).max(0) as u32;
                 let ny = (tile.1 as i32 + dy).max(0) as u32;
-                if nx >= cm.width || ny >= cm.height { continue; }
+                if nx >= cm.width || ny >= cm.height {
+                    continue;
+                }
                 let ni = (ny * cm.width + nx) as usize;
                 if ni < cm.data.len() && cm.data[ni] < f32::INFINITY {
                     return (nx, ny);
@@ -904,7 +946,11 @@ mod tests {
                 data[(y * w + (w - 1 - x)) as usize] = 1.0;
             }
         }
-        SurfaceCostMap { data, width: w, height: h }
+        SurfaceCostMap {
+            data,
+            width: w,
+            height: h,
+        }
     }
 
     #[test]

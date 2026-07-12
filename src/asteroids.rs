@@ -54,7 +54,13 @@ fn load_asteroid_atlases(
 ) {
     // 8×8 grid of 128px tiles (64 tumble frames). Optional layout = headless-safe.
     let layout = layouts.map(|mut l| {
-        l.add(TextureAtlasLayout::from_grid(UVec2::splat(128), 8, 8, None, None))
+        l.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(128),
+            8,
+            8,
+            None,
+            None,
+        ))
     });
     let mut rocks = Vec::new();
     let mut deps = Vec::new();
@@ -62,16 +68,27 @@ fn load_asteroid_atlases(
         rocks.push(asset_server.load(format!("sprites/asteroids/rock_{i}.png")));
         deps.push(asset_server.load(format!("sprites/asteroids/dep_{i}.png")));
     }
-    commands.insert_resource(AsteroidAtlases { rocks, deps, layout });
+    commands.insert_resource(AsteroidAtlases {
+        rocks,
+        deps,
+        layout,
+    });
 }
 
 /// Build an atlas sprite (or plain image fallback when headless / no layout).
-fn atlas_sprite(handle: &Handle<Image>, layout: &Option<Handle<TextureAtlasLayout>>,
-                px: f32, tint: Color) -> Sprite {
+fn atlas_sprite(
+    handle: &Handle<Image>,
+    layout: &Option<Handle<TextureAtlasLayout>>,
+    px: f32,
+    tint: Color,
+) -> Sprite {
     let mut s = match layout {
         Some(l) => Sprite::from_atlas_image(
             handle.clone(),
-            TextureAtlas { layout: l.clone(), index: 0 },
+            TextureAtlas {
+                layout: l.clone(),
+                index: 0,
+            },
         ),
         None => Sprite::from_image(handle.clone()),
     };
@@ -130,8 +147,8 @@ fn tumble_asteroids(time: Res<Time>, mut q: Query<(&AsteroidTumble, &mut Sprite)
     for (tumble, mut sprite) in &mut q {
         if let Some(atlas) = sprite.texture_atlas.as_mut() {
             let frac = (t * tumble.speed + tumble.phase).rem_euclid(1.0);
-            atlas.index = ((frac * ASTEROID_TUMBLE_FRAMES as f32) as usize)
-                % ASTEROID_TUMBLE_FRAMES;
+            atlas.index =
+                ((frac * ASTEROID_TUMBLE_FRAMES as f32) as usize) % ASTEROID_TUMBLE_FRAMES;
         }
     }
 }
@@ -439,7 +456,11 @@ fn handle_shatter(
     use std::collections::HashSet;
     let mut rng = rand::thread_rng();
     let mut shattered: HashSet<Entity> = HashSet::new();
-    for ShatterAsteroid { entity, drop_pickups } in reader.read() {
+    for ShatterAsteroid {
+        entity,
+        drop_pickups,
+    } in reader.read()
+    {
         if !shattered.insert(*entity) {
             continue;
         }
@@ -567,15 +588,16 @@ fn grow_asteroids(
 ) {
     let dt = time.delta_secs();
     for (entity, mut growing, mut transform) in growing.iter_mut() {
-        growing.progress =
-            (growing.progress + dt / ASTEROID_GROW_DURATION).min(1.0);
+        growing.progress = (growing.progress + dt / ASTEROID_GROW_DURATION).min(1.0);
         let scale = growing.progress;
         transform.scale = Vec3::splat(scale);
 
         if growing.progress >= 1.0 {
             // Fully grown: remove Sensor so it participates in physics.
             if let Ok(mut entity_cmd) = commands.get_entity(entity) {
-                entity_cmd.try_remove::<GrowingAsteroid>().try_remove::<Sensor>();
+                entity_cmd
+                    .try_remove::<GrowingAsteroid>()
+                    .try_remove::<Sensor>();
             }
         }
     }
@@ -669,7 +691,10 @@ fn start_fade(commands: &mut Commands, entity: Entity, size: f32) {
 /// Start fading any asteroid that's drifted too close to or too far from its field center.
 fn check_asteroid_bounds(
     mut commands: Commands,
-    asteroids: Query<(Entity, &Asteroid, &Transform), (Without<FadingAsteroid>, Without<GrowingAsteroid>)>,
+    asteroids: Query<
+        (Entity, &Asteroid, &Transform),
+        (Without<FadingAsteroid>, Without<GrowingAsteroid>),
+    >,
     fields: Query<&Transform, With<AsteroidField>>,
     field_data: Query<&AsteroidField>,
 ) {

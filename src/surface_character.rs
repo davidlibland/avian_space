@@ -45,7 +45,11 @@ impl Facing {
     /// Choose facing from a velocity vector.
     pub fn from_velocity(v: Vec2) -> Self {
         if v.x.abs() > v.y.abs() {
-            if v.x > 0.0 { Facing::Right } else { Facing::Left }
+            if v.x > 0.0 {
+                Facing::Right
+            } else {
+                Facing::Left
+            }
         } else {
             if v.y > 0.0 { Facing::Up } else { Facing::Down }
         }
@@ -114,7 +118,11 @@ impl CharacterAnim {
             is_moving: false,
             just_stepped: false,
             sheet_cols: PERSON_COLS,
-            idle: FrameSeq { cols: vec![0, 1], interval: 0.6, footfalls: vec![] },
+            idle: FrameSeq {
+                cols: vec![0, 1],
+                interval: 0.6,
+                footfalls: vec![],
+            },
             // LPC 8-frame walk: feet plant around frames 1 and 5 of the cycle.
             walk: FrameSeq {
                 cols: (2..10).collect(),
@@ -140,7 +148,11 @@ impl CharacterAnim {
             is_moving: false,
             just_stepped: false,
             sheet_cols: 3,
-            idle: FrameSeq { cols: vec![0], interval, footfalls: vec![] },
+            idle: FrameSeq {
+                cols: vec![0],
+                interval,
+                footfalls: vec![],
+            },
             walk: FrameSeq {
                 cols: vec![0, 1, 0, 2],
                 interval,

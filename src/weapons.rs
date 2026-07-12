@@ -345,7 +345,8 @@ fn auto_deploy_decoys(
             continue;
         };
         let inbound = missiles.iter().any(|(m, mp)| {
-            m.target == Some(entity) && mp.0.distance_squared(pos.0) < AI_DECOY_RANGE * AI_DECOY_RANGE
+            m.target == Some(entity)
+                && mp.0.distance_squared(pos.0) < AI_DECOY_RANGE * AI_DECOY_RANGE
         });
         if inbound {
             fire_writer.write(FireCommand {

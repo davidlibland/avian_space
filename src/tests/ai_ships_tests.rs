@@ -70,10 +70,16 @@ fn test_angle_to_controls_deadband() {
     // handle residual motion.
     let (torque, damping) = (1.0_f32, 1.0_f32);
     let (turn, _) = angle_to_controls(PI / 32.0, 0.0, torque, damping);
-    assert_eq!(turn, 0.0, "small positive angle inside deadband should coast");
+    assert_eq!(
+        turn, 0.0,
+        "small positive angle inside deadband should coast"
+    );
 
     let (turn, _) = angle_to_controls(-PI / 32.0, 0.0, torque, damping);
-    assert_eq!(turn, 0.0, "small negative angle inside deadband should coast");
+    assert_eq!(
+        turn, 0.0,
+        "small negative angle inside deadband should coast"
+    );
 }
 
 #[test]
@@ -420,7 +426,10 @@ fn test_compute_ai_action_planet_pd_brakes_when_overshooting() {
         &mut rand::thread_rng(),
     )
     .expect("close + fast → braking action");
-    assert_eq!(action.thrust, 0.0, "facing forward but PD wants to brake → no thrust");
+    assert_eq!(
+        action.thrust, 0.0,
+        "facing forward but PD wants to brake → no thrust"
+    );
     assert!(
         action.turn.abs() > 0.5,
         "should be turning toward retrograde, got turn={}",
@@ -621,7 +630,9 @@ fn population_cull_spares_escorts_and_mission_targets() {
         .world_mut()
         .spawn((
             ship(),
-            AIShip { personality: Personality::Fighter },
+            AIShip {
+                personality: Personality::Fighter,
+            },
             crate::carrier::Escort { mother: player },
         ))
         .id();
@@ -629,7 +640,9 @@ fn population_cull_spares_escorts_and_mission_targets() {
         .world_mut()
         .spawn((
             ship(),
-            AIShip { personality: Personality::Fighter },
+            AIShip {
+                personality: Personality::Fighter,
+            },
             crate::missions::MissionTarget {
                 mission_id: "battle".to_string(),
                 display_name: "Invader".to_string(),

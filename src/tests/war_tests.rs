@@ -76,7 +76,11 @@ fn tiers_track_the_defenders_grip() {
     g.apply_shift("t", "Federation", 0.3);
     assert_eq!(front_tier(&g, &front), 2, "a foothold → battles");
     g.apply_shift("t", "Federation", 0.2); // 0.5
-    assert_eq!(front_tier(&g, &front), 3, "threshold in sight → decisive push");
+    assert_eq!(
+        front_tier(&g, &front),
+        3,
+        "threshold in sight → decisive push"
+    );
 }
 
 fn war_app(iu: ItemUniverse, galaxy: GalaxyControl) -> App {
@@ -89,7 +93,14 @@ fn war_app(iu: ItemUniverse, galaxy: GalaxyControl) -> App {
             // A veteran of every faction: the service gate is tested
             // separately; other tests assume war offers are reachable.
             let mut sr = crate::standing::FactionServiceRecord::default();
-            for f in ["Federation", "Rebel", "Bastion", "FreeFrontier", "Helios", "Order"] {
+            for f in [
+                "Federation",
+                "Rebel",
+                "Bastion",
+                "FreeFrontier",
+                "Helios",
+                "Order",
+            ] {
                 for _ in 0..crate::war::WAR_SERVICE_MIN {
                     sr.record(f);
                 }
@@ -153,7 +164,10 @@ fn war_missions_offered_only_to_trusted_pilots() {
         .unwrap();
     // Venue split: overt war work is posted at the GARRISON desk; covert ops
     // come from a stranger in the bar.
-    if let crate::missions::types::OfferKind::NpcOffer { building: Some(b), .. } = &def.offer {
+    if let crate::missions::types::OfferKind::NpcOffer {
+        building: Some(b), ..
+    } = &def.offer
+    {
         if id.contains("covert") {
             assert_eq!(b, "bar", "covert stays deniable");
         } else {
@@ -164,7 +178,10 @@ fn war_missions_offered_only_to_trusted_pilots() {
     }
     let iu = world.resource::<ItemUniverse>();
     if let crate::missions::Objective::DestroyShips { ship_type, .. } = &def.objective {
-        assert!(iu.ships.contains_key(ship_type), "battle target ship exists");
+        assert!(
+            iu.ships.contains_key(ship_type),
+            "battle target ship exists"
+        );
     }
     let target = def.shift_target().expect("war missions shift influence");
     assert!(iu.star_systems[target].contestable);
@@ -185,9 +202,7 @@ fn drift_moves_active_fronts_only_a_little() {
     assert!(!fronts.is_empty());
     let before: f32 = fronts
         .iter()
-        .map(|f| {
-            app_influence(&galaxy, &f.target, &f.sponsor)
-        })
+        .map(|f| app_influence(&galaxy, &f.target, &f.sponsor))
         .sum();
     let mut app = war_app(iu, galaxy);
 
@@ -202,7 +217,10 @@ fn drift_moves_active_fronts_only_a_little() {
         .iter()
         .map(|f| g.influence_of(&f.target, &f.sponsor))
         .sum();
-    assert!(after > before - 1e-6, "attackers gain ground: {before} → {after}");
+    assert!(
+        after > before - 1e-6,
+        "attackers gain ground: {before} → {after}"
+    );
     // Every simplex stays valid, and no single share jumps beyond drift+slack.
     for f in &fronts {
         let sum: f32 = g
@@ -263,21 +281,33 @@ fn every_covert_template_instantiates_on_the_marches_front() {
         .filter(|(_, t)| matches!(t, MissionTemplate::Covert { .. }))
         .collect();
     coverts.sort_by_key(|(id, _)| (*id).clone());
-    assert_eq!(coverts.len(), 11, "the full covert family from the design doc");
+    assert_eq!(
+        coverts.len(),
+        11,
+        "the full covert family from the design doc"
+    );
 
     let has_pay = |effects: &[CompletionEffect]| {
-        effects.iter().any(|e| matches!(e, CompletionEffect::Pay { .. }))
+        effects
+            .iter()
+            .any(|e| matches!(e, CompletionEffect::Pay { .. }))
     };
     let shift_on_target = |effects: &[CompletionEffect]| {
-        effects.iter().any(|e| matches!(e,
+        effects.iter().any(|e| {
+            matches!(e,
             CompletionEffect::ShiftInfluence { system, faction, delta }
-                if system == "the_marches" && faction == "Federation" && *delta > 0.0))
+                if system == "the_marches" && faction == "Federation" && *delta > 0.0)
+        })
     };
 
     for (id, tmpl) in coverts {
         let (def, follow_up) = instantiate_war_mission(tmpl, &front, &iu, &galaxy, &mut rng)
             .unwrap_or_else(|| panic!("{id} must instantiate on a landable front"));
-        assert!(!def.briefing.contains('{'), "{id}: all vars substituted: {}", def.briefing);
+        assert!(
+            !def.briefing.contains('{'),
+            "{id}: all vars substituted: {}",
+            def.briefing
+        );
         // Deniability: covert offers come from a stranger in the BAR, never
         // anyone at the garrison desk.
         assert!(
@@ -290,16 +320,30 @@ fn every_covert_template_instantiates_on_the_marches_front() {
         match &follow_up {
             None => {
                 assert!(has_pay(&def.completion_effects), "{id}: pays");
-                assert!(shift_on_target(&def.completion_effects), "{id}: shifts the front");
+                assert!(
+                    shift_on_target(&def.completion_effects),
+                    "{id}: shifts the front"
+                );
             }
             Some(follow) => {
-                assert!(matches!(follow.offer, OfferKind::Auto), "{id}: stage 2 auto-starts");
-                assert!(!follow.briefing.is_empty() && !follow.briefing.contains('{'),
-                    "{id}: stage-2 text: {}", follow.briefing);
+                assert!(
+                    matches!(follow.offer, OfferKind::Auto),
+                    "{id}: stage 2 auto-starts"
+                );
+                assert!(
+                    !follow.briefing.is_empty() && !follow.briefing.contains('{'),
+                    "{id}: stage-2 text: {}",
+                    follow.briefing
+                );
                 assert!(has_pay(&follow.completion_effects), "{id}: stage 2 pays");
-                assert!(shift_on_target(&follow.completion_effects), "{id}: stage 2 shifts");
-                assert!(shift_on_target(&def.completion_effects),
-                    "{id}: the primary carries a partial shift (open_war bookkeeping)");
+                assert!(
+                    shift_on_target(&follow.completion_effects),
+                    "{id}: stage 2 shifts"
+                );
+                assert!(
+                    shift_on_target(&def.completion_effects),
+                    "{id}: the primary carries a partial shift (open_war bookkeeping)"
+                );
             }
         }
         // Bribes cost money; everything else earns it.
@@ -442,8 +486,7 @@ fn war_ids_skip_persisted_missions_from_prior_sessions() {
 
     let catalog = app.world().resource::<MissionCatalog>();
     assert_eq!(
-        catalog.defs[&stale_id].briefing,
-        "the player's ACTIVE mission from last session",
+        catalog.defs[&stale_id].briefing, "the player's ACTIVE mission from last session",
         "the persisted active mission must survive untouched"
     );
     assert!(

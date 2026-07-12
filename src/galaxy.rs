@@ -16,11 +16,11 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use crate::item_universe::ItemUniverse;
-use crate::missions::MissionCompleted;
-use crate::missions::MissionCatalog;
-use crate::missions::types::CompletionEffect;
 use crate::PlayState;
+use crate::item_universe::ItemUniverse;
+use crate::missions::MissionCatalog;
+use crate::missions::MissionCompleted;
+use crate::missions::types::CompletionEffect;
 
 // ── Tuning ───────────────────────────────────────────────────────────────────
 
@@ -152,9 +152,7 @@ impl GalaxyControl {
         let current = self.controllers.get(system).cloned();
         let next: Option<String> = match (&current, &top) {
             // Holding: keep unless we fell below the keep threshold.
-            (Some(cur), _) if self.influence_of(system, cur) >= CONTROL_KEEP => {
-                Some(cur.clone())
-            }
+            (Some(cur), _) if self.influence_of(system, cur) >= CONTROL_KEEP => Some(cur.clone()),
             // Lost grip (or never held): a challenger takes over only at GAIN.
             (_, Some((f, v))) if *v >= CONTROL_GAIN => Some(f.clone()),
             _ => None,

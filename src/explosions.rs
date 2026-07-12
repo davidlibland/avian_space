@@ -2,8 +2,8 @@ use avian2d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::ship::Ship;
 use crate::PlayState;
+use crate::ship::Ship;
 
 pub fn explosions_plugin(app: &mut App) {
     app.add_message::<TriggerExplosion>()
@@ -88,7 +88,8 @@ fn emit_weapon_particles(
         for _ in 0..n {
             let angle: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
             let speed: f32 = rng.gen_range(emitter.fx.speed * 0.25..emitter.fx.speed.max(0.26));
-            let lifetime = rng.gen_range(emitter.fx.particle_lifetime * 0.5..emitter.fx.particle_lifetime);
+            let lifetime =
+                rng.gen_range(emitter.fx.particle_lifetime * 0.5..emitter.fx.particle_lifetime);
             let size = rng.gen_range(emitter.fx.size * 0.6..emitter.fx.size * 1.3);
             // Slight per-particle color jitter so the plume shimmers.
             let jitter = rng.gen_range(0.85..1.15);
@@ -200,11 +201,7 @@ fn trigger_jump_flashes(
 
             // White-blue palette for hyperspace flash
             let t: f32 = rng.gen_range(0.0..1.0);
-            let color = Color::srgb(
-                0.7 + 0.3 * t,
-                0.8 + 0.2 * t,
-                1.0,
-            );
+            let color = Color::srgb(0.7 + 0.3 * t, 0.8 + 0.2 * t, 1.0);
 
             let offset = Vec2::new(
                 rng.gen_range(-event.size * 0.2..event.size * 0.2),
@@ -291,16 +288,13 @@ fn emit_ship_smoke(
         let ship_vel = vel.map(|v| v.0).unwrap_or(Vec2::ZERO);
         let pos = transform.translation.truncate();
         for _ in 0..count {
-            let off = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0))
-                * radius
-                * 0.5;
+            let off = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * radius * 0.5;
             let gray = 0.52 - 0.30 * damage; // darker, sootier with more damage
             let max_alpha = 0.16 + 0.24 * damage; // translucent; denser with damage
             let base_size = radius * rng.gen_range(0.5..0.9);
             let a: f32 = rng.gen_range(0.0..std::f32::consts::TAU);
             // drift outward a little, trailing slightly behind the ship's motion
-            let velocity = Vec2::new(a.cos(), a.sin()) * rng.gen_range(6.0..18.0)
-                - ship_vel * 0.12;
+            let velocity = Vec2::new(a.cos(), a.sin()) * rng.gen_range(6.0..18.0) - ship_vel * 0.12;
             let lifetime = rng.gen_range(0.8..1.6);
             commands.spawn((
                 DespawnOnExit(PlayState::Flying),

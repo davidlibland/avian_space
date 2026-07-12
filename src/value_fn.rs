@@ -59,7 +59,10 @@ pub fn batch_value_inference(
             &inner_device,
         );
         let proj_t = Tensor::<InnerTrainBackend, 3>::from_data(
-            TensorData::new(proj_slice.to_vec(), [b, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
+            TensorData::new(
+                proj_slice.to_vec(),
+                [b, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM],
+            ),
             &inner_device,
         );
 
@@ -107,7 +110,10 @@ pub fn recompute_bootstrap_values(
                 &inner_device,
             );
             let proj_t = Tensor::<InnerTrainBackend, 3>::from_data(
-                TensorData::new(last_t.proj_obs.clone(), [1, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM]),
+                TensorData::new(
+                    last_t.proj_obs.clone(),
+                    [1, model::N_PROJECTILE_SLOTS, model::PROJ_INPUT_DIM],
+                ),
                 &inner_device,
             );
             let (val, _, _) = inner_net.forward(self_t, obj_t, proj_t);

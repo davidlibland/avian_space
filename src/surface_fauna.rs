@@ -15,11 +15,11 @@ use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 
+use crate::PlayState;
 use crate::surface::{TILE_PX, Walker};
 use crate::surface_character::CharacterAnim;
 use crate::surface_objects::depth_z;
 use crate::surface_pathfinding::SurfaceCostMap;
-use crate::PlayState;
 
 // ── Tuning ────────────────────────────────────────────────────────────────
 
@@ -143,18 +143,17 @@ pub fn setup_fauna(
     map_h: u32,
     seed: u64,
 ) {
-    let manifest: FaunaManifest = match crate::embedded_assets::read_to_string(
-        "assets/sprites/fauna/fauna_manifest.ron",
-    )
-    .ok()
-    .and_then(|t| ron::from_str(&t).ok())
-    {
-        Some(m) => m,
-        None => {
-            eprintln!("[fauna] WARNING: could not load fauna_manifest.ron");
-            return;
-        }
-    };
+    let manifest: FaunaManifest =
+        match crate::embedded_assets::read_to_string("assets/sprites/fauna/fauna_manifest.ron")
+            .ok()
+            .and_then(|t| ron::from_str(&t).ok())
+        {
+            Some(m) => m,
+            None => {
+                eprintln!("[fauna] WARNING: could not load fauna_manifest.ron");
+                return;
+            }
+        };
 
     let idx_by_name: std::collections::HashMap<&str, u32> = terrain_names
         .iter()
@@ -240,7 +239,14 @@ pub fn spawn_fauna(
     for _ in 0..40 {
         let tx = world.rng.r#gen_range(0..map_w) as i32;
         let ty = world.rng.r#gen_range(0..map_h) as i32;
-        if !tile_ok(&world.terrain, map_w, map_h, &world.species[sp_idx].terrain_idxs, tx, ty) {
+        if !tile_ok(
+            &world.terrain,
+            map_w,
+            map_h,
+            &world.species[sp_idx].terrain_idxs,
+            tx,
+            ty,
+        ) {
             continue;
         }
         let wp = SurfaceCostMap::tile_to_world(tx as u32, ty as u32);
@@ -262,7 +268,14 @@ pub fn spawn_fauna(
             for _ in 0..8 {
                 let cx = ax + world.rng.r#gen_range(-2..=2);
                 let cy = ay + world.rng.r#gen_range(-2..=2);
-                if tile_ok(&world.terrain, map_w, map_h, &world.species[sp_idx].terrain_idxs, cx, cy) {
+                if tile_ok(
+                    &world.terrain,
+                    map_w,
+                    map_h,
+                    &world.species[sp_idx].terrain_idxs,
+                    cx,
+                    cy,
+                ) {
                     found = (cx, cy);
                     break;
                 }
@@ -274,8 +287,16 @@ pub fn spawn_fauna(
         let flier = sp.flier;
         let graze = world.rng.r#gen_range(1.2..3.5);
         // Fliers float above their ground track and sort over everything.
-        let pos = if flier { Vec2::new(ground.x, ground.y + FLY_ALTITUDE) } else { ground };
-        let z = if flier { FLY_Z } else { depth_z(pos.y - sp.foot_off) };
+        let pos = if flier {
+            Vec2::new(ground.x, ground.y + FLY_ALTITUDE)
+        } else {
+            ground
+        };
+        let z = if flier {
+            FLY_Z
+        } else {
+            depth_z(pos.y - sp.foot_off)
+        };
         let mut ent = commands.spawn((
             DespawnOnExit(PlayState::Exploring),
             Fauna {
@@ -284,7 +305,11 @@ pub fn spawn_fauna(
                 flee_speed: sp.flee_speed,
                 foot_off: sp.foot_off,
                 flier,
-                state: if flier { FaunaState::Wander } else { FaunaState::Graze },
+                state: if flier {
+                    FaunaState::Wander
+                } else {
+                    FaunaState::Graze
+                },
                 timer: Timer::from_seconds(graze, TimerMode::Once),
                 target: pos,
             },
@@ -295,7 +320,10 @@ pub fn spawn_fauna(
             LinearVelocity(Vec2::ZERO),
             Sprite::from_atlas_image(
                 sp.image.clone(),
-                TextureAtlas { layout: sp.layout.clone(), index: 0 },
+                TextureAtlas {
+                    layout: sp.layout.clone(),
+                    index: 0,
+                },
             ),
             Transform::from_xyz(pos.x, pos.y, z),
         ));
@@ -308,7 +336,10 @@ pub fn spawn_fauna(
                 CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
             ));
         } else {
-            ent.insert(MassPropertiesBundle::from_shape(&Collider::circle(4.0), 0.5));
+            ent.insert(MassPropertiesBundle::from_shape(
+                &Collider::circle(4.0),
+                0.5,
+            ));
         }
     }
 }
@@ -384,10 +415,8 @@ pub fn run_fauna(
                 let calm = ppos.map(|pp| pos.distance(pp) > CALM_DIST).unwrap_or(true);
                 if calm {
                     fauna.state = FaunaState::Graze;
-                    fauna.timer = Timer::from_seconds(
-                        world.rng.r#gen_range(1.2..3.0),
-                        TimerMode::Once,
-                    );
+                    fauna.timer =
+                        Timer::from_seconds(world.rng.r#gen_range(1.2..3.0), TimerMode::Once);
                 }
             }
             FaunaState::Graze => {
@@ -432,10 +461,8 @@ pub fn run_fauna(
                 let to = fauna.target - pos;
                 if to.length() < ARRIVE_DIST {
                     fauna.state = FaunaState::Graze;
-                    fauna.timer = Timer::from_seconds(
-                        world.rng.r#gen_range(1.5..4.0),
-                        TimerMode::Once,
-                    );
+                    fauna.timer =
+                        Timer::from_seconds(world.rng.r#gen_range(1.5..4.0), TimerMode::Once);
                     vel.0 = Vec2::ZERO;
                 } else {
                     vel.0 = to.normalize_or_zero() * fauna.speed;

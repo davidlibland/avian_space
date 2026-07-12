@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use crate::item_universe::ItemUniverse;
 use crate::missions::PlayerLandedOnPlanet;
 use crate::planet_ui::LandedContext;
-use crate::ship::{ShipHostility, Target};
-use crate::ship_anim::{PLANET_ANIM_DURATION, ScalingDown, ScaleDownFinished};
 use crate::session::SessionResourceExt;
+use crate::ship::{ShipHostility, Target};
+use crate::ship_anim::{PLANET_ANIM_DURATION, ScaleDownFinished, ScalingDown};
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player, Ship};
 
 use std::collections::HashMap;
@@ -63,8 +63,12 @@ pub struct NearbyPlanet(pub Option<Entity>);
 
 impl crate::session::SessionResource for NearbyPlanet {
     type SaveData = ();
-    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
-    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
 }
 
 /// Marker: the player ship is in the landing scale-down animation.

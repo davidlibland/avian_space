@@ -15,8 +15,7 @@ use crate::missions::{
     render_missions_tab,
 };
 use crate::planet_ui::{
-    LandedContext, render_mods_section, render_outfitter_tab, render_shipyard_tab,
-    render_trade_tab,
+    LandedContext, render_mods_section, render_outfitter_tab, render_shipyard_tab, render_trade_tab,
 };
 use crate::ship::{BuyShip, Ship};
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
@@ -397,39 +396,39 @@ fn spawn_mission_npcs(
             continue;
         }
         // Look up the mission def for NpcOffer config.
-        let (seek, door, identity) = if let Some(def) = mission_catalog.defs.get(mission_id.as_str())
-        {
-            match &def.offer {
-                crate::missions::OfferKind::NpcOffer {
-                    building,
-                    approach,
-                    npc,
-                    ..
-                } => {
-                    let seek = *approach == crate::missions::NpcApproach::Seek;
+        let (seek, door, identity) =
+            if let Some(def) = mission_catalog.defs.get(mission_id.as_str()) {
+                match &def.offer {
+                    crate::missions::OfferKind::NpcOffer {
+                        building,
+                        approach,
+                        npc,
+                        ..
+                    } => {
+                        let seek = *approach == crate::missions::NpcApproach::Seek;
 
-                    // Resolve building name to a door tile.
-                    let door = building
-                        .as_ref()
-                        .and_then(|name| building_door.get(&name.to_lowercase()))
-                        .copied()
-                        .unwrap_or_else(|| {
-                            // No building specified or not found → random door.
-                            door_tiles[rng.r#gen_range(0..door_tiles.len())]
-                        });
+                        // Resolve building name to a door tile.
+                        let door = building
+                            .as_ref()
+                            .and_then(|name| building_door.get(&name.to_lowercase()))
+                            .copied()
+                            .unwrap_or_else(|| {
+                                // No building specified or not found → random door.
+                                door_tiles[rng.r#gen_range(0..door_tiles.len())]
+                            });
 
-                    (seek, door, npc_identity(&item_universe, layers, npc))
+                        (seek, door, npc_identity(&item_universe, layers, npc))
+                    }
+                    _ => {
+                        // Fallback for non-NpcOffer (shouldn't happen here).
+                        let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
+                        (false, door, None)
+                    }
                 }
-                _ => {
-                    // Fallback for non-NpcOffer (shouldn't happen here).
-                    let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
-                    (false, door, None)
-                }
-            }
-        } else {
-            let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
-            (false, door, None)
-        };
+            } else {
+                let door = door_tiles[rng.r#gen_range(0..door_tiles.len())];
+                (false, door, None)
+            };
 
         // For waiters, pick a tile near the door (not on it).
         let spawn_tile = if !seek {
@@ -698,7 +697,10 @@ fn building_kinds_for_planet(
 /// Door (walkable, sensor) tiles for a building: the template's entry
 /// points — except the SHIPYARD, whose baked 3/4 sprite is an open hull-bay:
 /// its whole front row is a walkable threshold apart from the corner pillars.
-fn door_tiles_for(kind: BuildingKind, tmpl: &crate::world_assets::BuildingTemplate) -> Vec<(u32, u32)> {
+fn door_tiles_for(
+    kind: BuildingKind,
+    tmpl: &crate::world_assets::BuildingTemplate,
+) -> Vec<(u32, u32)> {
     if kind == BuildingKind::Shipyard && tmpl.width >= 3 {
         (1..tmpl.width - 1).map(|c| (c, 0)).collect()
     } else {
@@ -708,10 +710,10 @@ fn door_tiles_for(kind: BuildingKind, tmpl: &crate::world_assets::BuildingTempla
 
 fn kind_template(kind: BuildingKind) -> &'static str {
     match kind {
-        BuildingKind::Outfitter => "small_house",    // 4×4
-        BuildingKind::FuelStation => "small_house",   // 4×4 (booth + forecourt)
-        BuildingKind::Shipyard => "large_building",   // 8×6
-        _ => "medium_house",                          // 6×5 — Market, Bar (+ fallback)
+        BuildingKind::Outfitter => "small_house",   // 4×4
+        BuildingKind::FuelStation => "small_house", // 4×4 (booth + forecourt)
+        BuildingKind::Shipyard => "large_building", // 8×6
+        _ => "medium_house",                        // 6×5 — Market, Bar (+ fallback)
     }
 }
 
@@ -733,7 +735,10 @@ fn kind_func(kind: BuildingKind) -> &'static str {
 /// door row), where the 3/4 sprite's anchor is pinned.
 fn footprint_front_center(tx: u32, ty: u32, w: u32, map_w: u32, map_h: u32, tile_px: f32) -> Vec2 {
     let base = tile_to_world(tx, ty, map_w, map_h, tile_px);
-    Vec2::new(base.x + (w as f32 - 1.0) * 0.5 * tile_px, base.y - tile_px * 0.5)
+    Vec2::new(
+        base.x + (w as f32 - 1.0) * 0.5 * tile_px,
+        base.y - tile_px * 0.5,
+    )
 }
 
 /// Spawn a 3/4 building as two depth-split layers so a player stands framed in
@@ -814,10 +819,15 @@ fn spawn_building_3d(
 
     // Animated roll-up door (over the facade): overlays _front exactly (same
     // anchor/pos), and rolls open when the player nears. Only door buildings.
-    if matches!(func, "market" | "outfitter" | "bar" | "mechanic" | "fuel_station" | "garrison") {
+    if matches!(
+        func,
+        "market" | "outfitter" | "bar" | "mechanic" | "fuel_station" | "garrison"
+    ) {
         let frames: Vec<Handle<Image>> = (0..4)
             .map(|k| {
-                asset_server.load(format!("{WORLDS_DIR}/buildings3d/{style}_{func}_door{k}.png"))
+                asset_server.load(format!(
+                    "{WORLDS_DIR}/buildings3d/{style}_{func}_door{k}.png"
+                ))
             })
             .collect();
         commands.spawn((
@@ -831,12 +841,11 @@ fn spawn_building_3d(
                 fc.x,
                 fc.y,
                 crate::surface_objects::depth_z(
-                    fc.y
-                        - props
-                            .iter()
-                            .find(|p| p.name == "vest")
-                            .map_or(0.0, |p| p.dy)
-                            * tile_px,
+                    fc.y - props
+                        .iter()
+                        .find(|p| p.name == "vest")
+                        .map_or(0.0, |p| p.dy)
+                        * tile_px,
                 ) - 0.0004,
             )
             .with_scale(Vec3::splat(scale)),
@@ -869,7 +878,11 @@ fn animate_building_doors(
     let pp = player.translation.truncate();
     const OPEN_RADIUS: f32 = TILE_PX * 2.5;
     for (mut door, mut sprite) in &mut doors {
-        let target = if door.door_pos.distance(pp) < OPEN_RADIUS { 1.0 } else { 0.0 };
+        let target = if door.door_pos.distance(pp) < OPEN_RADIUS {
+            1.0
+        } else {
+            0.0
+        };
         let step = time.delta_secs() * 5.0;
         door.openness += (target - door.openness).clamp(-step, step);
         door.openness = door.openness.clamp(0.0, 1.0);
@@ -1223,11 +1236,10 @@ fn setup_surface(
         // Template buildings: mark each non-zero tile as solid (except doors).
         for &(kind, bx, by, ti) in &building_assignments {
             if let Some(tmpl) = templates.get(ti) {
-                let door_set: std::collections::HashSet<(u32, u32)> =
-                    door_tiles_for(kind, tmpl)
-                        .into_iter()
-                        .map(|(dc, dr)| (bx + dc, by + dr))
-                        .collect();
+                let door_set: std::collections::HashSet<(u32, u32)> = door_tiles_for(kind, tmpl)
+                    .into_iter()
+                    .map(|(dc, dr)| (bx + dc, by + dr))
+                    .collect();
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
                         let tile_idx = tmpl.tiles[row as usize][col as usize];
@@ -1382,10 +1394,11 @@ fn setup_surface(
 
         // ── Spawn landing pad — the baked 3/4 pad sprite, laid flat below the
         // player (it's walkable: you land on it and walk to the take-off sensor) ──
-        if let Some(spr) = b3d
-            .as_ref()
-            .and_then(|m| m.sprites.iter().find(|s| s.style == style_name && s.func == "pad"))
-        {
+        if let Some(spr) = b3d.as_ref().and_then(|m| {
+            m.sprites
+                .iter()
+                .find(|s| s.style == style_name && s.func == "pad")
+        }) {
             let fc = footprint_front_center(pad_cx - 1, pad_cy - 1, spr.w, map_w, map_h, tile_px);
             let scale = tile_px / b3d.as_ref().map(|m| m.px_per_tile).unwrap_or(tile_px);
             commands.spawn((
@@ -1496,7 +1509,9 @@ fn setup_surface(
             }
             // 3/4 mechanic sprite (6-wide; overhangs the 4×3 collision footprint).
             if let Some(spr) = b3d.as_ref().and_then(|m| {
-                m.sprites.iter().find(|s| s.style == style_name && s.func == "mechanic")
+                m.sprites
+                    .iter()
+                    .find(|s| s.style == style_name && s.func == "mechanic")
             }) {
                 let fc = footprint_front_center(mech_x, mech_y, 4, map_w, map_h, tile_px);
                 let scale = tile_px / b3d.as_ref().map(|m| m.px_per_tile).unwrap_or(tile_px);
@@ -1617,10 +1632,13 @@ fn setup_surface(
                 // _top over the player) so they read standing in the doorway.
                 if let Some(spr) = b3d.as_ref().and_then(|m| {
                     let func = kind_func(kind);
-                    m.sprites.iter().find(|s| s.style == style_name && s.func == func)
+                    m.sprites
+                        .iter()
+                        .find(|s| s.style == style_name && s.func == func)
                 }) {
                     let func = kind_func(kind);
-                    let fc = footprint_front_center(anchor_tx, anchor_ty, spr.w, map_w, map_h, tile_px);
+                    let fc =
+                        footprint_front_center(anchor_tx, anchor_ty, spr.w, map_w, map_h, tile_px);
                     let scale = tile_px / b3d.as_ref().map(|m| m.px_per_tile).unwrap_or(tile_px);
                     spawn_building_3d(
                         &mut commands,
@@ -1939,13 +1957,11 @@ fn setup_surface(
     let spawn_pos = tile_to_world(map_w / 2, map_h / 2, map_w, map_h, tile_px);
 
     // Composite the player's avatar sheet (32px, 18-col idle/walk/run).
-    let Some((walker_image, walker_layout)) =
-        character_layers.as_deref_mut().and_then(|layers| {
-            layers
-                .composite(&game_state.avatar, &mut images)
-                .map(|img| (img, layers.layout.clone()))
-        })
-    else {
+    let Some((walker_image, walker_layout)) = character_layers.as_deref_mut().and_then(|layers| {
+        layers
+            .composite(&game_state.avatar, &mut images)
+            .map(|img| (img, layers.layout.clone()))
+    }) else {
         eprintln!("[surface] WARNING: character layers unavailable — no walker spawned");
         return;
     };
@@ -1975,7 +1991,9 @@ fn setup_surface(
         Transform::from_xyz(
             spawn_pos.x,
             spawn_pos.y,
-            crate::surface_objects::depth_z(spawn_pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET),
+            crate::surface_objects::depth_z(
+                spawn_pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
+            ),
         ),
     ));
 
@@ -2345,7 +2363,8 @@ fn surface_building_ui(
             match kind {
                 BuildingKind::Market => {
                     if let (Ok(mut ship), Some(pd)) = (player_query.single_mut(), planet_data) {
-                        let markup = planet_markup(&standings, &galaxy, &item_universe, planet_name);
+                        let markup =
+                            planet_markup(&standings, &galaxy, &item_universe, planet_name);
                         render_trade_tab(ui, &mut ship, pd, &item_universe, markup);
                     } else {
                         ui.label("No commodities available.");
@@ -2353,7 +2372,8 @@ fn surface_building_ui(
                 }
                 BuildingKind::Outfitter => {
                     if let (Ok(mut ship), Some(pd)) = (player_query.single_mut(), planet_data) {
-                        let markup = planet_markup(&standings, &galaxy, &item_universe, planet_name);
+                        let markup =
+                            planet_markup(&standings, &galaxy, &item_universe, planet_name);
                         render_outfitter_tab(ui, &mut ship, pd, &item_universe, &unlocks, markup);
                     } else {
                         ui.label("No equipment available.");
@@ -2361,7 +2381,8 @@ fn surface_building_ui(
                 }
                 BuildingKind::Shipyard => {
                     if let (Ok(ship), Some(pd)) = (player_query.single(), planet_data) {
-                        let markup = planet_markup(&standings, &galaxy, &item_universe, planet_name);
+                        let markup =
+                            planet_markup(&standings, &galaxy, &item_universe, planet_name);
                         render_shipyard_tab(
                             ui,
                             &ship,
@@ -2449,12 +2470,8 @@ fn surface_building_ui(
 
                         // Hull modification bench — the mechanic's trade.
                         if let Some(pd) = planet_data {
-                            let markup = planet_markup(
-                                &standings,
-                                &galaxy,
-                                &item_universe,
-                                planet_name,
-                            );
+                            let markup =
+                                planet_markup(&standings, &galaxy, &item_universe, planet_name);
                             render_mods_section(
                                 ui,
                                 &mut ship,
@@ -2595,7 +2612,10 @@ mod tests {
         let mut galaxy = crate::galaxy::GalaxyControl::seeded_from(&iu);
 
         let kinds = building_kinds_for_planet("earth", &iu, "sol", &galaxy);
-        assert!(kinds.contains(&BuildingKind::Garrison), "Federation garrisons Earth");
+        assert!(
+            kinds.contains(&BuildingKind::Garrison),
+            "Federation garrisons Earth"
+        );
 
         let kinds = building_kinds_for_planet("marches_freeport", &iu, "the_marches", &galaxy);
         assert!(

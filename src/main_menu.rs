@@ -82,7 +82,11 @@ fn main_menu_ui(
             .new_pilot_avatar
             .get_or_insert_with(|| AvatarSpec::for_gender(gender))
             .clone();
-        let stale = menu_state.preview.as_ref().map(|(s, _)| *s != spec).unwrap_or(true);
+        let stale = menu_state
+            .preview
+            .as_ref()
+            .map(|(s, _)| *s != spec)
+            .unwrap_or(true);
         if stale {
             if let Some(handle) = layers.composite_portrait(&spec, &mut images) {
                 menu_state.preview = Some((spec.clone(), handle));
@@ -90,10 +94,8 @@ fn main_menu_ui(
             layers.composite(&spec, &mut images);
         }
         if let Some((_, handle)) = &menu_state.preview {
-            preview_tex = Some(
-                egui_contexts
-                    .add_image(bevy_egui::EguiTextureHandle::Strong(handle.clone())),
-            );
+            preview_tex =
+                Some(egui_contexts.add_image(bevy_egui::EguiTextureHandle::Strong(handle.clone())));
         }
     }
 
@@ -126,35 +128,29 @@ fn main_menu_ui(
             });
         } else {
             ui.columns(2, |cols| {
-                cols[0].with_layout(
-                    egui::Layout::top_down(egui::Align::Center),
-                    |ui| {
-                        new_pilot_panel(
-                            ui,
-                            &mut menu_state,
-                            &mut game_state,
-                            &mut current_system,
-                            &mut next_state,
-                            &item_universe,
-                            layers.as_deref_mut(),
-                            preview_tex,
-                        );
-                    },
-                );
-                cols[1].with_layout(
-                    egui::Layout::top_down(egui::Align::Center),
-                    |ui| {
-                        load_pilot_panel(
-                            ui,
-                            &mut commands,
-                            &menu_state,
-                            &mut game_state,
-                            &mut current_system,
-                            &mut next_state,
-                            &item_universe,
-                        );
-                    },
-                );
+                cols[0].with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    new_pilot_panel(
+                        ui,
+                        &mut menu_state,
+                        &mut game_state,
+                        &mut current_system,
+                        &mut next_state,
+                        &item_universe,
+                        layers.as_deref_mut(),
+                        preview_tex,
+                    );
+                });
+                cols[1].with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    load_pilot_panel(
+                        ui,
+                        &mut commands,
+                        &menu_state,
+                        &mut game_state,
+                        &mut current_system,
+                        &mut next_state,
+                        &item_universe,
+                    );
+                });
             });
         }
     });

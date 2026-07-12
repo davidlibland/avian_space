@@ -10,8 +10,8 @@ use std::path::Path;
 
 use crate::item_universe::{ItemUniverse, OutfitterItem};
 use crate::missions::types::{
-    CompletionEffect, CompletionRequirement, MissionTemplate, Objective, OfferKind,
-    Precondition, StartEffect,
+    CompletionEffect, CompletionRequirement, MissionTemplate, Objective, OfferKind, Precondition,
+    StartEffect,
 };
 use crate::planets::PlanetData;
 use crate::ship::{Personality, ShipData};
@@ -393,12 +393,7 @@ fn validate_mission_templates(iu: &ItemUniverse) {
 
 // ── sub-field validators ────────────────────────────────────────────────────
 
-fn validate_preconditions(
-    preconds: &[Precondition],
-    id: &str,
-    label: &str,
-    iu: &ItemUniverse,
-) {
+fn validate_preconditions(preconds: &[Precondition], id: &str, label: &str, iu: &ItemUniverse) {
     for p in preconds {
         match p {
             Precondition::Completed { mission } | Precondition::Failed { mission } => {
@@ -414,12 +409,7 @@ fn validate_preconditions(
     }
 }
 
-fn validate_offer(
-    offer: &OfferKind,
-    id: &str,
-    label: &str,
-    planets: &HashSet<&str>,
-) {
+fn validate_offer(offer: &OfferKind, id: &str, label: &str, planets: &HashSet<&str>) {
     if let OfferKind::NpcOffer { planet, .. } = offer {
         if !planets.contains(planet.as_str()) {
             warn!(
@@ -531,12 +521,7 @@ fn validate_objective(
     }
 }
 
-fn validate_start_effects(
-    effects: &[StartEffect],
-    id: &str,
-    label: &str,
-    iu: &ItemUniverse,
-) {
+fn validate_start_effects(effects: &[StartEffect], id: &str, label: &str, iu: &ItemUniverse) {
     for e in effects {
         match e {
             StartEffect::LoadCargo { commodity, .. } => {
@@ -689,7 +674,10 @@ fn check_companions(iu: &ItemUniverse, p: &mut Vec<String>) {
         .collect();
     for (key, c) in &iu.companions {
         if !iu.npcs.contains_key(&c.npc) {
-            p.push(format!("companion '{key}': npc '{}' not in npcs.yaml", c.npc));
+            p.push(format!(
+                "companion '{key}': npc '{}' not in npcs.yaml",
+                c.npc
+            ));
         }
         if !iu.ships.contains_key(&c.ship_type) {
             p.push(format!(
@@ -705,7 +693,10 @@ fn check_companions(iu: &ItemUniverse, p: &mut Vec<String>) {
             )),
         }
         for chatter_key in c.chatter.keys() {
-            if !matches!(chatter_key.as_str(), "kill" | "player_hit" | "jump_in" | "idle") {
+            if !matches!(
+                chatter_key.as_str(),
+                "kill" | "player_hit" | "jump_in" | "idle"
+            ) {
                 p.push(format!(
                     "companion '{key}': unknown chatter event '{chatter_key}'"
                 ));
@@ -938,7 +929,9 @@ fn check_ship_weapons_buyable(iu: &ItemUniverse, p: &mut Vec<String>) {
         }
     }
     for s in &sold_ships {
-        let Some(ship) = iu.ships.get(*s) else { continue };
+        let Some(ship) = iu.ships.get(*s) else {
+            continue;
+        };
         // Everything guaranteed owned once this ship is buyable.
         let mut have: HashSet<&str> = ship.required_unlocks.iter().map(String::as_str).collect();
         for u in &ship.required_unlocks {
@@ -1138,9 +1131,7 @@ fn check_sprites_exist(iu: &ItemUniverse, p: &mut Vec<String>) {
     for pt in &planet_types {
         let wf = format!("assets/sprites/wireframes/planet_{pt}.png");
         if !Path::new(&wf).exists() {
-            p.push(format!(
-                "planet type '{pt}': missing HUD wireframe {wf}"
-            ));
+            p.push(format!("planet type '{pt}': missing HUD wireframe {wf}"));
         }
     }
     for generic in ["asteroid", "pickup"] {
@@ -1218,7 +1209,14 @@ fn check_mission_coherence(iu: &ItemUniverse, p: &mut Vec<String>) {
                 planet, building, ..
             } => {
                 if let Some(pd) = find_planet(iu, planet) {
-                    check_surface(id, "has a surface objective on", planet, pd, building.as_deref(), p);
+                    check_surface(
+                        id,
+                        "has a surface objective on",
+                        planet,
+                        pd,
+                        building.as_deref(),
+                        p,
+                    );
                 }
             }
             _ => {}

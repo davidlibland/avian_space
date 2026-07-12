@@ -184,7 +184,12 @@ pub fn build_story_graph(
         }
         let d = preds
             .get(id)
-            .map(|ps| ps.iter().map(|p| 1 + depth_of(p, preds, depth, stack)).max().unwrap_or(0))
+            .map(|ps| {
+                ps.iter()
+                    .map(|p| 1 + depth_of(p, preds, depth, stack))
+                    .max()
+                    .unwrap_or(0)
+            })
             .unwrap_or(0);
         stack.remove(id);
         depth.insert(id, d);
@@ -245,11 +250,17 @@ pub fn build_story_graph(
     // Edges between two revealed nodes.
     let mut edges = Vec::new();
     for id in &ids {
-        let Some(&to) = node_index.get(id.as_str()) else { continue };
+        let Some(&to) = node_index.get(id.as_str()) else {
+            continue;
+        };
         for p in preds[id.as_str()].iter() {
             if let Some(&from) = node_index.get(p) {
                 let satisfied = matches!(log.status(p), MissionStatus::Completed);
-                edges.push(StoryEdge { from, to, satisfied });
+                edges.push(StoryEdge {
+                    from,
+                    to,
+                    satisfied,
+                });
             }
         }
     }

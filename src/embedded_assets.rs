@@ -75,7 +75,10 @@ fn disk_dir_to_yaml(dir: &std::path::Path) -> Option<Value> {
             }
         } else if path.extension().is_some_and(|e| e == "yaml" || e == "yml") {
             let Ok(text) = std::fs::read_to_string(&path) else {
-                eprintln!("[embedded_assets] WARNING: could not read {}", path.display());
+                eprintln!(
+                    "[embedded_assets] WARNING: could not read {}",
+                    path.display()
+                );
                 continue;
             };
             match serde_yaml::from_str::<Value>(&text) {
@@ -83,7 +86,10 @@ fn disk_dir_to_yaml(dir: &std::path::Path) -> Option<Value> {
                     map.insert(stem.into(), val);
                 }
                 Err(e) => {
-                    eprintln!("[embedded_assets] WARNING: could not parse {}: {e}", path.display());
+                    eprintln!(
+                        "[embedded_assets] WARNING: could not parse {}: {e}",
+                        path.display()
+                    );
                 }
             }
         }
@@ -114,8 +120,7 @@ fn embedded_dir_to_yaml(dir: &Dir<'_>) -> Option<Value> {
                 if !path.extension().is_some_and(|e| e == "yaml" || e == "yml") {
                     continue;
                 }
-                let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().into_owned())
-                else {
+                let Some(stem) = path.file_stem().map(|s| s.to_string_lossy().into_owned()) else {
                     continue;
                 };
                 let Some(text) = file.contents_utf8() else {

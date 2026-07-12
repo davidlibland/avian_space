@@ -15,8 +15,8 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::item_universe::ItemUniverse;
 use crate::PlayState;
+use crate::item_universe::ItemUniverse;
 
 // ── Trait ────────────────────────────────────────────────────────────────────
 

@@ -1,8 +1,8 @@
+use crate::session::SessionResourceExt;
+use crate::ship_anim::{ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp};
 use crate::{
     CurrentStarSystem, PlayState, Player, Ship, item_universe::ItemUniverse, ship::BuyShip,
 };
-use crate::session::SessionResourceExt;
-use crate::ship_anim::{ANIM_MIN_SCALE, PLANET_ANIM_DURATION, ScalingUp};
 use avian2d::prelude::{LinearVelocity, Position};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
@@ -55,8 +55,12 @@ pub struct LandedContext {
 
 impl crate::session::SessionResource for LandedContext {
     type SaveData = ();
-    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
-    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self { Self::default() }
+    fn new_session(_: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn from_save(_: (), _: &crate::item_universe::ItemUniverse) -> Self {
+        Self::default()
+    }
 }
 
 /// Ship-pad UI shown during `Landed` state — just Repair + Launch.
@@ -92,11 +96,7 @@ fn ship_pad_ui(
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
             if let Ok(ship) = player_query.single() {
-                ui.label(format!(
-                    "Hull: {}/{}",
-                    ship.health,
-                    ship.max_health()
-                ));
+                ui.label(format!("Hull: {}/{}", ship.health, ship.max_health()));
                 ui.label(format!("Credits: {}", ship.credits));
             }
             ui.separator();
@@ -461,7 +461,6 @@ pub fn render_outfitter_tab(
                 ui.end_row();
             }
         });
-
 }
 
 /// The mechanic's hull-modification bench: engine tunes, armor, repair bots.
@@ -480,13 +479,10 @@ pub fn render_mods_section(
         .outfitter
         .iter()
         .filter(|k| {
-            item_universe
-                .outfitter_items
-                .get(*k)
-                .is_some_and(|item| {
-                    item.mod_effect().is_some()
-                        && !item.required_unlocks().iter().any(|u| !unlocks.has(u))
-                })
+            item_universe.outfitter_items.get(*k).is_some_and(|item| {
+                item.mod_effect().is_some()
+                    && !item.required_unlocks().iter().any(|u| !unlocks.has(u))
+            })
         })
         .cloned()
         .collect();

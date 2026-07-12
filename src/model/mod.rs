@@ -12,11 +12,11 @@
 use std::sync::{Arc, Mutex};
 
 use bevy::prelude::Resource;
-use burn::backend::{Autodiff, ndarray::NdArray};
 #[cfg(feature = "cuda")]
 use burn::backend::Cuda;
 #[cfg(not(feature = "cuda"))]
 use burn::backend::wgpu::Wgpu;
+use burn::backend::{Autodiff, ndarray::NdArray};
 use burn::tensor::backend::AutodiffBackend;
 
 use crate::rl_obs::{K_PROJECTILES, OBS_DIM, PROJ_SLOT_SIZE, SELF_SIZE, SLOT_SIZE};

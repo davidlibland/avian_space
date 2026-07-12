@@ -64,7 +64,10 @@ fn squadron_musters_once_in_the_battle_system() {
     app.world_mut()
         .resource_mut::<MissionCatalog>()
         .defs
-        .insert("battle".into(), battle_mission("procyon", &["fighter", "fighter", "corvette"]));
+        .insert(
+            "battle".into(),
+            battle_mission("procyon", &["fighter", "fighter", "corvette"]),
+        );
     app.world_mut().resource_mut::<MissionLog>().set(
         "battle",
         MissionStatus::Active(ObjectiveProgress::default()),
@@ -90,7 +93,11 @@ fn squadron_musters_once_in_the_battle_system() {
     // Never re-mustered — losses are real.
     app.update();
     app.update();
-    assert_eq!(drain_spawns(&mut app).len(), 0, "no re-muster on later frames");
+    assert_eq!(
+        drain_spawns(&mut app).len(),
+        0,
+        "no re-muster on later frames"
+    );
     let MissionStatus::Active(p) = app.world().resource::<MissionLog>().status("battle") else {
         panic!()
     };
@@ -182,11 +189,17 @@ fn dock_order_falls_back_to_formation_for_squadrons() {
     app.update();
 
     assert!(
-        matches!(app.world().get::<EscortMode>(carried), Some(EscortMode::Dock)),
+        matches!(
+            app.world().get::<EscortMode>(carried),
+            Some(EscortMode::Dock)
+        ),
         "carried escorts obey the dock order"
     );
     assert!(
-        matches!(app.world().get::<EscortMode>(wing), Some(EscortMode::Escort)),
+        matches!(
+            app.world().get::<EscortMode>(wing),
+            Some(EscortMode::Escort)
+        ),
         "squadron wings can't dock — they hold formation instead"
     );
 }
@@ -315,12 +328,10 @@ mod roster {
             }
         );
         // The live entity is linked to the entry.
-        let mut linked = app
-            .world_mut()
-            .query::<(&PersistentEscort, &Escort)>();
+        let mut linked = app.world_mut().query::<(&PersistentEscort, &Escort)>();
         let links: Vec<_> = linked.iter(app.world()).collect();
         assert_eq!(links.len(), 1);
-        assert_eq!(links[0].0 .0, entry_id);
+        assert_eq!(links[0].0.0, entry_id);
         assert_eq!(links[0].1.mother, player);
     }
 
@@ -367,9 +378,12 @@ mod roster {
         app.update(); // respawn writes SpawnEscort
         app.update(); // spawner materializes them
 
-        let mut q = app
-            .world_mut()
-            .query::<(&PersistentEscort, &Ship, Option<&CarriedBy>, Option<&MissionSquadron>)>();
+        let mut q = app.world_mut().query::<(
+            &PersistentEscort,
+            &Ship,
+            Option<&CarriedBy>,
+            Option<&MissionSquadron>,
+        )>();
         let escorts: Vec<_> = q.iter(app.world()).collect();
         assert_eq!(escorts.len(), 2, "both roster entries re-materialize");
         let carried = escorts.iter().find(|(p, ..)| p.0 == carried_id).unwrap();
@@ -395,7 +409,9 @@ mod roster {
 
         // Simulate the jump: the per-system entities die, the roster lives.
         let entities: Vec<Entity> = {
-            let mut q = app.world_mut().query_filtered::<Entity, With<PersistentEscort>>();
+            let mut q = app
+                .world_mut()
+                .query_filtered::<Entity, With<PersistentEscort>>();
             q.iter(app.world()).collect()
         };
         for e in entities {
@@ -426,14 +442,21 @@ mod roster {
         app.update();
         // Battle damage on the live entity…
         let entity = {
-            let mut q = app.world_mut().query_filtered::<Entity, With<PersistentEscort>>();
+            let mut q = app
+                .world_mut()
+                .query_filtered::<Entity, With<PersistentEscort>>();
             q.single(app.world()).unwrap()
         };
         app.world_mut().get_mut::<Ship>(entity).unwrap().health = 41;
         app.update();
         // …lands in the roster, so it survives the next jump/save.
         assert_eq!(
-            roster(&app).entries.iter().find(|e| e.id == id).unwrap().health,
+            roster(&app)
+                .entries
+                .iter()
+                .find(|e| e.id == id)
+                .unwrap()
+                .health,
             41
         );
     }
@@ -542,8 +565,8 @@ mod roster {
         app.update();
         app.update();
         let credits = app.world().get::<Ship>(player).unwrap().credits;
-        let expected = ((1.0 - 10.0 / max as f64) * ESCORT_REPAIR_PRICE_FRAC * price as f64)
-            .ceil() as i128;
+        let expected =
+            ((1.0 - 10.0 / max as f64) * ESCORT_REPAIR_PRICE_FRAC * price as f64).ceil() as i128;
         assert_eq!(
             100_000 - credits,
             expected,
@@ -577,7 +600,9 @@ mod roster {
         app.update();
         app.update();
         let entity = {
-            let mut q = app.world_mut().query_filtered::<Entity, With<PersistentEscort>>();
+            let mut q = app
+                .world_mut()
+                .query_filtered::<Entity, With<PersistentEscort>>();
             q.single(app.world()).unwrap()
         };
         app.world_mut().write_message(crate::ship::DamageShip {
@@ -682,7 +707,10 @@ mod servicing {
             .expect("some hull ships with priced secondary ammo");
         let max = universe.ships[&hull].max_health;
         let price = universe.ships[&hull].price;
-        let unit = universe.outfitter_items[&weapon].ammo_price().unwrap().max(1);
+        let unit = universe.outfitter_items[&weapon]
+            .ammo_price()
+            .unwrap()
+            .max(1);
 
         let id = {
             let mut roster = app.world_mut().resource_mut::<EscortRoster>();
@@ -693,7 +721,11 @@ mod servicing {
                 },
                 max / 2, // half hull
             );
-            roster.get_mut(id).unwrap().ammo.insert(weapon.clone(), base_ammo - 2);
+            roster
+                .get_mut(id)
+                .unwrap()
+                .ammo
+                .insert(weapon.clone(), base_ammo - 2);
             id
         };
         land(&mut app);
@@ -705,11 +737,10 @@ mod servicing {
             entry.ammo[&weapon], base_ammo,
             "racks refilled to the factory loadout"
         );
-        let expected_repair = (((1.0 - (max / 2) as f64 / max as f64)
-            * ESCORT_REPAIR_PRICE_FRAC
-            * price as f64)
-            .ceil() as i128)
-            .max(1);
+        let expected_repair =
+            (((1.0 - (max / 2) as f64 / max as f64) * ESCORT_REPAIR_PRICE_FRAC * price as f64)
+                .ceil() as i128)
+                .max(1);
         let expected = expected_repair + 2 * unit;
         let credits = app.world().get::<Ship>(player).unwrap().credits;
         assert_eq!(
@@ -777,9 +808,9 @@ mod servicing {
             .ships
             .iter()
             .find_map(|(k, d)| {
-                d.base_weapons.iter().find_map(|(w, (_, ammo))| {
-                    ammo.map(|a| (k.clone(), w.clone(), a))
-                })
+                d.base_weapons
+                    .iter()
+                    .find_map(|(w, (_, ammo))| ammo.map(|a| (k.clone(), w.clone(), a)))
             })
             .unwrap();
         let mut app = App::new();
@@ -818,7 +849,9 @@ mod servicing {
         let _ = id;
         app.update();
         app.update();
-        let mut q = app.world_mut().query_filtered::<&Ship, With<PersistentEscort>>();
+        let mut q = app
+            .world_mut()
+            .query_filtered::<&Ship, With<PersistentEscort>>();
         let ship = q.single(app.world()).unwrap();
         assert_eq!(
             ship.weapon_systems

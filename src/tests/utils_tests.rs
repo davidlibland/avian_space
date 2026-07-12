@@ -9,10 +9,16 @@ fn try_despawn_is_idempotent() {
     let entity = world.spawn_empty().id();
 
     // First despawn — entity exists, should succeed.
-    assert!(world.try_despawn(entity).is_ok(), "first try_despawn should succeed");
+    assert!(
+        world.try_despawn(entity).is_ok(),
+        "first try_despawn should succeed"
+    );
 
     // Second despawn — entity is gone, must not panic and return an error.
-    assert!(world.try_despawn(entity).is_err(), "second try_despawn should return Err, not panic");
+    assert!(
+        world.try_despawn(entity).is_err(),
+        "second try_despawn should return Err, not panic"
+    );
 }
 
 /// `safe_despawn` must apply correctly via the command queue and survive
@@ -61,5 +67,8 @@ fn collision_dedup_prevents_double_shatter() {
         }
     }
 
-    assert_eq!(shatter_count, 1, "asteroid should only be shattered once even when hit by two weapons");
+    assert_eq!(
+        shatter_count, 1,
+        "asteroid should only be shattered once even when hit by two weapons"
+    );
 }

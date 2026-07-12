@@ -1,6 +1,9 @@
 //! Game-thread inference wrapper and checkpoint save/load helpers.
 
-use burn::{prelude::*, tensor::{Tensor, TensorData}};
+use burn::{
+    prelude::*,
+    tensor::{Tensor, TensorData},
+};
 
 use crate::rl_obs::K_PROJECTILES;
 
@@ -170,8 +173,8 @@ pub fn load_training_net_with_dim(
     let rec = BinBytesRecorder::<FullPrecisionSettings>::default();
     match Recorder::<TrainBackend>::load(&rec, bytes, device) {
         Ok(record) => {
-            let net =
-                RLNet::<TrainBackend>::new(device, VALUE_HIDDEN_DIM, output_dim).load_record(record);
+            let net = RLNet::<TrainBackend>::new(device, VALUE_HIDDEN_DIM, output_dim)
+                .load_record(record);
             println!("[model] Loaded training net (dim={output_dim}) from {path}");
             Some(net)
         }
