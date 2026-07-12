@@ -36,6 +36,7 @@ fn every_friend_exists_and_is_granted_by_an_arc() {
         "whisper",
         "pip_harlan",
         "saoirse_quill",
+        "jonah_wren",
     ];
     assert_eq!(iu.companions.len(), cast.len(), "cast list is exhaustive");
     for key in cast {

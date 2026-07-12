@@ -136,6 +136,11 @@ pub enum Objective {
         /// consistent name + appearance.
         #[serde(default)]
         npc: Option<String>,
+        /// When set, the mission log shows THIS instead of the planet name —
+        /// the player must search the region ("a Tau Ceti port") to find
+        /// where the NPC actually is. Big rewards hide behind hunts.
+        #[serde(default)]
+        hint: Option<String>,
     },
     /// Player must catch a fleeing NPC on a planet surface.  The NPC runs
     /// away; objective completes when the player gets adjacent.
@@ -146,6 +151,9 @@ pub enum Objective {
         /// Which building the NPC starts near.
         #[serde(default)]
         building: Option<String>,
+        /// Region hint shown instead of the planet name (see MeetNpc::hint).
+        #[serde(default)]
+        hint: Option<String>,
         /// Recurring character id (key in `assets/npcs.yaml`).
         #[serde(default)]
         npc: Option<String>,

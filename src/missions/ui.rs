@@ -116,12 +116,24 @@ fn format_objective(obj: &Objective, progress: &ObjectiveProgress) -> String {
                 quantity, commodity, system, have, quantity
             )
         }
-        Objective::MeetNpc { planet, npc_name, .. } => {
-            format!("Meet {} on {}.", npc_name, planet)
-        }
-        Objective::CatchNpc { planet, npc_name, .. } => {
-            format!("Catch {} on {}.", npc_name, planet)
-        }
+        Objective::MeetNpc {
+            planet,
+            npc_name,
+            hint,
+            ..
+        } => match hint {
+            Some(hint) => format!("Find {} — {}.", npc_name, hint),
+            None => format!("Meet {} on {}.", npc_name, planet),
+        },
+        Objective::CatchNpc {
+            planet,
+            npc_name,
+            hint,
+            ..
+        } => match hint {
+            Some(hint) => format!("Hunt down {} — {}.", npc_name, hint),
+            None => format!("Catch {} on {}.", npc_name, planet),
+        },
         Objective::DestroyShips {
             system,
             count,

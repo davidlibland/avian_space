@@ -42,6 +42,35 @@ pub const HIT_PENALTY: f32 = 2.0;
 pub const ENEMY_HIT_BONUS: f32 = 0.5;
 /// Standing gained with the offering planet's faction on mission completion.
 pub const MISSION_BONUS: f32 = 6.0;
+
+/// Missions completed for each faction (attributed like MISSION_BONUS: by
+/// the offering planet's effective faction). War and covert work only opens
+/// up once a faction actually knows you — see war::WAR_SERVICE_MIN.
+#[derive(Resource, Default)]
+pub struct FactionServiceRecord(pub std::collections::HashMap<String, u32>);
+
+impl FactionServiceRecord {
+    pub fn get(&self, faction: &str) -> u32 {
+        self.0.get(faction).copied().unwrap_or(0)
+    }
+    pub fn record(&mut self, faction: &str) {
+        *self.0.entry(faction.to_string()).or_insert(0) += 1;
+    }
+}
+
+impl crate::session::SessionResource for FactionServiceRecord {
+    type SaveData = std::collections::HashMap<String, u32>;
+    const SAVE_KEY: Option<&'static str> = Some("faction_service");
+    fn new_session(_: &ItemUniverse) -> Self {
+        Self::default()
+    }
+    fn to_save(&self) -> Self::SaveData {
+        self.0.clone()
+    }
+    fn from_save(data: Self::SaveData, _: &ItemUniverse) -> Self {
+        Self(data)
+    }
+}
 /// At or below this, the faction's ships engage the player on sight.
 pub const ENGAGE_THRESHOLD: f32 = -10.0;
 /// At or below this, landing on the faction's planets triggers an arrest.
@@ -180,6 +209,7 @@ fn standing_on_mission_complete(
     iu: Res<ItemUniverse>,
     galaxy: Res<crate::galaxy::GalaxyControl>,
     mut standings: ResMut<FactionStandings>,
+    mut service: Option<ResMut<FactionServiceRecord>>,
 ) {
     for MissionCompleted(id) in reader.read() {
         let Some(def) = catalog.defs.get(id) else {
@@ -188,6 +218,9 @@ fn standing_on_mission_complete(
         if let OfferKind::NpcOffer { planet, .. } = &def.offer {
             if let Some(f) = crate::galaxy::effective_planet_faction(&galaxy, &iu, planet) {
                 standings.adjust(&f, MISSION_BONUS);
+                if let Some(service) = service.as_deref_mut() {
+                    service.record(&f);
+                }
             }
         }
         for effect in &def.completion_effects {
@@ -381,6 +414,7 @@ fn arrest_on_landing(
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
                 objective: Objective::MeetNpc {
+                        hint: None,
                     planet: planet.clone(),
                     npc_name: format!("the {faction} enforcers"),
                     building: None,
@@ -405,6 +439,7 @@ fn arrest_on_landing(
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
                 objective: Objective::MeetNpc {
+                        hint: None,
                     planet: planet.clone(),
                     npc_name: "the fines clerk".to_string(),
                     building: Some("market".to_string()),
@@ -519,7 +554,9 @@ fn close_arrest_case(
 
 pub fn standing_plugin(app: &mut App) {
     use crate::session::SessionResourceExt;
-    app.init_session_resource::<FactionStandings>().add_systems(
+    app.init_session_resource::<FactionStandings>()
+        .init_session_resource::<FactionServiceRecord>()
+        .add_systems(
         Update,
         (
             standing_on_hits,

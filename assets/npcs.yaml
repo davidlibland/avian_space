@@ -153,3 +153,9 @@ pip_harlan:
 saoirse_quill:
   name: "Saoirse Quill"
   role: merchant
+marta_wren:
+  name: "Marta Wren"
+  role: civilian
+jonah_wren:
+  name: "Jonah Wren"
+  role: civilian

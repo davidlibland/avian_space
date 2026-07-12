@@ -61,6 +61,8 @@ pub fn npc_chat_interact(
     walker_q: Query<&Transform, With<Walker>>,
     mut npcs: Query<(Entity, &mut NpcBehavior, &Transform), (With<Npc>, Without<Walker>)>,
     mut chat: ResMut<NpcChatState>,
+    nearby_building: Res<crate::surface::NearbyBuilding>,
+    mission_npcs: Query<(), With<crate::surface_npc::MissionNpc>>,
     mut active_building_ui: ResMut<ActiveBuildingUI>,
     game_state: Res<crate::game_save::PlayerGameState>,
     landed_context: Res<crate::planet_ui::LandedContext>,
@@ -87,23 +89,37 @@ pub fn npc_chat_interact(
         return;
     }
 
+    // E PRIORITY: a building doorway outranks every NPC — standing in the
+    // door means the player wants IN, however chatty the crowd outside is
+    // (building_interact handles the same press).
+    if nearby_building.current.is_some() && active_building_ui.0.is_none() {
+        return;
+    }
+
     let Ok(walker_tf) = walker_q.single() else { return };
     let wp = walker_tf.translation.truncate();
     let planet = landed_context.planet_name.clone().unwrap_or_default();
     let pilot = &game_state.pilot_name;
 
-    // Find the nearest adjacent NPC.
-    let mut best: Option<(Entity, f32)> = None;
+    // Nearest adjacent NPC — MISSION npcs (givers/objectives) outrank
+    // ambient civilians and companion avatars at any distance.
+    let mut best: Option<(Entity, f32, bool)> = None; // (entity, dist, is_mission)
     for (entity, _, tf) in &npcs {
         let dist = (tf.translation.truncate() - wp).length();
         if dist < ADJACENT_DIST {
-            if best.map_or(true, |(_, d)| dist < d) {
-                best = Some((entity, dist));
+            let is_mission = mission_npcs.contains(entity);
+            let better = match best {
+                None => true,
+                Some((_, d, m)) => (is_mission, std::cmp::Reverse(dist as i64))
+                    > (m, std::cmp::Reverse(d as i64)),
+            };
+            if better {
+                best = Some((entity, dist, is_mission));
             }
         }
     }
 
-    let Some((npc_entity, _)) = best else { return };
+    let Some((npc_entity, ..)) = best else { return };
     let Ok((_, mut npc, _)) = npcs.get_mut(npc_entity) else { return };
 
     // Determine content from front behavior.

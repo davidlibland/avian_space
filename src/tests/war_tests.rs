@@ -85,6 +85,17 @@ fn war_app(iu: ItemUniverse, galaxy: GalaxyControl) -> App {
         .insert_resource(iu)
         .insert_resource(galaxy)
         .init_resource::<FactionStandings>()
+        .insert_resource({
+            // A veteran of every faction: the service gate is tested
+            // separately; other tests assume war offers are reachable.
+            let mut sr = crate::standing::FactionServiceRecord::default();
+            for f in ["Federation", "Rebel", "Bastion", "FreeFrontier", "Helios", "Order"] {
+                for _ in 0..crate::war::WAR_SERVICE_MIN {
+                    sr.record(f);
+                }
+            }
+            sr
+        })
         .init_resource::<MissionCatalog>()
         .init_resource::<MissionLog>()
         .init_resource::<MissionOffers>()
@@ -442,4 +453,53 @@ fn war_ids_skip_persisted_missions_from_prior_sessions() {
             .any(|id| id.starts_with("war__war_raid") && *id != stale_id),
         "the new offer takes a fresh id instead of colliding"
     );
+}
+
+/// Standing can be bought with a few deliveries; moving borders takes a
+/// RECORD — the war desk ignores pilots below WAR_SERVICE_MIN completed
+/// missions for the sponsor, whatever their standing.
+#[test]
+fn war_offers_require_a_service_record() {
+    let iu = universe();
+    let galaxy = seeded(&iu);
+    let mut app = war_app(iu, galaxy);
+    // Trusted standing, ZERO missions flown for the Federation.
+    app.insert_resource(crate::standing::FactionServiceRecord::default());
+    app.world_mut()
+        .resource_mut::<FactionStandings>()
+        .adjust("Federation", 50.0);
+    app.world_mut().write_message(PlayerLandedOnPlanet {
+        planet: "kepler_22b".to_string(),
+    });
+    app.update();
+    let war_count = app
+        .world()
+        .resource::<MissionCatalog>()
+        .defs
+        .keys()
+        .filter(|id| id.starts_with("war__"))
+        .count();
+    assert_eq!(war_count, 0, "no record, no war work");
+
+    // Five completed missions later, the desk talks.
+    {
+        let mut sr = app
+            .world_mut()
+            .resource_mut::<crate::standing::FactionServiceRecord>();
+        for _ in 0..crate::war::WAR_SERVICE_MIN {
+            sr.record("Federation");
+        }
+    }
+    app.world_mut().write_message(PlayerLandedOnPlanet {
+        planet: "kepler_22b".to_string(),
+    });
+    app.update();
+    let war_count = app
+        .world()
+        .resource::<MissionCatalog>()
+        .defs
+        .keys()
+        .filter(|id| id.starts_with("war__"))
+        .count();
+    assert!(war_count >= 1, "a proven pilot gets the commission");
 }

@@ -2726,8 +2726,8 @@ friend_chandra_2:
   objective:
     kind: destroy_ships
     system: barnard
-    ship_type: pirate_corvette
-    count: 3
+    ship_type: pirate_missile_boat
+    count: 4
     target_name: "Lane Racketeers"
     hostile: true
   completion_effects:
@@ -2751,7 +2751,7 @@ friend_chandra_3:
   - kind: pay
     credits: 2000
 friend_chandra_4:
-  briefing: "'The clerk who impounded my hold sold the lane schedules to the racket,' Vale says. 'They're on Tau Ceti IV, about to board a liner with a new name. Catch them at the port. I'll bring the paperwork. All of it.'"
+  briefing: "'The clerk who impounded my hold sold the lane schedules to the racket,' Vale says. 'They've gone to ground somewhere in the Tau Ceti system under a new name — I don't know which port. Work the system. Catch them before their liner does.'"
   success_text: "The clerk drops a false passport and three apologies. The Guild takes them, and Vale's hold, seriously."
   failure_text: "The liner boards. The clerk is someone else now."
   preconditions:
@@ -2762,6 +2762,7 @@ friend_chandra_4:
   objective:
     kind: catch_npc
     planet: tau_ceti_4
+    hint: "a port somewhere in the Tau Ceti system"
     npc_name: "the manifest clerk"
   completion_effects:
   - kind: pay
@@ -2821,16 +2822,16 @@ friend_mirelle_2:
     kind: destroy_ships
     system: sol
     ship_type: pirate_missile_boat
-    count: 2
+    count: 3
     target_name: "The Hand's Cleaners"
     hostile: true
   completion_effects:
   - kind: pay
     credits: 8000
 friend_mirelle_3:
-  briefing: "'The books name a shell-company clerk on Earth who launders the Hand's freight,' Mirelle says. 'They'll run the moment they see you. Run faster.'"
+  briefing: "'The books name a shell-company clerk who launders the Hand's freight through the Sol colonies,' Mirelle says. 'Which colony? The books are laundered, obviously. They'll run the moment they see you. Search the core worlds — and run faster.'"
   success_text: "The clerk trips over their own briefcase. The contents are worth divisions of lawyers."
-  failure_text: "The clerk vanishes into the Earth crowds."
+  failure_text: "The clerk vanishes into the crowds."
   preconditions:
   - kind: completed
     mission: friend_mirelle_2
@@ -2839,6 +2840,7 @@ friend_mirelle_3:
   objective:
     kind: catch_npc
     planet: earth
+    hint: "one of the Sol core colonies"
     npc_name: "the shell-company clerk"
   completion_effects:
   - kind: pay
@@ -2925,7 +2927,7 @@ friend_kore_2:
     kind: destroy_ships
     system: tycho_drift
     ship_type: pirate_corvette
-    count: 3
+    count: 4
     target_name: "Mirror Scavengers"
     hostile: true
   completion_effects:
@@ -2948,7 +2950,7 @@ friend_kore_3:
   - kind: pay
     credits: 3000
 friend_kore_4:
-  briefing: "'The broker is an intern on Helios Orbital with a shuttle ticket and my blind-spot file,' Kore says. 'Catch them. I have prepared REMARKS.'"
+  briefing: "'The broker is an intern with a shuttle ticket, my blind-spot file, and the sense to not tell anyone WHICH company station they're hiding on,' Kore says. 'Search them all. I have prepared REMARKS.'"
   success_text: "The intern surrenders the file and requests, in writing, to never hear the remarks."
   failure_text: "The intern's shuttle departs on schedule. Kore's remarks remain undelivered, which is worse."
   preconditions:
@@ -2959,6 +2961,7 @@ friend_kore_4:
   objective:
     kind: catch_npc
     planet: helios_orbital
+    hint: "one of the Helios company stations"
     npc_name: "the sunstruck intern"
   completion_effects:
   - kind: pay
@@ -3000,8 +3003,8 @@ friend_rook_1:
   objective:
     kind: destroy_ships
     system: drift
-    ship_type: rebel_fighter
-    count: 3
+    ship_type: rebel_gunboat
+    count: 4
     target_name: "Drift Probes"
     hostile: true
   completion_effects:
@@ -3036,14 +3039,14 @@ friend_rook_3:
     kind: destroy_ships
     system: alpha_centauri
     ship_type: pirate_missile_boat
-    count: 2
+    count: 3
     target_name: "Centauri Wreckers"
     hostile: true
   completion_effects:
   - kind: pay
     credits: 9000
 friend_rook_4:
-  briefing: "'The parts left the depot with a deserter — my own helmsman, once,' Rook says quietly. 'He's on Vega I under a dockhand's name. Bring him in standing up. He was a good officer before he was a bad one.'"
+  briefing: "'The parts left the depot with a deserter — my own helmsman, once,' Rook says quietly. 'He's working a dock under a false name somewhere in Federation space near Vega. I won't narrow it further; finding men was his job, let it be yours. Bring him in standing up. He was a good officer before he was a bad one.'"
   success_text: "The deserter doesn't run far, and doesn't seem sorry to stop. Rook files charges AND a character reference."
   failure_text: "The dockhand's name holds one more day."
   preconditions:
@@ -3054,6 +3057,7 @@ friend_rook_4:
   objective:
     kind: catch_npc
     planet: vega_1
+    hint: "a dock in Federation space near Vega"
     npc_name: "the quiet dockhand"
   completion_effects:
   - kind: pay
@@ -3259,3 +3263,61 @@ friend_saoirse_2:
   completion_effects:
   - kind: grant_companion
     companion: saoirse_quill
+
+# — The lost son (early; after the Sol pirate bounty) —
+lost_son_1:
+  briefing: "A woman scans the pad crowds with red-rimmed eyes, and picks you. 'You're the pilot who beat that pirate — I saw the bulletin. My son Jonah is FOURTEEN and he's gone. He left a note about becoming a \"space voyager\". He stowed out on some freighter — he's on one of the colonies, I know it. Please. Find my boy.'"
+  success_text: "You find Jonah in a dockside crowd, neck craned at the ships, half-starved and entirely unrepentant. 'I was going to send a message,' he says. 'Eventually.'"
+  failure_text: "The colonies are big, and a boy who doesn't want finding stays lost."
+  preconditions:
+  - kind: completed
+    mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 1.0
+    building: market
+    npc: marta_wren
+    approach: seek
+  objective:
+    kind: meet_npc
+    planet: mars
+    hint: "one of the nearby Sol colonies — he always talked about the red sky"
+    npc_name: "Jonah Wren"
+    npc: jonah_wren
+  completion_effects:
+  - kind: pay
+    credits: 500
+lost_son_2:
+  briefing: "Jonah buckles in without being told, which surprises you both. 'Mum's going to orbit me,' he says, watching the colony shrink through your canopy. 'Worth it. Did you really fight a pirate? What's a braking burn feel like? Can I—' It's a long flight home. Get him there safely."
+  success_text: "Jonah's boots touch Earth. His mother crosses the pad like a missile with a lock."
+  failure_text: "The flight home doesn't end on Earth."
+  preconditions:
+  - kind: completed
+    mission: lost_son_1
+  offer:
+    kind: auto
+  objective:
+    kind: land_on_planet
+    planet: earth
+  completion_effects:
+  - kind: pay
+    credits: 500
+lost_son_3:
+  briefing: "The Wrens talk for a long time by the pad fence — Jonah pointing at the sky, his mother's arms crossed, then less crossed. Finally she walks over. 'He'll go again. We both know it. Better he goes with someone who fights pirates and brings boys home. There's an old shuttle in our shed — his grandfather's. If Jonah apprentices with you... you keep my son SAFE, pilot. Promise me that.'"
+  success_text: "You promise. Jonah Wren joins your wing in his grandfather's shuttle, the happiest apprentice voyager in the Sol system. Keep the promise."
+  failure_text: "The shed stays locked."
+  preconditions:
+  - kind: completed
+    mission: lost_son_2
+  offer:
+    kind: auto
+  objective:
+    kind: meet_npc
+    planet: earth
+    npc_name: "Marta Wren"
+    building: market
+    npc: marta_wren
+  completion_effects:
+  - kind: grant_companion
+    companion: jonah_wren

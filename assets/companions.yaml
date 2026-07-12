@@ -243,3 +243,21 @@ saoirse_quill:
       - "On schedule. You're the only route I fly twice."
     idle:
       - "Eighteen units of hold, zero units lost. The streak holds."
+
+jonah_wren:
+  name: "Jonah Wren"
+  npc: jonah_wren
+  ship_type: shuttle
+  home_planet: earth
+  temperament: cautious
+  bio: "fourteen, apprentice space voyager, flying his grandfather's shuttle"
+  chatter:
+    kill:
+      - "I logged it! I'm logging everything!"
+    player_hit:
+      - "You PROMISED mum nothing dangerous! ...I won't tell if you won't."
+    jump_in:
+      - "Jump number... I lost count. The best one so far."
+    idle:
+      - "When I'm a real voyager I'm naming a comet after mum. She'd pretend to hate it."
+      - "Grandad's shuttle rattles at half throttle. I think it's happy."

@@ -36,6 +36,10 @@ use crate::standing::FactionStandings;
 const DRIFT_PER_LANDING: f32 = 0.015;
 /// Max war missions offered per landing.
 const MAX_WAR_OFFERS: usize = 2;
+/// A faction only trusts you with WAR work after this many completed
+/// missions for them — standing alone can be bought with a few deliveries;
+/// moving borders takes a record.
+pub const WAR_SERVICE_MIN: u32 = 5;
 
 // ── Fronts + tiers ───────────────────────────────────────────────────────────
 
@@ -177,6 +181,7 @@ fn offer_war_missions(
     iu: Res<ItemUniverse>,
     galaxy: Res<GalaxyControl>,
     standings: Res<FactionStandings>,
+    service: Res<crate::standing::FactionServiceRecord>,
     mut catalog: ResMut<MissionCatalog>,
     log: Res<MissionLog>,
     mut offers: ResMut<MissionOffers>,
@@ -207,6 +212,11 @@ fn offer_war_missions(
         let mut offered = 0usize;
         for front in &fronts {
             if offered >= MAX_WAR_OFFERS || open_war(&catalog, front) {
+                continue;
+            }
+            // The sponsor has to KNOW you before the war desk talks:
+            // completed missions for the faction, not just standing.
+            if service.get(&front.sponsor) < WAR_SERVICE_MIN {
                 continue;
             }
             let tier = front_tier(&galaxy, front);
@@ -439,6 +449,7 @@ fn instantiate_war_mission(
                 }
                 CovertAction::MeetContact { npc_name } => (
                     Objective::MeetNpc {
+                        hint: None,
                         planet: planet_id.clone(),
                         npc_name: npc_name.clone(),
                         building: None,
@@ -451,6 +462,7 @@ fn instantiate_war_mission(
                 ),
                 CovertAction::CatchOfficial { npc_name } => (
                     Objective::CatchNpc {
+                        hint: None,
                         planet: planet_id.clone(),
                         npc_name: npc_name.clone(),
                         building: None,
@@ -480,6 +492,7 @@ fn instantiate_war_mission(
                 CovertAction::Bribe { npc_name } => (
                     // The negative pay_range IS the bribe — Pay below charges it.
                     Objective::MeetNpc {
+                        hint: None,
                         planet: planet_id.clone(),
                         npc_name: npc_name.clone(),
                         building: None,
@@ -499,6 +512,7 @@ fn instantiate_war_mission(
                     ));
                     (
                         Objective::MeetNpc {
+                        hint: None,
                             planet: planet_id.clone(),
                             npc_name: npc_name.clone(),
                             building: None,
@@ -519,6 +533,7 @@ fn instantiate_war_mission(
                     vars.push(("{quantity}", quantity.to_string()));
                     stage2 = Some((
                         Objective::MeetNpc {
+                        hint: None,
                             planet: planet_id.clone(),
                             npc_name: npc_name.clone(),
                             building: None,

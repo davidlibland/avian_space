@@ -147,7 +147,7 @@ war_raid:
   squadron_size: 0
   count_range: [2, 3]
   influence_delta: 0.08
-  pay_range: [12000, 18000]
+  pay_range: [8000, 12000]
   min_standing: 10.0
   tier: 1
 war_rapid_defense:
@@ -159,7 +159,7 @@ war_rapid_defense:
   squadron_size: 0
   count_range: [2, 3]
   influence_delta: 0.08
-  pay_range: [12000, 18000]
+  pay_range: [8000, 12000]
   min_standing: 10.0
   tier: 1
 war_battle_defense:
@@ -171,7 +171,7 @@ war_battle_defense:
   squadron_size: 3
   count_range: [4, 6]
   influence_delta: 0.15
-  pay_range: [30000, 42000]
+  pay_range: [18000, 26000]
   min_standing: 10.0
   tier: 2
 war_battle_offense:
@@ -183,7 +183,7 @@ war_battle_offense:
   squadron_size: 3
   count_range: [4, 6]
   influence_delta: 0.15
-  pay_range: [30000, 42000]
+  pay_range: [18000, 26000]
   min_standing: 10.0
   tier: 2
 war_decisive_push:
@@ -195,7 +195,7 @@ war_decisive_push:
   squadron_size: 4
   count_range: [6, 8]
   influence_delta: 0.25
-  pay_range: [55000, 75000]
+  pay_range: [35000, 48000]
   min_standing: 10.0
   tier: 3
 covert_smuggle_arms:
@@ -208,7 +208,7 @@ covert_smuggle_arms:
     commodity: weapons_parts
     quantity: 8
   influence_delta: 0.1
-  pay_range: [14000, 20000]
+  pay_range: [8000, 12000]
   min_standing: 10.0
   tier: 1
   enemy_standing_penalty: 4.0
@@ -221,7 +221,7 @@ covert_meet_dissidents:
     kind: meet_contact
     npc_name: "the dissident organizer"
   influence_delta: 0.08
-  pay_range: [10000, 15000]
+  pay_range: [6000, 9000]
   min_standing: 10.0
   tier: 1
   enemy_standing_penalty: 2.0
@@ -234,7 +234,7 @@ covert_snatch_official:
     kind: catch_official
     npc_name: "the garrison commander"
   influence_delta: 0.12
-  pay_range: [22000, 32000]
+  pay_range: [13000, 19000]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 6.0
@@ -248,7 +248,7 @@ covert_hearts_minds:
     commodity: medical_supplies
     quantity: 10
   influence_delta: 0.08
-  pay_range: [8000, 12000]
+  pay_range: [5000, 8000]
   min_standing: 10.0
   tier: 1
 covert_propaganda:
@@ -264,7 +264,7 @@ covert_propaganda:
     quantity: 6
     npc_name: "the cell organizer"
   influence_delta: 0.1
-  pay_range: [12000, 18000]
+  pay_range: [7000, 11000]
   min_standing: 10.0
   tier: 1
   enemy_standing_penalty: 3.0
@@ -277,7 +277,7 @@ covert_steal_docs:
     kind: meet_contact
     npc_name: "the ministry mole"
   influence_delta: 0.1
-  pay_range: [16000, 24000]
+  pay_range: [10000, 14000]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 4.0
@@ -290,7 +290,7 @@ covert_cut_supply:
     kind: cut_supply
     count: 3
   influence_delta: 0.12
-  pay_range: [22000, 32000]
+  pay_range: [13000, 19000]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 5.0
@@ -306,7 +306,7 @@ covert_extract_defector:
     kind: extract
     npc_name: "the defecting officer"
   influence_delta: 0.14
-  pay_range: [26000, 38000]
+  pay_range: [16000, 23000]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 6.0
@@ -320,7 +320,7 @@ covert_plant_intel:
     commodity: electronics
     quantity: 2
   influence_delta: 0.12
-  pay_range: [18000, 26000]
+  pay_range: [11000, 16000]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 4.0
@@ -348,7 +348,7 @@ covert_rescue_pows:
     kind: extract
     npc_name: "the senior POW officer"
   influence_delta: 0.18
-  pay_range: [36000, 50000]
+  pay_range: [22000, 30000]
   min_standing: 10.0
   tier: 3
   enemy_standing_penalty: 8.0

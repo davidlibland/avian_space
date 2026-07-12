@@ -835,6 +835,17 @@ pub fn roll_offers_on_land(
             .considered
             .extend(tab.iter().chain(npc.iter()).map(|(id, _)| id.clone()));
         let mut rolled_tab = roll(&tab, &mut rng);
+        // NPC walkers crowd the pad fast: normalize so the EXPECTED number
+        // of giver NPCs per landing is about one, however many storylines
+        // currently intersect this planet (weights keep their ratios).
+        let npc_total: f32 = npc.iter().map(|(_, w)| w.clamp(0.0, 1.0)).sum();
+        let npc: Vec<(String, f32)> = if npc_total > 1.0 {
+            npc.into_iter()
+                .map(|(id, w)| (id, w / npc_total))
+                .collect()
+        } else {
+            npc
+        };
         let mut rolled_npc = roll(&npc, &mut rng);
 
         // Procedurally generate mission instances from templates.
@@ -881,6 +892,12 @@ pub fn roll_offers_on_land(
         if rolled_tab.len() > MAX_TAB_OFFERS {
             rolled_tab.partial_shuffle(&mut rng, MAX_TAB_OFFERS);
             rolled_tab.truncate(MAX_TAB_OFFERS);
+        }
+        // Two giver NPCs max, whatever the dice said.
+        const MAX_NPC_OFFERS: usize = 2;
+        if rolled_npc.len() > MAX_NPC_OFFERS {
+            rolled_npc.partial_shuffle(&mut rng, MAX_NPC_OFFERS);
+            rolled_npc.truncate(MAX_NPC_OFFERS);
         }
 
         offers.tab = rolled_tab;
@@ -1412,6 +1429,7 @@ pub(super) fn instantiate_template(
                 offer: OfferKind::Auto,
                 start_effects: Vec::new(),
                 objective: Objective::CatchNpc {
+                        hint: None,
                     planet: chase_planet,
                     npc_name: target_name.clone(),
                     building: None,
