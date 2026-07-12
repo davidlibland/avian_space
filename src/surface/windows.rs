@@ -34,6 +34,18 @@ pub(crate) fn planet_markup(
         .unwrap_or(1.0)
 }
 
+/// Everything the building windows read from the mission/faction layer —
+/// bundled so the system signature stays legible (see [lints] policy note).
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct BuildingUiContext<'w> {
+    mission_log: Res<'w, MissionLog>,
+    mission_offers: Res<'w, MissionOffers>,
+    mission_catalog: Res<'w, MissionCatalog>,
+    unlocks: Res<'w, PlayerUnlocks>,
+    standings: Res<'w, crate::standing::FactionStandings>,
+    galaxy: Res<'w, crate::galaxy::GalaxyControl>,
+}
+
 pub(crate) fn surface_building_ui(
     mut egui_contexts: EguiContexts,
     mut active_ui: ResMut<ActiveBuildingUI>,
@@ -42,20 +54,20 @@ pub(crate) fn surface_building_ui(
     item_universe: Res<ItemUniverse>,
     mut player_query: Query<&mut Ship, With<Player>>,
     mut buy_ship_writer: MessageWriter<BuyShip>,
-    missions: (
-        Res<MissionLog>,
-        Res<MissionOffers>,
-        Res<MissionCatalog>,
-        Res<PlayerUnlocks>,
-    ),
-    standings: Res<crate::standing::FactionStandings>,
-    galaxy: Res<crate::galaxy::GalaxyControl>,
+    ctx: BuildingUiContext,
     mut accept_writer: MessageWriter<AcceptMission>,
     mut abandon_writer: MessageWriter<AbandonMission>,
     mut escort_roster: Option<ResMut<crate::carrier::EscortRoster>>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
-    let (mission_log, mission_offers, mission_catalog, unlocks) = missions;
+    let BuildingUiContext {
+        mission_log,
+        mission_offers,
+        mission_catalog,
+        unlocks,
+        standings,
+        galaxy,
+    } = ctx;
     let Some(kind) = active_ui.0 else {
         return;
     };

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # Bevy's Linux dependencies
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - name: Format
+        run: cargo fmt --check
+
+      # Zero-warning policy: the [lints] table in Cargo.toml holds the
+      # allowed-by-policy set; everything else is an error here.
+      - name: Clippy
+        run: cargo clippy --features dev --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --features dev

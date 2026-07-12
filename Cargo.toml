@@ -38,6 +38,11 @@ include_dir = { version = "0.7", optional = true }
 # these two are allowed BY POLICY (SystemParam bundles / type aliases are
 # still preferred where they aid readability). Everything else warns, and CI
 # treats warnings as errors.
+[package.metadata.cargo-machete]
+# naga is a deliberate version pin with feature overrides (see the comment at
+# its dependency entry) — not an unused dependency.
+ignored = ["naga"]
+
 [lints.clippy]
 too_many_arguments = "allow"
 type_complexity = "allow"
