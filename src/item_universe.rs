@@ -854,6 +854,14 @@ pub enum OutfitterItem {
 }
 
 impl OutfitterItem {
+    /// Per-round ammo price for secondary weapons (None for everything else).
+    pub fn ammo_price(&self) -> Option<i128> {
+        match self {
+            OutfitterItem::SecondaryWeapon { ammo_price, .. } => Some(*ammo_price),
+            _ => None,
+        }
+    }
+
     pub fn price(&self) -> i128 {
         match self {
             OutfitterItem::PrimaryWeapon { price, .. } => *price,

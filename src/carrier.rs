@@ -92,6 +92,11 @@ pub struct EscortEntry {
     /// Hull carried across jumps/landings — damage is not shaken off by
     /// hopping systems.
     pub health: i32,
+    /// Secondary ammo carried across jumps/landings (weapon type → rounds
+    /// remaining). Fired rounds are not free — restocking at a landing
+    /// charges the PLAYER (companions have no income of their own).
+    #[serde(default)]
+    pub ammo: std::collections::HashMap<String, u32>,
 }
 
 /// The player's persistent escorts (session resource, saved with the pilot).
@@ -126,6 +131,7 @@ impl EscortRoster {
             ship_type,
             kind,
             health,
+            ammo: std::collections::HashMap::new(),
         });
         id
     }
@@ -255,6 +261,10 @@ pub fn carrier_plugin(app: &mut App) {
         use crate::session::SessionResourceExt;
         app.init_session_resource::<EscortRoster>();
     }
+    app.add_systems(
+        Update,
+        service_escorts_on_landing.run_if(not(in_state(PlayState::MainMenu))),
+    );
     app.add_message::<SpawnEscort>().add_systems(
         Update,
         (
@@ -365,13 +375,17 @@ fn spawn_escort_ships(
             (None, Some(weapon_type), Some(roster))
                 if Some(event.mother) == player_entity && event.mission.is_none() =>
             {
-                Some(roster.add(
+                let id = roster.add(
                     event.ship_type.clone(),
                     EscortKind::Carried {
                         weapon_type: weapon_type.clone(),
                     },
                     bundle.ship_health(),
-                ))
+                );
+                if let Some(entry) = roster.get_mut(id) {
+                    entry.ammo = bundle.ship_ammo();
+                }
+                Some(id)
             }
             _ => None,
         };
@@ -382,6 +396,7 @@ fn spawn_escort_ships(
         if let (Some(id), Some(roster)) = (event.roster, &mut roster) {
             if let Some(entry) = roster.get_mut(id) {
                 bundle.set_ship_health(entry.health);
+                bundle.set_ship_ammo(&entry.ammo);
                 roster_temperament = match &entry.kind {
                     EscortKind::Companion { name } => item_universe
                         .companions
@@ -748,6 +763,7 @@ fn animate_escort_dock(
     mut mother_ships: Query<(&mut Ship, &Position), Without<Escort>>,
     player: Query<Entity, With<Player>>,
     mut roster: Option<ResMut<EscortRoster>>,
+    iu: Res<crate::item_universe::ItemUniverse>,
     mut sfx_writer: MessageWriter<EscortSfx>,
 ) {
     let player_entity = player.single().ok();
@@ -794,6 +810,28 @@ fn animate_escort_dock(
             }
             if Some(escort.mother) == player_entity {
                 sfx_writer.write(EscortSfx::Docked);
+            }
+            // Bay maintenance: the next launch is factory-fresh, so the
+            // fighter's damage and spent rounds are billed NOW, to the
+            // PLAYER, capped at their cash (the bay absorbs the rest —
+            // docking must never be refused).
+            if Some(escort.mother) == player_entity {
+                let mut phantom = EscortEntry {
+                    id: 0,
+                    ship_type: escort_ship.ship_type.clone(),
+                    kind: EscortKind::Carried {
+                        weapon_type: carried.weapon_type.clone(),
+                    },
+                    health: escort_ship.health,
+                    ammo: escort_ship
+                        .weapon_systems
+                        .iter_all()
+                        .filter_map(|(k, ws)| ws.ammo_quantity.map(|n| (k.clone(), n)))
+                        .collect(),
+                };
+                let mut credits = mother.credits;
+                service_entry(&mut phantom, &iu, &mut credits);
+                mother.credits = credits;
             }
             // Back in the bay: the roster entry retires (the ammo round
             // above is its new home).
@@ -852,8 +890,8 @@ fn respawn_roster_escorts(
     }
 }
 
-/// Keep roster hull values current so damage persists across jumps, landings
-/// and saves. Cheap: a handful of escorts at most.
+/// Keep roster hull AND ammo values current so damage and spent rounds
+/// persist across jumps, landings and saves. Cheap: a handful of escorts.
 fn sync_roster_health(
     mut roster: Option<ResMut<EscortRoster>>,
     escorts: Query<(&PersistentEscort, &Ship), Changed<Ship>>,
@@ -864,8 +902,97 @@ fn sync_roster_health(
             if entry.health != ship.health {
                 entry.health = ship.health;
             }
+            for (k, ws) in ship.weapon_systems.iter_all() {
+                if let Some(n) = ws.ammo_quantity {
+                    if entry.ammo.get(k) != Some(&n) {
+                        entry.ammo.insert(k.clone(), n);
+                    }
+                }
+            }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Escort servicing: repairs and rearming bill the PLAYER
+// ---------------------------------------------------------------------------
+
+/// Full-repair price fraction of hull value — same formula as the player's
+/// own mechanic repair.
+pub const ESCORT_REPAIR_PRICE_FRAC: f64 = 0.05;
+
+/// Repair an entry as far as the player's credits allow (partial repairs
+/// heal proportionally), then restock missing secondary rounds at the
+/// outfitter's per-round price. Companions have no income: every credit
+/// comes out of the player's pocket.
+fn service_entry(
+    entry: &mut EscortEntry,
+    iu: &crate::item_universe::ItemUniverse,
+    credits: &mut i128,
+) {
+    let Some(data) = iu.ships.get(&entry.ship_type) else {
+        return;
+    };
+    // ── Hull ──
+    let max = data.max_health.max(1);
+    if entry.health < max {
+        let damage_frac = 1.0 - entry.health as f64 / max as f64;
+        let full_cost =
+            ((damage_frac * ESCORT_REPAIR_PRICE_FRAC * data.price as f64).ceil() as i128).max(1);
+        if *credits >= full_cost {
+            *credits -= full_cost;
+            entry.health = max;
+        } else if *credits > 0 {
+            let frac = *credits as f64 / full_cost as f64;
+            let healed = ((max - entry.health) as f64 * frac).floor() as i32;
+            entry.health += healed;
+            *credits = 0;
+        }
+    }
+    // ── Ammo ──
+    for (weapon, (_, base_ammo)) in &data.base_weapons {
+        let Some(base) = base_ammo else { continue };
+        let have = entry.ammo.get(weapon).copied().unwrap_or(*base);
+        if have >= *base {
+            continue;
+        }
+        let Some(unit) = iu
+            .outfitter_items
+            .get(weapon)
+            .and_then(|item| item.ammo_price())
+        else {
+            continue;
+        };
+        let unit = unit.max(1);
+        let missing = (*base - have) as i128;
+        let affordable = (*credits / unit).min(missing).max(0);
+        if affordable > 0 {
+            *credits -= affordable * unit;
+            entry.ammo.insert(weapon.clone(), have + affordable as u32);
+        }
+    }
+}
+
+/// The pad crew services the whole flight on every landing: hull patched and
+/// racks refilled for all roster escorts, billed to the player. (Refuelling
+/// doesn't apply — escorts don't consume jump fuel.)
+fn service_escorts_on_landing(
+    mut reader: MessageReader<crate::missions::PlayerLandedOnPlanet>,
+    mut roster: Option<ResMut<EscortRoster>>,
+    iu: Res<crate::item_universe::ItemUniverse>,
+    mut player: Query<&mut Ship, With<Player>>,
+) {
+    if reader.read().next().is_none() {
+        return;
+    }
+    let (Some(roster), Ok(mut ship)) = (roster.as_deref_mut(), player.single_mut()) else {
+        return;
+    };
+    let mut credits = ship.credits;
+    for entry in &mut roster.entries {
+        service_entry(entry, &iu, &mut credits);
+    }
+    ship.credits = credits;
 }
 
 // ---------------------------------------------------------------------------

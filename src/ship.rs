@@ -944,6 +944,25 @@ impl ShipBundle {
         self.ship.health = health.max(1);
     }
 
+    /// Current secondary ammo of the bundled ship (weapon type → rounds).
+    pub fn ship_ammo(&self) -> std::collections::HashMap<String, u32> {
+        self.ship
+            .weapon_systems
+            .iter_all()
+            .filter_map(|(k, ws)| ws.ammo_quantity.map(|n| (k.clone(), n)))
+            .collect()
+    }
+
+    /// Override the bundled ship's secondary ammo (persistent escorts
+    /// respawn with the rounds they actually had left).
+    pub fn set_ship_ammo(&mut self, ammo: &std::collections::HashMap<String, u32>) {
+        for (k, n) in ammo {
+            if let Some(ws) = self.ship.weapon_systems.find_weapon(k) {
+                ws.ammo_quantity = ws.ammo_quantity.map(|_| *n);
+            }
+        }
+    }
+
     pub fn get_personality(&self) -> Personality {
         self.ship.data.personality.clone()
     }

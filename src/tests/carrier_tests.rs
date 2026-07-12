@@ -496,6 +496,65 @@ mod roster {
         );
     }
 
+    /// Docking a shot-up fighter bills the player for bay maintenance —
+    /// the next launch is factory-fresh and that's not free.
+    #[test]
+    fn dock_bills_the_player_for_repairs() {
+        let (mut app, player) = spawn_app();
+        app.add_systems(PostUpdate, animate_escort_dock);
+        {
+            let mut ship = app.world_mut().get_mut::<Ship>(player).unwrap();
+            ship.credits = 100_000;
+        }
+        let id = app.world_mut().resource_mut::<EscortRoster>().add(
+            "fighter".into(),
+            EscortKind::Carried {
+                weapon_type: "fighter_bay".into(),
+            },
+            10,
+        );
+        // Billing uses the REGISTRY hull stats for "fighter".
+        let universe = iu();
+        let max = universe.ships["fighter"].max_health;
+        let price = universe.ships["fighter"].price;
+        let mut wounded = Ship::from_ship_data(
+            &ShipData {
+                max_health: max,
+                price,
+                ..Default::default()
+            },
+            "fighter",
+        );
+        wounded.health = 10;
+        app.world_mut().spawn((
+            Escort { mother: player },
+            CarriedBy {
+                weapon_type: "fighter_bay".into(),
+            },
+            PersistentEscort(id),
+            DockingEscort::for_tests(120.0, Vec2::splat(16.0)),
+            EscortMode::Dock,
+            Position(Vec2::ZERO),
+            Sprite::default(),
+            wounded,
+            MaxLinearSpeed(100.0),
+        ));
+        app.update();
+        app.update();
+        let credits = app.world().get::<Ship>(player).unwrap().credits;
+        let expected = ((1.0 - 10.0 / max as f64) * ESCORT_REPAIR_PRICE_FRAC * price as f64)
+            .ceil() as i128;
+        assert_eq!(
+            100_000 - credits,
+            expected,
+            "bay maintenance billed at the mechanic's rate"
+        );
+        assert!(
+            app.world().resource::<EscortRoster>().entries.is_empty(),
+            "entry still retires on dock"
+        );
+    }
+
     #[test]
     fn death_retires_the_entry() {
         let (mut app, _player) = spawn_app();
@@ -563,5 +622,211 @@ mod roster {
         );
         // Fresh runtime ids, all distinct.
         assert_ne!(restored.entries[0].id, restored.entries[1].id);
+    }
+}
+
+// ── Escort servicing: repairs and rearming bill the PLAYER ───────────────────
+mod servicing {
+    use super::*;
+    use crate::missions::PlayerLandedOnPlanet;
+
+    fn iu() -> crate::item_universe::ItemUniverse {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        iu
+    }
+
+    fn service_app(credits: i128) -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(iu())
+            .init_resource::<EscortRoster>()
+            .add_message::<PlayerLandedOnPlanet>()
+            .add_systems(Update, service_escorts_on_landing);
+        let mut ship = Ship::from_ship_data(&ShipData::default(), "player");
+        ship.credits = credits;
+        let player = app.world_mut().spawn((ship, Player)).id();
+        (app, player)
+    }
+
+    fn land(app: &mut App) {
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "earth".to_string(),
+        });
+        app.update();
+    }
+
+    /// A damaged companion with spent rounds: landing patches the hull and
+    /// refills the racks, and every credit comes out of the player's pocket.
+    #[test]
+    fn landing_repairs_and_restocks_at_the_players_expense() {
+        let (mut app, player) = service_app(1_000_000);
+        let universe = iu();
+        // rebel_gunboat has base secondary ammo? Use fed_missile_cruiser's
+        // fighter instead: pick a hull with ammo-backed base weapons.
+        let (hull, weapon, base_ammo) = universe
+            .ships
+            .iter()
+            .find_map(|(k, d)| {
+                d.base_weapons.iter().find_map(|(w, (_, ammo))| {
+                    ammo.and_then(|a| {
+                        universe
+                            .outfitter_items
+                            .get(w)
+                            .and_then(|i| i.ammo_price())
+                            .map(|_| (k.clone(), w.clone(), a))
+                    })
+                })
+            })
+            .expect("some hull ships with priced secondary ammo");
+        let max = universe.ships[&hull].max_health;
+        let price = universe.ships[&hull].price;
+        let unit = universe.outfitter_items[&weapon].ammo_price().unwrap().max(1);
+
+        let id = {
+            let mut roster = app.world_mut().resource_mut::<EscortRoster>();
+            let id = roster.add(
+                hull.clone(),
+                EscortKind::Companion {
+                    name: "vex_marlowe".into(),
+                },
+                max / 2, // half hull
+            );
+            roster.get_mut(id).unwrap().ammo.insert(weapon.clone(), base_ammo - 2);
+            id
+        };
+        land(&mut app);
+
+        let roster = app.world().resource::<EscortRoster>();
+        let entry = roster.entries.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.health, max, "hull patched to full");
+        assert_eq!(
+            entry.ammo[&weapon], base_ammo,
+            "racks refilled to the factory loadout"
+        );
+        let expected_repair = (((1.0 - (max / 2) as f64 / max as f64)
+            * ESCORT_REPAIR_PRICE_FRAC
+            * price as f64)
+            .ceil() as i128)
+            .max(1);
+        let expected = expected_repair + 2 * unit;
+        let credits = app.world().get::<Ship>(player).unwrap().credits;
+        assert_eq!(
+            1_000_000 - credits,
+            expected,
+            "the player pays for hull ({expected_repair}) + 2 rounds ({unit} each)"
+        );
+    }
+
+    /// Undamaged, fully-stocked escorts cost nothing on landing.
+    #[test]
+    fn landing_is_free_when_nothing_needs_servicing() {
+        let (mut app, player) = service_app(50_000);
+        let universe = iu();
+        let max = universe.ships["fighter"].max_health;
+        app.world_mut().resource_mut::<EscortRoster>().add(
+            "fighter".into(),
+            EscortKind::Companion {
+                name: "vex_marlowe".into(),
+            },
+            max,
+        );
+        land(&mut app);
+        assert_eq!(app.world().get::<Ship>(player).unwrap().credits, 50_000);
+    }
+
+    /// Broke pilots get partial service: hull heals proportionally to what
+    /// they can pay, and rounds only while credits last.
+    #[test]
+    fn partial_service_when_the_player_is_broke() {
+        let universe = iu();
+        let max = universe.ships["fed_destroyer"].max_health;
+        let price = universe.ships["fed_destroyer"].price;
+        let full_cost = ((0.5 * ESCORT_REPAIR_PRICE_FRAC * price as f64).ceil() as i128).max(1);
+        let budget = full_cost / 2; // half the repair bill
+        let (mut app, player) = service_app(budget);
+        let id = app.world_mut().resource_mut::<EscortRoster>().add(
+            "fed_destroyer".into(),
+            EscortKind::Companion {
+                name: "yara_brakespear".into(),
+            },
+            max / 2,
+        );
+        land(&mut app);
+        let roster = app.world().resource::<EscortRoster>();
+        let entry = roster.entries.iter().find(|e| e.id == id).unwrap();
+        assert!(
+            entry.health > max / 2 && entry.health < max,
+            "partial repair: {} of {max}",
+            entry.health
+        );
+        assert_eq!(
+            app.world().get::<Ship>(player).unwrap().credits,
+            0,
+            "everything they had"
+        );
+    }
+
+    /// Spent rounds persist across a respawn — no silent free rearm; the
+    /// restock happens at a landing, billed.
+    #[test]
+    fn ammo_persists_across_respawn_until_serviced() {
+        let universe = iu();
+        let (hull, weapon, base_ammo) = universe
+            .ships
+            .iter()
+            .find_map(|(k, d)| {
+                d.base_weapons.iter().find_map(|(w, (_, ammo))| {
+                    ammo.map(|a| (k.clone(), w.clone(), a))
+                })
+            })
+            .unwrap();
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Image>()
+            .insert_resource(universe)
+            .insert_resource(CurrentStarSystem("sol".to_string()))
+            .init_resource::<EscortRoster>()
+            .add_message::<SpawnEscort>()
+            .add_message::<crate::sfx::EscortSfx>()
+            .add_message::<crate::explosions::TriggerJumpFlash>()
+            .add_systems(Update, (respawn_roster_escorts, spawn_escort_ships).chain());
+        app.world_mut().spawn((
+            Ship::from_ship_data(&ShipData::default(), "p"),
+            Player,
+            Position(Vec2::ZERO),
+            avian2d::prelude::LinearVelocity(Vec2::ZERO),
+            Transform::default(),
+        ));
+        let id = {
+            let mut roster = app.world_mut().resource_mut::<EscortRoster>();
+            let id = roster.add(
+                hull.clone(),
+                EscortKind::Companion {
+                    name: "tinny".into(),
+                },
+                100,
+            );
+            roster
+                .get_mut(id)
+                .unwrap()
+                .ammo
+                .insert(weapon.clone(), base_ammo.saturating_sub(3));
+            id
+        };
+        let _ = id;
+        app.update();
+        app.update();
+        let mut q = app.world_mut().query_filtered::<&Ship, With<PersistentEscort>>();
+        let ship = q.single(app.world()).unwrap();
+        assert_eq!(
+            ship.weapon_systems
+                .iter_all()
+                .find(|(k, _)| **k == weapon)
+                .and_then(|(_, ws)| ws.ammo_quantity),
+            Some(base_ammo.saturating_sub(3)),
+            "the respawned escort has the rounds it actually had left"
+        );
     }
 }
