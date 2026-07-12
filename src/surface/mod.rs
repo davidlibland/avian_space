@@ -1,0 +1,369 @@
+//! Walkable planet surface plugin.
+//!
+//! When the player lands on a planet, this module spawns a procedurally
+//! generated tilemap with buildings (Bar, Shipyard, Outfitter, Mission
+//! Control, Market) that the player can walk to and interact with.
+
+use avian2d::prelude::*;
+use bevy::prelude::*;
+use bevy_ecs_tilemap::prelude::*;
+
+use crate::PlayState;
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/// Player walking speed (below the run-animation threshold, 80).
+const WALK_SPEED: f32 = 70.0;
+/// Player speed while holding Shift (plays the run cycle).
+const RUN_SPEED: f32 = 120.0;
+const WALKER_RADIUS: f32 = 6.0;
+const WALKER_DAMPING: f32 = 10.0;
+
+/// Camera scale when zoomed in on the planet surface.
+const SURFACE_CAMERA_SCALE: f32 = 0.8;
+/// Camera scale in space (normal).
+const SPACE_CAMERA_SCALE: f32 = 1.0;
+/// How fast the camera zoom interpolates (per second).
+const CAMERA_ZOOM_SPEED: f32 = 4.0;
+
+/// Base path for world tile assets.
+const WORLDS_DIR: &str = "sprites/worlds";
+
+/// World dimensions in tiles. Small for testing; increase for production.
+pub const WORLD_WIDTH: u32 = 64;
+pub const WORLD_HEIGHT: u32 = 64;
+
+/// Tile size in pixels (must match the atlas tile size from tilegen.py).
+pub const TILE_PX: f32 = 32.0;
+
+// ── fBm parameters ──────────────────────────────────────────────────────
+const FBM_SCALE: f32 = 4.0;
+const FBM_OCTAVES: u32 = 5;
+const FBM_LACUNARITY: f32 = 2.0;
+const FBM_GAIN: f32 = 0.5;
+/// Number of terrain types per biome (must match the atlas row count).
+/// Number of terrain types per biome (5 biome terrains + 1 void border).
+const N_TERRAIN_TYPES: u32 = 6;
+
+// ---------------------------------------------------------------------------
+// Building kinds
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BuildingKind {
+    ShipPad,
+    MechanicShop,
+    Market,
+    Outfitter,
+    Shipyard,
+    Bar,
+    FuelStation,
+    /// The controlling faction's war office — present only on worlds whose
+    /// effective faction takes sides. War missions are posted here; it flies
+    /// a flag tinted with the faction's colors.
+    Garrison,
+}
+
+impl BuildingKind {
+    fn label(&self) -> &'static str {
+        match self {
+            BuildingKind::ShipPad => "Ship",
+            BuildingKind::MechanicShop => "Mechanic",
+            BuildingKind::Market => "Market",
+            BuildingKind::Outfitter => "Outfitter",
+            BuildingKind::Shipyard => "Shipyard",
+            BuildingKind::Bar => "Bar",
+            BuildingKind::FuelStation => "Fuel",
+            BuildingKind::Garrison => "Garrison",
+        }
+    }
+
+    #[allow(dead_code)] // superseded by the baked 3/4 sprites; kept for minimap/fallback use
+    fn color(&self) -> Color {
+        match self {
+            BuildingKind::ShipPad => Color::srgb(0.5, 0.5, 0.7),
+            BuildingKind::MechanicShop => Color::srgb(0.8, 0.5, 0.2),
+            BuildingKind::Market => Color::srgb(0.9, 0.75, 0.2),
+            BuildingKind::Outfitter => Color::srgb(0.7, 0.3, 0.3),
+            BuildingKind::Shipyard => Color::srgb(0.3, 0.5, 0.8),
+            BuildingKind::Bar => Color::srgb(0.8, 0.4, 0.1),
+            BuildingKind::FuelStation => Color::srgb(0.3, 0.8, 0.9),
+            BuildingKind::Garrison => Color::srgb(0.45, 0.55, 0.35),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Components & Resources
+// ---------------------------------------------------------------------------
+
+/// Marker for the walking character on the planet surface.
+#[derive(Component)]
+pub struct Walker;
+
+// ---------------------------------------------------------------------------
+// Walker sprite loading
+// ---------------------------------------------------------------------------
+
+use crate::surface_character::CharacterAnim;
+
+/// Interaction zone for a building.
+#[derive(Component)]
+pub struct Building {
+    pub kind: BuildingKind,
+}
+
+/// Marks a door sprite for depth-crossing sound detection.
+/// `walker_was_behind` tracks whether the walker was behind (higher z)
+/// the door last frame.
+#[derive(Component)]
+pub(crate) struct DoorSprite {
+    walker_was_behind: Option<bool>,
+}
+
+/// Which building (if any) the walker is currently overlapping,
+/// plus a count of active sensor overlaps (so exiting one of two
+/// adjacent door tiles doesn't clear the state).
+#[derive(Resource, Default)]
+pub struct NearbyBuilding {
+    pub current: Option<(Entity, BuildingKind)>,
+    overlap_count: u32,
+}
+
+/// Which building's egui UI is currently open. `None` = walking freely.
+#[derive(Resource, Default)]
+pub struct ActiveBuildingUI(pub Option<BuildingKind>);
+
+/// Current movement cost multiplier from the terrain the walker is on.
+/// 1.0 = normal speed, 2.0 = half speed, etc.
+#[derive(Resource)]
+pub(crate) struct TerrainSpeedModifier(f32);
+
+/// Per-terrain footstep data, indexed by terrain index.
+#[derive(Resource, Default)]
+pub(crate) struct FootstepData {
+    /// (surface_name, volume) per terrain index.
+    terrains: Vec<(String, f32)>,
+    /// Terrain index per tile, flat array (map_w × map_h, bottom-up).
+    terrain_map: Vec<u32>,
+    map_w: u32,
+    map_h: u32,
+}
+
+impl Default for TerrainSpeedModifier {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
+/// The generated mini-map image handle + map dimensions, used by the HUD.
+#[derive(Resource)]
+pub struct SurfaceMiniMap {
+    pub image: Handle<Image>,
+    pub map_w: u32,
+    pub map_h: u32,
+    /// (tile_x, tile_y, BuildingKind) for each placed building.
+    #[allow(dead_code)] // populated for debug overlays/tooling
+    pub buildings: Vec<(u32, u32, BuildingKind)>,
+    /// Landing pad center.
+    #[allow(dead_code)]
+    pub pad_pos: (u32, u32),
+}
+
+/// Animated camera zoom target.
+#[derive(Resource)]
+pub(crate) struct CameraZoom {
+    target: f32,
+}
+
+impl Default for CameraZoom {
+    fn default() -> Self {
+        Self {
+            target: SPACE_CAMERA_SCALE,
+        }
+    }
+}
+
+/// Marker for building label text entities.
+#[derive(Component)]
+struct BuildingLabel;
+
+/// Spawn a building label with a dark plaque behind for readability.
+fn spawn_building_label(commands: &mut Commands, text: &str, pos: Vec3) {
+    let scale = Vec3::splat(0.18);
+    let char_w = 28.0 * 0.6; // approximate glyph width at font_size 28
+    let plaque_w = text.len() as f32 * char_w * scale.x + 4.0;
+    let plaque_h = 28.0 * scale.y + 2.5;
+
+    // Dark plaque background.
+    commands.spawn((
+        DespawnOnExit(PlayState::Exploring),
+        BuildingLabel,
+        Sprite {
+            color: Color::srgba(0.05, 0.05, 0.08, 0.85),
+            custom_size: Some(Vec2::new(plaque_w, plaque_h)),
+            ..default()
+        },
+        Transform::from_translation(pos + Vec3::new(0.0, 0.0, -0.02)),
+    ));
+    // White text.
+    commands.spawn((
+        DespawnOnExit(PlayState::Exploring),
+        BuildingLabel,
+        Text2d::new(text.to_string()),
+        TextFont {
+            font_size: 28.0,
+            ..default()
+        },
+        TextColor(Color::srgb(1.0, 1.0, 1.0)),
+        Transform::from_translation(pos).with_scale(scale),
+    ));
+}
+
+// ---------------------------------------------------------------------------
+// Plugin
+// ---------------------------------------------------------------------------
+
+pub fn surface_plugin(app: &mut App) {
+    app.add_plugins(TilemapPlugin)
+        .init_resource::<CameraZoom>()
+        .init_resource::<NearbyBuilding>()
+        .init_resource::<ActiveBuildingUI>()
+        .init_resource::<TerrainSpeedModifier>()
+        .init_resource::<FootstepData>()
+        .init_resource::<crate::surface_npc_chat::NpcChatState>()
+        .add_systems(
+            OnEnter(PlayState::Exploring),
+            (setup_surface, save_on_explore).chain(),
+        )
+        .add_systems(
+            OnExit(PlayState::Exploring),
+            (
+                save_on_explore,
+                teardown_surface,
+                crate::surface_civilians::cleanup_civilians,
+                crate::surface_fauna::cleanup_fauna,
+            )
+                .chain(),
+        )
+        .add_systems(
+            Update,
+            (
+                walker_input,
+                crate::surface_character::animate_characters,
+                play_footstep,
+                track_nearby_building,
+                track_terrain_speed,
+                building_interact,
+                update_interact_prompt,
+                spawn_mission_npcs,
+                spawn_companion_avatars,
+            )
+                .run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            Update,
+            (
+                crate::surface_objects::update_shy_objects,
+                crate::surface_objects::animate_landscape_objects,
+                crate::surface_objects::depth_sort_walker,
+                door_depth_sound,
+                crate::surface_civilians::spawn_civilians,
+                crate::surface_npc::run_npc_behaviors,
+                crate::surface_npc_chat::npc_chat_interact,
+                crate::surface_npc::update_npc_markers,
+                crate::surface_civilians::depth_sort_npcs,
+                crate::surface_fauna::spawn_fauna,
+                crate::surface_fauna::run_fauna,
+                crate::surface_fauna::depth_sort_fauna,
+                animate_building_doors,
+            )
+                .run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            bevy_egui::EguiPrimaryContextPass,
+            crate::surface_npc_chat::npc_chat_ui.run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(Update, animate_camera_zoom)
+        .add_systems(
+            bevy_egui::EguiPrimaryContextPass,
+            surface_building_ui.run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            Update,
+            egui_button_click_sound.run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            FixedUpdate,
+            camera_follow_walker.run_if(in_state(PlayState::Exploring)),
+        );
+}
+
+// ---------------------------------------------------------------------------
+// Save
+// ---------------------------------------------------------------------------
+
+fn save_on_explore(
+    game_state: Res<crate::game_save::PlayerGameState>,
+    session_data: Res<crate::session::SessionSaveData>,
+) {
+    crate::game_save::write_save(&game_state, &session_data);
+}
+
+// ── Submodules (split from the old 2,600-line surface.rs) ────────────────────
+mod buildings;
+mod interact;
+mod npcs;
+mod setup;
+mod windows;
+
+pub(crate) use buildings::*;
+pub(crate) use interact::*;
+pub(crate) use npcs::*;
+pub(crate) use setup::*;
+pub(crate) use windows::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::item_universe::ItemUniverse;
+
+    fn universe() -> ItemUniverse {
+        let mut iu: ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        iu
+    }
+
+    /// The garrison follows the LIVE controller: faction worlds have one,
+    /// unaligned freeports don't — until somebody takes the system.
+    #[test]
+    fn garrison_stands_on_faction_worlds_only() {
+        let iu = universe();
+        let mut galaxy = crate::galaxy::GalaxyControl::seeded_from(&iu);
+
+        let kinds = building_kinds_for_planet("earth", &iu, "sol", &galaxy);
+        assert!(
+            kinds.contains(&BuildingKind::Garrison),
+            "Federation garrisons Earth"
+        );
+
+        let kinds = building_kinds_for_planet("marches_freeport", &iu, "the_marches", &galaxy);
+        assert!(
+            !kinds.contains(&BuildingKind::Garrison),
+            "no flag flies over an unaligned freeport"
+        );
+
+        // Federation takes the Marches → the garrison (and its flag) appears.
+        // (update_controllers does the recompute every frame in the live game.)
+        galaxy.apply_shift("the_marches", "Federation", 1.0);
+        galaxy.recompute_controller("the_marches");
+        let kinds = building_kinds_for_planet("marches_freeport", &iu, "the_marches", &galaxy);
+        assert!(
+            kinds.contains(&BuildingKind::Garrison),
+            "conquest raises a garrison"
+        );
+    }
+}
