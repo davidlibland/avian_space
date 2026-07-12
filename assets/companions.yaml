@@ -116,3 +116,130 @@ yara_brakespear:
       - "Formation review at your leisure. It will be poor."
     idle:
       - "Thirty years of walls. The sky is better."
+
+# ── Wave 2: branch companions ─────────────────────────────────────────────────
+
+chandra_vale:
+  name: "Chandra Vale"
+  npc: chandra_vale
+  ship_type: freighter
+  home_planet: tau_ceti_2
+  temperament: cautious
+  bio: "Guild freighter captain who counts everything twice"
+  chatter:
+    kill:
+      - "That's coming out of somebody's margin."
+    player_hit:
+      - "Insurance won't cover that. Evade!"
+    jump_in:
+      - "Forty tons of hold and all of it yours. Don't waste it."
+    idle:
+      - "Ran this lane four hundred times. Never once got bored. Twice got shot."
+      - "The Guild says hello. The Guild always says hello."
+
+mirelle_ossan:
+  name: "Mirelle Ossan"
+  npc: mirelle_ossan
+  ship_type: hauler
+  home_planet: mars
+  temperament: cautious
+  bio: "ex-corporate logistics chief with eighty tons of spite"
+  chatter:
+    kill:
+      - "File that under 'resolved'."
+    player_hit:
+      - "You're the only employer who's never docked my pay. Stay alive."
+    jump_in:
+      - "Hold's empty. That's money bleeding. Find us cargo."
+    idle:
+      - "I moved a corporation's secrets for nine years. Now I move your ore. Better."
+      - "The Hand still sends me severance paperwork. I invoice them for reading it."
+
+ismene_kore:
+  name: "Dr. Ismene Kore"
+  npc: ismene_kore
+  ship_type: helios_enforcer
+  home_planet: helios_prime
+  temperament: aggressive
+  bio: "solar-array physicist with strong opinions and stronger capacitors"
+  chatter:
+    kill:
+      - "Hypothesis confirmed. They were flammable."
+    player_hit:
+      - "Your shield harmonics are WRONG. Hold still, I'll fix them later."
+    jump_in:
+      - "Local star: adequate. Company: acceptable."
+    idle:
+      - "I published four papers on lance optics. The pirates cited none of them."
+      - "The array misses me. I can tell. It flickers."
+
+aldous_rook:
+  name: "Cmdr. Aldous Rook"
+  npc: aldous_rook
+  ship_type: fed_destroyer
+  home_planet: earth
+  temperament: protective
+  bio: "decorated Federation destroyer commander, retired under protest"
+  chatter:
+    kill:
+      - "Confirmed. Log it proper."
+    player_hit:
+      - "Screen formation — get behind my hull, NOW."
+    jump_in:
+      - "Rook on station. Fleet of two is still a fleet."
+    idle:
+      - "I commanded four hundred souls. You're easier to feed."
+      - "Earth gave me a medal and a pension. You gave me a wing. Fair trade."
+
+whisper:
+  name: "Whisper"
+  npc: whisper
+  ship_type: rebel_fighter
+  home_planet: deneb_prime
+  temperament: aggressive
+  bio: "the East Wind's quietest courier, now yours"
+  chatter:
+    kill:
+      - "..."
+      - "Done."
+    player_hit:
+      - "Louder than I'd like. Breaking them off you."
+    jump_in:
+      - "Here."
+    idle:
+      - "The Wind still whispers. I stopped listening. Mostly."
+
+pip_harlan:
+  name: "Pip Harlan"
+  npc: pip_harlan
+  ship_type: shuttle
+  home_planet: earth
+  temperament: cautious
+  bio: "Earth dock kid with a patched shuttle and boundless faith"
+  chatter:
+    kill:
+      - "Did we do that?! We did that!"
+    player_hit:
+      - "Ohno ohno — I'm distracting them! Am I helping?!"
+    jump_in:
+      - "First one through! Okay, second. Close second!"
+    idle:
+      - "When I get a real ship, I want turrets. Can shuttles have turrets? Don't answer."
+      - "Mars colony still owes you for that grain, you know. I keep receipts!"
+
+saoirse_quill:
+  name: "Saoirse Quill"
+  npc: saoirse_quill
+  ship_type: courier
+  home_planet: mars
+  temperament: protective
+  bio: "Mars courier who never lost a parcel, or a friend"
+  chatter:
+    kill:
+      - "Delivery refused."
+    player_hit:
+      - "Package is the pilot today. Cover inbound."
+    jump_in:
+      - "On schedule. You're the only route I fly twice."
+    idle:
+      - "Eighteen units of hold, zero units lost. The streak holds."

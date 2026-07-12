@@ -130,3 +130,26 @@ tinny:
 yara_brakespear:
   name: "Capt. Yara Brakespear"
   role: guard
+
+# ── Wave 2 companions ──────────────────────────────────────────────────
+chandra_vale:
+  name: "Chandra Vale"
+  role: merchant
+mirelle_ossan:
+  name: "Mirelle Ossan"
+  role: merchant
+ismene_kore:
+  name: "Dr. Ismene Kore"
+  role: mechanic
+aldous_rook:
+  name: "Cmdr. Aldous Rook"
+  role: guard
+whisper:
+  name: "Whisper"
+  role: civilian
+pip_harlan:
+  name: "Pip Harlan"
+  role: civilian
+saoirse_quill:
+  name: "Saoirse Quill"
+  role: merchant

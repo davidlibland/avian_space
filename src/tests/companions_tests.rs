@@ -19,16 +19,26 @@ fn universe() -> ItemUniverse {
 // ── Registry ─────────────────────────────────────────────────────────────────
 
 #[test]
-fn all_six_friends_exist_and_are_granted_by_their_arcs() {
+fn every_friend_exists_and_is_granted_by_an_arc() {
     let iu = universe();
-    for key in [
+    // The full cast — update when someone new joins the galaxy.
+    let cast = [
         "vex_marlowe",
         "oak_adaora",
         "sable_dune",
         "brother_cassian",
         "tinny",
         "yara_brakespear",
-    ] {
+        "chandra_vale",
+        "mirelle_ossan",
+        "ismene_kore",
+        "aldous_rook",
+        "whisper",
+        "pip_harlan",
+        "saoirse_quill",
+    ];
+    assert_eq!(iu.companions.len(), cast.len(), "cast list is exhaustive");
+    for key in cast {
         let def = iu.companions.get(key).unwrap_or_else(|| panic!("{key} in companions.yaml"));
         assert!(iu.npcs.contains_key(&def.npc), "{key}: face in npcs.yaml");
         assert!(iu.ships.contains_key(&def.ship_type), "{key}: hull exists");
@@ -371,4 +381,31 @@ fn chatter_speaks_once_then_rate_limits() {
         "SENTINEL",
         "rate limit holds the channel"
     );
+}
+
+/// The merchant-line friends fly real cargo vessels: befriending them is a
+/// fleet-hold upgrade, not just a gun.
+#[test]
+fn merchant_line_friends_fly_cargo_vessels() {
+    let iu = universe();
+    for (key, min_hold) in [
+        ("chandra_vale", 30u16), // freighter
+        ("mirelle_ossan", 60),   // hauler
+        ("saoirse_quill", 12),   // courier
+        ("pip_harlan", 8),       // shuttle
+    ] {
+        let def = &iu.companions[key];
+        let data = &iu.ships[&def.ship_type];
+        assert!(
+            data.cargo_space >= min_hold,
+            "{key} flies a {} with only {} hold",
+            def.ship_type,
+            data.cargo_space
+        );
+        assert_eq!(
+            data.personality,
+            crate::ship::Personality::Trader,
+            "{key}: cargo friends fly trader hulls"
+        );
+    }
 }
