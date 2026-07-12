@@ -430,6 +430,7 @@ fn build_app(
     app.add_plugins(standing::standing_plugin);
     app.add_plugins(galaxy::galaxy_plugin);
     app.add_plugins(war::war_plugin);
+    app.add_plugins(companions::companions_plugin);
 
     // ── Rendering-dependent plugins (skipped in headless) ────────────────
     if headless {

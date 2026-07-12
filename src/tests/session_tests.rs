@@ -464,15 +464,15 @@ fn full_pipeline_roundtrip() {
     let mut session_data = SessionSaveData::default();
     session_data.resources.insert(
         MissionLog::SAVE_KEY.unwrap().to_string(),
-        serde_yaml::to_value(&log.to_save()).unwrap(),
+        serde_yaml::to_value(log.to_save()).unwrap(),
     );
     session_data.resources.insert(
         MissionCatalog::SAVE_KEY.unwrap().to_string(),
-        serde_yaml::to_value(&catalog.to_save()).unwrap(),
+        serde_yaml::to_value(catalog.to_save()).unwrap(),
     );
     session_data.resources.insert(
         PlayerUnlocks::SAVE_KEY.unwrap().to_string(),
-        serde_yaml::to_value(&unlocks.to_save()).unwrap(),
+        serde_yaml::to_value(unlocks.to_save()).unwrap(),
     );
 
     // 3. Build PilotSave and serialise to YAML.
@@ -613,7 +613,7 @@ fn partial_save_loads_independently() {
     let mut resources = HashMap::new();
     resources.insert(
         "unlocks".to_string(),
-        serde_yaml::to_value(&HashSet::from(["shields".to_string()])).unwrap(),
+        serde_yaml::to_value(HashSet::from(["shields".to_string()])).unwrap(),
     );
     let pending = PendingSessionLoad { resources };
 

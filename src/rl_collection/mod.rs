@@ -1390,6 +1390,7 @@ fn build_all_observations(
             let cap = max_count.min(entity_list.len());
             let room = model::N_OBJECTS - entity_slots.len();
             let n = cap.min(room);
+            #[allow(clippy::needless_range_loop)] // parallel-array indexing is the point here
             for i in 0..n {
                 let (e, _) = entity_list[i];
                 if let Some(slot) = slot_data.get_mut(i) {

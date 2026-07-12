@@ -63,6 +63,7 @@ struct BiomeObjectsDef {
 
 #[derive(Deserialize, Debug)]
 struct ObjectsManifest {
+    #[allow(dead_code)] // manifest field, kept for parity with the RON schema
     tile_size: u32,
     biomes: HashMap<String, BiomeObjectsDef>,
 }

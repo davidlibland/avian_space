@@ -32,3 +32,15 @@ ron = "0.12.1"
 clap = { version = "4", features = ["derive"] }
 bevy_embedded_assets = { version = "0.15", optional = true }
 include_dir = { version = "0.7", optional = true }
+
+# ── Lint policy ───────────────────────────────────────────────────────────────
+# Bevy systems legitimately take many params and query tuples get wide —
+# these two are allowed BY POLICY (SystemParam bundles / type aliases are
+# still preferred where they aid readability). Everything else warns, and CI
+# treats warnings as errors.
+[lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+# Comment-formatting pedantry — not worth churn in doc blocks.
+doc_lazy_continuation = "allow"
+doc_overindented_list_items = "allow"

@@ -22,6 +22,7 @@ pub const SEXES: [&str; 2] = ["male", "female"];
 /// "shirt" is the base top; "over" is overwear (aprons/jackets/armour)
 /// layered above it — LPC z-values stack them correctly.
 pub const REQUIRED_SLOTS: [&str; 5] = ["body", "head", "shirt", "legs", "feet"];
+#[allow(dead_code)] // documented slot taxonomy; kept for authoring reference
 pub const OPTIONAL_SLOTS: [&str; 4] = ["hair", "beard", "over", "hat"];
 
 const MAX_CACHE: usize = 512;
@@ -472,7 +473,7 @@ impl CharacterLayers {
                 } else {
                     let da = d[3] as u32;
                     let oa = sa + da * (255 - sa) / 255;
-                    if oa > 0 {
+                    if let Some(_nz) = std::num::NonZeroU32::new(oa) {
                         for c in 0..3 {
                             let sc = rgb[c] as u32;
                             let dc = d[c] as u32;
@@ -641,7 +642,7 @@ mod tests {
                 assert!(
                     m.items.iter().any(|i| i.slot == *slot
                         && i.id == *item_id
-                        && i.sexes.iter().any(|s| *s == avatar.sex)),
+                        && i.sexes.contains(&avatar.sex)),
                     "npc {id}: no item {item_id:?} in slot {slot:?} for sex {:?}",
                     avatar.sex
                 );

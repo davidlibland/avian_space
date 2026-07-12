@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop, clippy::same_item_push)] // fixture style: build-then-tweak / parallel-array checks
 //! Policy behaviour tests.
 //!
 //! These tests load a trained checkpoint and verify that the policy makes
@@ -120,7 +121,7 @@ fn make_slot(
     // type_specific (pad to TYPE_SPECIFIC_SIZE)
     slot.extend_from_slice(type_specific);
     let pad = TYPE_SPECIFIC_SIZE - type_specific.len();
-    slot.extend(std::iter::repeat(0.0_f32).take(pad));
+    slot.extend(std::iter::repeat_n(0.0_f32, pad));
     debug_assert_eq!(slot.len(), SLOT_SIZE, "slot size mismatch");
     slot
 }

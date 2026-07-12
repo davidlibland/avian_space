@@ -1,3 +1,4 @@
+#![allow(clippy::field_reassign_with_default)] // fixture style: build-then-tweak / parallel-array checks
 //! Weapon-system timing tests against the real asset data.
 
 use super::*;

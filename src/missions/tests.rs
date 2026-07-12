@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::log::{MissionCatalog, MissionLog, PlayerUnlocks};
+use super::log::{MissionLog, PlayerUnlocks};
 use super::progress::{preconditions_met, requirements_met};
 use super::types::*;
 use crate::ship::{Ship, ShipData};
@@ -1270,7 +1270,7 @@ pub(super) mod runtime {
             "mission cargo stripped, player's own 3 kept"
         );
         assert!(
-            ship.reserved_cargo.get("food").is_none(),
+            !ship.reserved_cargo.contains_key("food"),
             "reservation fully cleared"
         );
     }
@@ -1395,7 +1395,8 @@ pub(super) mod runtime {
         // while the player is landed gets one roll on the spot (weight 1.0 →
         // guaranteed offer) and is not re-added on later frames.
         let mut app = App::new();
-        let mut app_galaxy: Option<crate::galaxy::GalaxyControl> = None;
+        let app_galaxy: std::cell::RefCell<Option<crate::galaxy::GalaxyControl>> =
+            std::cell::RefCell::new(None);
         app.add_plugins(MinimalPlugins)
             .init_resource::<MissionLog>()
             .init_resource::<MissionCatalog>()
@@ -1409,14 +1410,14 @@ pub(super) mod runtime {
                 )
                 .expect("assets/ must parse");
                 iu.finalize();
-                app_galaxy = Some(crate::galaxy::GalaxyControl::seeded_from(&iu));
+                *app_galaxy.borrow_mut() = Some(crate::galaxy::GalaxyControl::seeded_from(&iu));
                 iu
             })
             .insert_resource(crate::planet_ui::LandedContext {
                 planet_name: Some("earth".into()),
             })
             .add_systems(Update, progress::roll_new_offers_while_landed);
-        app.insert_resource(app_galaxy.take().unwrap());
+        app.insert_resource(app_galaxy.into_inner().unwrap());
 
         let mut def = dummy_def();
         def.offer = OfferKind::NpcOffer {
@@ -1605,10 +1606,7 @@ mod tutorial {
         assert_eq!(ui_of("a3"), None, "a3 requirements unmet → hidden");
         assert_eq!(ui_of("b"), None, "b requirements unmet → hidden");
         assert_eq!(ui_of("side"), None, "non-story mission excluded");
-        assert!(
-            ui_of("a2").unwrap().shows_name() == false,
-            "next hides its name"
-        );
+        assert!(!ui_of("a2").unwrap().shows_name(), "next hides its name");
 
         // Now complete a2: a3 becomes Next; branch b becomes Impossible
         // (needs a2 FAILED, but a2 is Completed) and is revealed at its

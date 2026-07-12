@@ -102,6 +102,7 @@ pub struct WorldManifest {
 #[derive(Deserialize, Debug)]
 pub struct BuildingTemplate {
     pub name: String,
+    #[allow(dead_code)] // parsed from RON; consumed by tooling, not the game
     pub style: String,
     pub width: u32,
     pub height: u32,
@@ -403,6 +404,7 @@ pub fn spawn_collision_entities(
 /// properties for gameplay effects.
 #[derive(Component)]
 pub struct TerrainSensor {
+    #[allow(dead_code)] // parsed from RON; consumed by tooling, not the game
     pub collision_type: CollisionType,
     /// Movement speed multiplier (1.0 = normal, 2.0 = half speed).
     pub movement_cost: f32,

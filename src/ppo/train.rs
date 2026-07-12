@@ -270,6 +270,7 @@ pub fn spawn_ppo_training_thread(
                 let mut step_personality = vec![0usize; total_steps];
                 for (seg_idx, seg) in batch.segment_infos.iter().enumerate() {
                     let pi = batch.personalities[seg_idx];
+                    #[allow(clippy::needless_range_loop)] // indexes parallel step arrays
                     for t in seg.start_idx..seg.end_idx {
                         step_personality[t] = pi;
                     }
@@ -307,6 +308,7 @@ pub fn spawn_ppo_training_thread(
                     (is_hostile, should_engage)
                 };
 
+                #[allow(clippy::needless_range_loop)] // indexes parallel step arrays
                 for (step, action) in batch.actions.iter().enumerate() {
                     let pi = step_personality[step];
                     pers_step_counts[pi] += 1;
@@ -502,6 +504,7 @@ pub fn spawn_ppo_training_thread(
 
                 let mut step_personality = vec![0usize; total_steps];
                 for (si, info) in batch.segment_infos.iter().enumerate() {
+                    #[allow(clippy::needless_range_loop)] // indexes parallel step arrays
                     for k in info.start_idx..info.end_idx {
                         step_personality[k] = batch.personalities[si];
                     }

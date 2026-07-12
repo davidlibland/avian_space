@@ -257,6 +257,7 @@ fn commodity_colors(
 }
 
 /// Spawn small irregular polygon "crystal" children on an asteroid's surface.
+#[allow(dead_code)] // detached when ore visuals moved to sprites; kept for a rich-vein event
 fn spawn_ore_crystals(
     parent: &mut ChildSpawnerCommands,
     meshes: &mut ResMut<Assets<Mesh>>,

@@ -90,6 +90,7 @@ impl BuildingKind {
         }
     }
 
+    #[allow(dead_code)] // superseded by the baked 3/4 sprites; kept for minimap/fallback use
     fn color(&self) -> Color {
         match self {
             BuildingKind::ShipPad => Color::srgb(0.5, 0.5, 0.7),
@@ -174,8 +175,10 @@ pub struct SurfaceMiniMap {
     pub map_w: u32,
     pub map_h: u32,
     /// (tile_x, tile_y, BuildingKind) for each placed building.
+    #[allow(dead_code)] // populated for debug overlays/tooling
     pub buildings: Vec<(u32, u32, BuildingKind)>,
     /// Landing pad center.
+    #[allow(dead_code)]
     pub pad_pos: (u32, u32),
 }
 

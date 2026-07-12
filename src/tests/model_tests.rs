@@ -1,3 +1,4 @@
+#![allow(clippy::identity_op, clippy::erasing_op, clippy::needless_range_loop)] // deliberate clarity math / parallel-array indexing in RL fixtures
 use super::sampling::{coupled_gumbel_sample, logits_to_discrete_action};
 use super::*;
 use crate::rl_obs::{

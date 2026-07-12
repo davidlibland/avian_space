@@ -4,13 +4,12 @@
 
 use super::*;
 use crate::Player;
-use crate::missions::types::{CompletionEffect, MissionStatus, Objective, OfferKind};
+use crate::missions::types::MissionStatus;
 use crate::missions::{
     MissionCatalog, MissionCompleted, MissionLog, MissionOffers, NpcMet, PlayerLandedOnPlanet,
     PlayerUnlocks,
 };
 use crate::ship::{Ship, ShipData, ShipHostility};
-use bevy::prelude::*;
 use std::path::Path;
 
 fn universe() -> ItemUniverse {

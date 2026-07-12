@@ -1,3 +1,4 @@
+#![allow(clippy::identity_op, clippy::erasing_op, clippy::manual_range_contains)] // deliberate clarity math in RL fixtures
 use super::*;
 use crate::ship::{Ship, ShipData};
 use std::collections::HashMap;

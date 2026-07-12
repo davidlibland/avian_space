@@ -640,7 +640,7 @@ mod tests {
         // Always a multiple of 5, never zero.
         for space in 0..=200 {
             let b = bulk_trade_amount(space);
-            assert!(b >= 5 && b % 5 == 0, "space {space} → {b}");
+            assert!(b >= 5 && b.is_multiple_of(5), "space {space} → {b}");
         }
     }
 }

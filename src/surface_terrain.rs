@@ -90,6 +90,7 @@ pub fn generate_constrained_terrain(
 
 /// Force tiles within `margin` of each building rect to `walkable_terrain`,
 /// pin them, then re-clamp to maintain gradient constraint.
+#[allow(clippy::ptr_arg)] // callers hand the owned map back and forth
 fn force_walkable_near_buildings(
     terrain: &mut Vec<u32>,
     map_w: u32,
@@ -143,6 +144,7 @@ fn derive_collision(terrain: &[u32], collision_codes: &[u8]) -> Vec<u8> {
 /// find the cheapest crossing.  Tiles along the crossing that are
 /// impassable get forced to `walkable_terrain`, then gradients are
 /// re-clamped and collision is re-derived.
+#[allow(clippy::ptr_arg)]
 fn force_paths_for_connectivity(
     terrain: &mut Vec<u32>,
     collision: &mut Vec<u8>,

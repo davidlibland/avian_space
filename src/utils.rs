@@ -84,10 +84,8 @@ pub fn angle_to_hit(proj_vel: f32, obj_pos: &Vec2, obj_vel: &Vec2) -> Option<f32
         t2
     } else if t2 < 0.0 {
         t1
-    } else if t1 < t2 {
-        t1
     } else {
-        t2
+        t1.min(t2)
     };
     let contact_pos = obj_pos + t * obj_vel;
     Some(contact_pos.y.atan2(contact_pos.x))

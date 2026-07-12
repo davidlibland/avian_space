@@ -1,3 +1,4 @@
+#![allow(clippy::field_reassign_with_default)] // fixture style: build-then-tweak / parallel-array checks
 use super::*;
 use crate::item_universe::ItemUniverse;
 use crate::rl_obs::{controls_to_discrete, discrete_to_controls};

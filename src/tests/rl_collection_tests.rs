@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop)] // parallel-array indexing in RL fixtures
 use super::*;
 use crate::consts::*;
 use crate::ship::{Personality, Target};

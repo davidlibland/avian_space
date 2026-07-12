@@ -128,6 +128,7 @@ pub const SHIP_ALLY_DISTRESS_TARGET: usize = 16;
 // ── Planet type-specific feature indices (local to SLOT_TYPE_SPECIFIC) ───
 pub const PLANET_CARGO_PROFIT_VALUE: usize = 0;
 pub const PLANET_HAS_AMMO: usize = 1;
+#[allow(dead_code)] // reserved for the planned market-margin observation
 pub const PLANET_COMMODITY_MARGIN: usize = 2;
 /// 1.0 if the ship landed at this planet within the recent-visited cooldown.
 pub const PLANET_IS_RECENTLY_VISITED: usize = 3;

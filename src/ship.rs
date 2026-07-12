@@ -864,6 +864,7 @@ impl Ship {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
+        #[allow(clippy::collapsible_if)] // find_weapon_entry borrows self mutably
         if let OutfitterItem::SecondaryWeapon { ammo_price, .. } = outfitter_item {
             if let std::collections::hash_map::Entry::Occupied(mut view) =
                 self.weapon_systems.find_weapon_entry(weapon_type)

@@ -46,8 +46,10 @@ impl NodeUi {
 }
 
 pub struct StoryNode {
+    #[allow(dead_code)] // consumed by the chart exporter, not the in-game view
     pub id: String,
     pub label: String,
+    #[allow(dead_code)] // consumed by the chart exporter, not the in-game view
     pub faction: Option<String>,
     /// Faction color (from factions.yaml), or a neutral grey.
     pub color: [u8; 3],
