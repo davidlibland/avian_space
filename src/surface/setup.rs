@@ -808,15 +808,8 @@ pub(crate) fn setup_surface(
                     pixels[pi + 3] = 255;
                 }
             }
-            // Helper: set a pixel on the mini-map (with Y-flip for image coords).
             let set_px = |pixels: &mut [u8], x: u32, y: u32, color: [u8; 3]| {
-                if x < map_w && y < map_h {
-                    let iy = map_h - 1 - y;
-                    let pi = ((iy * map_w + x) * 4) as usize;
-                    pixels[pi] = color[0];
-                    pixels[pi + 1] = color[1];
-                    pixels[pi + 2] = color[2];
-                }
+                crate::surface::minimap_set_px(pixels, map_w, map_h, x, y, color);
             };
 
             // Render full building footprints using per-tile colors.
@@ -868,19 +861,7 @@ pub(crate) fn setup_surface(
                 }
             }
 
-            let mut img = Image::new(
-                bevy::render::render_resource::Extent3d {
-                    width: map_w,
-                    height: map_h,
-                    depth_or_array_layers: 1,
-                },
-                bevy::render::render_resource::TextureDimension::D2,
-                pixels,
-                bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
-                bevy::asset::RenderAssetUsages::MAIN_WORLD
-                    | bevy::asset::RenderAssetUsages::RENDER_WORLD,
-            );
-            img.sampler = bevy::image::ImageSampler::nearest();
+            let img = crate::surface::minimap_image(pixels, map_w, map_h);
 
             let building_info: Vec<(u32, u32, BuildingKind)> = building_assignments
                 .iter()

@@ -229,6 +229,47 @@ pub(crate) fn spawn_walker_at(
     )
 }
 
+/// Set one tile's pixel on a mini-map pixel buffer. Tile rows are
+/// bottom-up (world y=0 = south edge); image rows are top-down — the
+/// Y-flip lives HERE and nowhere else. (It has now bitten both the
+/// surface and the interior builders independently.)
+pub(crate) fn minimap_set_px(
+    pixels: &mut [u8],
+    map_w: u32,
+    map_h: u32,
+    x: u32,
+    y: u32,
+    color: [u8; 3],
+) {
+    if x < map_w && y < map_h {
+        let iy = map_h - 1 - y;
+        let pi = ((iy * map_w + x) * 4) as usize;
+        pixels[pi] = color[0];
+        pixels[pi + 1] = color[1];
+        pixels[pi + 2] = color[2];
+        pixels[pi + 3] = 255;
+    }
+}
+
+/// Wrap a finished mini-map pixel buffer into the HUD image (nearest
+/// sampling, main+render world) — the single image-construction path for
+/// surface and interior maps alike.
+pub(crate) fn minimap_image(pixels: Vec<u8>, map_w: u32, map_h: u32) -> Image {
+    let mut img = Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: map_w,
+            height: map_h,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        pixels,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::MAIN_WORLD | bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    );
+    img.sampler = bevy::image::ImageSampler::nearest();
+    img
+}
+
 /// The generated mini-map image handle + map dimensions, used by the HUD.
 #[derive(Resource)]
 pub struct SurfaceMiniMap {

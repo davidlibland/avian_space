@@ -838,37 +838,19 @@ pub(crate) fn setup_interior(
                     g /= 2;
                     b /= 2;
                 }
-                let p = i * 4;
-                pixels[p] = r;
-                pixels[p + 1] = g;
-                pixels[p + 2] = b;
-                pixels[p + 3] = 255;
+                super::minimap_set_px(&mut pixels, map_w, map_h, x, y, [r, g, b]);
             }
         }
         let mut mark = |tile: Option<(u32, u32)>, rgb: [u8; 3]| {
             if let Some((tx, ty)) = tile {
-                let p = ((ty * map_w + tx) * 4) as usize;
-                pixels[p..p + 3].copy_from_slice(&rgb);
+                super::minimap_set_px(&mut pixels, map_w, map_h, tx, ty, rgb);
             }
         };
         mark(plan.door, [90, 255, 120]); // the way out: green
         mark(plan.stairs_down, [255, 210, 80]); // shafts: amber
         mark(plan.stairs_up, [255, 210, 80]);
-        let mut img = Image::new(
-            bevy::render::render_resource::Extent3d {
-                width: map_w,
-                height: map_h,
-                depth_or_array_layers: 1,
-            },
-            bevy::render::render_resource::TextureDimension::D2,
-            pixels,
-            bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
-            bevy::asset::RenderAssetUsages::MAIN_WORLD
-                | bevy::asset::RenderAssetUsages::RENDER_WORLD,
-        );
-        img.sampler = bevy::image::ImageSampler::nearest();
         commands.insert_resource(super::SurfaceMiniMap {
-            image: images.add(img),
+            image: images.add(super::minimap_image(pixels, map_w, map_h)),
             map_w,
             map_h,
             buildings: Vec::new(),
