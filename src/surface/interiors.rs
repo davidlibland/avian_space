@@ -932,6 +932,29 @@ pub(crate) fn setup_interior(
             )
             .with_scale(Vec3::splat(size)),
         ));
+        // Holo name-tag under the plinth — glyphs are shared within a
+        // weapon family, so the label is what tells a laser from a
+        // proton beam at a glance. Same tint as the wireframe.
+        let label = display_label(binding, &iu);
+        if !label.is_empty() {
+            commands.spawn((
+                DespawnOnExit(PlayState::Inside),
+                InteriorScoped,
+                Text2d::new(label),
+                TextFont {
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::srgba(0.4, 0.9, 1.0, 0.85)),
+                bevy::text::TextLayout::new_with_justify(bevy::text::Justify::Center),
+                Transform::from_xyz(
+                    pos.x,
+                    pos.y - tile_px * 0.62,
+                    crate::surface_objects::depth_z(pos.y - tile_px * 0.5) + 0.4,
+                )
+                .with_scale(Vec3::splat(0.45)),
+            ));
+        }
     }
 
     // Counter + exit door markers (invisible; interaction handles them).
@@ -1012,6 +1035,28 @@ pub(crate) fn setup_interior(
         cam_tf.translation = Vec3::new(spawn_pos.x, spawn_pos.y, cam_tf.translation.z);
     }
     zoom.target = super::SURFACE_CAMERA_SCALE * 0.8;
+}
+
+/// The holo name-tag under a display.
+fn display_label(binding: &DisplayBinding, iu: &ItemUniverse) -> String {
+    match binding {
+        DisplayBinding::Ship(key) => iu
+            .ships
+            .get(key)
+            .map(|d| {
+                if d.display_name.is_empty() {
+                    key.clone()
+                } else {
+                    d.display_name.clone()
+                }
+            })
+            .unwrap_or_else(|| key.clone()),
+        DisplayBinding::OutfitterItem(key) => iu
+            .outfitter_items
+            .get(key)
+            .map(|i| i.display_name().to_string())
+            .unwrap_or_else(|| key.clone()),
+    }
 }
 
 /// What a display shows: outfitter items use their weapon sprite (or a glow
@@ -1888,6 +1933,22 @@ mod tests {
             );
         }
         assert!(std::path::Path::new("assets/sprites/wireframes/pickup.png").exists());
+    }
+
+    /// Every purchasable display resolves to a non-empty, distinct-enough
+    /// label — the name-tag is what distinguishes shared glyph families.
+    #[test]
+    fn every_display_gets_a_readable_label() {
+        let iu = iu();
+        let all = un_all(&iu);
+        for key in purchasable_items(&iu, "earth", &all) {
+            let label = display_label(&DisplayBinding::OutfitterItem(key.clone()), &iu);
+            assert!(!label.trim().is_empty(), "{key}: label");
+        }
+        for key in purchasable_ships(&iu, "earth", &all) {
+            let label = display_label(&DisplayBinding::Ship(key.clone()), &iu);
+            assert!(!label.trim().is_empty(), "{key}: label");
+        }
     }
 
     /// Maze venues derive from what the world is, and are rare.
