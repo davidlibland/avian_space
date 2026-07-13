@@ -15,6 +15,7 @@ use crate::item_universe::ItemUniverse;
 /// every frame while Exploring: a follow-up mission that auto-starts *after*
 /// the player lands (e.g. its predecessor completed on this very landing) gets
 /// its NPC spawned immediately, instead of only on the next re-land.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_mission_npcs(
     mut commands: Commands,
     layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
@@ -27,6 +28,7 @@ pub(crate) fn spawn_mission_npcs(
     landed_context: Res<crate::planet_ui::LandedContext>,
     item_universe: Res<ItemUniverse>,
     existing: Query<&crate::surface_npc::MissionNpc>,
+    chase: Res<crate::surface::interiors::MazeChase>,
 ) {
     let (Some(mut layers), Some(paths), Some(cost_map)) = (layers, paths, cost_map) else {
         return;
@@ -207,11 +209,47 @@ pub(crate) fn spawn_mission_npcs(
                 npc,
                 ..
             } if planet == planet_name => {
-                if building
-                    .as_deref()
-                    .and_then(building_kind_from_name)
-                    .is_some_and(crate::surface::interiors::has_interior)
-                {
+                let target_kind = building.as_deref().and_then(building_kind_from_name);
+                let maze = target_kind.is_some_and(crate::surface::mazes::is_maze);
+                if maze {
+                    // The staged chase: the fugitive starts OUT HERE, near
+                    // the venue, and bolts for its door when you close in
+                    // (catch them in the open if you're quick). Once
+                    // they're inside, the chase ledger owns them.
+                    if chase.inside.contains_key(mission_id.as_str()) {
+                        continue;
+                    }
+                    let Some(&door) = building
+                        .as_ref()
+                        .and_then(|name| building_door.get(&name.to_lowercase()))
+                    else {
+                        continue; // venue not on this world's pad
+                    };
+                    let spawn_tile = find_nearby_tile(door, &cost_map, &paths, &mut rng);
+                    let spawned = crate::surface_npc::spawn_objective_npc(
+                        &mut commands,
+                        layers,
+                        &mut images,
+                        "civilian",
+                        npc_identity(&item_universe, layers, npc),
+                        mission_id,
+                        spawn_tile,
+                        walk_speed * 1.2,
+                        crate::surface_npc::ObjectiveKind::CatchToward { goal: door },
+                        PlayState::Exploring,
+                    );
+                    if let Some(entity) = spawned {
+                        commands
+                            .entity(entity)
+                            .insert(crate::surface::interiors::MazeFugitive {
+                                mission_id: mission_id.clone(),
+                                goal: door,
+                                next: crate::surface::interiors::FugitiveNext::IntoBuilding,
+                            });
+                    }
+                    continue;
+                }
+                if target_kind.is_some_and(crate::surface::interiors::has_interior) {
                     continue;
                 }
                 let door = building

@@ -73,6 +73,82 @@ pub(crate) struct StairsUp;
 #[derive(Component)]
 pub(crate) struct Clerk;
 
+/// The maze-hunt chase ledger: for each catch mission whose target has
+/// fled INSIDE its venue, which level the fugitive is waiting on. Session
+/// resource — leave the planet mid-chase and they're still down there.
+#[derive(Resource, Default)]
+pub struct MazeChase {
+    pub inside: std::collections::HashMap<String, u8>,
+}
+
+/// A fleeing hunt target with a destination: the venue door (outside) or
+/// the down shaft (inside). Arrival despawns them and advances the chase.
+#[derive(Component)]
+pub(crate) struct MazeFugitive {
+    pub mission_id: String,
+    pub goal: (u32, u32),
+    pub next: FugitiveNext,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum FugitiveNext {
+    /// Slips through the venue door — the chase moves inside (level 0).
+    IntoBuilding,
+    /// Scrambles down the shaft — the chase moves one level deeper.
+    Descend,
+}
+
+/// Fugitives that reach their goal vanish ahead of the player: into the
+/// building from the surface, or down the stairs between levels. Also
+/// prunes chase entries for missions that ended.
+pub(crate) fn maze_fugitive_arrivals(
+    mut commands: Commands,
+    fugitives: Query<(Entity, &Transform, &MazeFugitive)>,
+    mut chase: ResMut<MazeChase>,
+    mission_log: Res<crate::missions::MissionLog>,
+    mut comms: ResMut<crate::hud::CommsChannel>,
+) {
+    for (entity, tf, fug) in &fugitives {
+        let goal =
+            crate::surface_pathfinding::SurfaceCostMap::tile_to_world(fug.goal.0, fug.goal.1);
+        if (tf.translation.truncate() - goal).length() > TILE_PX * 0.9 {
+            continue;
+        }
+        commands.entity(entity).despawn();
+        match fug.next {
+            FugitiveNext::IntoBuilding => {
+                chase.inside.insert(fug.mission_id.clone(), 0);
+                comms.send("The target ducks inside! After them.");
+            }
+            FugitiveNext::Descend => {
+                let lvl = chase.inside.entry(fug.mission_id.clone()).or_insert(0);
+                *lvl += 1;
+                comms.send("They scramble down the shaft — keep up!");
+            }
+        }
+    }
+    chase.inside.retain(|id, _| {
+        matches!(
+            mission_log.status(id),
+            crate::missions::MissionStatus::Active(_)
+        )
+    });
+}
+
+/// Where a pursued fugitive waits on this level: halfway along the
+/// shortest path from the player's entry to the down stairs (their head
+/// start), or None when this level has no way further down (cornered —
+/// they fall back to ordinary flee AI).
+pub(crate) fn fugitive_head_start(
+    plan: &InteriorPlan,
+    cm: &crate::surface_pathfinding::SurfaceCostMap,
+) -> Option<((u32, u32), (u32, u32))> {
+    let stairs = plan.stairs_down?;
+    let path = cm.find_path(plan.entry, stairs)?;
+    let spawn = *path.get(path.len() / 2)?;
+    Some((spawn, stairs))
+}
+
 /// On entering the state: flag the first build and clear the stale
 /// door-side `NearbyBuilding` so NPC chat isn't suppressed inside.
 pub(crate) fn mark_interior_dirty(
@@ -1049,8 +1125,9 @@ pub(crate) fn spawn_interior_npcs(
     layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
     mut images: ResMut<Assets<Image>>,
     cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
+    chase: Res<MazeChase>,
 ) {
-    let (Some(context), Some(mut layers), Some(_cm)) = (context, layers, cost_map) else {
+    let (Some(context), Some(mut layers), Some(cm)) = (context, layers, cost_map) else {
         return;
     };
     let kind = context.kind;
@@ -1105,55 +1182,102 @@ pub(crate) fn spawn_interior_npcs(
         }
     }
 
-    // Hunt targets: active meet/catch objectives bound to THIS building,
-    // hiding at the deepest level's farthest tile.
-    if context.level + 1 == plan.levels {
-        for (mission_id, def) in &catalog.defs {
-            if already.contains(mission_id.as_str()) {
-                continue;
-            }
-            if !matches!(
-                mission_log.status(mission_id),
-                crate::missions::MissionStatus::Active(_)
-            ) {
-                continue;
-            }
-            let (m_planet, m_building, npc, objective) = match &def.objective {
-                crate::missions::Objective::MeetNpc {
-                    planet: p,
-                    building: b,
-                    npc,
-                    ..
-                } => (
-                    p,
-                    b,
-                    npc,
-                    crate::surface_npc::ObjectiveKind::Meet { seek: false },
-                ),
-                crate::missions::Objective::CatchNpc {
-                    planet: p,
-                    building: b,
-                    npc,
-                    ..
-                } => (p, b, npc, crate::surface_npc::ObjectiveKind::Catch),
+    // Hunt targets bound to THIS building. Meet targets hide at the
+    // deepest level's farthest tile. Catch targets in maze venues play
+    // the staged chase: they're only here if the chase ledger says so,
+    // spawned halfway along the path to the down stairs (their head
+    // start) and fleeing TOWARD them; on the deepest level they're
+    // cornered and fall back to ordinary flee AI.
+    for (mission_id, def) in &catalog.defs {
+        if already.contains(mission_id.as_str()) {
+            continue;
+        }
+        if !matches!(
+            mission_log.status(mission_id),
+            crate::missions::MissionStatus::Active(_)
+        ) {
+            continue;
+        }
+        let (m_planet, m_building, npc, is_catch) = match &def.objective {
+            crate::missions::Objective::MeetNpc {
+                planet: p,
+                building: b,
+                npc,
+                ..
+            } => (p, b, npc, false),
+            crate::missions::Objective::CatchNpc {
+                planet: p,
+                building: b,
+                npc,
+                ..
+            } => (p, b, npc, true),
+            _ => continue,
+        };
+        if *m_planet != planet || m_building.as_deref() != Some(building_name.as_str()) {
+            continue;
+        }
+
+        let maze = super::mazes::is_maze(kind);
+        let deepest = context.level + 1 == plan.levels;
+        let (spawn_tile, objective, fugitive_goal) = if is_catch && maze {
+            // Chase discipline: the fugitive is on exactly one level.
+            match chase.inside.get(mission_id.as_str()) {
+                Some(&lvl) if lvl == context.level => {}
                 _ => continue,
-            };
-            if *m_planet != planet || m_building.as_deref() != Some(building_name.as_str()) {
+            }
+            match fugitive_head_start(&plan, &cm) {
+                Some((spawn, stairs)) => (
+                    spawn,
+                    crate::surface_npc::ObjectiveKind::CatchToward { goal: stairs },
+                    Some(stairs),
+                ),
+                None => {
+                    // Bottom of the shaft: cornered, half a level of room.
+                    let spawn = cm
+                        .find_path(plan.entry, plan.hunt_spot)
+                        .and_then(|p| p.get(p.len() / 2).copied())
+                        .unwrap_or(plan.hunt_spot);
+                    (spawn, crate::surface_npc::ObjectiveKind::Catch, None)
+                }
+            }
+        } else {
+            if !deepest {
                 continue;
             }
-            let identity = super::npc_identity(&iu, &layers, npc);
-            crate::surface_npc::spawn_objective_npc(
-                &mut commands,
-                &mut layers,
-                &mut images,
-                "civilian",
-                identity,
-                mission_id,
+            (
                 plan.hunt_spot,
-                walk_speed * 1.1,
-                objective,
-                PlayState::Inside,
-            );
+                if is_catch {
+                    crate::surface_npc::ObjectiveKind::Catch
+                } else {
+                    crate::surface_npc::ObjectiveKind::Meet { seek: false }
+                },
+                None,
+            )
+        };
+
+        let identity = super::npc_identity(&iu, &layers, npc);
+        let spawned = crate::surface_npc::spawn_objective_npc(
+            &mut commands,
+            &mut layers,
+            &mut images,
+            "civilian",
+            identity,
+            mission_id,
+            spawn_tile,
+            walk_speed * 1.1,
+            objective,
+            PlayState::Inside,
+        );
+        if let Some(entity) = spawned {
+            // Level rebuilds (stairs) must clear hunt NPCs with the scene.
+            commands.entity(entity).insert(InteriorScoped);
+            if let Some(goal) = fugitive_goal {
+                commands.entity(entity).insert(MazeFugitive {
+                    mission_id: mission_id.clone(),
+                    goal,
+                    next: FugitiveNext::Descend,
+                });
+            }
         }
     }
 }
@@ -1508,6 +1632,41 @@ mod tests {
             world_tint(crate::world_assets::planet_type_to_biome("icy_dwarf")).to_srgba(),
             world_tint(crate::world_assets::planet_type_to_biome("desert")).to_srgba(),
         );
+    }
+
+    /// The staged chase: on every level with a way down, the fugitive
+    /// gets a head start — spawned ON the entry→stairs path, roughly
+    /// halfway, strictly closer to the stairs than the player's entry —
+    /// and the deepest level corners them (no head start possible).
+    #[test]
+    fn fugitives_get_a_halfway_head_start_on_every_descending_level() {
+        let iu = iu();
+        for planet in ["ceres", "earth", "deneb_prime"] {
+            let ground = build_plan(BuildingKind::Mine, &iu, planet, 0);
+            assert!(ground.levels >= 2, "premise: mines descend");
+            for level in 0..ground.levels {
+                let plan = build_plan(BuildingKind::Mine, &iu, planet, level);
+                let cm = cost_map_of(&plan);
+                let head_start = fugitive_head_start(&plan, &cm);
+                if level + 1 == plan.levels {
+                    assert!(head_start.is_none(), "deepest level corners the fugitive");
+                    continue;
+                }
+                let (spawn, stairs) = head_start.unwrap_or_else(|| panic!("L{level}: head start"));
+                assert_eq!(Some(stairs), plan.stairs_down, "goal is the shaft");
+                let full = cm.find_path(plan.entry, stairs).unwrap().len();
+                let to_spawn = cm.find_path(plan.entry, spawn).unwrap().len();
+                let to_go = cm.find_path(spawn, stairs).unwrap().len();
+                assert!(
+                    to_spawn >= full / 3 && to_spawn <= full * 2 / 3 + 2,
+                    "L{level}: spawn ~halfway ({to_spawn} of {full})"
+                );
+                assert!(
+                    to_go < full,
+                    "L{level}: the fugitive is strictly AHEAD of the player"
+                );
+            }
+        }
     }
 
     /// Maze venues derive from what the world is, and are rare.

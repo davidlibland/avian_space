@@ -240,6 +240,7 @@ fn spawn_building_label(commands: &mut Commands, text: &str, pos: Vec3) {
 
 pub fn surface_plugin(app: &mut App) {
     app.add_plugins(TilemapPlugin)
+        .init_resource::<interiors::MazeChase>()
         .init_resource::<CameraZoom>()
         .init_resource::<NearbyBuilding>()
         .init_resource::<ActiveBuildingUI>()
@@ -292,6 +293,11 @@ pub fn surface_plugin(app: &mut App) {
             Update,
             (interiors::interior_interact, interiors::spawn_interior_npcs)
                 .run_if(in_state(PlayState::Inside)),
+        )
+        .add_systems(
+            Update,
+            interiors::maze_fugitive_arrivals
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
         )
         .add_systems(
             Update,

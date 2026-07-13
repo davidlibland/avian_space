@@ -65,6 +65,17 @@ pub enum Behavior {
         repath_timer: Timer,
     },
 
+    /// Flee TOWARD a fixed goal tile (a doorway, a shaft) while the player
+    /// chases — the maze-hunt fugitive. Catchable exactly like FleePlayer;
+    /// arrival at the goal is handled by `maze_fugitive_arrivals`, which
+    /// despawns the runner and advances the chase.
+    FleeToward {
+        mission_id: String,
+        goal: (u32, u32),
+        path: Vec<(u32, u32)>,
+        current_idx: usize,
+    },
+
     /// Stand still with a marker.  Wait for the player to press E while
     /// adjacent.  Completes after the player interacts.
     OfferMission { mission_id: String },
@@ -440,6 +451,50 @@ pub fn run_npc_behaviors(
                 }
             }
 
+            Behavior::FleeToward {
+                mission_id,
+                goal,
+                path,
+                current_idx,
+            } => {
+                // Catchable mid-run, same rule as FleePlayer.
+                if let Some(wp) = walker_pos {
+                    let dist_to_player = (pos - wp).length();
+                    if dist_to_player < ADJACENT_DIST_TILES * TILE_PX {
+                        vel.0 = Vec2::ZERO;
+                        npc_caught_writer.write(crate::missions::NpcCaught {
+                            planet: planet_name.clone(),
+                            mission_id: mission_id.clone(),
+                        });
+                        npc.queue.pop_front();
+                        continue;
+                    }
+                }
+                // The goal is fixed: one path, computed once.
+                if path.is_empty()
+                    && let Some(cm) = cost_map.as_ref()
+                {
+                    let my_tile = find_nearest_walkable(pos, cm);
+                    if let Some(p) = cm.find_path(my_tile, *goal) {
+                        *path = p;
+                        *current_idx = 0;
+                    }
+                }
+                if *current_idx < path.len() {
+                    let (tx, ty) = path[*current_idx];
+                    let target = SurfaceCostMap::tile_to_world(tx, ty);
+                    if (target - foot(pos)).length() < WAYPOINT_ARRIVE_DIST {
+                        *current_idx += 1;
+                    } else {
+                        vel.0 = steer_to(target, pos, speed * 1.2);
+                    }
+                } else {
+                    // At (or path-less near) the goal — hold; the arrival
+                    // system takes it from here.
+                    vel.0 = Vec2::ZERO;
+                }
+            }
+
             Behavior::OfferMission { .. } => {
                 // Stand still, wait for player interaction.
                 // The interaction is handled by a separate system that
@@ -677,8 +732,15 @@ pub fn spawn_companion_avatar(
 
 /// What kind of objective NPC to spawn.
 pub enum ObjectiveKind {
-    Meet { seek: bool },
+    Meet {
+        seek: bool,
+    },
     Catch,
+    /// A maze-hunt fugitive: flees toward `goal` (a door or shaft) instead
+    /// of just away from the player.
+    CatchToward {
+        goal: (u32, u32),
+    },
 }
 
 /// Spawn an NPC for a MeetNpc or CatchNpc mission objective.
@@ -708,7 +770,9 @@ pub fn spawn_objective_npc(
     // Marker: "?" blue for meet, "!" red for catch.
     let (marker_text, marker_color) = match &kind {
         ObjectiveKind::Meet { .. } => ("?", Color::srgb(0.3, 0.8, 1.0)),
-        ObjectiveKind::Catch => ("!", Color::srgb(1.0, 0.3, 0.2)),
+        ObjectiveKind::Catch | ObjectiveKind::CatchToward { .. } => {
+            ("!", Color::srgb(1.0, 0.3, 0.2))
+        }
     };
 
     let mut behavior = NpcBehavior::new(speed);
@@ -733,10 +797,18 @@ pub fn spawn_objective_npc(
                 repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
             });
         }
+        ObjectiveKind::CatchToward { goal } => {
+            behavior.push(Behavior::FleeToward {
+                mission_id: mission_id.to_string(),
+                goal,
+                path: Vec::new(),
+                current_idx: 0,
+            });
+        }
     }
     // After objective: caught NPCs follow the player, others patrol away.
     match &kind {
-        ObjectiveKind::Catch => {
+        ObjectiveKind::Catch | ObjectiveKind::CatchToward { .. } => {
             // Follow the player after being caught (like an escort).
             behavior.push(Behavior::FollowPlayer {
                 path: Vec::new(),
