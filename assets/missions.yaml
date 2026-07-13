@@ -3304,8 +3304,8 @@ lost_son_2:
   - kind: pay
     credits: 500
 lost_son_3:
-  briefing: "The Wrens talk for a long time by the pad fence — Jonah pointing at the sky, his mother's arms crossed, then less crossed. Finally she walks over. 'He'll go again. We both know it. Better he goes with someone who fights pirates and brings boys home. There's an old shuttle in our shed — his grandfather's. If Jonah apprentices with you... you keep my son SAFE, pilot. Promise me that.'"
-  success_text: "You promise. Jonah Wren joins your wing in his grandfather's shuttle, the happiest apprentice voyager in the Sol system. Keep the promise."
+  briefing: "Marta Wren is waiting on the pad before your engines stop ticking. She crushes Jonah into a hug, holds him at arm's length to check him over, then hugs him again. Over his shoulder she mouths 'thank you' to you. 'We need to talk, this boy and I,' she says, steering him toward the gate — then pauses. 'Don't lift off yet, pilot. Come find me at the market later. There's something I want to ask you.'"
+  success_text: "At the market stall Marta comes straight to it: 'He'll go again. We both know it. Better he goes with someone who fights pirates and brings boys home. There's an old shuttle in our shed — his grandfather's. If Jonah apprentices with you... you keep my son SAFE. Promise me that.' You promise. Jonah Wren joins your wing in his grandfather's shuttle, the happiest apprentice voyager in the Sol system. Keep the promise."
   failure_text: "The shed stays locked."
   preconditions:
   - kind: completed
