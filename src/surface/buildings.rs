@@ -61,20 +61,25 @@ pub(crate) fn maze_venue_for_planet(
     item_universe: &ItemUniverse,
 ) -> Option<BuildingKind> {
     let (_, pd) = item_universe.find_gameplay_planet(planet_name)?;
+    // Top-tech worlds (tech 4 is the universe's ceiling) run a SUBSTATION
+    // service level under the colony.
+    if pd.tech_level >= 4 {
+        return Some(BuildingKind::Substation);
+    }
+    // Low-tech worlds that move ore dig MINES — the economy IS the hole.
+    // (Ore alone isn't enough: every trade hub stocks iron.)
     let mines_ore = pd.commodities.keys().any(|c| {
         matches!(
             c.as_str(),
             "iron" | "ore" | "minerals" | "silver" | "uranium"
         )
     });
-    if mines_ore {
+    if mines_ore && pd.tech_level <= 2 {
         return Some(BuildingKind::Mine);
     }
-    if pd.commodities.len() >= 5 {
+    // Mid-tech trade hubs stack WAREHOUSE rows.
+    if pd.commodities.len() >= 6 {
         return Some(BuildingKind::Warehouse);
-    }
-    if pd.tech_level >= 6 {
-        return Some(BuildingKind::Substation);
     }
     None
 }

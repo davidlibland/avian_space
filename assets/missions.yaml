@@ -3321,3 +3321,66 @@ lost_son_3:
   completion_effects:
   - kind: grant_companion
     companion: jonah_wren
+
+# ── Venue hunts: catch missions that USE the maze interiors ──────────────────
+# (mine on Mars, warehouse rows on Procyon Prime, substation under Earth.)
+claim_jumper_mars:
+  briefing: "A dust-caked mine foreman corners you at the bar. 'Claim-jumper salted our assay reports and bolted with the originals. He's gone to ground in the Mars mine — deep, probably, he knows those tunnels. Drag him out and the co-op pays 8,000. Fair warning, pilot: he WILL run for the shafts.'"
+  success_text: "You march the jumper out into the red daylight, assay folder wedged under your arm. The foreman flips through every page and nods once. 'Well hunted.'"
+  failure_text: "The tunnels keep him."
+  preconditions:
+  - kind: completed
+    mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 0.6
+    building: bar
+  objective:
+    kind: catch_npc
+    planet: mars
+    building: mine
+    npc_name: "the claim-jumper"
+  completion_effects:
+  - kind: pay
+    credits: 8000
+manifest_ghost:
+  briefing: "The customs clerk slides a flagged manifest across the counter. 'Freight fraud. A tally-man in the Procyon Prime warehouse rows ghosts cargo for smugglers — crates that exist on paper and nowhere else. Catch him with the books on him. 9,000, and Procyon's lanes get honest for a week.'"
+  success_text: "You corner the tally-man between container stacks, ledger still under his coat. The clerk stamps the recovered manifest with visible satisfaction."
+  failure_text: "The rows swallow him, and the paperwork stays crooked."
+  preconditions:
+  - kind: completed
+    mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 0.6
+    building: market
+  objective:
+    kind: catch_npc
+    planet: procyon_prime
+    building: warehouse
+    npc_name: "the tally-man"
+  completion_effects:
+  - kind: pay
+    credits: 9000
+coolant_saboteur:
+  briefing: "A Federation liaison meets you away from the crowds. 'Someone has been rigging the coolant loops in the service level under Earth's colony — the substation. Our engineers keep finding the damage; never the hand. Catch the saboteur down there. They know the pipes, so expect a chase. 10,000, quietly.'"
+  success_text: "You pin the saboteur against a pipe run, pockets full of scoring tools. Above ground, the liaison takes delivery without a word and pays without a receipt."
+  failure_text: "The service level hums on, and somewhere down there a valve is already loosening."
+  preconditions:
+  - kind: completed
+    mission: pirate_bounty_sol
+  offer:
+    kind: npc_offer
+    planet: earth
+    weight: 0.6
+    building: garrison
+  objective:
+    kind: catch_npc
+    planet: earth
+    building: substation
+    npc_name: "the saboteur"
+  completion_effects:
+  - kind: pay
+    credits: 10000

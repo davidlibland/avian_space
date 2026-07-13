@@ -2055,20 +2055,27 @@ mod tests {
         }
     }
 
-    /// Maze venues derive from what the world is, and are rare.
+    /// Maze venues derive from what the world is: low-tech ore worlds dig
+    /// mines, top-tech worlds run substations, mid-tech trade hubs stack
+    /// warehouses — and all three kinds actually place somewhere.
     #[test]
     fn maze_venues_derive_from_world_economy() {
         let iu = iu();
-        // Ceres is a mining world (iron on the market) → a mine.
+        use super::super::buildings::maze_venue_for_planet;
         assert_eq!(
-            super::super::buildings::maze_venue_for_planet("ceres", &iu),
+            maze_venue_for_planet("mars", &iu),
             Some(BuildingKind::Mine),
-            "ceres digs"
+            "mars digs"
         );
-        // Every venue is at most one per world.
-        for planet in ["earth", "ceres", "deneb_prime", "halcyon", "mars"] {
-            let v = super::super::buildings::maze_venue_for_planet(planet, &iu);
-            assert!(v.is_none() || v.is_some(), "{planet}: at most one venue");
-        }
+        assert_eq!(
+            maze_venue_for_planet("earth", &iu),
+            Some(BuildingKind::Substation),
+            "earth's service level"
+        );
+        assert_eq!(
+            maze_venue_for_planet("procyon_prime", &iu),
+            Some(BuildingKind::Warehouse),
+            "procyon prime trades"
+        );
     }
 }

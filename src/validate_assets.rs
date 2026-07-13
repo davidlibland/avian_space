@@ -632,6 +632,20 @@ fn planet_has_building(pd: &PlanetData, building: &str) -> bool {
         "garrison" => is_landable(pd),
         "outfitter" => !pd.outfitter.is_empty(),
         "shipyard" => !pd.shipyard.is_empty(),
+        // Maze venues derive from the world's economy (mirrors
+        // surface::buildings::maze_venue_for_planet — tech ceiling is 4).
+        "substation" => is_landable(pd) && pd.tech_level >= 4,
+        "mine" => {
+            is_landable(pd)
+                && pd.tech_level <= 2
+                && pd.commodities.keys().any(|c| {
+                    matches!(
+                        c.as_str(),
+                        "iron" | "ore" | "minerals" | "silver" | "uranium"
+                    )
+                })
+        }
+        "warehouse" => is_landable(pd) && pd.tech_level < 4 && pd.commodities.len() >= 6,
         _ => false, // unknown building name => typo
     }
 }
