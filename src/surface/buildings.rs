@@ -45,7 +45,38 @@ pub(crate) fn building_kinds_for_planet(
     {
         kinds.push(BuildingKind::Garrison);
     }
+    if let Some(venue) = maze_venue_for_planet(planet_name, item_universe) {
+        kinds.push(venue);
+    }
     kinds
+}
+
+/// At most ONE maze venue per world, derived from what the world is:
+/// ore/mineral economies dig MINES, big markets and free ports stack
+/// WAREHOUSE rows, high-tech worlds run a SUBSTATION service level
+/// underneath. Rare on purpose — "which building is the target in?" should
+/// stay a real question on hunt missions.
+pub(crate) fn maze_venue_for_planet(
+    planet_name: &str,
+    item_universe: &ItemUniverse,
+) -> Option<BuildingKind> {
+    let (_, pd) = item_universe.find_gameplay_planet(planet_name)?;
+    let mines_ore = pd.commodities.keys().any(|c| {
+        matches!(
+            c.as_str(),
+            "iron" | "ore" | "minerals" | "silver" | "uranium"
+        )
+    });
+    if mines_ore {
+        return Some(BuildingKind::Mine);
+    }
+    if pd.commodities.len() >= 5 {
+        return Some(BuildingKind::Warehouse);
+    }
+    if pd.tech_level >= 6 {
+        return Some(BuildingKind::Substation);
+    }
+    None
 }
 
 /// Template (footprint + door) used to place each building kind. Chosen so the
@@ -67,10 +98,12 @@ pub(crate) fn door_tiles_for(
 
 pub(crate) fn kind_template(kind: BuildingKind) -> &'static str {
     match kind {
-        BuildingKind::Outfitter => "small_house",   // 4×4
-        BuildingKind::FuelStation => "small_house", // 4×4 (booth + forecourt)
-        BuildingKind::Shipyard => "large_building", // 8×6
-        _ => "medium_house",                        // 6×5 — Market, Bar (+ fallback)
+        BuildingKind::Outfitter => "small_house",    // 4×4
+        BuildingKind::FuelStation => "small_house",  // 4×4 (booth + forecourt)
+        BuildingKind::Shipyard => "large_building",  // 8×6
+        BuildingKind::Warehouse => "large_building", // 8×6 — a freight shed
+        BuildingKind::Mine | BuildingKind::Substation => "small_house", // 4×4 — an adit / stair kiosk
+        _ => "medium_house", // 6×5 — Market, Bar (+ fallback)
     }
 }
 
@@ -85,6 +118,9 @@ pub(crate) fn kind_func(kind: BuildingKind) -> &'static str {
         BuildingKind::ShipPad => "pad",
         BuildingKind::FuelStation => "fuel_station",
         BuildingKind::Garrison => "garrison",
+        BuildingKind::Mine => "mine",
+        BuildingKind::Warehouse => "warehouse",
+        BuildingKind::Substation => "substation",
     }
 }
 

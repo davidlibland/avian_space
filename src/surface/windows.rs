@@ -213,6 +213,11 @@ pub(crate) fn surface_building_ui(
                         ui.label(format!("Credits: {}", ship.credits));
                     }
                 }
+                BuildingKind::Mine | BuildingKind::Warehouse | BuildingKind::Substation => {
+                    // Maze venues have no counter window — everything
+                    // happens inside. Unreachable in practice.
+                    ui.label("Nothing to do here.");
+                }
                 BuildingKind::Garrison => {
                     let faction = crate::galaxy::effective_planet_faction(
                         &galaxy,

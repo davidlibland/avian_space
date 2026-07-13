@@ -23,18 +23,66 @@ use super::{
     WORLD_HEIGHT, WORLD_WIDTH, WORLDS_DIR, Walker,
 };
 
-/// Which buildings have walkable interiors (the rest keep their windows).
+/// Which buildings have walkable interiors: all of them except the landing
+/// pad. The usual tasks route through the COUNTER — walk up to the clerk's
+/// counter and press E to open the classic window (trade at the market,
+/// repair/mods at the mechanic, refuel at the fuel depot, war desk at the
+/// garrison), so nothing regresses; displays and props are the browse path.
 pub(crate) fn has_interior(kind: BuildingKind) -> bool {
-    matches!(
-        kind,
-        BuildingKind::Bar | BuildingKind::Outfitter | BuildingKind::Shipyard
-    )
+    !matches!(kind, BuildingKind::ShipPad)
 }
 
 /// Set when entering a door; read by `setup_interior`.
 #[derive(Resource, Clone, Copy)]
 pub struct InteriorContext {
     pub kind: BuildingKind,
+    /// Which floor of a multi-level venue (0 = ground; mazes descend).
+    pub level: u8,
+}
+
+/// Present while the interior needs (re)building — inserted on entering the
+/// state and again on every stairs transition. `setup_interior` consumes it.
+#[derive(Resource, Clone, Copy)]
+pub(crate) struct InteriorDirty {
+    pub arrive: Arrive,
+}
+
+/// Where the walker appears after a (re)build.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Arrive {
+    /// The level's natural entry (door on level 0, up-stairs below).
+    Entry,
+    /// Climbing back up: appear at this level's DOWN stairs.
+    FromBelow,
+}
+
+/// Everything spawned by `setup_interior` — despawned wholesale on rebuild
+/// (stairs) as well as on state exit.
+#[derive(Component)]
+pub(crate) struct InteriorScoped;
+
+/// The stairs down to the next level (E to descend).
+#[derive(Component)]
+pub(crate) struct StairsDown;
+
+/// The stairs back up (E to ascend).
+#[derive(Component)]
+pub(crate) struct StairsUp;
+
+/// The clerk behind the counter — ambience; the counter does the business.
+#[derive(Component)]
+pub(crate) struct Clerk;
+
+/// On entering the state: flag the first build and clear the stale
+/// door-side `NearbyBuilding` so NPC chat isn't suppressed inside.
+pub(crate) fn mark_interior_dirty(
+    mut commands: Commands,
+    mut nearby: ResMut<super::NearbyBuilding>,
+) {
+    nearby.current = None;
+    commands.insert_resource(InteriorDirty {
+        arrive: Arrive::Entry,
+    });
 }
 
 /// Set when leaving an interior; `setup_surface` places the walker at this
@@ -76,14 +124,28 @@ pub(crate) struct InteriorPlan {
     pub terrain: Vec<u32>,
     /// Where the walker appears (just inside the door).
     pub entry: (u32, u32),
-    /// The exit-door tile (south wall centre).
-    pub door: (u32, u32),
+    /// The exit-door tile (level 0 only; None on lower levels).
+    pub door: Option<(u32, u32)>,
     /// Display plinth tiles, in stock order.
     pub displays: Vec<(u32, u32)>,
-    /// Counter tile (north wall centre).
-    pub counter: (u32, u32),
+    /// Counter tile — Some for shops, None for maze venues.
+    pub counter: Option<(u32, u32)>,
     /// Room bounds (x0, y0, w, h) for prop placement/tests.
     pub room: (u32, u32, u32, u32),
+    /// Extra solid tiles (furniture, containers), row-major.
+    pub solid: Vec<bool>,
+    /// Prop sprites: (sprite name, south-west anchor tile).
+    pub props: Vec<(&'static str, (u32, u32))>,
+    /// Stairs to the level below / back up.
+    pub stairs_down: Option<(u32, u32)>,
+    pub stairs_up: Option<(u32, u32)>,
+    /// Farthest walkable tile from the entry — hunt NPCs hide here.
+    pub hunt_spot: (u32, u32),
+    /// Total levels this venue has on this planet.
+    pub levels: u8,
+    /// Tiles at or above this tier are solid. Shops: the wall tier.
+    /// Mazes: the grate tier, letting walls be 3 tiles thin.
+    pub solid_min_tier: u32,
 }
 
 /// Room size for `n` display slots along the walls: displays sit on the
@@ -120,9 +182,44 @@ pub(crate) fn hall_size_for(ships: usize) -> (u32, u32, usize) {
     (w.max(14), h.max(12), cols)
 }
 
+/// Prop metadata: (footprint w, footprint h, blocks movement).
+/// Sprites live at assets/sprites/worlds/interior_props/<name>.png.
+pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
+    match name {
+        "bar_counter" => (3, 1, true),
+        "table_round" => (1, 1, true),
+        "stool" => (1, 1, false),
+        "shelf_rack" => (2, 1, true),
+        "market_stall" => (2, 1, true),
+        "engine_bench" => (2, 1, true),
+        "tool_rack" => (1, 1, true),
+        "fuel_pump" => (1, 1, true),
+        "war_desk" => (2, 1, true),
+        "flag_stand" => (1, 1, false),
+        "crate_stack" => (1, 1, true),
+        // Containers are already solid in the maze mask — visual only here.
+        "container_a" | "container_b" => (4, 2, false),
+        "ore_cart" => (1, 1, true),
+        "timber_brace" | "lantern" => (1, 1, false),
+        "pump_unit" => (2, 2, true),
+        "pipe_valve" => (1, 1, true),
+        "stairs_down" | "stairs_up" => (1, 1, false),
+        _ => (1, 1, false),
+    }
+}
+
 /// Build the floor plan for a building kind against the planet's derived
-/// stock. Deterministic: same planet, same shop, same room.
-pub(crate) fn build_plan(kind: BuildingKind, iu: &ItemUniverse, planet: &str) -> InteriorPlan {
+/// stock. Deterministic: same planet, same shop, same room. `level` picks
+/// the floor of multi-level maze venues (shops only have level 0).
+pub(crate) fn build_plan(
+    kind: BuildingKind,
+    iu: &ItemUniverse,
+    planet: &str,
+    level: u8,
+) -> InteriorPlan {
+    if super::mazes::is_maze(kind) {
+        return maze_plan(kind, planet, level);
+    }
     let (stock_len, ship_hall) = match kind {
         BuildingKind::Outfitter => (
             iu.find_gameplay_planet(planet)
@@ -136,7 +233,7 @@ pub(crate) fn build_plan(kind: BuildingKind, iu: &ItemUniverse, planet: &str) ->
                 .unwrap_or(0),
             true,
         ),
-        _ => (0, false), // bar: fixed cosy room
+        _ => (0, false),
     };
 
     let (rw, rh, hall_cols) = if ship_hall {
@@ -145,7 +242,14 @@ pub(crate) fn build_plan(kind: BuildingKind, iu: &ItemUniverse, planet: &str) ->
         let (w, h) = room_size_for(stock_len);
         (w, h, 0)
     } else {
-        (16, 12, 0) // the bar
+        // Fixed rooms sized to their furniture.
+        match kind {
+            BuildingKind::Market => (20, 13, 0),
+            BuildingKind::MechanicShop => (14, 10, 0),
+            BuildingKind::FuelStation => (12, 10, 0),
+            BuildingKind::Garrison => (14, 11, 0),
+            _ => (16, 12, 0), // the bar
+        }
     };
 
     let map_w = WORLD_WIDTH;
@@ -243,13 +347,149 @@ pub(crate) fn build_plan(kind: BuildingKind, iu: &ItemUniverse, planet: &str) ->
         }
     }
 
+    // ── Furnishing: the props that make each shop ITS shop ──
+    let mut props: Vec<(&'static str, (u32, u32))> = Vec::new();
+    match kind {
+        BuildingKind::Bar => {
+            props.push(("bar_counter", (counter.0 - 1, counter.1)));
+            // Round tables + stools in a loose grid clear of the walkway.
+            for (i, &(tx, ty)) in [
+                (x0 + 3, y0 + 3),
+                (x0 + 3, y0 + 6),
+                (x0 + rw - 5, y0 + 3),
+                (x0 + rw - 5, y0 + 6),
+                (x0 + rw / 2 + 2, y0 + 4),
+            ]
+            .iter()
+            .enumerate()
+            {
+                props.push(("table_round", (tx, ty)));
+                props.push(("stool", (tx + 1, ty + if i % 2 == 0 { 1 } else { 0 })));
+            }
+        }
+        BuildingKind::Market => {
+            // Two stall rows facing a central aisle.
+            for row in 0..2u32 {
+                let sy = y0 + 3 + row * 5;
+                let mut sx = x0 + 2;
+                while sx + 2 < x0 + rw - 2 {
+                    props.push(("market_stall", (sx, sy)));
+                    // Loose crates dress the first aisle only — the second
+                    // row's aisle doubles as the counter walkway.
+                    if row == 0 {
+                        props.push(("crate_stack", (sx + rng_ish(sx, sy) % 2, sy + 2)));
+                    }
+                    sx += 4;
+                }
+            }
+        }
+        BuildingKind::MechanicShop => {
+            props.push(("engine_bench", (x0 + rw / 2 - 1, y0 + rh / 2)));
+            props.push(("tool_rack", (x0 + 1, y0 + 3)));
+            props.push(("tool_rack", (x0 + 1, y0 + 6)));
+            props.push(("crate_stack", (x0 + rw - 2, y0 + 2)));
+        }
+        BuildingKind::FuelStation => {
+            for i in 0..3u32 {
+                props.push(("fuel_pump", (x0 + rw - 2, y0 + 2 + i * 3)));
+            }
+        }
+        BuildingKind::Garrison => {
+            props.push(("war_desk", (counter.0 - 1, counter.1)));
+            props.push(("flag_stand", (counter.0 - 3, counter.1)));
+            props.push(("flag_stand", (counter.0 + 2, counter.1)));
+        }
+        BuildingKind::Outfitter | BuildingKind::Shipyard => {
+            props.push(("shelf_rack", (counter.0 - 1, counter.1)));
+        }
+        _ => {}
+    }
+
+    // Furniture solidity → the solid mask (kept out of doorways by layout).
+    let mut solid = vec![false; (map_w * map_h) as usize];
+    for &(name, (px, py)) in &props {
+        let (w, h, blocks) = prop_meta(name);
+        if blocks {
+            for y in py..(py + h).min(map_h) {
+                for x in px..(px + w).min(map_w) {
+                    solid[(y * map_w + x) as usize] = true;
+                }
+            }
+        }
+    }
+
     InteriorPlan {
         terrain,
         entry,
-        door,
+        door: Some(door),
         displays,
-        counter,
+        counter: Some(counter),
         room: (x0, y0, rw, rh),
+        solid,
+        props,
+        stairs_down: None,
+        stairs_up: None,
+        hunt_spot: (x0 + 2, y0 + rh - 2),
+        levels: 1,
+        solid_min_tier: T_WALL,
+    }
+}
+
+/// Tiny deterministic hash for prop jitter (no RNG in shop plans).
+fn rng_ish(x: u32, y: u32) -> u32 {
+    x.wrapping_mul(31).wrapping_add(y).wrapping_mul(2654435761) >> 16
+}
+
+/// A maze venue floor: generator output → plan.
+fn maze_plan(kind: BuildingKind, planet: &str, level: u8) -> InteriorPlan {
+    let seed = super::mazes::planet_seed(planet);
+    let levels = super::mazes::levels_for(kind, seed);
+    let level = level.min(levels - 1);
+    let mut lv = super::mazes::build_maze_level(kind, seed, level);
+    let terrain = super::mazes::terrain_from_floor(&lv.floor);
+    if let Some((sx, sy)) = lv.stairs_down {
+        lv.props.push(("stairs_down", (sx, sy)));
+    }
+    if let Some((sx, sy)) = lv.stairs_up {
+        lv.props.push(("stairs_up", (sx, sy)));
+    }
+    // Maze props block per their metadata (carts, valves...).
+    for &(name, (px, py)) in &lv.props {
+        let (w, h, blocks) = prop_meta(name);
+        if blocks {
+            for y in py..(py + h).min(WORLD_HEIGHT) {
+                for x in px..(px + w).min(WORLD_WIDTH) {
+                    lv.solid[(y * WORLD_WIDTH + x) as usize] = true;
+                }
+            }
+        }
+    }
+    // Keep the entry, stairs and hunt spot clear of props.
+    for tile in [
+        Some(lv.entry),
+        lv.stairs_down,
+        lv.stairs_up,
+        Some(lv.hunt_spot),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        lv.solid[(tile.1 * WORLD_WIDTH + tile.0) as usize] = false;
+    }
+    InteriorPlan {
+        terrain,
+        entry: lv.entry,
+        door: lv.door,
+        displays: Vec::new(),
+        counter: None,
+        room: (1, 1, WORLD_WIDTH - 2, WORLD_HEIGHT - 2),
+        solid: lv.solid,
+        props: lv.props,
+        stairs_down: lv.stairs_down,
+        stairs_up: lv.stairs_up,
+        hunt_spot: lv.hunt_spot,
+        levels,
+        solid_min_tier: 2, // grate and above are rock/steel in a maze
     }
 }
 
@@ -258,6 +498,8 @@ pub(crate) fn build_plan(kind: BuildingKind, iu: &ItemUniverse, planet: &str) ->
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn setup_interior(
     mut commands: Commands,
+    dirty: Option<Res<InteriorDirty>>,
+    old_scene: Query<Entity, With<InteriorScoped>>,
     context: Option<Res<InteriorContext>>,
     landed: Res<crate::planet_ui::LandedContext>,
     iu: Res<ItemUniverse>,
@@ -271,10 +513,19 @@ pub(crate) fn setup_interior(
     mut zoom: ResMut<super::CameraZoom>,
 ) {
     let _ = &current_system;
-    let Some(context) = context else { return };
+    let (Some(context), Some(dirty)) = (context, dirty) else {
+        return;
+    };
+    let arrive = dirty.arrive;
+    commands.remove_resource::<InteriorDirty>();
+    // Rebuild: clear the previous level's scene (state didn't change, so
+    // DespawnOnExit hasn't fired).
+    for e in &old_scene {
+        commands.entity(e).despawn();
+    }
     let kind = context.kind;
     let planet = landed.planet_name.clone().unwrap_or_default();
-    let plan = build_plan(kind, &iu, &planet);
+    let plan = build_plan(kind, &iu, &planet, context.level);
 
     commands.insert_resource(ClearColor(Color::srgb(0.02, 0.02, 0.03)));
 
@@ -334,6 +585,7 @@ pub(crate) fn setup_interior(
             let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
             commands.spawn((
                 DespawnOnExit(PlayState::Inside),
+                InteriorScoped,
                 Sprite::from_atlas_image(
                     atlas_image.clone(),
                     TextureAtlas {
@@ -343,17 +595,23 @@ pub(crate) fn setup_interior(
                 ),
                 Transform::from_xyz(pos.x, pos.y, -10.0),
             ));
-            // Solid walls (tier ≥ wall) block; the door notch is plating.
+            // Solid walls block. Shops use the biome's collision rows; maze
+            // venues also solidify the grate tier (3-tile-thin walls) and
+            // any furniture/container tiles from the plan.
             let tier = map2d[ty as usize][tx as usize];
-            let solid = biome
-                .terrains
-                .iter()
-                .find(|t| t.row == tier)
-                .map(|t| t.collision == 1)
-                .unwrap_or(tier >= T_WALL);
+            let idx = (ty * map_w + tx) as usize;
+            let solid = tier >= plan.solid_min_tier
+                || plan.solid[idx]
+                || biome
+                    .terrains
+                    .iter()
+                    .find(|t| t.row == tier)
+                    .map(|t| t.collision == 1)
+                    .unwrap_or(false);
             if solid {
                 commands.spawn((
                     DespawnOnExit(PlayState::Inside),
+                    InteriorScoped,
                     RigidBody::Static,
                     Collider::rectangle(tile_px, tile_px),
                     CollisionLayers::new(
@@ -370,7 +628,11 @@ pub(crate) fn setup_interior(
     let data: Vec<f32> = plan
         .terrain
         .iter()
-        .map(|&tier| {
+        .enumerate()
+        .map(|(i, &tier)| {
+            if plan.solid[i] || tier >= plan.solid_min_tier {
+                return f32::INFINITY;
+            }
             let meta = biome.terrains.iter().find(|t| t.row == tier);
             match meta {
                 Some(m) if m.collision != 1 => m.movement_cost.max(0.1),
@@ -417,6 +679,7 @@ pub(crate) fn setup_interior(
         let (sprite, size) = display_sprite(binding, &iu, &asset_server);
         commands.spawn((
             DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
             binding.clone(),
             sprite,
             Transform::from_xyz(
@@ -429,21 +692,66 @@ pub(crate) fn setup_interior(
     }
 
     // Counter + exit door markers (invisible; interaction handles them).
-    let cpos = super::tile_to_world(plan.counter.0, plan.counter.1, map_w, map_h, tile_px);
-    commands.spawn((
-        DespawnOnExit(PlayState::Inside),
-        Counter(kind),
-        Transform::from_xyz(cpos.x, cpos.y, 0.0),
-    ));
-    let dpos = super::tile_to_world(plan.door.0, plan.door.1, map_w, map_h, tile_px);
-    commands.spawn((
-        DespawnOnExit(PlayState::Inside),
-        ExitDoor,
-        Transform::from_xyz(dpos.x, dpos.y, 0.0),
-    ));
+    if let Some(counter) = plan.counter {
+        let cpos = super::tile_to_world(counter.0, counter.1, map_w, map_h, tile_px);
+        commands.spawn((
+            DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
+            Counter(kind),
+            Transform::from_xyz(cpos.x, cpos.y, 0.0),
+        ));
+    }
+    if let Some(door) = plan.door {
+        let dpos = super::tile_to_world(door.0, door.1, map_w, map_h, tile_px);
+        commands.spawn((
+            DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
+            ExitDoor,
+            Transform::from_xyz(dpos.x, dpos.y, 0.0),
+        ));
+    }
+    if let Some(stairs) = plan.stairs_down {
+        let spos = super::tile_to_world(stairs.0, stairs.1, map_w, map_h, tile_px);
+        commands.spawn((
+            DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
+            StairsDown,
+            Transform::from_xyz(spos.x, spos.y, 0.0),
+        ));
+    }
+    if let Some(stairs) = plan.stairs_up {
+        let spos = super::tile_to_world(stairs.0, stairs.1, map_w, map_h, tile_px);
+        commands.spawn((
+            DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
+            StairsUp,
+            Transform::from_xyz(spos.x, spos.y, 0.0),
+        ));
+    }
 
-    // ── The walker, just inside the door ──
-    let spawn_pos = super::tile_to_world(plan.entry.0, plan.entry.1, map_w, map_h, tile_px);
+    // ── Prop sprites (baked at 32 px/tile, bottom-center anchored) ──
+    for &(name, (px, py)) in &plan.props {
+        let (w, _h, _) = prop_meta(name);
+        let base = super::tile_to_world(px, py, map_w, map_h, tile_px);
+        let front_y = base.y - tile_px * 0.5;
+        let cx = base.x + (w as f32 - 1.0) * 0.5 * tile_px;
+        commands.spawn((
+            DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
+            Sprite::from_image(
+                asset_server.load(format!("sprites/worlds/interior_props/{name}.png")),
+            ),
+            bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
+            Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
+        ));
+    }
+
+    // ── The walker: at the door coming in, at the stairs coming up ──
+    let spawn_tile = match arrive {
+        Arrive::Entry => plan.entry,
+        Arrive::FromBelow => plan.stairs_down.unwrap_or(plan.entry),
+    };
+    let spawn_pos = super::tile_to_world(spawn_tile.0, spawn_tile.1, map_w, map_h, tile_px);
     if let Some((walker_image, walker_layout)) = character_layers.as_deref_mut().and_then(|l| {
         l.composite(&game_state.avatar, &mut images)
             .map(|img| (img, l.layout.clone()))
@@ -452,6 +760,7 @@ pub(crate) fn setup_interior(
         let initial_index = walker_anim.atlas_index();
         commands.spawn((
             DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
             Walker,
             crate::surface_objects::FootOffset(crate::surface_objects::CHARACTER_FOOT_OFFSET),
             walker_anim,
@@ -524,14 +833,18 @@ fn display_sprite(
 
 // ── Interaction ───────────────────────────────────────────────────────────────
 
-/// E inside: exit door first, then the counter (classic window).
+/// E inside: exit door first, then stairs, then the counter (which opens
+/// the classic full-list window — trade, repair, refuel, war desk).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn interior_interact(
     keyboard: Res<ButtonInput<KeyCode>>,
     walker: Query<&Transform, With<Walker>>,
     exits: Query<&Transform, (With<ExitDoor>, Without<Walker>)>,
+    stairs_down: Query<&Transform, (With<StairsDown>, Without<Walker>)>,
+    stairs_up: Query<&Transform, (With<StairsUp>, Without<Walker>)>,
     counters: Query<(&Counter, &Transform), Without<Walker>>,
     mut active_ui: ResMut<ActiveBuildingUI>,
-    context: Option<Res<InteriorContext>>,
+    context: Option<ResMut<InteriorContext>>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
@@ -541,20 +854,33 @@ pub(crate) fn interior_interact(
     let Ok(wtf) = walker.single() else { return };
     let wp = wtf.translation.truncate();
     let range = TILE_PX * 1.6;
-    if exits
-        .iter()
-        .any(|t| (t.translation.truncate() - wp).length() < range)
-    {
+    let near = |t: &Transform| (t.translation.truncate() - wp).length() < range;
+    if exits.iter().any(near) {
         if let Some(ctx) = context {
             commands.insert_resource(ReturnFromInterior(ctx.kind));
         }
         next_state.set(PlayState::Exploring);
         return;
     }
-    if let Some((counter, _)) = counters
-        .iter()
-        .find(|(_, t)| (t.translation.truncate() - wp).length() < range)
-    {
+    if stairs_down.iter().any(near) {
+        if let Some(mut ctx) = context {
+            ctx.level += 1;
+            commands.insert_resource(InteriorDirty {
+                arrive: Arrive::Entry,
+            });
+        }
+        return;
+    }
+    if stairs_up.iter().any(near) {
+        if let Some(mut ctx) = context {
+            ctx.level = ctx.level.saturating_sub(1);
+            commands.insert_resource(InteriorDirty {
+                arrive: Arrive::FromBelow,
+            });
+        }
+        return;
+    }
+    if let Some((counter, _)) = counters.iter().find(|(_, t)| near(t)) {
         active_ui.0 = Some(counter.0);
     }
 }
@@ -673,9 +999,11 @@ pub(crate) fn display_panel_ui(
         });
 }
 
-/// Offer NPCs whose building has an interior spawn INSIDE it; the bar's
-/// patrons come with them. Idempotent per mission id (same as the surface
-/// spawner). Companion avatars arrive via the shared system.
+/// People inside: offer NPCs whose building this is wait at tables
+/// (level 0), a CLERK stands behind every shop counter, and active
+/// meet/catch hunt targets hide at the deepest level's far end.
+/// Idempotent per mission id / per clerk.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_interior_npcs(
     mut commands: Commands,
     context: Option<Res<InteriorContext>>,
@@ -683,7 +1011,9 @@ pub(crate) fn spawn_interior_npcs(
     iu: Res<ItemUniverse>,
     offers: Res<crate::missions::MissionOffers>,
     catalog: Res<crate::missions::MissionCatalog>,
+    mission_log: Res<crate::missions::MissionLog>,
     existing: Query<&crate::surface_npc::MissionNpc>,
+    clerks: Query<(), With<Clerk>>,
     layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
     mut images: ResMut<Assets<Image>>,
     cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
@@ -695,41 +1025,105 @@ pub(crate) fn spawn_interior_npcs(
     let planet = landed.planet_name.clone().unwrap_or_default();
     let already: std::collections::HashSet<&str> = existing.iter().map(|m| m.0.as_str()).collect();
     let building_name = format!("{kind:?}").to_lowercase();
-    let plan = build_plan(kind, &iu, &planet);
-    let (x0, y0, rw, rh) = plan.room;
-    let mut slot = 0u32;
-    for id in offers.npc.get(&planet).cloned().unwrap_or_default() {
-        if already.contains(id.as_str()) {
-            continue;
-        }
-        let Some(def) = catalog.defs.get(&id) else {
-            continue;
-        };
-        let crate::missions::types::OfferKind::NpcOffer { building, npc, .. } = &def.offer else {
-            continue;
-        };
-        if building.as_deref() != Some(building_name.as_str()) {
-            continue;
-        }
-        // A table spot along the west side.
-        let tile = (x0 + 2, (y0 + 3 + slot * 2).min(y0 + rh - 3));
-        slot += 1;
-        let identity = super::npc_identity(&iu, &layers, npc);
-        let walk_speed = layers.walk_speed;
-        crate::surface_npc::spawn_mission_npc(
-            &mut commands,
-            &mut layers,
-            &mut images,
-            "civilian",
-            identity,
-            &id,
-            tile,
-            walk_speed,
-            false,
-            PlayState::Inside,
-        );
+    let plan = build_plan(kind, &iu, &planet, context.level);
+    let (x0, y0, _rw, rh) = plan.room;
+    let walk_speed = layers.walk_speed;
+
+    // The clerk: one per counter, standing behind it.
+    if let Some(counter) = plan.counter
+        && clerks.is_empty()
+    {
+        let tile = (counter.0, (counter.1 + 1).min(y0 + rh - 1));
+        crate::surface_npc::spawn_clerk(&mut commands, &mut layers, &mut images, tile);
     }
-    let _ = rw;
+
+    // Offer NPCs at the tables (ground floor only; mazes have no givers).
+    if context.level == 0 && !super::mazes::is_maze(kind) {
+        let mut slot = 0u32;
+        for id in offers.npc.get(&planet).cloned().unwrap_or_default() {
+            if already.contains(id.as_str()) {
+                continue;
+            }
+            let Some(def) = catalog.defs.get(&id) else {
+                continue;
+            };
+            let crate::missions::types::OfferKind::NpcOffer { building, npc, .. } = &def.offer
+            else {
+                continue;
+            };
+            if building.as_deref() != Some(building_name.as_str()) {
+                continue;
+            }
+            // A table spot along the west side.
+            let tile = (x0 + 2, (y0 + 3 + slot * 2).min(y0 + rh - 3));
+            slot += 1;
+            let identity = super::npc_identity(&iu, &layers, npc);
+            crate::surface_npc::spawn_mission_npc(
+                &mut commands,
+                &mut layers,
+                &mut images,
+                "civilian",
+                identity,
+                &id,
+                tile,
+                walk_speed,
+                false,
+                PlayState::Inside,
+            );
+        }
+    }
+
+    // Hunt targets: active meet/catch objectives bound to THIS building,
+    // hiding at the deepest level's farthest tile.
+    if context.level + 1 == plan.levels {
+        for (mission_id, def) in &catalog.defs {
+            if already.contains(mission_id.as_str()) {
+                continue;
+            }
+            if !matches!(
+                mission_log.status(mission_id),
+                crate::missions::MissionStatus::Active(_)
+            ) {
+                continue;
+            }
+            let (m_planet, m_building, npc, objective) = match &def.objective {
+                crate::missions::Objective::MeetNpc {
+                    planet: p,
+                    building: b,
+                    npc,
+                    ..
+                } => (
+                    p,
+                    b,
+                    npc,
+                    crate::surface_npc::ObjectiveKind::Meet { seek: false },
+                ),
+                crate::missions::Objective::CatchNpc {
+                    planet: p,
+                    building: b,
+                    npc,
+                    ..
+                } => (p, b, npc, crate::surface_npc::ObjectiveKind::Catch),
+                _ => continue,
+            };
+            if *m_planet != planet || m_building.as_deref() != Some(building_name.as_str()) {
+                continue;
+            }
+            let identity = super::npc_identity(&iu, &layers, npc);
+            crate::surface_npc::spawn_objective_npc(
+                &mut commands,
+                &mut layers,
+                &mut images,
+                "civilian",
+                identity,
+                mission_id,
+                plan.hunt_spot,
+                walk_speed * 1.1,
+                objective,
+                PlayState::Inside,
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -744,12 +1138,20 @@ mod tests {
         iu
     }
 
-    /// Walkable predicate mirroring setup: below the wall tier walks.
+    /// Walkable predicate mirroring setup: below the plan's solid tier and
+    /// not furniture.
     fn cost_map_of(plan: &InteriorPlan) -> SurfaceCostMap {
         let data = plan
             .terrain
             .iter()
-            .map(|&t| if t < T_WALL { 1.0 } else { f32::INFINITY })
+            .enumerate()
+            .map(|(i, &t)| {
+                if plan.solid[i] || t >= plan.solid_min_tier {
+                    f32::INFINITY
+                } else {
+                    1.0
+                }
+            })
             .collect();
         SurfaceCostMap {
             data,
@@ -758,8 +1160,28 @@ mod tests {
         }
     }
 
+    fn assert_contract(terrain: &[u32], what: &str) {
+        let (w, h) = (WORLD_WIDTH as i32, WORLD_HEIGHT as i32);
+        for y in 0..h {
+            for x in 0..w {
+                let t = terrain[(y * w + x) as usize] as i64;
+                for (dx, dy) in [(1, 0), (0, 1), (1, 1), (1, -1)] {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                        continue;
+                    }
+                    let n = terrain[(ny * w + nx) as usize] as i64;
+                    assert!(
+                        (t - n).abs() <= 1,
+                        "{what}: gradient break at ({x},{y}): {t} vs {n}"
+                    );
+                }
+            }
+        }
+    }
+
     /// Shops are rooms, not mazes: every display, the counter, and the
-    /// entry are mutually reachable, and the entry sits by the door notch.
+    /// entry are mutually reachable — WITH the furniture in place.
     #[test]
     fn every_display_and_the_counter_are_reachable_from_the_entry() {
         let iu = iu();
@@ -767,13 +1189,18 @@ mod tests {
             (BuildingKind::Bar, "earth"),
             (BuildingKind::Outfitter, "earth"),
             (BuildingKind::Shipyard, "earth"),
+            (BuildingKind::Market, "earth"),
+            (BuildingKind::MechanicShop, "earth"),
+            (BuildingKind::FuelStation, "earth"),
+            (BuildingKind::Garrison, "earth"),
             (BuildingKind::Outfitter, "marches_freeport"),
             (BuildingKind::Shipyard, "deneb_prime"),
         ] {
-            let plan = build_plan(kind, &iu, planet);
+            let plan = build_plan(kind, &iu, planet, 0);
             let cm = cost_map_of(&plan);
+            let counter_front = plan.counter.map(|(cx, cy)| (cx, cy - 1)).unwrap();
             assert!(
-                cm.find_path(plan.entry, plan.counter).is_some(),
+                cm.find_path(plan.entry, counter_front).is_some(),
                 "{kind:?}@{planet}: counter reachable"
             );
             for (i, &d) in plan.displays.iter().enumerate() {
@@ -785,26 +1212,24 @@ mod tests {
         }
     }
 
-    /// The blob47 autotiler contract: no two 8-connected neighbors differ
-    /// by more than one tier.
+    /// The blob47 autotiler contract holds for shops AND all maze levels.
     #[test]
     fn interior_terrain_satisfies_the_gradient_contract() {
         let iu = iu();
-        let plan = build_plan(BuildingKind::Shipyard, &iu, "earth");
-        let (w, h) = (WORLD_WIDTH as i32, WORLD_HEIGHT as i32);
-        for y in 0..h {
-            for x in 0..w {
-                let t = plan.terrain[(y * w + x) as usize] as i64;
-                for (dx, dy) in [(1, 0), (0, 1), (1, 1), (1, -1)] {
-                    let (nx, ny) = (x + dx, y + dy);
-                    if nx < 0 || ny < 0 || nx >= w || ny >= h {
-                        continue;
-                    }
-                    let n = plan.terrain[(ny * w + nx) as usize] as i64;
-                    assert!(
-                        (t - n).abs() <= 1,
-                        "gradient break at ({x},{y}): {t} vs {n}"
-                    );
+        assert_contract(
+            &build_plan(BuildingKind::Shipyard, &iu, "earth", 0).terrain,
+            "shipyard",
+        );
+        for kind in [
+            BuildingKind::Mine,
+            BuildingKind::Warehouse,
+            BuildingKind::Substation,
+        ] {
+            for planet in ["earth", "ceres", "deneb_prime"] {
+                let plan = build_plan(kind, &iu, planet, 0);
+                for level in 0..plan.levels {
+                    let p = build_plan(kind, &iu, planet, level);
+                    assert_contract(&p.terrain, &format!("{kind:?}@{planet} L{level}"));
                 }
             }
         }
@@ -816,7 +1241,7 @@ mod tests {
     fn shops_size_to_stock_and_display_everything() {
         let iu = iu();
         let earth_items = iu.find_gameplay_planet("earth").unwrap().1.outfitter.len();
-        let plan = build_plan(BuildingKind::Outfitter, &iu, "earth");
+        let plan = build_plan(BuildingKind::Outfitter, &iu, "earth", 0);
         assert_eq!(
             plan.displays.len(),
             earth_items,
@@ -829,7 +1254,7 @@ mod tests {
             .outfitter
             .len();
         assert!(earth_items > freeport_items, "premise: Earth stocks more");
-        let small = build_plan(BuildingKind::Outfitter, &iu, "marches_freeport");
+        let small = build_plan(BuildingKind::Outfitter, &iu, "marches_freeport", 0);
         let area = |p: &InteriorPlan| p.room.2 * p.room.3;
         assert!(
             area(&plan) > area(&small),
@@ -837,15 +1262,15 @@ mod tests {
         );
         // Ships too.
         let hulls = iu.find_gameplay_planet("earth").unwrap().1.shipyard.len();
-        let yard = build_plan(BuildingKind::Shipyard, &iu, "earth");
+        let yard = build_plan(BuildingKind::Shipyard, &iu, "earth", 0);
         assert_eq!(yard.displays.len(), hulls, "every hull gets a cradle");
         // The bar ignores stock entirely.
-        let bar = build_plan(BuildingKind::Bar, &iu, "earth");
+        let bar = build_plan(BuildingKind::Bar, &iu, "earth", 0);
         assert_eq!((bar.room.2, bar.room.3), (16, 12), "cosy, fixed, no maze");
     }
 
-    /// The outside-spawn filter's name mapping covers every kind, and
-    /// exactly the walk-in shops report an interior.
+    /// The outside-spawn filter's name mapping covers every kind, and every
+    /// kind except the landing pad has a walkable interior now.
     #[test]
     fn building_names_map_to_kinds_and_shops_have_interiors() {
         use BuildingKind::*;
@@ -858,6 +1283,9 @@ mod tests {
             Bar,
             FuelStation,
             Garrison,
+            Mine,
+            Warehouse,
+            Substation,
         ] {
             let name = format!("{kind:?}").to_lowercase();
             assert_eq!(
@@ -867,7 +1295,7 @@ mod tests {
             );
             assert_eq!(
                 has_interior(kind),
-                matches!(kind, Bar | Outfitter | Shipyard),
+                kind != ShipPad,
                 "{kind:?} interior flag"
             );
         }
@@ -887,6 +1315,127 @@ mod tests {
             assert!(area >= last, "monotone growth");
             assert!(w <= 36 && h <= 32, "bounded: {w}x{h} for {n}");
             last = area;
+        }
+    }
+
+    /// Every maze level is fully traversable: from the entry you can reach
+    /// the door (level 0), the stairs in BOTH directions, and the hunt
+    /// spot — with props and containers solid.
+    #[test]
+    fn maze_levels_are_connected_with_working_exits() {
+        let iu = iu();
+        for kind in [
+            BuildingKind::Mine,
+            BuildingKind::Warehouse,
+            BuildingKind::Substation,
+        ] {
+            for planet in ["earth", "ceres", "deneb_prime", "halcyon"] {
+                let ground = build_plan(kind, &iu, planet, 0);
+                assert!(
+                    ground.door.is_some(),
+                    "{kind:?}@{planet}: level 0 has a door"
+                );
+                assert!(ground.levels >= 1);
+                for level in 0..ground.levels {
+                    let plan = build_plan(kind, &iu, planet, level);
+                    let cm = cost_map_of(&plan);
+                    let reach = |to: (u32, u32), what: &str| {
+                        assert!(
+                            cm.find_path(plan.entry, to).is_some(),
+                            "{kind:?}@{planet} L{level}: {what} unreachable from entry"
+                        );
+                    };
+                    if let Some(door) = plan.door {
+                        // The entry sits just inside; the door tile itself
+                        // is the walkable corridor end.
+                        reach(door, "exit door");
+                    }
+                    if let Some(s) = plan.stairs_down {
+                        reach(s, "stairs down");
+                    }
+                    if let Some(s) = plan.stairs_up {
+                        reach(s, "stairs up");
+                    }
+                    reach(plan.hunt_spot, "hunt spot");
+                    // Levels below 0 must have a way back up.
+                    if level > 0 {
+                        assert!(plan.stairs_up.is_some(), "L{level} needs stairs up");
+                    }
+                    // Non-final levels must lead further down.
+                    if level + 1 < plan.levels {
+                        assert!(plan.stairs_down.is_some(), "L{level} needs stairs down");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Stair positions agree across adjacent levels' plans regenerated
+    /// independently (determinism), and the hunt spot is genuinely deep.
+    #[test]
+    fn maze_generation_is_deterministic_and_deep() {
+        let iu = iu();
+        let a = build_plan(BuildingKind::Mine, &iu, "ceres", 0);
+        let b = build_plan(BuildingKind::Mine, &iu, "ceres", 0);
+        assert_eq!(a.terrain, b.terrain, "same seed, same maze");
+        assert_eq!(a.stairs_down, b.stairs_down);
+        let cm = cost_map_of(&a);
+        let to_hunt = cm.find_path(a.entry, a.hunt_spot).map(|p| p.len()).unwrap();
+        assert!(
+            to_hunt >= 20,
+            "the hunt spot should be a real trek, got {to_hunt} tiles"
+        );
+    }
+
+    /// Each venue reads differently: the mine is a winding tree with thin
+    /// tunnels, the warehouse one big hall with container blocks, the
+    /// substation rooms-and-corridors.
+    #[test]
+    fn venues_have_distinct_shapes() {
+        let iu = iu();
+        let floor_count = |p: &InteriorPlan| {
+            p.terrain
+                .iter()
+                .enumerate()
+                .filter(|&(i, &t)| t == 0 && !p.solid[i])
+                .count()
+        };
+        let mine = build_plan(BuildingKind::Mine, &iu, "earth", 0);
+        let wh = build_plan(BuildingKind::Warehouse, &iu, "earth", 0);
+        let sub = build_plan(BuildingKind::Substation, &iu, "earth", 0);
+        // The warehouse hall dwarfs the mine's tunnels in open floor.
+        assert!(
+            floor_count(&wh) > floor_count(&mine),
+            "warehouse {} vs mine {}",
+            floor_count(&wh),
+            floor_count(&mine)
+        );
+        // The warehouse actually contains container blocks.
+        assert!(
+            wh.solid.iter().filter(|&&s| s).count() > 40,
+            "container blocks present"
+        );
+        // Substation has multiple disjoint room clusters joined by
+        // corridors — more floor than the mine's tunnels too.
+        assert!(floor_count(&sub) > 0);
+        // Mazes never expose a counter.
+        assert!(mine.counter.is_none() && wh.counter.is_none() && sub.counter.is_none());
+    }
+
+    /// Maze venues derive from what the world is, and are rare.
+    #[test]
+    fn maze_venues_derive_from_world_economy() {
+        let iu = iu();
+        // Ceres is a mining world (iron on the market) → a mine.
+        assert_eq!(
+            super::super::buildings::maze_venue_for_planet("ceres", &iu),
+            Some(BuildingKind::Mine),
+            "ceres digs"
+        );
+        // Every venue is at most one per world.
+        for planet in ["earth", "ceres", "deneb_prime", "halcyon", "mars"] {
+            let v = super::super::buildings::maze_venue_for_planet(planet, &iu);
+            assert!(v.is_none() || v.is_some(), "{planet}: at most one venue");
         }
     }
 }

@@ -245,7 +245,7 @@ pub(crate) fn building_interact(
         && let Some((_, kind)) = nearby.current
     {
         if crate::surface::interiors::has_interior(kind) {
-            commands.insert_resource(crate::surface::interiors::InteriorContext { kind });
+            commands.insert_resource(crate::surface::interiors::InteriorContext { kind, level: 0 });
             next_state.set(PlayState::Inside);
         } else {
             active_ui.0 = Some(kind);

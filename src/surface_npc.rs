@@ -692,7 +692,8 @@ pub fn spawn_objective_npc(
     door_tile: (u32, u32),
     speed: f32,
     kind: ObjectiveKind,
-) {
+    scope: crate::PlayState,
+) -> Option<Entity> {
     let mut rng = rand::thread_rng();
 
     let spec = identity
@@ -700,7 +701,7 @@ pub fn spawn_objective_npc(
         .map(|(_, spec)| spec.clone())
         .unwrap_or_else(|| layers.random_spec(&mut rng, role));
     let Some(image) = layers.composite(&spec, images) else {
-        return; // layer images still loading; idempotent caller retries
+        return None; // layer images still loading; idempotent caller retries
     };
     let start = SurfaceCostMap::tile_to_world(door_tile.0, door_tile.1);
 
@@ -756,7 +757,7 @@ pub fn spawn_objective_npc(
 
     let npc_entity = commands
         .spawn((
-            DespawnOnExit(crate::PlayState::Exploring),
+            DespawnOnExit(scope),
             Npc,
             MissionNpc(mission_id.to_string()),
             behavior,
@@ -800,6 +801,7 @@ pub fn spawn_objective_npc(
             Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
     });
+    Some(npc_entity)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -917,6 +919,46 @@ fn find_nearest_walkable(world_pos: Vec2, cm: &SurfaceCostMap) -> (u32, u32) {
         }
     }
     tile // fallback
+}
+
+/// A shopkeeper standing behind their counter. Pure ambience: no
+/// `NpcBehavior` (an empty queue would despawn them) and no chat — the
+/// counter itself opens the trade window. Static body so they hold their
+/// spot behind the till.
+pub fn spawn_clerk(
+    commands: &mut Commands,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    tile: (u32, u32),
+) {
+    let mut rng = rand::thread_rng();
+    let spec = layers.random_spec(&mut rng, "civilian");
+    let Some(image) = layers.composite(&spec, images) else {
+        return;
+    };
+    let pos = SurfaceCostMap::tile_to_world(tile.0, tile.1);
+    commands.spawn((
+        DespawnOnExit(crate::PlayState::Inside),
+        crate::surface::interiors::InteriorScoped,
+        crate::surface::interiors::Clerk,
+        Npc,
+        crate::surface_character::CharacterAnim::person(0.11),
+        RigidBody::Static,
+        crate::surface_objects::character_foot_collider(5.0),
+        CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+        Sprite::from_atlas_image(
+            image,
+            TextureAtlas {
+                layout: layers.layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_xyz(
+            pos.x,
+            pos.y,
+            crate::surface_objects::depth_z(pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET),
+        ),
+    ));
 }
 
 #[cfg(test)]

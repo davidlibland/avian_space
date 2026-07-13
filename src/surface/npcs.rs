@@ -169,6 +169,14 @@ pub(crate) fn spawn_mission_npcs(
                 npc,
                 ..
             } if planet == planet_name => {
+                // Building-bound targets wait INSIDE that building now.
+                if building
+                    .as_deref()
+                    .and_then(building_kind_from_name)
+                    .is_some_and(crate::surface::interiors::has_interior)
+                {
+                    continue;
+                }
                 let door = building
                     .as_ref()
                     .and_then(|name| building_door.get(&name.to_lowercase()))
@@ -180,10 +188,6 @@ pub(crate) fn spawn_mission_npcs(
                 } else {
                     door
                 };
-                let _world_pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(
-                    spawn_tile.0,
-                    spawn_tile.1,
-                );
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
                     layers,
@@ -194,6 +198,7 @@ pub(crate) fn spawn_mission_npcs(
                     spawn_tile,
                     walk_speed,
                     crate::surface_npc::ObjectiveKind::Meet { seek },
+                    PlayState::Exploring,
                 );
             }
             crate::missions::Objective::CatchNpc {
@@ -202,13 +207,18 @@ pub(crate) fn spawn_mission_npcs(
                 npc,
                 ..
             } if planet == planet_name => {
+                if building
+                    .as_deref()
+                    .and_then(building_kind_from_name)
+                    .is_some_and(crate::surface::interiors::has_interior)
+                {
+                    continue;
+                }
                 let door = building
                     .as_ref()
                     .and_then(|name| building_door.get(&name.to_lowercase()))
                     .copied()
                     .unwrap_or_else(|| door_tiles[rng.r#gen_range(0..door_tiles.len())]);
-                let _world_pos =
-                    crate::surface_pathfinding::SurfaceCostMap::tile_to_world(door.0, door.1);
                 crate::surface_npc::spawn_objective_npc(
                     &mut commands,
                     layers,
@@ -219,6 +229,7 @@ pub(crate) fn spawn_mission_npcs(
                     door,
                     walk_speed * 1.2,
                     crate::surface_npc::ObjectiveKind::Catch,
+                    PlayState::Exploring,
                 );
             }
             _ => {}
@@ -365,6 +376,9 @@ pub(crate) fn building_kind_from_name(name: &str) -> Option<BuildingKind> {
         BuildingKind::Bar,
         BuildingKind::FuelStation,
         BuildingKind::Garrison,
+        BuildingKind::Mine,
+        BuildingKind::Warehouse,
+        BuildingKind::Substation,
     ]
     .into_iter()
     .find(|k| format!("{k:?}").to_lowercase() == name)

@@ -64,6 +64,12 @@ pub enum BuildingKind {
     /// effective faction takes sides. War missions are posted here; it flies
     /// a flag tinted with the faction's colors.
     Garrison,
+    /// Maze venue: winding backtracker tunnels on mining worlds.
+    Mine,
+    /// Maze venue: container-canyon aisles at trade hubs and free ports.
+    Warehouse,
+    /// Maze venue: BSP service level under high-tech worlds.
+    Substation,
 }
 
 impl BuildingKind {
@@ -77,6 +83,9 @@ impl BuildingKind {
             BuildingKind::Bar => "Bar",
             BuildingKind::FuelStation => "Fuel",
             BuildingKind::Garrison => "Garrison",
+            BuildingKind::Mine => "Mine",
+            BuildingKind::Warehouse => "Warehouse",
+            BuildingKind::Substation => "Substation",
         }
     }
 
@@ -91,6 +100,9 @@ impl BuildingKind {
             BuildingKind::Bar => Color::srgb(0.8, 0.4, 0.1),
             BuildingKind::FuelStation => Color::srgb(0.3, 0.8, 0.9),
             BuildingKind::Garrison => Color::srgb(0.45, 0.55, 0.35),
+            BuildingKind::Mine => Color::srgb(0.5, 0.4, 0.3),
+            BuildingKind::Warehouse => Color::srgb(0.6, 0.55, 0.45),
+            BuildingKind::Substation => Color::srgb(0.35, 0.5, 0.55),
         }
     }
 }
@@ -248,7 +260,13 @@ pub fn surface_plugin(app: &mut App) {
             )
                 .chain(),
         )
-        .add_systems(OnEnter(PlayState::Inside), interiors::setup_interior)
+        .add_systems(OnEnter(PlayState::Inside), interiors::mark_interior_dirty)
+        .add_systems(
+            Update,
+            interiors::setup_interior.run_if(
+                in_state(PlayState::Inside).and(resource_exists::<interiors::InteriorDirty>),
+            ),
+        )
         .add_systems(
             Update,
             (
@@ -342,6 +360,7 @@ fn save_on_explore(
 mod buildings;
 mod interact;
 pub mod interiors;
+pub mod mazes;
 mod npcs;
 mod setup;
 mod windows;
