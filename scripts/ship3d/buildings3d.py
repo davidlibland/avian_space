@@ -648,7 +648,9 @@ def build_substation(s, m):
     # 4×4 stair kiosk: blast door, vent stacks, transformer yard cue.
     w, d, h = 4, 4, 2.4
     z0, top = base_and_walls(s, m, w, d, h)
-    wall_skin(s, m, w, d, h, z0, top, win=(2, 1), front=True)
+    # front=False: the blast door + hazard stripe own the front wall — the
+    # style's centre-front windows/curtain glow would overlap the doorway.
+    wall_skin(s, m, w, d, h, z0, top, win=(2, 1), front=False)
     # flat slab roof with vents instead of the style roof
     B.add_box("slab", (0, 0, top + 0.12), (w + 0.3, d + 0.3, 0.24), m["trim"], bevel=0.03)
     for i, (vx, vy) in enumerate(((-1.0, 0.6), (0.2, 0.9), (1.1, 0.3))):
