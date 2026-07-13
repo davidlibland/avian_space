@@ -34,10 +34,7 @@ impl Plugin for ToroidalWrapPlugin {
         app.insert_resource(ToroidalWorld {
             size: self.world_size,
         })
-        .add_systems(
-            Update,
-            toroidal_wrap_system.run_if(not(in_state(crate::PlayState::Exploring))),
-        );
+        .add_systems(Update, toroidal_wrap_system.run_if(not_on_foot));
     }
 }
 
@@ -54,7 +51,7 @@ impl Plugin for StarfieldPlugin {
             (shift_starfield, wrap_starfield)
                 .chain()
                 .before(PhysicsSystems::Writeback)
-                .run_if(not(in_state(crate::PlayState::Exploring))),
+                .run_if(not_on_foot),
         )
         .add_systems(
             Update,
@@ -62,13 +59,9 @@ impl Plugin for StarfieldPlugin {
         )
         .add_systems(
             Update,
-            origin_shift_system
-                .run_if(player_is_far_from_origin.and(not(in_state(crate::PlayState::Exploring)))),
+            origin_shift_system.run_if(player_is_far_from_origin.and(not_on_foot)),
         )
-        .add_systems(
-            FixedUpdate,
-            camera_follow_player.run_if(not(in_state(crate::PlayState::Exploring))),
-        );
+        .add_systems(FixedUpdate, camera_follow_player.run_if(not_on_foot));
     }
 }
 
@@ -310,11 +303,24 @@ fn camera_follow_player(
 }
 
 /// Hide stars when entering Exploring, show them again when leaving.
+/// The space scene sleeps while the player is on foot — both on the
+/// surface AND inside a building (the camera must track the walker, not
+/// the parked ship, and the starfield must not shine through interiors).
+fn not_on_foot(state: Res<State<crate::PlayState>>) -> bool {
+    !matches!(
+        *state.get(),
+        crate::PlayState::Exploring | crate::PlayState::Inside
+    )
+}
+
 fn toggle_star_visibility(
     state: Res<State<crate::PlayState>>,
     mut stars: Query<&mut Visibility, With<Star>>,
 ) {
-    let hide = *state.get() == crate::PlayState::Exploring;
+    let hide = matches!(
+        *state.get(),
+        crate::PlayState::Exploring | crate::PlayState::Inside
+    );
     for mut vis in &mut stars {
         *vis = if hide {
             Visibility::Hidden

@@ -602,6 +602,7 @@ pub(crate) fn setup_interior(
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut camera_query: Query<&mut Transform, With<Camera2d>>,
     mut zoom: ResMut<super::CameraZoom>,
+    player_ship: Query<Entity, With<Player>>,
 ) {
     let _ = &current_system;
     let (Some(context), Some(dirty)) = (context, dirty) else {
@@ -619,6 +620,11 @@ pub(crate) fn setup_interior(
     let plan = build_plan(kind, &iu, &planet, context.level);
 
     commands.insert_resource(ClearColor(Color::srgb(0.02, 0.02, 0.03)));
+    // teardown_surface (OnExit(Exploring)) re-reveals the parked ship on
+    // EVERY exit, including the one into this interior — hide it again.
+    if let Ok(ship) = player_ship.single() {
+        commands.entity(ship).insert(Visibility::Hidden);
+    }
 
     // ── Interior biome data (same files the surface uses) ──
     let load_ron = |filename: &str| -> Option<String> {
@@ -673,13 +679,32 @@ pub(crate) fn setup_interior(
         None,
     ));
 
-    // ── Tiles: only around the room (the void beyond never shows) ──
-    let (x0, y0, rw, rh) = plan.room;
-    let pad = 4u32;
-    let (tx0, ty0) = (x0.saturating_sub(pad), y0.saturating_sub(pad));
-    let (tx1, ty1) = ((x0 + rw + pad).min(map_w), (y0 + rh + pad).min(map_h));
-    for ty in ty0..ty1 {
-        for tx in tx0..tx1 {
+    // ── Tiles: the WHOLE map — any gap would show the space scene
+    // behind the interior. Colliders only in a band around the walkable
+    // region (incl. the entrance corridor), which seals every edge the
+    // walker can actually reach.
+    let walkable_bounds = {
+        let (mut lo_x, mut lo_y, mut hi_x, mut hi_y) = (map_w, map_h, 0u32, 0u32);
+        for y in 0..map_h {
+            for x in 0..map_w {
+                let i = (y * map_w + x) as usize;
+                if plan.terrain[i] < plan.solid_min_tier && !plan.solid[i] {
+                    lo_x = lo_x.min(x);
+                    lo_y = lo_y.min(y);
+                    hi_x = hi_x.max(x);
+                    hi_y = hi_y.max(y);
+                }
+            }
+        }
+        (
+            lo_x.saturating_sub(3),
+            lo_y.saturating_sub(3),
+            (hi_x + 4).min(map_w),
+            (hi_y + 4).min(map_h),
+        )
+    };
+    for ty in 0..map_h {
+        for tx in 0..map_w {
             let index = crate::world_assets::tile_texture_index(
                 &map2d,
                 tx as i32,
@@ -716,7 +741,11 @@ pub(crate) fn setup_interior(
                     .find(|t| t.row == tier)
                     .map(|t| t.collision == 1)
                     .unwrap_or(false);
-            if solid {
+            let in_collider_band = tx >= walkable_bounds.0
+                && ty >= walkable_bounds.1
+                && tx < walkable_bounds.2
+                && ty < walkable_bounds.3;
+            if solid && in_collider_band {
                 commands.spawn((
                     DespawnOnExit(PlayState::Inside),
                     InteriorScoped,
@@ -1665,6 +1694,42 @@ mod tests {
                     to_go < full,
                     "L{level}: the fugitive is strictly AHEAD of the player"
                 );
+            }
+        }
+    }
+
+    /// No leaks: every walkable tile (room, corridor, door) is strictly
+    /// enclosed — each of its neighbours is walkable or solid, and the
+    /// walkable region never reaches the map border (where colliders
+    /// would stop).
+    #[test]
+    fn walkable_region_is_sealed_for_every_interior() {
+        let iu = iu();
+        for (kind, planet) in [
+            (BuildingKind::Bar, "earth"),
+            (BuildingKind::Outfitter, "earth"),
+            (BuildingKind::Shipyard, "earth"),
+            (BuildingKind::Market, "earth"),
+            (BuildingKind::Mine, "ceres"),
+            (BuildingKind::Warehouse, "earth"),
+            (BuildingKind::Substation, "deneb_prime"),
+        ] {
+            let ground = build_plan(kind, &iu, planet, 0);
+            for level in 0..ground.levels {
+                let plan = build_plan(kind, &iu, planet, level);
+                for y in 0..WORLD_HEIGHT {
+                    for x in 0..WORLD_WIDTH {
+                        let i = (y * WORLD_WIDTH + x) as usize;
+                        let walkable = plan.terrain[i] < plan.solid_min_tier && !plan.solid[i];
+                        if !walkable {
+                            continue;
+                        }
+                        assert!(
+                            x > 0 && y > 0 && x + 1 < WORLD_WIDTH && y + 1 < WORLD_HEIGHT,
+                            "{kind:?}@{planet} L{level}: walkable at map border ({x},{y})"
+                        );
+                    }
+                }
             }
         }
     }

@@ -164,7 +164,10 @@ impl Plugin for HudPlugin {
                 update_target_wireframe,
                 update_secondary_weapon,
             )
-                .run_if(not(in_state(crate::PlayState::Exploring))),
+                .run_if(
+                    not(in_state(crate::PlayState::Exploring))
+                        .and(not(in_state(crate::PlayState::Inside))),
+                ),
         )
         .add_systems(
             Update,
