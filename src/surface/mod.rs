@@ -170,6 +170,65 @@ impl Default for TerrainSpeedModifier {
     }
 }
 
+/// Run condition: the player is on foot — walking the surface OR inside
+/// a building. The two states share almost every walking system; gate
+/// them on this instead of repeating the two-state `.or()` chain.
+pub(crate) fn on_foot(state: Res<State<crate::PlayState>>) -> bool {
+    matches!(
+        *state.get(),
+        crate::PlayState::Exploring | crate::PlayState::Inside
+    )
+}
+
+/// Spawn THE walker (player avatar) at a world position, scoped to the
+/// given on-foot state. One bundle for both scenes — surface and interior
+/// walkers must never drift apart in physics or animation setup.
+pub(crate) fn spawn_walker_at(
+    commands: &mut Commands,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    avatar: &crate::character_compositor::AvatarSpec,
+    spawn_pos: Vec2,
+    scope: crate::PlayState,
+) -> Option<Entity> {
+    let walker_image = layers.composite(avatar, images)?;
+    let walker_layout = layers.layout.clone();
+    let walker_anim = crate::surface_character::CharacterAnim::person(0.08);
+    let initial_index = walker_anim.atlas_index();
+    Some(
+        commands
+            .spawn((
+                DespawnOnExit(scope),
+                Walker,
+                crate::surface_objects::FootOffset(crate::surface_objects::CHARACTER_FOOT_OFFSET),
+                walker_anim,
+                RigidBody::Dynamic,
+                LockedAxes::ROTATION_LOCKED,
+                crate::surface_objects::character_foot_collider(WALKER_RADIUS),
+                CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+                CollisionEventsEnabled,
+                LinearDamping(WALKER_DAMPING),
+                MaxLinearSpeed(RUN_SPEED),
+                LinearVelocity(Vec2::ZERO),
+                Sprite::from_atlas_image(
+                    walker_image,
+                    TextureAtlas {
+                        layout: walker_layout,
+                        index: initial_index,
+                    },
+                ),
+                Transform::from_xyz(
+                    spawn_pos.x,
+                    spawn_pos.y,
+                    crate::surface_objects::depth_z(
+                        spawn_pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
+                    ),
+                ),
+            ))
+            .id(),
+    )
+}
+
 /// The generated mini-map image handle + map dimensions, used by the HUD.
 #[derive(Resource)]
 pub struct SurfaceMiniMap {
@@ -276,7 +335,7 @@ pub fn surface_plugin(app: &mut App) {
                 play_footstep,
                 spawn_companion_avatars,
             )
-                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
+                .run_if(on_foot),
         )
         .add_systems(
             Update,
@@ -294,11 +353,7 @@ pub fn surface_plugin(app: &mut App) {
             (interiors::interior_interact, interiors::spawn_interior_npcs)
                 .run_if(in_state(PlayState::Inside)),
         )
-        .add_systems(
-            Update,
-            interiors::maze_fugitive_arrivals
-                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
-        )
+        .add_systems(Update, interiors::maze_fugitive_arrivals.run_if(on_foot))
         .add_systems(
             Update,
             (
@@ -322,7 +377,7 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_npc::update_npc_markers,
                 crate::surface_civilians::depth_sort_npcs,
             )
-                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
+                .run_if(on_foot),
         )
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
@@ -330,25 +385,15 @@ pub fn surface_plugin(app: &mut App) {
         )
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
-            crate::surface_npc_chat::npc_chat_ui
-                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
+            crate::surface_npc_chat::npc_chat_ui.run_if(on_foot),
         )
         .add_systems(Update, animate_camera_zoom)
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
-            surface_building_ui
-                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
+            surface_building_ui.run_if(on_foot),
         )
-        .add_systems(
-            Update,
-            egui_button_click_sound
-                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
-        )
-        .add_systems(
-            FixedUpdate,
-            camera_follow_walker
-                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
-        );
+        .add_systems(Update, egui_button_click_sound.run_if(on_foot))
+        .add_systems(FixedUpdate, camera_follow_walker.run_if(on_foot));
 }
 
 // ---------------------------------------------------------------------------

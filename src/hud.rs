@@ -176,11 +176,15 @@ impl Plugin for HudPlugin {
         )
         .add_systems(
             Update,
-            toggle_space_hud_visibility.run_if(state_changed::<PlayState>),
+            toggle_space_hud_visibility.run_if(
+                state_changed::<PlayState>
+                    .or(resource_exists_and_changed::<crate::surface::SurfaceMiniMap>),
+            ),
         )
         .add_systems(
             Update,
-            update_minimap_player_dot.run_if(in_state(PlayState::Exploring)),
+            update_minimap_player_dot
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
         );
     }
 }
@@ -1171,9 +1175,13 @@ fn toggle_space_hud_visibility(
     mut minimap_q: Query<&mut ImageNode, With<MiniMapImage>>,
     minimap_res: Option<Res<crate::surface::SurfaceMiniMap>>,
 ) {
-    let exploring = *state.get() == PlayState::Exploring;
+    // On foot = surface OR inside a building: the walker's HUD (comms +
+    // surface mini-map) replaces the flight HUD (radar, target panels) in
+    // both. Interiors keep showing the SURFACE map — you're still on that
+    // world, just under a roof.
+    let on_foot = matches!(*state.get(), PlayState::Exploring | PlayState::Inside);
     for (mut vis, mut node) in &mut space_q {
-        if exploring {
+        if on_foot {
             *vis = Visibility::Hidden;
             node.display = Display::None;
         } else {
@@ -1182,7 +1190,7 @@ fn toggle_space_hud_visibility(
         }
     }
     for (mut vis, mut node) in &mut surface_q {
-        if exploring {
+        if on_foot {
             *vis = Visibility::Inherited;
             node.display = Display::Flex;
         } else {
@@ -1190,8 +1198,9 @@ fn toggle_space_hud_visibility(
             node.display = Display::None;
         }
     }
-    // Set the mini-map image when entering Exploring.
-    if exploring && let (Some(minimap), Ok(mut img_node)) = (minimap_res, minimap_q.single_mut()) {
+    // Set the mini-map image when entering Exploring (inside a building
+    // the resource is gone but the node keeps the surface image — right).
+    if on_foot && let (Some(minimap), Ok(mut img_node)) = (minimap_res, minimap_q.single_mut()) {
         img_node.image = minimap.image.clone();
     }
 }

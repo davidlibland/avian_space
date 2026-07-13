@@ -15,12 +15,10 @@ use bevy_egui::EguiContexts;
 
 use crate::item_universe::ItemUniverse;
 use crate::ship::{BuyShip, Ship};
-use crate::surface_character::CharacterAnim;
 use crate::{CurrentStarSystem, GameLayer, PlayState, Player};
 
 use super::{
-    ActiveBuildingUI, BuildingKind, RUN_SPEED, TILE_PX, WALKER_DAMPING, WALKER_RADIUS,
-    WORLD_HEIGHT, WORLD_WIDTH, WORLDS_DIR, Walker,
+    ActiveBuildingUI, BuildingKind, TILE_PX, WORLD_HEIGHT, WORLD_WIDTH, WORLDS_DIR, Walker,
 };
 
 /// Which buildings have walkable interiors: all of them except the landing
@@ -258,6 +256,57 @@ pub(crate) fn hall_size_for(ships: usize) -> (u32, u32, usize) {
     (w.max(14), h.max(12), cols)
 }
 
+/// What the outfitter actually SELLS to this player: stocked here,
+/// license held, and not a ship mod (mods live at the counter, exactly
+/// like the classic window's split).
+pub(crate) fn purchasable_items(
+    iu: &ItemUniverse,
+    planet: &str,
+    unlocks: &crate::missions::PlayerUnlocks,
+) -> Vec<String> {
+    let mut items: Vec<String> = iu
+        .find_gameplay_planet(planet)
+        .map(|(_, pd)| {
+            pd.outfitter
+                .iter()
+                .filter(|k| {
+                    iu.outfitter_items.get(k.as_str()).is_some_and(|item| {
+                        item.mod_effect().is_none()
+                            && item.required_unlocks().iter().all(|u| unlocks.has(u))
+                    })
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    items.sort();
+    items
+}
+
+/// The hulls this player can actually buy here (license-gated).
+pub(crate) fn purchasable_ships(
+    iu: &ItemUniverse,
+    planet: &str,
+    unlocks: &crate::missions::PlayerUnlocks,
+) -> Vec<String> {
+    let mut ships: Vec<String> = iu
+        .find_gameplay_planet(planet)
+        .map(|(_, pd)| {
+            pd.shipyard
+                .iter()
+                .filter(|k| {
+                    iu.ships
+                        .get(k.as_str())
+                        .is_some_and(|d| d.required_unlocks.iter().all(|u| unlocks.has(u)))
+                })
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    ships.sort();
+    ships
+}
+
 /// Prop metadata: (footprint w, footprint h, blocks movement).
 /// Sprites live at assets/sprites/worlds/interior_props/<name>.png.
 pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
@@ -294,23 +343,14 @@ pub(crate) fn build_plan(
     iu: &ItemUniverse,
     planet: &str,
     level: u8,
+    unlocks: &crate::missions::PlayerUnlocks,
 ) -> InteriorPlan {
     if super::mazes::is_maze(kind) {
         return maze_plan(kind, planet, level);
     }
     let (stock_len, ship_hall) = match kind {
-        BuildingKind::Outfitter => (
-            iu.find_gameplay_planet(planet)
-                .map(|(_, pd)| pd.outfitter.len())
-                .unwrap_or(0),
-            false,
-        ),
-        BuildingKind::Shipyard => (
-            iu.find_gameplay_planet(planet)
-                .map(|(_, pd)| pd.shipyard.len())
-                .unwrap_or(0),
-            true,
-        ),
+        BuildingKind::Outfitter => (purchasable_items(iu, planet, unlocks).len(), false),
+        BuildingKind::Shipyard => (purchasable_ships(iu, planet, unlocks).len(), true),
         _ => (0, false),
     };
 
@@ -397,6 +437,10 @@ pub(crate) fn build_plan(
                 displays.push((cx, cy));
                 placed += 1;
             }
+        }
+        // The same plating pedestal tiles the outfitter's plinths sit on.
+        for &(px, py) in &displays {
+            terrain[(py * map_w + px) as usize] = T_PLATING;
         }
     } else if stock_len > 0 {
         // Wall slots: west wall, east wall, then north beside the counter.
@@ -616,6 +660,7 @@ pub(crate) fn setup_interior(
     mut camera_query: Query<&mut Transform, With<Camera2d>>,
     mut zoom: ResMut<super::CameraZoom>,
     player_ship: Query<Entity, With<Player>>,
+    unlocks: Res<crate::missions::PlayerUnlocks>,
 ) {
     let _ = &current_system;
     let (Some(context), Some(dirty)) = (context, dirty) else {
@@ -630,7 +675,7 @@ pub(crate) fn setup_interior(
     }
     let kind = context.kind;
     let planet = landed.planet_name.clone().unwrap_or_default();
-    let plan = build_plan(kind, &iu, &planet, context.level);
+    let plan = build_plan(kind, &iu, &planet, context.level, &unlocks);
 
     commands.insert_resource(ClearColor(Color::srgb(0.02, 0.02, 0.03)));
     // teardown_surface (OnExit(Exploring)) re-reveals the parked ship on
@@ -774,6 +819,63 @@ pub(crate) fn setup_interior(
         }
     }
 
+    // ── Mini-map: the HUD keeps its surface slot, but inside it shows
+    // THIS floor's layout — walls dark, floor lit, exits highlighted.
+    {
+        let mut pixels = vec![0u8; (map_w * map_h * 4) as usize];
+        for y in 0..map_h {
+            for x in 0..map_w {
+                let i = (y * map_w + x) as usize;
+                let tier = plan.terrain[i];
+                let (mut r, mut g, mut b) = biome
+                    .terrains
+                    .iter()
+                    .find(|t| t.row == tier)
+                    .map(|t| t.map_color)
+                    .unwrap_or((40, 40, 44));
+                if plan.solid[i] {
+                    r /= 2;
+                    g /= 2;
+                    b /= 2;
+                }
+                let p = i * 4;
+                pixels[p] = r;
+                pixels[p + 1] = g;
+                pixels[p + 2] = b;
+                pixels[p + 3] = 255;
+            }
+        }
+        let mut mark = |tile: Option<(u32, u32)>, rgb: [u8; 3]| {
+            if let Some((tx, ty)) = tile {
+                let p = ((ty * map_w + tx) * 4) as usize;
+                pixels[p..p + 3].copy_from_slice(&rgb);
+            }
+        };
+        mark(plan.door, [90, 255, 120]); // the way out: green
+        mark(plan.stairs_down, [255, 210, 80]); // shafts: amber
+        mark(plan.stairs_up, [255, 210, 80]);
+        let mut img = Image::new(
+            bevy::render::render_resource::Extent3d {
+                width: map_w,
+                height: map_h,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            pixels,
+            bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+            bevy::asset::RenderAssetUsages::MAIN_WORLD
+                | bevy::asset::RenderAssetUsages::RENDER_WORLD,
+        );
+        img.sampler = bevy::image::ImageSampler::nearest();
+        commands.insert_resource(super::SurfaceMiniMap {
+            image: images.add(img),
+            map_w,
+            map_h,
+            buildings: Vec::new(),
+            pad_pos: plan.door.unwrap_or(plan.entry),
+        });
+    }
+
     // ── Cost map for NPC pathfinding (companions, patrons, hunts later) ──
     let data: Vec<f32> = plan
         .terrain
@@ -799,26 +901,17 @@ pub(crate) fn setup_interior(
     commands.insert_resource(crate::surface_pathfinding::SurfacePaths::default());
 
     // ── Props ──
+    // Only what this player can actually buy — same filter as the
+    // classic window (license held, mods excluded).
     let stock: Vec<DisplayBinding> = match kind {
-        BuildingKind::Outfitter => iu
-            .find_gameplay_planet(&planet)
-            .map(|(_, pd)| {
-                let mut items = pd.outfitter.clone();
-                items.sort();
-                items
-                    .into_iter()
-                    .map(DisplayBinding::OutfitterItem)
-                    .collect()
-            })
-            .unwrap_or_default(),
-        BuildingKind::Shipyard => iu
-            .find_gameplay_planet(&planet)
-            .map(|(_, pd)| {
-                let mut ships = pd.shipyard.clone();
-                ships.sort();
-                ships.into_iter().map(DisplayBinding::Ship).collect()
-            })
-            .unwrap_or_default(),
+        BuildingKind::Outfitter => purchasable_items(&iu, &planet, &unlocks)
+            .into_iter()
+            .map(DisplayBinding::OutfitterItem)
+            .collect(),
+        BuildingKind::Shipyard => purchasable_ships(&iu, &planet, &unlocks)
+            .into_iter()
+            .map(DisplayBinding::Ship)
+            .collect(),
         _ => Vec::new(),
     };
     for (slot, binding) in stock.iter().enumerate() {
@@ -902,41 +995,17 @@ pub(crate) fn setup_interior(
         Arrive::FromBelow => plan.stairs_down.unwrap_or(plan.entry),
     };
     let spawn_pos = super::tile_to_world(spawn_tile.0, spawn_tile.1, map_w, map_h, tile_px);
-    if let Some((walker_image, walker_layout)) = character_layers.as_deref_mut().and_then(|l| {
-        l.composite(&game_state.avatar, &mut images)
-            .map(|img| (img, l.layout.clone()))
-    }) {
-        let walker_anim = CharacterAnim::person(0.08);
-        let initial_index = walker_anim.atlas_index();
-        commands.spawn((
-            DespawnOnExit(PlayState::Inside),
-            InteriorScoped,
-            Walker,
-            crate::surface_objects::FootOffset(crate::surface_objects::CHARACTER_FOOT_OFFSET),
-            walker_anim,
-            RigidBody::Dynamic,
-            LockedAxes::ROTATION_LOCKED,
-            crate::surface_objects::character_foot_collider(WALKER_RADIUS),
-            CollisionLayers::new(GameLayer::Character, [GameLayer::Surface]),
-            CollisionEventsEnabled,
-            LinearDamping(WALKER_DAMPING),
-            MaxLinearSpeed(RUN_SPEED),
-            LinearVelocity(Vec2::ZERO),
-            Sprite::from_atlas_image(
-                walker_image,
-                TextureAtlas {
-                    layout: walker_layout,
-                    index: initial_index,
-                },
-            ),
-            Transform::from_xyz(
-                spawn_pos.x,
-                spawn_pos.y,
-                crate::surface_objects::depth_z(
-                    spawn_pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
-                ),
-            ),
-        ));
+    if let Some(layers) = character_layers.as_deref_mut()
+        && let Some(walker) = super::spawn_walker_at(
+            &mut commands,
+            layers,
+            &mut images,
+            &game_state.avatar,
+            spawn_pos,
+            PlayState::Inside,
+        )
+    {
+        commands.entity(walker).insert(InteriorScoped);
     }
 
     if let Ok(mut cam_tf) = camera_query.single_mut() {
@@ -961,22 +1030,18 @@ fn display_sprite(
             (s, 1.0)
         }
         DisplayBinding::OutfitterItem(item) => {
-            let weapon = iu.weapons.get(item);
-            match weapon.and_then(|w| w.sprite_path.clone()) {
-                Some(path) => {
-                    let mut s = Sprite::from_image(asset_server.load(path));
-                    s.custom_size = Some(Vec2::splat(TILE_PX * 0.9));
-                    (s, 1.0)
-                }
-                None => {
-                    let color = weapon
-                        .map(|w| Color::srgb(w.color[0], w.color[1], w.color[2]))
-                        .unwrap_or(Color::srgb(0.7, 0.9, 1.0));
-                    let mut s = Sprite::from_color(color, Vec2::splat(TILE_PX * 0.45));
-                    s.color = color;
-                    (s, 1.0)
-                }
-            }
+            // Holo-schematic over the plinth: every weapon has a generated
+            // wireframe (gen_wireframes.py item glyphs); anything else
+            // shows the generic cargo-canister schematic.
+            let path = if iu.weapons.contains_key(item) {
+                format!("sprites/wireframes/item_{item}.png")
+            } else {
+                "sprites/wireframes/pickup.png".to_string()
+            };
+            let mut s = Sprite::from_image(asset_server.load(path));
+            s.color = Color::srgba(0.4, 0.9, 1.0, 0.9);
+            s.custom_size = Some(Vec2::splat(TILE_PX * 1.3));
+            (s, 1.0)
         }
     }
 }
@@ -1168,6 +1233,7 @@ pub(crate) fn spawn_interior_npcs(
     mut images: ResMut<Assets<Image>>,
     cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
     chase: Res<MazeChase>,
+    unlocks: Res<crate::missions::PlayerUnlocks>,
 ) {
     let (Some(context), Some(mut layers), Some(cm)) = (context, layers, cost_map) else {
         return;
@@ -1176,7 +1242,7 @@ pub(crate) fn spawn_interior_npcs(
     let planet = landed.planet_name.clone().unwrap_or_default();
     let already: std::collections::HashSet<&str> = existing.iter().map(|m| m.0.as_str()).collect();
     let building_name = format!("{kind:?}").to_lowercase();
-    let plan = build_plan(kind, &iu, &planet, context.level);
+    let plan = build_plan(kind, &iu, &planet, context.level, &unlocks);
     let (x0, y0, _rw, rh) = plan.room;
     let walk_speed = layers.walk_speed;
 
@@ -1336,6 +1402,23 @@ mod tests {
         iu
     }
 
+    fn un() -> crate::missions::PlayerUnlocks {
+        crate::missions::PlayerUnlocks::default()
+    }
+
+    /// Every license in the universe — for size comparisons that shouldn't
+    /// depend on what a fresh pilot happens to hold.
+    fn un_all(iu: &ItemUniverse) -> crate::missions::PlayerUnlocks {
+        let mut all = std::collections::HashSet::new();
+        for item in iu.outfitter_items.values() {
+            all.extend(item.required_unlocks().iter().cloned());
+        }
+        for ship in iu.ships.values() {
+            all.extend(ship.required_unlocks.iter().cloned());
+        }
+        crate::missions::PlayerUnlocks(all)
+    }
+
     /// Walkable predicate mirroring setup: below the plan's solid tier and
     /// not furniture.
     fn cost_map_of(plan: &InteriorPlan) -> SurfaceCostMap {
@@ -1394,7 +1477,7 @@ mod tests {
             (BuildingKind::Outfitter, "marches_freeport"),
             (BuildingKind::Shipyard, "deneb_prime"),
         ] {
-            let plan = build_plan(kind, &iu, planet, 0);
+            let plan = build_plan(kind, &iu, planet, 0, &un());
             let cm = cost_map_of(&plan);
             let counter_front = plan.counter.map(|(cx, cy)| (cx, cy - 1)).unwrap();
             assert!(
@@ -1415,7 +1498,7 @@ mod tests {
     fn interior_terrain_satisfies_the_gradient_contract() {
         let iu = iu();
         assert_contract(
-            &build_plan(BuildingKind::Shipyard, &iu, "earth", 0).terrain,
+            &build_plan(BuildingKind::Shipyard, &iu, "earth", 0, &un()).terrain,
             "shipyard",
         );
         for kind in [
@@ -1424,9 +1507,9 @@ mod tests {
             BuildingKind::Substation,
         ] {
             for planet in ["earth", "ceres", "deneb_prime"] {
-                let plan = build_plan(kind, &iu, planet, 0);
+                let plan = build_plan(kind, &iu, planet, 0, &un());
                 for level in 0..plan.levels {
-                    let p = build_plan(kind, &iu, planet, level);
+                    let p = build_plan(kind, &iu, planet, level, &un());
                     assert_contract(&p.terrain, &format!("{kind:?}@{planet} L{level}"));
                 }
             }
@@ -1438,32 +1521,28 @@ mod tests {
     #[test]
     fn shops_size_to_stock_and_display_everything() {
         let iu = iu();
-        let earth_items = iu.find_gameplay_planet("earth").unwrap().1.outfitter.len();
-        let plan = build_plan(BuildingKind::Outfitter, &iu, "earth", 0);
+        let all = un_all(&iu);
+        let earth_items = purchasable_items(&iu, "earth", &all).len();
+        let plan = build_plan(BuildingKind::Outfitter, &iu, "earth", 0, &all);
         assert_eq!(
             plan.displays.len(),
             earth_items,
             "every stocked item gets a plinth"
         );
-        let freeport_items = iu
-            .find_gameplay_planet("marches_freeport")
-            .unwrap()
-            .1
-            .outfitter
-            .len();
+        let freeport_items = purchasable_items(&iu, "marches_freeport", &all).len();
         assert!(earth_items > freeport_items, "premise: Earth stocks more");
-        let small = build_plan(BuildingKind::Outfitter, &iu, "marches_freeport", 0);
+        let small = build_plan(BuildingKind::Outfitter, &iu, "marches_freeport", 0, &all);
         let area = |p: &InteriorPlan| p.room.2 * p.room.3;
         assert!(
             area(&plan) > area(&small),
             "Earth's outfitter hall outsizes the freeport booth"
         );
         // Ships too.
-        let hulls = iu.find_gameplay_planet("earth").unwrap().1.shipyard.len();
-        let yard = build_plan(BuildingKind::Shipyard, &iu, "earth", 0);
+        let hulls = purchasable_ships(&iu, "earth", &all).len();
+        let yard = build_plan(BuildingKind::Shipyard, &iu, "earth", 0, &all);
         assert_eq!(yard.displays.len(), hulls, "every hull gets a cradle");
         // The bar ignores stock entirely.
-        let bar = build_plan(BuildingKind::Bar, &iu, "earth", 0);
+        let bar = build_plan(BuildingKind::Bar, &iu, "earth", 0, &un());
         assert_eq!((bar.room.2, bar.room.3), (16, 12), "cosy, fixed, no maze");
     }
 
@@ -1528,14 +1607,14 @@ mod tests {
             BuildingKind::Substation,
         ] {
             for planet in ["earth", "ceres", "deneb_prime", "halcyon"] {
-                let ground = build_plan(kind, &iu, planet, 0);
+                let ground = build_plan(kind, &iu, planet, 0, &un());
                 assert!(
                     ground.door.is_some(),
                     "{kind:?}@{planet}: level 0 has a door"
                 );
                 assert!(ground.levels >= 1);
                 for level in 0..ground.levels {
-                    let plan = build_plan(kind, &iu, planet, level);
+                    let plan = build_plan(kind, &iu, planet, level, &un());
                     let cm = cost_map_of(&plan);
                     let reach = |to: (u32, u32), what: &str| {
                         assert!(
@@ -1573,8 +1652,8 @@ mod tests {
     #[test]
     fn maze_generation_is_deterministic_and_deep() {
         let iu = iu();
-        let a = build_plan(BuildingKind::Mine, &iu, "ceres", 0);
-        let b = build_plan(BuildingKind::Mine, &iu, "ceres", 0);
+        let a = build_plan(BuildingKind::Mine, &iu, "ceres", 0, &un());
+        let b = build_plan(BuildingKind::Mine, &iu, "ceres", 0, &un());
         assert_eq!(a.terrain, b.terrain, "same seed, same maze");
         assert_eq!(a.stairs_down, b.stairs_down);
         let cm = cost_map_of(&a);
@@ -1598,9 +1677,9 @@ mod tests {
                 .filter(|&(i, &t)| t == 0 && !p.solid[i])
                 .count()
         };
-        let mine = build_plan(BuildingKind::Mine, &iu, "earth", 0);
-        let wh = build_plan(BuildingKind::Warehouse, &iu, "earth", 0);
-        let sub = build_plan(BuildingKind::Substation, &iu, "earth", 0);
+        let mine = build_plan(BuildingKind::Mine, &iu, "earth", 0, &un());
+        let wh = build_plan(BuildingKind::Warehouse, &iu, "earth", 0, &un());
+        let sub = build_plan(BuildingKind::Substation, &iu, "earth", 0, &un());
         // The warehouse hall dwarfs the mine's tunnels in open floor.
         assert!(
             floor_count(&wh) > floor_count(&mine),
@@ -1684,10 +1763,10 @@ mod tests {
     fn fugitives_get_a_halfway_head_start_on_every_descending_level() {
         let iu = iu();
         for planet in ["ceres", "earth", "deneb_prime"] {
-            let ground = build_plan(BuildingKind::Mine, &iu, planet, 0);
+            let ground = build_plan(BuildingKind::Mine, &iu, planet, 0, &un());
             assert!(ground.levels >= 2, "premise: mines descend");
             for level in 0..ground.levels {
-                let plan = build_plan(BuildingKind::Mine, &iu, planet, level);
+                let plan = build_plan(BuildingKind::Mine, &iu, planet, level, &un());
                 let cm = cost_map_of(&plan);
                 let head_start = fugitive_head_start(&plan, &cm);
                 if level + 1 == plan.levels {
@@ -1727,9 +1806,9 @@ mod tests {
             (BuildingKind::Warehouse, "earth"),
             (BuildingKind::Substation, "deneb_prime"),
         ] {
-            let ground = build_plan(kind, &iu, planet, 0);
+            let ground = build_plan(kind, &iu, planet, 0, &un());
             for level in 0..ground.levels {
-                let plan = build_plan(kind, &iu, planet, level);
+                let plan = build_plan(kind, &iu, planet, level, &un());
                 for y in 0..WORLD_HEIGHT {
                     for x in 0..WORLD_WIDTH {
                         let i = (y * WORLD_WIDTH + x) as usize;
@@ -1760,7 +1839,7 @@ mod tests {
             (BuildingKind::Mine, "ceres", "ladder_up"),
             (BuildingKind::Substation, "deneb_prime", "ladder_up"),
         ] {
-            let plan = build_plan(kind, &iu, planet, 0);
+            let plan = build_plan(kind, &iu, planet, 0, &un());
             let door = plan.door.unwrap();
             assert!(
                 plan.props.iter().any(|&(n, t)| n == expect && t == door),
@@ -1769,6 +1848,46 @@ mod tests {
             let (_, _, blocks) = prop_meta(expect);
             assert!(!blocks, "{expect} must stay walkable");
         }
+    }
+
+    /// Displays show only what THIS pilot can buy: gaining licenses grows
+    /// the plinth count, and a fresh pilot never sees license-locked gear.
+    #[test]
+    fn displays_respect_licenses() {
+        let iu = iu();
+        let fresh = purchasable_items(&iu, "earth", &un());
+        let licensed = purchasable_items(&iu, "earth", &un_all(&iu));
+        assert!(
+            fresh.len() < licensed.len(),
+            "premise: Earth stocks licensed gear ({} vs {})",
+            fresh.len(),
+            licensed.len()
+        );
+        for key in &fresh {
+            let item = iu.outfitter_items.get(key).unwrap();
+            assert!(item.required_unlocks().is_empty(), "{key} is unlocked gear");
+            assert!(
+                item.mod_effect().is_none(),
+                "{key}: mods stay at the counter"
+            );
+        }
+        let plan = build_plan(BuildingKind::Outfitter, &iu, "earth", 0, &un());
+        assert_eq!(plan.displays.len(), fresh.len());
+    }
+
+    /// Every weapon in the universe has its display wireframe on disk —
+    /// plinths never show an empty holo.
+    #[test]
+    fn every_weapon_has_an_item_wireframe() {
+        let iu = iu();
+        for key in iu.weapons.keys() {
+            let path = format!("assets/sprites/wireframes/item_{key}.png");
+            assert!(
+                std::path::Path::new(&path).exists(),
+                "{path} missing — rerun scripts/gen_wireframes.py"
+            );
+        }
+        assert!(std::path::Path::new("assets/sprites/wireframes/pickup.png").exists());
     }
 
     /// Maze venues derive from what the world is, and are rare.

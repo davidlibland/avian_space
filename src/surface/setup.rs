@@ -1024,46 +1024,23 @@ pub(crate) fn setup_surface(
         commands.remove_resource::<crate::surface::interiors::ReturnFromInterior>();
     }
 
-    // Composite the player's avatar sheet (32px, 18-col idle/walk/run).
-    let Some((walker_image, walker_layout)) = character_layers.as_deref_mut().and_then(|layers| {
-        layers
-            .composite(&game_state.avatar, &mut images)
-            .map(|img| (img, layers.layout.clone()))
-    }) else {
+    let Some(layers) = character_layers.as_deref_mut() else {
         eprintln!("[surface] WARNING: character layers unavailable — no walker spawned");
         return;
     };
-    let walker_anim = CharacterAnim::person(0.08);
-    let initial_index = walker_anim.atlas_index();
-
-    commands.spawn((
-        DespawnOnExit(PlayState::Exploring),
-        Walker,
-        crate::surface_objects::FootOffset(crate::surface_objects::CHARACTER_FOOT_OFFSET),
-        walker_anim,
-        RigidBody::Dynamic,
-        LockedAxes::ROTATION_LOCKED,
-        crate::surface_objects::character_foot_collider(WALKER_RADIUS),
-        CollisionLayers::new(GameLayer::Character, [GameLayer::Surface]),
-        CollisionEventsEnabled,
-        LinearDamping(WALKER_DAMPING),
-        MaxLinearSpeed(RUN_SPEED),
-        LinearVelocity(Vec2::ZERO),
-        Sprite::from_atlas_image(
-            walker_image,
-            TextureAtlas {
-                layout: walker_layout,
-                index: initial_index,
-            },
-        ),
-        Transform::from_xyz(
-            spawn_pos.x,
-            spawn_pos.y,
-            crate::surface_objects::depth_z(
-                spawn_pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
-            ),
-        ),
-    ));
+    if crate::surface::spawn_walker_at(
+        &mut commands,
+        layers,
+        &mut images,
+        &game_state.avatar,
+        spawn_pos,
+        PlayState::Exploring,
+    )
+    .is_none()
+    {
+        eprintln!("[surface] WARNING: avatar sheet not composited — no walker spawned");
+        return;
+    }
 
     // "Press E" prompt is now shown via the comms ticker (no floating text).
 
