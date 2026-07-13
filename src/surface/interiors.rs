@@ -920,6 +920,22 @@ pub(crate) fn setup_interior(
         };
         let pos = super::tile_to_world(px, py, map_w, map_h, tile_px);
         let (sprite, size) = display_sprite(binding, &iu, &asset_server);
+        // The pedestal catches the hologram's light: a translucent pad in
+        // the weapon's signature color (holo cyan for hulls and the rest).
+        let pad_color = match binding {
+            DisplayBinding::OutfitterItem(key) => iu
+                .weapons
+                .get(key)
+                .map(|w| Color::srgba(w.color[0], w.color[1], w.color[2], 0.30))
+                .unwrap_or(Color::srgba(0.4, 0.9, 1.0, 0.22)),
+            DisplayBinding::Ship(_) => Color::srgba(0.4, 0.9, 1.0, 0.22),
+        };
+        commands.spawn((
+            DespawnOnExit(PlayState::Inside),
+            InteriorScoped,
+            Sprite::from_color(pad_color, Vec2::splat(tile_px * 0.88)),
+            Transform::from_xyz(pos.x, pos.y, -9.5),
+        ));
         commands.spawn((
             DespawnOnExit(PlayState::Inside),
             InteriorScoped,
