@@ -159,3 +159,9 @@ marta_wren:
 jonah_wren:
   name: "Jonah Wren"
   role: civilian
+free_fleet_king:
+  name: "Corven, the Uncrowned King"
+  avatar:
+    sex: male
+    slots: { body: body, head: head_m, hair: buzzcut, beard: stubble, shirt: longsleeve, over: jacket_trench_gray, legs: pants_formal, feet: boots_black }
+    colors: { body: ivory, hair: gray, eye: gray, cloth: charcoal }

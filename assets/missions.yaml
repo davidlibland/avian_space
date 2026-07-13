@@ -144,8 +144,8 @@ scavenge_iron_deliver:
 
 mining_story_1:
   faction: Merchant
-  briefing: "A weather-beaten Mining Guild recruiter loiters near the shipyard, eyeing incoming pilots. She waves you over. 'Kid, we're short on haulers. Shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 1,500 credits. Find me at the Mars market when you're done.'"
-  success_text: "The recruiter looks impressed. 'Go see the foreman on Mars — she's got bigger work.'"
+  briefing: "A weather-beaten Mining Guild recruiter loiters near the shipyard, eyeing incoming pilots. She waves you over. 'Kid, we're short on haulers. Shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 1,500 credits, paid the moment it's aboard.'"
+  success_text: "Your comm pings — the recruiter has seen the manifest. 'Good iron, kid. Go see the foreman at the Mars market — she's got bigger work.'"
   failure_text: "The recruiter snorts. 'Don't waste my time again.'"
   preconditions: []
   offer:
@@ -165,8 +165,8 @@ mining_story_1:
 
 mining_story_2:
   faction: Merchant
-  briefing: "The foreman is checking cargo manifests outside the Mars market. She pushes a datapad across a crate toward you. '6 units of iron, pulled from the Tau Ceti belt. Federation space, but further out — you'll need to jump. 3,000 on delivery. Come see our frontier contact at Barnard Rock when you make it back.'"
-  success_text: "The foreman nods. 'Frontier work pays the best. Barnard Rock — ask for the Guild near the market.'"
+  briefing: "The foreman is checking cargo manifests outside the Mars market. She pushes a datapad across a crate toward you. '6 units of iron, pulled from the Tau Ceti belt. Federation space, but further out — you'll need to jump. 3,000 the moment it's aboard. Then go see our frontier contact at Barnard Rock.'"
+  success_text: "The foreman's voice crackles over the long-range: 'Good haul. Frontier work pays the best — Barnard Rock, ask for the Guild near the market.'"
   failure_text: "The foreman just shakes her head."
   preconditions:
     - kind: completed
@@ -189,7 +189,7 @@ mining_story_2:
 mining_story_3:
   faction: Merchant
   briefing: "A wiry Guild agent waits outside the Barnard Rock market, arms folded. 'Border work. 8 units of clean iron, pulled from the Barnard belt. Rebels and pirates both sweep through here, so keep your eyes open. 6,000 credits — and if you make it back, you'll have earned your Miner's Guild certification. Real mining contracts will start showing up after that.'"
-  success_text: "The agent slides a signed certification across the counter: 'You're Guild now. Check any bar for mining contracts.' Your ship computer registers the new licenses."
+  success_text: "The agent's certification comes through on your ship computer, signature and all: 'You're Guild now. Check any bar for mining contracts.' The new licenses register."
   failure_text: "The agent sighs. 'The border eats the unprepared.'"
   preconditions:
     - kind: completed
@@ -254,7 +254,7 @@ merchant_story_1:
 
 merchant_story_2:
   faction: Merchant
-  briefing: "The Guild rep is leaning against a stack of crates outside the Moon market. He waves you over with a manifest. 'Bigger run this time — 50 units of food out to tau_ceti_2, one jump from Sol. You'll want a freighter for this one. 9,000 on delivery. When it's done, head to the tau_ceti_2 market — the Guild's regional office is there.'"
+  briefing: "The Guild rep is leaning against a stack of crates outside the Moon market. He waves you over with a manifest. 'Bigger run this time — 40 units of food out to tau_ceti_2, one jump from Sol. You'll want a freighter for this one. 9,000 on delivery. When it's done, head to the tau_ceti_2 market — the Guild's regional office is there.'"
   success_text: "The regional manager signs off the shipment and hands you a hauler license: 'Good run. We've got one more contract for you. Come back when you're ready.'"
   failure_text: "The regional manager's disappointment is palpable."
   preconditions:
@@ -458,7 +458,7 @@ bounty_story_2_catch:
 bounty_story_3:
   faction: Federation
   briefing: "Captain Vasquez is inspecting a damaged hull outside the Barnard Station mechanic shop. She sizes you up. 'You've got a reputation now. We've tracked a pirate strike group — two missile boats — operating out of the Drift. Border space, no backup. 22,000 credits if you eliminate them both. Report back here when it's done.'"
-  success_text: "Vasquez stamps your record. 'Impressive. One more target and you'll have earned a frigate certification — and access to Federation IR missiles. Come find me at the mechanic shop.'"
+  success_text: "Vasquez's stamp comes through on comms. 'Impressive. One more target and you'll have earned a frigate certification — and access to Federation IR missiles. Find me at the Barnard Station shipyard.'"
   failure_text: "Vasquez says nothing. The dossier stays on the table."
   preconditions:
     - kind: completed
@@ -601,8 +601,8 @@ bounty_story_6_catch:
   objective:
     kind: catch_npc
     planet: pluto
-    npc_name: "the Pirate King"
-    npc: pirate_king
+    npc_name: "the Uncrowned King"
+    npc: free_fleet_king
     building: bar
   completion_effects:
     - kind: pay
@@ -890,7 +890,7 @@ espionage_7_deliver:
 espionage_8:
   faction: Federation
   briefing: "The officer is pacing when you walk in. 'We have a problem. The rebels know the engineer defected — they've pulled an undercover frigate out of the Sirius fleet yard to hunt for whoever he leaked to. That's you, Commander. We're turning this around. Engage the frigate in Sirius before it ships out, break it open, and recover whatever weapons-tech they loaded for pursuit. 28,000 credits.'"
-  success_text: "The rebel frigate folds under sustained fire. Eight units of weapons-tech drift free of the wreckage — pursuit ordnance they never got to use. Bring it home."
+  success_text: "The rebel frigate folds under sustained fire. Six units of weapons-tech drift free of the wreckage — pursuit ordnance they never got to use. Bring it home."
   failure_text: "The frigate escaped. It will find you eventually."
   preconditions:
     - kind: completed
@@ -1028,8 +1028,8 @@ espionage_final:
 # ══════════════════════════════════════════════════════════════════════════════
 frontier_1:
   faction: FreeFrontier
-  briefing: "A weather-beaten harbormaster corners you in the Halcyon free port. 'You fly like you can fight. Pirates are gutting our ice convoys — two corvettes, working the Halcyon lanes. Run them off and the Reaches won't forget it. 22,000, and Coalition papers — our prospectors and ore-dredgers, and the flak gun they mount, are yours after that. The fighting hulls you earn one at a time.'"
-  success_text: "The harbormaster grips your hand. 'You're one of us now. Ceres yard sells you our working hulls — the prospector, the dredger, the flak gun. The fast hulls come as you prove them. Come find me — there's more.'"
+  briefing: "A weather-beaten harbormaster corners you in the Halcyon free port. 'You fly like you can fight. Pirates are gutting our ice convoys — two corvettes, working the Halcyon lanes. Run them off and the Reaches won't forget it. 8,000, and Coalition papers — our prospectors and ore-dredgers, and the flak gun they mount, are yours after that. The fighting hulls you earn one at a time.'"
+  success_text: "The harbormaster's voice comes warm over the link. 'You're one of us now. Ceres yard sells you our working hulls — the prospector, the dredger, the flak gun. The fast hulls come as you prove them. Come find me — there's more.'"
   failure_text: "The convoys burn. The harbormaster won't look at you."
   preconditions:
     - kind: completed
@@ -1115,7 +1115,7 @@ frontier_3:
       name: frontier_sailtender_license
 frontier_4:
   faction: FreeFrontier
-  briefing: "The harbormaster's voice is tight over comms. 'A Bastion raiding column is bearing down on Ceres Freehold — three iron hulls, no mercy in them. The whole Coalition is watching. Hold the line. 50,000, and you'll have earned every credit.' Two Freehold skiffs will fly on your wing."
+  briefing: "The harbormaster finds you at the bar, voice tight. 'A Bastion raiding column is bearing down on Ceres Freehold — three iron hulls, no mercy in them. The whole Coalition is watching. Hold the line. 20,000, and you'll have earned every credit.' Two Freehold skiffs will fly on your wing."
   success_text: "The Bastion column breaks against the Freehold's guns — and your own. Ceres holds. 'The Reaches are free another day, Captain,' the harbormaster says. 'Because of you.' 20,000 credits — and a harvester gunship off the Ceres line, mass-driver fitted, so you can hit back harder."
   failure_text: "Ceres Freehold burns. The Coalition will not forget who failed them."
   preconditions:
@@ -1147,7 +1147,7 @@ frontier_4:
   squadron: [frontier_skiff, frontier_skiff]
 frontier_5:
   faction: FreeFrontier
-  briefing: "The harbormaster's grin is gone. 'The Bastion learned their lesson and came back heavier — a monitor, the meanest hull they field, leading a push on Kuiper Reach. We have one answer to a monitor, Captain: ours. Take the new gunboat off the Kuiper ways and break theirs. 75,000, and the heavy line is yours.' A skiff and a harvester gunship fly escort — the Reaches fight together now."
+  briefing: "The harbormaster's grin is gone. 'The Bastion learned their lesson and came back heavier — a monitor, the meanest hull they field, leading a push on Kuiper Reach. We have one answer to a monitor, Captain: break theirs, and the new gunboat coming off the Kuiper ways flies under your name. 30,000, and the heavy line is yours.' A skiff and a harvester gunship fly escort — the Reaches fight together now."
   success_text: "The Bastion monitor folds and the push collapses with it. The Coalition opens its heaviest hull to you — the frontier monitor and its flak turret. 30,000 credits. 'The Reaches will sing about this one,' the harbormaster says."
   failure_text: "The Bastion monitor breaks through, and Kuiper Reach falls under the iron writ."
   preconditions:
@@ -1183,7 +1183,7 @@ frontier_5:
 # ══════════════════════════════════════════════════════════════════════════════
 helios_1:
   faction: Helios
-  briefing: "A Helios recruiter in a spotless suit finds you at Helios Prime. 'We headhunt talent. Pirates are circling an automated ore convoy near the Foundry — two of them. Clear them; the shareholders thank you. 22,000, plus a Combine trade clearance — our courier and freight hulls, and the lance sidearm they ship with, open to you. The combat line you earn separately.'"
+  briefing: "A Helios recruiter in a spotless suit finds you at Helios Prime. 'We headhunt talent. Pirates are circling an automated ore convoy near the Foundry — two of them. Clear them; the shareholders thank you. 8,000, plus a Combine trade clearance — our courier and freight hulls, and the lance sidearm they ship with, open to you. The combat line you earn separately.'"
   success_text: "'Efficient. The Combine likes efficient.' 8,000 credits, and your Helios trade clearance is live — the logistics hulls (courier, freighter, hauler) and the Helios lance are yours at any Combine yard. Prove yourself further and the war hulls follow."
   failure_text: "The convoy is lost. The recruiter has already moved on to the next candidate."
   preconditions:
@@ -1210,7 +1210,7 @@ helios_1:
       name: helios_license
 helios_2:
   faction: Helios
-  briefing: "The recruiter is unbothered. 'A delivery. 12 units of weapons-parts to Procyon Prime — yes, the Rebels. We sell to everyone; that's the whole point. 28,000, and don't ask what they do with it.'"
+  briefing: "The recruiter is unbothered. 'A delivery. 12 units of weapons-parts to Procyon Prime — yes, the Rebels. We sell to everyone; that's the whole point. 11,000, and don't ask what they do with it.'"
   success_text: "The Rebels take delivery without comment. 11,000 credits. The Combine arms both sides and bills both sides — and clears you for the Drone interceptor, the smallest hull in its war line."
   failure_text: "The shipment was lost. The Combine notes the inefficiency."
   preconditions:
@@ -1297,7 +1297,7 @@ helios_4:
       name: helios_overseer_license
 helios_5:
   faction: Helios
-  briefing: "The recruiter — now your handler — is unsmiling. 'A competitor has fielded a Titan-class dreadnought to break our hold on the Drift. The board has authorized a response in kind. Fly our prototype, kill theirs, and the production line is yours to command. 28,000. This is the top of the house.'"
+  briefing: "The recruiter — now your handler — is unsmiling. 'A competitor has fielded a Titan-class dreadnought to break our hold on the Drift. The board has authorized a response in kind. Kill theirs, and our prototype's production line is yours to command. 28,000. This is the top of the house.'"
   success_text: "The rival Titan comes apart under your guns. The Combine opens its own Titan line to you — the largest hull it builds. 28,000 credits. 'Welcome to the board,' the handler says."
   failure_text: "Their Titan still rules the Drift, and the board's patience is spent."
   preconditions:
@@ -1418,7 +1418,7 @@ bastion_3:
       name: bastion_lance_license
 bastion_4:
   faction: Bastion
-  briefing: "'The endgame, Captain. We move on a frontier world that shelters Rebel sympathizers. Three defenders stand in the way. Break them and the Bastion's reach extends another system. 22,000. This is the order we will build, whatever the cost.' A pair of Bastion guards will hold your flanks."
+  briefing: "'The endgame, Captain. Coalition ships shelter in OUR forge system — the Anvil harbors sympathizers under our own smoke. Three defenders stand in the way. Break them and the Anvil is clean. 22,000. This is the order we will build, whatever the cost.' A pair of Bastion guards will hold your flanks."
   success_text: "The defenders fall. The Bastion's iron writ spreads. The officer salutes you as kin. 22,000 credits — and the keys to a siege monitor, siege-cannon mounted, with a reputation soaked in it."
   failure_text: "The defenders held the line. The splinter's advance stalls."
   preconditions:
@@ -1450,7 +1450,7 @@ bastion_4:
   squadron: [bastion_guard, bastion_guard]
 bastion_5:
   faction: Bastion
-  briefing: "The officer's voice is iron. 'The endgame the soft never had the will for, Captain. The Coalition has fielded a monitor to break our advance — and behind it, everything they have left. We answer with the Iron Dreadnought, the heaviest hull the forge has ever struck. Fly it, take theirs out, shatter their line. 32,000. After this, there is only the order we impose.' A lance and a guard fly at your wing — the Column moves as one."
+  briefing: "The officer's voice is iron. 'The endgame the soft never had the will for, Captain. The Coalition has fielded a monitor to break our advance — and behind it, everything they have left. We answer with the Iron Dreadnought, the heaviest hull the forge has ever struck. Shatter their line and it is YOURS to fly. 32,000. After this, there is only the order we impose.' A lance and a guard fly at your wing — the Column moves as one."
   success_text: "The Coalition monitor breaks apart against the Dreadnought's broadside. The forge opens its heaviest hull to you — the Iron Dreadnought. 32,000 credits. 'You are the Bastion now,' the officer says."
   failure_text: "The Coalition line held, and the Bastion's advance breaks on the rocks of the Reaches."
   preconditions:
@@ -1488,7 +1488,7 @@ bastion_5:
 order_1:
   faction: Order
   briefing: "A robed proctor watches you in the Tau Ceti ruins — and approaches only because you did not loot. 'Smugglers strip the sacred sites for trinkets. Three of them defile a ruin now. Stop them, and recover what they have taken — the relics are not yours, nor theirs. 9,000. The Order will know you then.'"
-  success_text: "The looters are scattered; the relics recovered, unspoiled. The proctor inclines his head. 'You may walk in the Order now. Our pilgrim hulls — the quarryman and the almoner — and the relic-lance they bear are open to the faithful. The war-relics you earn by deeper devotion.' 9,000 credits."
+  success_text: "The looters are scattered; the relics recovered, unspoiled. The proctor's blessing arrives over comms. 'You may walk in the Order now. Our pilgrim hulls — the quarryman and the almoner — and the relic-lance they bear are open to the faithful. The war-relics you earn by deeper devotion.' 9,000 credits."
   failure_text: "The relics are gone, sold for scrap-price. The proctor mourns."
   preconditions:
     - kind: completed
@@ -1542,8 +1542,8 @@ order_2:
       name: order_acolyte_license
 order_3:
   faction: Order
-  briefing: "The proctor's calm cracks. 'The Helios Combine excavates a sacred site at the Foundry to PATENT what they find. Blasphemy beyond words. Drive off their security and seize their lead engineer before the relics are crated north. 17,000. They would make a product of the divine.'"
-  success_text: "The Helios dig is shattered; their engineer in your hold. The proctor's voice shakes with fury and gratitude both. 'The relics are safe. The Combine will pay for this — and you helped see it done.' 17,000 credits — and the Censer is consecrated to you, its censer-charges with it."
+  briefing: "The proctor's calm cracks. 'The Helios Combine excavates a sacred site at the Foundry to PATENT what they find. Blasphemy beyond words. Drive off their security before the relics are crated north. 17,000. They would make a product of the divine.'"
+  success_text: "The Helios dig is shattered, its security fled. The proctor's voice shakes with fury and gratitude both. 'The relics are safe. The Combine will pay for this — and you helped see it done.' 17,000 credits — and the Censer is consecrated to you, its censer-charges with it."
   failure_text: "The relics went north in Helios crates. Somewhere a patent is filed on a god."
   preconditions:
     - kind: completed
@@ -1570,7 +1570,7 @@ order_3:
 order_4:
   faction: Order
   briefing: "'A relic must reach the vaults at the Cloister — the most sacred we have recovered. The road past the Threshold is watched by everything that wants it. Carry it to the Cloister and guard it with your life. 18,000.'"
-  success_text: "The relic is sealed in Sanctum's deepest vault. The proctor blesses your hull. 'You have carried the divine and not faltered.' 18,000 credits — and the Reliquary, the Order's heavy cruiser, is entrusted to you."
+  success_text: "The relic is sealed in the Cloister's deepest vault. The proctor blesses your hull. 'You have carried the divine and not faltered.' 18,000 credits — and the Reliquary, the Order's heavy cruiser, is entrusted to you."
   failure_text: "The relic was taken on the road. A wound that will not close."
   preconditions:
     - kind: completed
@@ -1605,7 +1605,7 @@ order_4:
 order_5:
   faction: Order
   briefing: "The proctor is pale. 'Something in the Rift has STIRRED. Probes emerge from the dark — the heralds of the sleeper. They come for Sanctum. We hold the line at the Threshold, or we lose everything. Three of them, for now. And Captain — the Order will entrust you with a relic-weapon stable enough to wield. 24,000.'"
-  success_text: "The probes are dust. The proctor presses a humming relic-core into your hands: 'Exotic-lance clearance — the first stable Precursor weapon in mortal hands. You will need it for what comes — and the Cathedral, the Order's flagship, its relic-turret with it. Go armored in faith.' 24,000 credits, plus cathedral and precursor-tech clearance."
+  success_text: "The probes are dust. The proctor's voice carries clear across the void: 'Exotic-lance clearance is consecrated to you — the first stable Precursor weapon in mortal hands. You will need it for what comes — and the Cathedral, the Order's flagship, its relic-turret with it. Go armored in faith.' 24,000 credits, plus cathedral and precursor-tech clearance."
   failure_text: "The probes reached Sanctum. The vigil is broken; the sleeper stirs unopposed."
   preconditions:
     - kind: completed
@@ -1811,7 +1811,7 @@ weight_of_order_3:
 
 weight_of_order_4:
   faction: Federation
-  briefing: "'A tax-revolt is brewing on Pluto, and its ringleader is hiding in the shipyard district,' Sato says. 'Catch him. What happens after is your call — turn him in, or let him slip. The Federation only requires that the revolt ends. 10,000 credits.'"
+  briefing: "'A tax-revolt is brewing on Pluto, and its ringleader is hiding in the mechanic's quarter,' Sato says. 'Catch him. What happens after is your call — turn him in, or let him slip. The Federation only requires that the revolt ends. 10,000 credits.'"
   success_text: "You corner the ringleader by the mechanic's bay. He doesn't run. 'You really think order is the same as justice?' Whatever you decide, the revolt loses its head. Sato: 'There is one last thing, and it is the largest.'"
   failure_text: "The ringleader makes orbit and the revolt spreads to three more moons."
   preconditions:
@@ -1892,8 +1892,8 @@ east_wind_1:
 
 east_wind_2:
   faction: Rebel
-  briefing: "'Procyon's outer camps are out of medicine and the Federation cordon is 'inspecting' every relief ship into the ground,' the cell leader says. 'Run twelve units across the Drift to Procyon Prime. Don't stop for patrols. 18,000, and you'll have earned the next conversation.'"
-  success_text: "The Procyon med-camp unloads the crates in the dark. A medic grips your arm. 'You don't know what this means.' The cell leader is waiting at Deneb's door."
+  briefing: "'Procyon's outer camps are out of medicine and the Federation cordon is 'inspecting' every relief ship into the ground,' the cell leader says. 'Run twelve units across the Drift to Procyon Prime. Don't stop for patrols. 7,000, and you'll have earned the next conversation.'"
+  success_text: "The Procyon med-camp unloads the crates in the dark. A medic grips your arm. 'You don't know what this means.' The cell leader will have the next job before your engines cool."
   failure_text: "The relief run failed, and the Procyon camps went without."
   preconditions:
     - kind: completed
@@ -1921,7 +1921,7 @@ east_wind_2:
 
 east_wind_3:
   faction: Rebel
-  briefing: "'A Federation patrol is herding a refugee convoy out of Procyon space — they'll strip it for 'contraband' and leave the families drifting,' the cell leader says, jaw tight. 'This is the line, pilot. Cross it and there's no going back to the Federation's good graces. Break that patrol. 22,000, and the Alliance opens its hangars to you.'"
+  briefing: "'A Federation patrol is herding a refugee convoy out of Procyon space — they'll strip it for 'contraband' and leave the families drifting,' the cell leader says, jaw tight. 'This is the line, pilot. Cross it and there's no going back to the Federation's good graces. Break that patrol. 8,500, and the Alliance opens its hangars to you.'"
   success_text: "The patrol scatters and the convoy slips free. You've fired on the Federation now — there's no unfiring it. The Alliance uploads rebel ship clearance to your hull: their fighters and gunboats are yours."
   failure_text: "The patrol drives the refugee convoy into custody, and the Alliance keeps its distance."
   preconditions:
@@ -1970,7 +1970,7 @@ east_wind_4:
 
 east_wind_5:
   faction: Rebel
-  briefing: "At Deneb Prime the cell leader brings you before Alliance command. 'There's a hardliner faction here that wants to hit Kepler-22b — a civilian world — to 'send a message.' Some of us want it stopped. Meet our contact in the Deneb bar and decide which way the wind blows. 10,000 either way.'"
+  briefing: "Word comes up the Alliance net from Deneb Prime: command wants you. 'There's a hardliner faction here that wants to hit Kepler-22b — a civilian world — to 'send a message.' Some of us want it stopped. Come to Deneb Prime, find our contact in the bar, and decide which way the wind blows. 10,000 either way.'"
   success_text: "Whatever you chose at Deneb, the Alliance now counts you as one of its own — and grants you a capital berth. With the javelins you recovered already on the racks, the converted-hull frigates of the rebel fleet are yours to command."
   failure_text: "You leave Deneb without the Alliance's trust, and the capital berth with it."
   preconditions:
@@ -2137,7 +2137,7 @@ no_flag_3:
 no_flag_4:
   faction: Pirate
   briefing: "The fixer sends coordinates to the haven at Kuiper. 'The King wants to look you in the eye. He's building something out here — a Free Fleet, ships that answer to no nation. Meet him in the haven bar. Don't be late, and don't be armed when you walk in.'"
-  success_text: "The Pirate King is older than the legends and twice as sharp. 'A free Drift, captain — no tariffs, no conscription, no flag. I need pilots who understand that.' He marks you as one of his own. 'There's one more fight, and it's the only one that matters.'"
+  success_text: "The Uncrowned King is older than the legends and twice as sharp. 'A free Drift, captain — no tariffs, no conscription, no flag. I need pilots who understand that.' He marks you as one of his own. 'There's one more fight, and it's the only one that matters.'"
   failure_text: "You miss the meeting, and the King's invitation does not come twice."
   preconditions:
     - kind: completed
@@ -2147,8 +2147,8 @@ no_flag_4:
   objective:
     kind: meet_npc
     planet: kuiper_haven
-    npc_name: "the Pirate King"
-    npc: pirate_king
+    npc_name: "the Uncrowned King"
+    npc: free_fleet_king
     building: bar
   completion_effects:
     - kind: pay
@@ -2189,7 +2189,7 @@ no_flag_5:
 
 invisible_hand_1:
   faction: Merchant
-  briefing: "A Guild broker buys you a drink you didn't order. 'You've run the ladder. Now the real work. We've fronted you twelve units of Mars medical supply — every unit off the market is a unit the price climbs. Sit on it, then sell it back to us on Earth at the new rate. 9,000 on delivery. The shortage is the product.'"
+  briefing: "A Guild broker flags you down between the market stalls. 'You've run the ladder. Now the real work. We've fronted you twelve units of Mars medical supply — every unit off the market is a unit the price climbs. Sit on it, then sell it back to us on Earth at the new rate. 9,000 on delivery. The shortage is the product.'"
   success_text: "Earth pays the inflated rate without blinking, and the broker toasts you. 'Scarcity is just inventory you haven't sold yet. You have the instinct.'"
   failure_text: "The stock never reaches Earth, and the broker quietly closes your line of credit."
   preconditions:
@@ -2251,7 +2251,7 @@ invisible_hand_2:
 
 invisible_hand_3:
   faction: Merchant
-  briefing: "'A rival cartel is undercutting us out of the Drift, and the board would like them to stop,' the broker says lightly. 'We don't soil our hands with this sort of thing — which is why we contract it to you. Their convoy runs the Drift unescorted. Break it. 26,000, and you were never here.'"
+  briefing: "'A rival cartel is undercutting us out of the Drift, and the board would like them to stop,' the broker says lightly. 'We don't soil our hands with this sort of thing — which is why we contract it to you. Their convoy runs the Drift unescorted. Break it. 10,000, and you were never here.'"
   success_text: "The rival cartel's convoy scatters across the Drift and their prices climb back into line with ours. The broker never mentions it again, which is how you know it mattered."
   failure_text: "The rival convoy gets through, and the cartel keeps bleeding the Guild's margins."
   preconditions:
@@ -2293,7 +2293,7 @@ invisible_hand_4:
 
 invisible_hand_5:
   faction: Merchant
-  briefing: "The broker brings you to the Guild board floor on Earth. 'They've watched you corner a market, balance a war, and defend our independence without ever once asking whose side you were on. That's a board seat, pilot. Come take it. Wealth, a surplus carrier, and a hand on the prices that move worlds.'"
+  briefing: "A sealed Guild packet finds you. 'The board has watched you corner a market, balance a war, and defend our independence without ever once asking whose side you were on. That's a board seat, pilot. Come to the Earth market — the board floor sits above it — and take it. Wealth, a surplus carrier, and a hand on the prices that move worlds.'"
   success_text: "You take the seat and the carrier certification that comes with it. The broker leans in. 'Welcome to the only faction that wins every war. We didn't fire a shot — we just sent the invoice.' The surplus carrier yards are open to you."
   failure_text: "You leave the board floor without a seat, and the Guild's quiet door closes."
   preconditions:
@@ -2425,7 +2425,7 @@ reclamation_3:
 # Friends are permadeath: the roster's fallen ledger blocks any re-grant.
 
 friend_vex_1:
-  briefing: "A message finds you through Federation channels: 'Marlowe. The ace you hauled off that penal transport. Three of the hunters who framed me are working the Drift as \"privateers\". Bring me their wrecks and I'll believe you're worth flying with.'"
+  briefing: "Marlowe plants herself in your path at the bar. 'You know me — the ace you hauled off that penal transport. Three of the hunters who framed me are working the Drift as \"privateers\". Bring me their wrecks and I'll believe you're worth flying with.'"
   success_text: "Three kills logged. A slow clap crackles over comms."
   failure_text: "The privateers scatter. Marlowe goes quiet."
   preconditions:
@@ -2639,7 +2639,7 @@ friend_tinny_2:
     companion: tinny
 
 friend_yara_1:
-  briefing: "Captain Brakespear corners you at the March Keep bar. 'Thirty years I held the wall. Now pirates raid our supply road while the fleet drills parades. Clear 2 of them off the Barrens run and I'll consider the fleet's honor rented, if not restored.'"
+  briefing: "Captain Brakespear corners you at the Iron March bar. 'Thirty years I held the wall. Now pirates raid our supply road while the fleet drills parades. Clear 2 of them off the Barrens run and I'll consider the fleet's honor rented, if not restored.'"
   success_text: "The supply road runs clean. Brakespear nods once — from her, a parade."
   failure_text: "The raiders keep the road. Brakespear keeps her silence."
   preconditions:
@@ -2735,7 +2735,7 @@ friend_chandra_2:
     credits: 7000
 friend_chandra_3:
   briefing: "'The racket had a fixer inside the Guild office on Barnard Rock,' Vale says. 'My contact there will name them — to a face they trust. Yours, apparently.'"
-  success_text: "The contact talks fast: the fixer is a manifest clerk on Tau Ceti IV. Vale goes very quiet."
+  success_text: "The contact talks fast: the fixer is a manifest clerk at one of the Tau Ceti ports — which one, the contact never knew. Vale goes very quiet."
   failure_text: "The contact stops answering."
   preconditions:
   - kind: completed
@@ -2903,7 +2903,7 @@ friend_kore_1:
     approach: seek
   objective:
     kind: land_on_planet
-    planet: tycho_yards
+    planet: tycho
   requires:
   - kind: has_cargo
     commodity: cooling_gel
@@ -2944,7 +2944,7 @@ friend_kore_3:
     kind: auto
   objective:
     kind: meet_npc
-    planet: tycho_yards
+    planet: tycho
     npc_name: "the array foreman"
   completion_effects:
   - kind: pay
