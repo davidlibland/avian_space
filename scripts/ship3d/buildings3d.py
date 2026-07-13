@@ -31,7 +31,8 @@ ORTHO = 17.0                 # fixed across the montage so relative sizes show
 # footprint W×D in tiles (base/collision box); roofs/awnings may overhang
 FOOTPRINTS = {"market": (6, 5), "outfitter": (4, 4), "shipyard": (8, 6),
               "mechanic": (6, 4), "bar": (6, 5), "pad": (3, 3), "fuel_station": (4, 4),
-              "garrison": (6, 5)}
+              "garrison": (6, 5), "mine": (4, 4), "warehouse": (8, 6),
+              "substation": (4, 4)}
 
 
 def C(*v):
@@ -594,9 +595,81 @@ def build_fuel_station(s, m):
     B.add_box("fl_fs_hazard", (0, -d / 2 - 2.25 - fwd, z0 + 0.04), (3.6, 0.06, 0.16), m["glow"], bevel=0.0)
 
 
+
+
+def build_mine(s, m):
+    # 4×4 adit into a rock mound: timber portal, headframe, cart rail.
+    w, d = 4, 4
+    B.add_box("fl_pad", (0, 0, 0.06), (w, d, 0.12), m["stone"], bevel=0.02)
+    # the mound: overlapping rock domes, tallest at the back
+    B.add_sphere("rock_a", (0, 0.6, 0.4), (2.2, 1.7, 2.2), m["stone"], zclip=0.0)
+    B.add_sphere("rock_b", (-1.2, 0.2, 0.3), (1.2, 1.2, 1.4), m["stone"], zclip=0.0)
+    B.add_sphere("rock_c", (1.3, 0.4, 0.3), (1.1, 1.1, 1.2), m["stone"], zclip=0.0)
+    # timber portal around the adit (the door plane)
+    for sx in (-0.75, 0.75):
+        B.add_box("portal_post", (sx, -d / 2 + 0.35, 0.8), (0.24, 0.24, 1.6), m["beam"], bevel=0.02)
+    B.add_box("portal_beam", (0, -d / 2 + 0.35, 1.68), (1.9, 0.28, 0.26), m["beam"], bevel=0.02)
+    B.add_box("adit", (0, -d / 2 + 0.5, 0.75), (1.3, 0.3, 1.5), m["dark"], bevel=0.0)
+    # headframe tower over the shaft
+    for sx in (-0.5, 0.5):
+        leg = B.add_box("hf_leg", (sx, 0.9, 1.9), (0.16, 0.16, 2.6), m["metal"], bevel=0.01)
+        leg.rotation_euler = (0, sx * 0.22, 0)
+    B.add_box("hf_head", (0, 0.9, 3.2), (1.3, 0.7, 0.5), m["metal"], bevel=0.04)
+    B.add_cylinder("hf_wheel", (0, 0.9, 3.55), 0.32, 0.14, m["dark"], axis="y")
+    B.add_box("hf_lamp", (0, 0.52, 3.2), (0.3, 0.06, 0.2), m["glow"], bevel=0.0)
+    # cart rail running out the front + a loaded cart
+    for sx in (-0.28, 0.28):
+        B.add_box("pp_rail__r", (sx, -d / 2 - 0.9, 0.05), (0.09, 1.8, 0.08), m["metal"], bevel=0.0)
+    g = "pp_cart"
+    B.add_box(f"{g}__tub", (0, -d / 2 - 1.1, 0.42), (0.7, 0.5, 0.45), m["dark"], bevel=0.04)
+    B.add_box(f"{g}__ore", (0, -d / 2 - 1.1, 0.66), (0.55, 0.36, 0.18), m["stone"], bevel=0.06)
+
+
+def build_warehouse(s, m):
+    # 8×6 freight shed: long gable, big sliding front door, container stacks.
+    w, d, h = 8, 6, 4.0
+    z0, top = base_and_walls(s, m, w, d, h)
+    wall_skin(s, m, w, d, h, z0, top, win=(4, 1), front=False)
+    gable(0, 0, top, w + 0.3, d + 0.3, 1.6, m["roof"])
+    # sliding door: rails + two big panels parted around the doorway
+    B.add_box("dr_rail", (0, -d / 2 - 0.08, z0 + 2.8), (w - 1.0, 0.12, 0.14), m["metal"], bevel=0.0)
+    for sx, pw in ((-1.9, 1.6), (1.9, 1.6)):
+        B.add_box("dr_panel", (sx, -d / 2 - 0.04, z0 + 1.35), (pw, 0.1, 2.6), m["wall_d"], bevel=0.02)
+    B.add_box("dr_open", (0, -d / 2 + 0.08, z0 + 1.3), (2.2, 0.3, 2.5), m["dark"], bevel=0.0)
+    B.add_box("sign", (0, -d / 2 - 0.12, z0 + 3.3), (2.6, 0.08, 0.5), m["glow"], bevel=0.0)
+    # container stacks against the east wall
+    for i, (dy, dz, mt) in enumerate(((0.0, 0.55, "trim"), (1.4, 0.55, "wall_d"), (0.7, 1.65, "metal"))):
+        g = f"pp_cont{i}"
+        B.add_box(f"{g}__box", (w / 2 + 1.0, -d / 2 + 1.2 + dy, dz), (1.4, 1.2, 1.05), m[mt], bevel=0.03)
+        B.add_box(f"{g}__rib", (w / 2 + 1.0, -d / 2 + 1.2 + dy, dz), (1.44, 0.1, 1.08), m["dark"], bevel=0.0)
+
+
+def build_substation(s, m):
+    # 4×4 stair kiosk: blast door, vent stacks, transformer yard cue.
+    w, d, h = 4, 4, 2.4
+    z0, top = base_and_walls(s, m, w, d, h)
+    wall_skin(s, m, w, d, h, z0, top, win=(2, 1), front=True)
+    # flat slab roof with vents instead of the style roof
+    B.add_box("slab", (0, 0, top + 0.12), (w + 0.3, d + 0.3, 0.24), m["trim"], bevel=0.03)
+    for i, (vx, vy) in enumerate(((-1.0, 0.6), (0.2, 0.9), (1.1, 0.3))):
+        B.add_cylinder(f"vent{i}", (vx, vy, top + 0.55), 0.22, 0.7, m["metal"], axis="z")
+        B.add_box(f"vent_cap{i}", (vx, vy, top + 0.95), (0.55, 0.55, 0.08), m["dark"], bevel=0.02)
+    # blast door: recessed dark opening + hazard-striped frame
+    B.add_box("blast_frame", (0, -d / 2 - 0.02, z0 + 1.05), (1.5, 0.12, 2.1), m["metal"], bevel=0.02)
+    B.add_box("blast_open", (0, -d / 2 + 0.1, z0 + 1.0), (1.15, 0.3, 1.9), m["dark"], bevel=0.0)
+    B.add_box("hazard", (0, -d / 2 - 0.08, z0 + 2.2), (1.5, 0.06, 0.22), m["glow"], bevel=0.0)
+    # transformer on a pad beside the kiosk, cable up the wall
+    g = "pp_tx"
+    B.add_box(f"{g}__pad", (w / 2 + 0.9, -d / 2 + 0.9, 0.08), (1.3, 1.3, 0.16), m["stone"], bevel=0.02)
+    B.add_box(f"{g}__body", (w / 2 + 0.9, -d / 2 + 0.9, 0.65), (0.95, 0.85, 1.0), m["metal"], bevel=0.05)
+    for fy in (-0.2, 0.0, 0.2):
+        B.add_box(f"{g}__fin", (w / 2 + 0.9, -d / 2 + 0.9 + fy, 0.65), (1.05, 0.06, 0.9), m["dark"], bevel=0.0)
+    B.add_cylinder(f"{g}__bush", (w / 2 + 0.9, -d / 2 + 0.9, 1.3), 0.07, 0.5, m["trim"], axis="z")
+
 BUILDERS = {"market": build_market, "outfitter": build_outfitter, "shipyard": build_shipyard,
             "mechanic": build_mechanic, "bar": build_bar, "pad": build_pad,
-            "fuel_station": build_fuel_station, "garrison": build_garrison}
+            "fuel_station": build_fuel_station, "garrison": build_garrison,
+            "mine": build_mine, "warehouse": build_warehouse, "substation": build_substation}
 
 
 # ── camera / render ─────────────────────────────────────────────────────────
@@ -704,7 +777,8 @@ def bake():
     # (half-width, height-above-floor) of the doorway to cut open in _front
     door_funcs = {"market": (0.62, 1.25), "outfitter": (0.62, 1.25),
                   "bar": (0.62, 1.25), "mechanic": (1.95, 2.5),
-                  "garrison": (0.62, 1.25)}
+                  "garrison": (0.62, 1.25), "mine": (0.62, 1.5),
+                  "warehouse": (1.1, 2.4), "substation": (0.58, 1.85)}
     tmp = lambda n: os.path.join(OUT, f"_bk_{n}.png")
     # BAKE_ONLY=garrison bakes a single function and MERGES it into the
     # existing manifest (a full bake rewrites everything as before).
