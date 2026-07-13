@@ -327,9 +327,28 @@ STATIONS = [
 ]
 
 
+def angle_camera(elev_deg=52.0, azim_deg=20.0):
+    """Swing the top-down ortho camera to an oblique 3/4 view — rings become
+    ellipses, masts and hab-domes gain visible height."""
+    scene = bpy.context.scene
+    cam = scene.camera
+    E, A = math.radians(elev_deg), math.radians(azim_deg)
+    dist = 10.0
+    cam.location = (dist * math.cos(E) * math.sin(A),
+                    -dist * math.cos(E) * math.cos(A),
+                    dist * math.sin(E))
+    tgt = bpy.data.objects.new("cam_tgt", None)
+    scene.collection.objects.link(tgt)
+    tr = cam.constraints.new("TRACK_TO")
+    tr.target = tgt
+    tr.track_axis = "TRACK_NEGATIVE_Z"
+    tr.up_axis = "UP_Y"
+
+
 def render_station(name, builder, ortho, px, out_dir):
     reset()
     setup_scene(ortho, RES, freestyle_thick=2.2)
+    angle_camera()
     builder()
     tmp = os.path.join(OUT, f"_station_{name}.png")
     render_to(tmp)
