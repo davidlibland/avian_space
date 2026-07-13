@@ -541,12 +541,21 @@ pub(crate) fn setup_interior(
         eprintln!("[interiors] WARNING: world data unavailable — no interior spawned");
         return;
     };
+    // Maze venues bring their own tileset (mine tunnels, container canyons,
+    // pipe runs); shops use the station-interior atlas.
+    let biome_name = match kind {
+        BuildingKind::Mine => "mine",
+        BuildingKind::Warehouse => "warehouse",
+        BuildingKind::Substation => "substation",
+        _ => "interior",
+    };
     let biome = manifest
         .biomes
-        .get("interior")
+        .get(biome_name)
+        .or_else(|| manifest.biomes.get("interior"))
         .or_else(|| manifest.biomes.values().next());
     let Some(biome) = biome else { return };
-    let atlas_image: Handle<Image> = asset_server.load(format!("{WORLDS_DIR}/interior_atlas.png"));
+    let atlas_image: Handle<Image> = asset_server.load(format!("{WORLDS_DIR}/{}", biome.atlas));
     let tile_px = TILE_PX;
     let (map_w, map_h) = (WORLD_WIDTH, WORLD_HEIGHT);
 
@@ -1420,6 +1429,35 @@ mod tests {
         assert!(floor_count(&sub) > 0);
         // Mazes never expose a counter.
         assert!(mine.counter.is_none() && wh.counter.is_none() && sub.counter.is_none());
+    }
+
+    /// Every venue biome exists in the world manifest with the full
+    /// six-tier row set, its atlas file is on disk with matching rows,
+    /// and solidity matches the maze contract (grate+ solid enough).
+    #[test]
+    fn venue_biomes_have_atlases_and_six_tiers() {
+        let manifest_text =
+            std::fs::read_to_string("assets/sprites/worlds/world_manifest.ron").unwrap();
+        let manifest: crate::world_assets::WorldManifest = ron::from_str(&manifest_text).unwrap();
+        for name in ["mine", "warehouse", "substation", "interior"] {
+            let biome = manifest
+                .biomes
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} biome in manifest"));
+            if name != "interior" {
+                assert_eq!(biome.terrains.len(), 6, "{name}: six tiers incl. void");
+                let atlas = format!("assets/sprites/worlds/{}", biome.atlas);
+                let meta = std::fs::metadata(&atlas).unwrap_or_else(|_| panic!("{atlas} exists"));
+                assert!(meta.len() > 0);
+                // Wall and everything above must collide (mazes also
+                // solidify the grate tier via solid_min_tier).
+                for t in &biome.terrains {
+                    if t.row >= 3 {
+                        assert_eq!(t.collision, 1, "{name}/{}: solid", t.name);
+                    }
+                }
+            }
+        }
     }
 
     /// Maze venues derive from what the world is, and are rare.

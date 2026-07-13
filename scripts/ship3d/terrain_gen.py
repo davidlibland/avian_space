@@ -240,6 +240,131 @@ def _interior_base(name, variant=0, S=64):
     return np.asarray(small, float)
 
 
+# ── venue interior themes (mine / warehouse / substation) ──────────────────
+# Each terrain row carries style= (draw routine) + color=; rows share the
+# blob47 semantics with the station interior (floor..void).
+
+
+def _venue_base(style, color, variant=0, S=64):
+    base = np.array(color, float)
+    img = Image.new("RGB", (S, S), tuple(base.astype(int)))
+    d = ImageDraw.Draw(img)
+    seam = tuple((base * 0.5).astype(int))
+    hi = tuple(np.clip(base * 1.26, 0, 255).astype(int))
+    lo = tuple((base * 0.74).astype(int))
+    rng = np.random.default_rng(abs(hash(style)) % 9000 + variant * 31)
+
+    if style == "dirt":                      # packed earth + pebbles
+        for _ in range(26):
+            x, y = rng.integers(0, S, 2)
+            r = int(rng.integers(1, 3))
+            shade = lo if rng.random() < 0.6 else hi
+            d.ellipse([x - r, y - r, x + r, y + r], fill=shade)
+    elif style == "planks":                  # timber boards, horizontal
+        P = S // 4
+        for py in range(0, S, P):
+            d.line([(0, py), (S, py)], fill=seam)
+            d.line([(0, py + 1), (S, py + 1)], fill=lo)
+            jx = int(rng.integers(4, S - 4))
+            d.line([(jx, py + 2), (jx, py + P - 1)], fill=seam)
+        for _ in range(8):                   # wood grain flecks
+            x, y = rng.integers(0, S, 2)
+            d.line([(x, y), (x + int(rng.integers(3, 8)), y)], fill=lo)
+    elif style == "rubble":                  # loose rock fill
+        for _ in range(40):
+            x, y = rng.integers(0, S, 2)
+            r = int(rng.integers(2, 5))
+            shade = lo if rng.random() < 0.5 else (seam if rng.random() < 0.5 else hi)
+            d.ellipse([x - r, y - r, x + r, y + r], fill=shade)
+    elif style == "rock":                    # rough face + cracks
+        for _ in range(5):
+            x0, y0 = rng.integers(0, S, 2)
+            pts = [(x0, y0)]
+            for _ in range(4):
+                x0 = int(np.clip(x0 + rng.integers(-9, 10), 0, S - 1))
+                y0 = int(np.clip(y0 + rng.integers(4, 12), 0, S - 1))
+                pts.append((x0, y0))
+            d.line(pts, fill=seam, width=2)
+        for _ in range(12):
+            x, y = rng.integers(0, S, 2)
+            d.point((x, y), fill=hi)
+    elif style == "ore":                     # rock shot with glinting veins
+        _rockify(d, rng, S, seam, hi)
+        glint = tuple(np.clip(base * 1.9 + np.array([60, 45, 0]), 0, 255).astype(int))
+        for _ in range(10):
+            x, y = rng.integers(2, S - 2, 2)
+            d.ellipse([x - 1, y - 1, x + 1, y + 1], fill=glint)
+    elif style == "concrete":                # painted slab, hairline cracks
+        d.rectangle([0, 0, S - 1, S - 1], outline=seam)
+        for _ in range(3):
+            x0, y0 = rng.integers(0, S, 2)
+            x1 = int(np.clip(x0 + rng.integers(-14, 15), 0, S - 1))
+            y1 = int(np.clip(y0 + rng.integers(-14, 15), 0, S - 1))
+            d.line([(x0, y0), (x1, y1)], fill=lo)
+        if variant == 2:                     # lane stripe on one variant
+            stripe = tuple(np.clip(base * 0.9 + np.array([70, 60, -20]), 0, 255).astype(int))
+            d.rectangle([0, S // 2 - 3, S - 1, S // 2 + 3], fill=stripe)
+    elif style == "hazard":                  # slab + diagonal hazard edge
+        d.rectangle([0, 0, S - 1, S - 1], outline=seam)
+        stripe = tuple(np.clip(base * 1.5 + np.array([80, 60, -30]), 0, 255).astype(int))
+        for x in range(-S, S, 12):
+            d.line([(x, S - 2), (x + 10, S - 12)], fill=stripe, width=3)
+    elif style == "corrugated":              # container wall, vertical ribs
+        for cx in range(0, S, 8):
+            d.rectangle([cx, 0, cx + 3, S - 1], fill=lo)
+            d.line([(cx, 0), (cx, S - 1)], fill=hi)
+        d.rectangle([0, 0, S - 1, S - 1], outline=seam)
+    elif style == "deck":                    # steel deck, dot tread
+        d.rectangle([0, 0, S - 1, S - 1], outline=seam)
+        for cx in range(4, S, 10):
+            for cy in range(4, S, 10):
+                d.ellipse([cx - 1, cy - 1, cx + 2, cy + 2], fill=hi)
+                d.point((cx + 1, cy + 1), fill=lo)
+    elif style == "cable":                   # parallel cable runs
+        for py in range(3, S, 9):
+            d.line([(0, py), (S, py)], fill=lo)
+            d.line([(0, py + 1), (S, py + 1)], fill=seam)
+        for cx in range(0, S, 16):           # tie-down cleats
+            d.rectangle([cx, 0, cx + 2, S - 1], fill=hi)
+    elif style == "pipes":                   # dense pipe bundle (wall)
+        for py in range(0, S, 8):
+            d.rectangle([0, py, S - 1, py + 5], fill=hi)
+            d.line([(0, py), (S, py)], fill=lo)
+            d.line([(0, py + 5), (S, py + 5)], fill=seam)
+    elif style == "coolant":                 # glowing channel
+        glow = tuple(np.clip(base * 1.7 + np.array([0, 70, 80]), 0, 255).astype(int))
+        d.rectangle([0, S // 2 - 6, S - 1, S // 2 + 6], fill=glow)
+        d.line([(0, S // 2 - 7), (S, S // 2 - 7)], fill=hi)
+        d.line([(0, S // 2 + 7), (S, S // 2 + 7)], fill=seam)
+    elif style == "dark":                    # unlit depths
+        for _ in range(10):
+            x, y = rng.integers(0, S, 2)
+            d.point((x, y), fill=hi)
+
+    arr = np.asarray(img, float)
+    nz = n01(pnoise(0.7, (abs(hash(style)) % 9000) + variant * 5, S))
+    arr = arr * (1 + 0.05 * (nz - 0.5) * 2)[..., None]
+    if variant:
+        sc = n01(pnoise(1.2, 4000 + variant, S))
+        arr = arr * (1 - 0.12 * (sc * WIN_S(S))[..., None])
+    small = Image.fromarray(np.clip(arr, 0, 255).astype("uint8")).resize((TILE, TILE), Image.LANCZOS)
+    return np.asarray(small, float)
+
+
+def _rockify(d, rng, S, seam, hi):
+    for _ in range(5):
+        x0, y0 = rng.integers(0, S, 2)
+        pts = [(x0, y0)]
+        for _ in range(4):
+            x0 = int(np.clip(x0 + rng.integers(-9, 10), 0, S - 1))
+            y0 = int(np.clip(y0 + rng.integers(4, 12), 0, S - 1))
+            pts.append((x0, y0))
+        d.line(pts, fill=seam, width=2)
+    for _ in range(12):
+        x, y = rng.integers(0, S, 2)
+        d.point((x, y), fill=hi)
+
+
 def WIN_S(S):
     m = 0.3
     x = np.linspace(0, 1, S)
@@ -250,7 +375,11 @@ def WIN_S(S):
 def render_interior_tile(terrains, row, col, variant):
     spec = terrains[row]
     mask = BLOB47[col] if col < 47 else 255
-    arr = _interior_base(spec["name"], variant if mask == 255 else 0)
+    v = variant if mask == 255 else 0
+    if "style" in spec:
+        arr = _venue_base(spec["style"], spec["color"], v)
+    else:
+        arr = _interior_base(spec["name"], v)
     # hard recessed seams where the neighbour is a different (lower) terrain
     for bit, sl in ((T, (slice(0, 2), slice(None))), (B, (slice(TILE - 2, TILE), slice(None))),
                     (R_, (slice(None), slice(TILE - 2, TILE))), (L, (slice(None), slice(0, 2)))):
@@ -268,7 +397,7 @@ def render_interior_tile(terrains, row, col, variant):
 def build_atlas(name, terrains):
     max_elev = max(t["elev"] for t in terrains)
     cols = 47 + (N_VARIANTS - 1)        # blob47 + extra interior variants
-    is_interior = name == "interior"    # geometric station tiles, not heightfield
+    is_interior = name in ("interior", "mine", "warehouse", "substation")
 
     def tile(row, col, v):
         return (render_interior_tile(terrains, row, col, v) if is_interior
@@ -341,6 +470,32 @@ BIOMES = {
         terr("wall", (52, 56, 62), 0.5, 3.0, 2.5, grain=0.05, key=0.6, ambient=0.55),
         terr("conduit", (25, 78, 112), 0.5, 2.0, 2.7, grain=0.05, key=0.6, ambient=0.6),
     ],
+    # Maze venues (docs/maze_interiors_plan.md): same six-tier semantics,
+    # construction differs — rock tunnels / container canyons / pipe runs.
+    "mine": [
+        dict(name="floor", style="dirt", color=(126, 102, 74), elev=0.5),
+        dict(name="plating", style="planks", color=(122, 88, 52), elev=0.5),
+        dict(name="grate", style="rubble", color=(96, 82, 66), elev=0.5),
+        dict(name="wall", style="rock", color=(74, 62, 50), elev=0.5),
+        dict(name="conduit", style="ore", color=(64, 54, 44), elev=0.5),
+        dict(name="void", style="dark", color=(16, 13, 10), elev=0.5),
+    ],
+    "warehouse": [
+        dict(name="floor", style="concrete", color=(148, 150, 152), elev=0.5),
+        dict(name="plating", style="hazard", color=(120, 122, 124), elev=0.5),
+        dict(name="grate", style="deck", color=(104, 110, 118), elev=0.5),
+        dict(name="wall", style="corrugated", color=(88, 76, 60), elev=0.5),
+        dict(name="conduit", style="cable", color=(56, 62, 72), elev=0.5),
+        dict(name="void", style="dark", color=(14, 15, 17), elev=0.5),
+    ],
+    "substation": [
+        dict(name="floor", style="deck", color=(94, 110, 108), elev=0.5),
+        dict(name="plating", style="cable", color=(78, 92, 92), elev=0.5),
+        dict(name="grate", style="pipes", color=(72, 88, 90), elev=0.5),
+        dict(name="wall", style="pipes", color=(52, 64, 68), elev=0.5),
+        dict(name="conduit", style="coolant", color=(30, 84, 92), elev=0.5),
+        dict(name="void", style="dark", color=(10, 14, 15), elev=0.5),
+    ],
 }
 # stable per-terrain seeds
 for bi, (bname, ts) in enumerate(BIOMES.items()):
@@ -358,10 +513,15 @@ def update_col_count(cols):
 
 
 def main():
+    import sys
+    only = set(sys.argv[1:])
     cols = 0
     for name, terrains in BIOMES.items():
+        if only and name not in only:
+            continue
         cols = build_atlas(name, terrains)
-    update_col_count(cols)
+    if not only:
+        update_col_count(cols)
     print("done")
 
 
