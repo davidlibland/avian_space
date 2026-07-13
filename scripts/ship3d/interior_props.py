@@ -215,7 +215,36 @@ def stairs(M, down):
                M["glow_warm" if down else "glow_cyan"])
 
 
+def exit_door(M):
+    # An unmissable way out: tall jambs + lintel, parted panels around a
+    # warm light spill, and a deep-green EXIT bar over the top.
+    for sx in (-0.7, 0.7):
+        add_box(f"jamb{sx}", (sx, 0, 1.05), (0.22, 0.28, 2.1), M["steel"])
+    add_box("lintel", (0, 0, 2.2), (1.7, 0.3, 0.22), M["steel"])
+    add_box("panel_l", (-0.4, 0.1, 1.0), (0.48, 0.08, 1.9), M["iron"])
+    add_box("panel_r", (0.4, 0.1, 1.0), (0.48, 0.08, 1.9), M["iron"])
+    add_box("gap", (0, 0.14, 1.0), (0.32, 0.06, 1.9), M["glow_warm"])
+    exit_green = glow_material("exit_green", C(30, 160, 60), 1.6)
+    add_box("sign", (0, -0.08, 2.5), (1.2, 0.14, 0.34), exit_green)
+    add_box("sign_frame", (0, 0.0, 2.5), (1.3, 0.1, 0.42), M["dark"])
+
+
+def ladder_up(M):
+    # A ladder climbing OUT — rails, rungs, a hatch rim of daylight above.
+    for sx in (-0.28, 0.28):
+        add_cylinder(f"rail{sx}", (sx, 0.1, 1.05), 0.05, 2.1, M["brass"],
+                     axis="z")
+    for i in range(5):
+        add_cylinder(f"rung{i}", (0, 0.1, 0.35 + i * 0.42), 0.04, 0.62,
+                     M["steel"], axis="x")
+    day = glow_material("daylight", C(255, 244, 200), 2.8)
+    add_box("hatch_glow", (0, 0.1, 2.2), (0.9, 0.5, 0.1), day)
+    add_box("hatch_rim", (0, 0.1, 2.3), (1.0, 0.6, 0.08), M["iron"])
+
+
 PROPS = [
+    ("exit_door", exit_door, 2.0),
+    ("ladder_up", ladder_up, 1.9),
     ("bar_counter", bar_counter, 3.4),
     ("table_round", table_round, 1.3),
     ("stool", stool, 1.0),

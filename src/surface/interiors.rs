@@ -280,6 +280,8 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         "pump_unit" => (2, 2, true),
         "pipe_valve" => (1, 1, true),
         "stairs_down" | "stairs_up" => (1, 1, false),
+        // Exit markers stand ON the walkable door tile.
+        "exit_door" | "ladder_up" => (1, 1, false),
         _ => (1, 1, false),
     }
 }
@@ -424,7 +426,7 @@ pub(crate) fn build_plan(
     }
 
     // ── Furnishing: the props that make each shop ITS shop ──
-    let mut props: Vec<(&'static str, (u32, u32))> = Vec::new();
+    let mut props: Vec<(&'static str, (u32, u32))> = vec![("exit_door", door)];
     match kind {
         BuildingKind::Bar => {
             props.push(("bar_counter", (counter.0 - 1, counter.1)));
@@ -543,6 +545,17 @@ fn maze_plan(kind: BuildingKind, planet: &str, level: u8) -> InteriorPlan {
     }
     if let Some((sx, sy)) = lv.stairs_up {
         lv.props.push(("stairs_up", (sx, sy)));
+    }
+    if let Some(door) = lv.door {
+        // Climbing out of a dig reads as a ladder; the warehouse keeps a
+        // proper lit doorway.
+        lv.props.push((
+            match kind {
+                BuildingKind::Mine | BuildingKind::Substation => "ladder_up",
+                _ => "exit_door",
+            },
+            door,
+        ));
     }
     // Maze props block per their metadata (carts, valves...).
     for &(name, (px, py)) in &lv.props {
@@ -1731,6 +1744,30 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// Every interior marks its way out: a prop sits ON the door tile —
+    /// a ladder up for digs (mine/substation), a lit doorway elsewhere.
+    #[test]
+    fn every_interior_marks_its_exit() {
+        let iu = iu();
+        for (kind, planet, expect) in [
+            (BuildingKind::Bar, "earth", "exit_door"),
+            (BuildingKind::Market, "earth", "exit_door"),
+            (BuildingKind::Shipyard, "earth", "exit_door"),
+            (BuildingKind::Warehouse, "earth", "exit_door"),
+            (BuildingKind::Mine, "ceres", "ladder_up"),
+            (BuildingKind::Substation, "deneb_prime", "ladder_up"),
+        ] {
+            let plan = build_plan(kind, &iu, planet, 0);
+            let door = plan.door.unwrap();
+            assert!(
+                plan.props.iter().any(|&(n, t)| n == expect && t == door),
+                "{kind:?}@{planet}: {expect} on the door tile"
+            );
+            let (_, _, blocks) = prop_meta(expect);
+            assert!(!blocks, "{expect} must stay walkable");
         }
     }
 
