@@ -1143,6 +1143,50 @@ pub(crate) fn interior_interact(
     }
 }
 
+/// "Press E" prompts inside — the same comms ticker (and priority order)
+/// as the surface's update_interact_prompt: door first, stairs, counter.
+pub(crate) fn interior_interact_prompt(
+    walker: Query<&Transform, With<Walker>>,
+    exits: Query<&Transform, (With<ExitDoor>, Without<Walker>)>,
+    stairs_down: Query<&Transform, (With<StairsDown>, Without<Walker>)>,
+    stairs_up: Query<&Transform, (With<StairsUp>, Without<Walker>)>,
+    counters: Query<(&Counter, &Transform), Without<Walker>>,
+    active_ui: Res<ActiveBuildingUI>,
+    mut comms: ResMut<crate::hud::CommsChannel>,
+    mut last: Local<Option<&'static str>>,
+) {
+    let Ok(wtf) = walker.single() else { return };
+    let wp = wtf.translation.truncate();
+    let range = TILE_PX * 1.6;
+    let near = |t: &Transform| (t.translation.truncate() - wp).length() < range;
+    let prompt: Option<&'static str> = if active_ui.0.is_some() {
+        None
+    } else if exits.iter().any(near) {
+        Some("Press E to leave")
+    } else if stairs_down.iter().any(near) {
+        Some("Press E to descend")
+    } else if stairs_up.iter().any(near) {
+        Some("Press E to climb up")
+    } else if counters.iter().any(|(_, t)| near(t)) {
+        Some("Press E to talk to the clerk")
+    } else {
+        None
+    };
+    if prompt == *last {
+        return;
+    }
+    match prompt {
+        Some(text) => comms.send(text),
+        // Only clear our own prompt (chase taunts etc. must survive).
+        None => {
+            if comms.message.starts_with("Press E") {
+                comms.send("");
+            }
+        }
+    }
+    *last = prompt;
+}
+
 /// The focused display panel: stats + Buy for whatever plinth the walker is
 /// standing at. Ships show comparative bars against the current hull.
 #[allow(clippy::too_many_arguments)]
@@ -1192,6 +1236,13 @@ pub(crate) fn display_panel_ui(
                 let price = crate::standing::markup_price(item.price(), markup);
                 ui.label(format!("Price: {price} cr"));
                 ui.label(format!("Space: {}", item.space()));
+                let (owned, ammo) = ship
+                    .weapon_systems
+                    .find_weapon(item_key)
+                    .map(|ws| (ws.number, ws.ammo_quantity))
+                    .unwrap_or((0, None));
+                ui.label(format!("Owned: {owned}"));
+                let mut mount_ok = true;
                 if let Some(w) = iu.weapons.get(item_key) {
                     ui.label(format!("Damage: {}", w.damage));
                     ui.label(format!("Range: {:.0}", w.speed * w.lifetime));
@@ -1200,8 +1251,8 @@ pub(crate) fn display_panel_ui(
                     } else {
                         "Mount: gun"
                     });
-                    let ok = ship.mount_free_for(w);
-                    if !ok {
+                    mount_ok = ship.mount_free_for(w);
+                    if !mount_ok {
                         ui.colored_label(
                             bevy_egui::egui::Color32::from_rgb(230, 160, 100),
                             "No free mount on this hull.",
@@ -1211,9 +1262,64 @@ pub(crate) fn display_panel_ui(
                 let locked = item.required_unlocks().iter().any(|u| !unlocks.has(u));
                 if locked {
                     ui.label("License required.");
-                } else if ui.button("Buy").clicked() {
-                    ship.buy_weapon(item_key, &iu, markup);
+                    return;
                 }
+                // Buy / Sell — the exact classic-window flows.
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(mount_ok, bevy_egui::egui::Button::new("Buy"))
+                        .clicked()
+                    {
+                        ship.buy_weapon(item_key, &iu, markup);
+                    }
+                    if ui
+                        .add_enabled(owned > 0, bevy_egui::egui::Button::new("Sell"))
+                        .clicked()
+                    {
+                        ship.sell_weapon(item_key, &iu);
+                    }
+                });
+                // Ammo, for weapons that carry it (owned or not — you can
+                // stock up before buying the launcher's twin).
+                if item.ammo_price().is_some() {
+                    ui.separator();
+                    ui.label(format!(
+                        "Ammo: {}",
+                        ammo.map(|q| q.to_string()).unwrap_or_else(|| "0".into())
+                    ));
+                    let shift = ui.input(|i| i.modifiers.shift);
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button("Buy ammo")
+                            .on_hover_text("Shift-click: fill the racks")
+                            .clicked()
+                        {
+                            if shift {
+                                ship.buy_max_ammo(item_key, &iu, markup);
+                            } else {
+                                ship.buy_ammo(item_key, &iu, markup);
+                            }
+                        }
+                        if ui
+                            .button("Sell ammo")
+                            .on_hover_text("Shift-click: sell all ammo")
+                            .clicked()
+                        {
+                            if shift {
+                                ship.sell_all_ammo(item_key, &iu);
+                            } else {
+                                ship.sell_ammo(item_key, &iu);
+                            }
+                        }
+                    });
+                }
+                ui.separator();
+                ui.label(format!("Credits: {}", ship.credits));
+                ui.label(format!(
+                    "Free space: {}/{}",
+                    ship.remaining_item_space(),
+                    ship.data.item_space
+                ));
             }
             DisplayBinding::Ship(ship_key) => {
                 let Some(data) = iu.ships.get(ship_key) else {

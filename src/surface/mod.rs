@@ -391,7 +391,11 @@ pub fn surface_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            (interiors::interior_interact, interiors::spawn_interior_npcs)
+            (
+                interiors::interior_interact,
+                interiors::interior_interact_prompt,
+                interiors::spawn_interior_npcs,
+            )
                 .run_if(in_state(PlayState::Inside)),
         )
         .add_systems(Update, interiors::maze_fugitive_arrivals.run_if(on_foot))
