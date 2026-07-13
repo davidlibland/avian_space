@@ -96,6 +96,17 @@ pub(crate) fn spawn_mission_npcs(
                     } => {
                         let seek = *approach == crate::missions::NpcApproach::Seek;
 
+                        // Givers bound to a walk-in shop wait INSIDE it
+                        // (spawn_interior_npcs seats them); don't double-
+                        // spawn them on the pad.
+                        let inside = building
+                            .as_deref()
+                            .and_then(building_kind_from_name)
+                            .is_some_and(crate::surface::interiors::has_interior);
+                        if inside {
+                            continue;
+                        }
+
                         // Resolve building name to a door tile.
                         let door = building
                             .as_ref()
@@ -136,6 +147,7 @@ pub(crate) fn spawn_mission_npcs(
             spawn_tile,
             walk_speed,
             seek,
+            PlayState::Exploring,
         );
     }
 
@@ -339,4 +351,21 @@ pub(crate) fn tile_to_world(tx: u32, ty: u32, map_w: u32, map_h: u32, tile_px: f
         (tx as f32 - map_w as f32 / 2.0) * tile_px + tile_px / 2.0,
         (ty as f32 - map_h as f32 / 2.0) * tile_px + tile_px / 2.0,
     )
+}
+
+/// Building name (as used in mission `building:` fields — the Debug name
+/// lowercased) → kind. None for unknown names.
+pub(crate) fn building_kind_from_name(name: &str) -> Option<BuildingKind> {
+    [
+        BuildingKind::ShipPad,
+        BuildingKind::MechanicShop,
+        BuildingKind::Market,
+        BuildingKind::Outfitter,
+        BuildingKind::Shipyard,
+        BuildingKind::Bar,
+        BuildingKind::FuelStation,
+        BuildingKind::Garrison,
+    ]
+    .into_iter()
+    .find(|k| format!("{k:?}").to_lowercase() == name)
 }

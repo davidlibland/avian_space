@@ -10,6 +10,7 @@ use crate::{GameLayer, PlayState, Player};
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn setup_surface(
     mut commands: Commands,
+    return_from_interior: Option<Res<crate::surface::interiors::ReturnFromInterior>>,
     player_query: Query<Entity, With<Player>>,
     landed_context: Res<LandedContext>,
     item_universe: Res<ItemUniverse>,
@@ -59,7 +60,8 @@ pub(crate) fn setup_surface(
     let map_h = WORLD_HEIGHT;
     let tile_px = TILE_PX;
 
-    let (_col_data, _placed_buildings) = if let (Some(lut_data), Some(manifest)) = (&lut, &manifest)
+    let (_col_data, _placed_buildings, door_positions) = if let (Some(lut_data), Some(manifest)) =
+        (&lut, &manifest)
     {
         // Seed fBm from planet name for deterministic, per-planet terrain.
         let seed = planet_name
@@ -991,7 +993,7 @@ pub(crate) fn setup_surface(
             );
         }
 
-        (col_data, placed_buildings)
+        (col_data, placed_buildings, door_positions)
     } else {
         eprintln!(
             "[surface] WARNING: could not load world data for biome '{biome_name}' \
@@ -1009,11 +1011,18 @@ pub(crate) fn setup_surface(
             Transform::from_xyz(0.0, 0.0, -10.0),
         ));
         let n = (map_w * map_h) as usize;
-        (vec![0u8; n], Vec::new())
+        (vec![0u8; n], Vec::new(), Vec::new())
     };
 
-    // Spawn on the landing pad (always at map center).
-    let spawn_pos = tile_to_world(map_w / 2, map_h / 2, map_w, map_h, tile_px);
+    // Spawn on the landing pad (map center) — unless the player just walked
+    // out of a building's interior, in which case they appear at ITS door.
+    let mut spawn_pos = tile_to_world(map_w / 2, map_h / 2, map_w, map_h, tile_px);
+    if let Some(ret) = return_from_interior {
+        if let Some(&(_, (dtx, dty))) = door_positions.iter().find(|(k, _)| *k == ret.0) {
+            spawn_pos = tile_to_world(dtx, dty.saturating_sub(1), map_w, map_h, tile_px);
+        }
+        commands.remove_resource::<crate::surface::interiors::ReturnFromInterior>();
+    }
 
     // Composite the player's avatar sheet (32px, 18-col idle/walk/run).
     let Some((walker_image, walker_layout)) = character_layers.as_deref_mut().and_then(|layers| {

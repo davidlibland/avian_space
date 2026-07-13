@@ -89,6 +89,8 @@ pub enum PlayState {
     Flying,
     /// Player is walking around the planet surface (tilemap world).
     Exploring,
+    /// Player is inside a building's interior (its own small tile world).
+    Inside,
     /// Player is at the ship pad — egui Launch/Repair UI, physics paused.
     Landed,
     Traveling,

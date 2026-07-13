@@ -248,33 +248,40 @@ pub fn surface_plugin(app: &mut App) {
             )
                 .chain(),
         )
+        .add_systems(OnEnter(PlayState::Inside), interiors::setup_interior)
         .add_systems(
             Update,
             (
                 walker_input,
                 crate::surface_character::animate_characters,
                 play_footstep,
+                spawn_companion_avatars,
+            )
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
+        )
+        .add_systems(
+            Update,
+            (
                 track_nearby_building,
                 track_terrain_speed,
                 building_interact,
                 update_interact_prompt,
                 spawn_mission_npcs,
-                spawn_companion_avatars,
             )
                 .run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            Update,
+            (interiors::interior_interact, interiors::spawn_interior_npcs)
+                .run_if(in_state(PlayState::Inside)),
         )
         .add_systems(
             Update,
             (
                 crate::surface_objects::update_shy_objects,
                 crate::surface_objects::animate_landscape_objects,
-                crate::surface_objects::depth_sort_walker,
                 door_depth_sound,
                 crate::surface_civilians::spawn_civilians,
-                crate::surface_npc::run_npc_behaviors,
-                crate::surface_npc_chat::npc_chat_interact,
-                crate::surface_npc::update_npc_markers,
-                crate::surface_civilians::depth_sort_npcs,
                 crate::surface_fauna::spawn_fauna,
                 crate::surface_fauna::run_fauna,
                 crate::surface_fauna::depth_sort_fauna,
@@ -283,21 +290,40 @@ pub fn surface_plugin(app: &mut App) {
                 .run_if(in_state(PlayState::Exploring)),
         )
         .add_systems(
+            Update,
+            (
+                crate::surface_objects::depth_sort_walker,
+                crate::surface_npc::run_npc_behaviors,
+                crate::surface_npc_chat::npc_chat_interact,
+                crate::surface_npc::update_npc_markers,
+                crate::surface_civilians::depth_sort_npcs,
+            )
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
+        )
+        .add_systems(
             bevy_egui::EguiPrimaryContextPass,
-            crate::surface_npc_chat::npc_chat_ui.run_if(in_state(PlayState::Exploring)),
+            interiors::display_panel_ui.run_if(in_state(PlayState::Inside)),
+        )
+        .add_systems(
+            bevy_egui::EguiPrimaryContextPass,
+            crate::surface_npc_chat::npc_chat_ui
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
         )
         .add_systems(Update, animate_camera_zoom)
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
-            surface_building_ui.run_if(in_state(PlayState::Exploring)),
+            surface_building_ui
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
         )
         .add_systems(
             Update,
-            egui_button_click_sound.run_if(in_state(PlayState::Exploring)),
+            egui_button_click_sound
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
         )
         .add_systems(
             FixedUpdate,
-            camera_follow_walker.run_if(in_state(PlayState::Exploring)),
+            camera_follow_walker
+                .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
         );
 }
 
@@ -315,6 +341,7 @@ fn save_on_explore(
 // ── Submodules (split from the old 2,600-line surface.rs) ────────────────────
 mod buildings;
 mod interact;
+pub mod interiors;
 mod npcs;
 mod setup;
 mod windows;

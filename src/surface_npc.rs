@@ -524,6 +524,7 @@ pub fn spawn_mission_npc(
     door_tile: (u32, u32),
     speed: f32,
     seek: bool,
+    scope: crate::PlayState,
 ) {
     let mut rng = rand::thread_rng();
 
@@ -558,7 +559,7 @@ pub fn spawn_mission_npc(
 
     let npc_entity = commands
         .spawn((
-            DespawnOnExit(crate::PlayState::Exploring),
+            DespawnOnExit(scope),
             Npc,
             MissionNpc(mission_id.to_string()),
             behavior,

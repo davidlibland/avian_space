@@ -218,6 +218,7 @@ pub(crate) fn track_terrain_speed(
 /// Handle E key to interact with buildings, Escape to close UI or return
 /// to main menu.
 pub(crate) fn building_interact(
+    mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     nearby: Res<NearbyBuilding>,
     mut active_ui: ResMut<ActiveBuildingUI>,
@@ -238,11 +239,17 @@ pub(crate) fn building_interact(
         return;
     }
 
-    // Open building on E.
+    // Open building on E. Walk-in shops transition to their interior;
+    // the rest open the full-screen window as before.
     if keyboard.just_pressed(KeyCode::KeyE)
         && let Some((_, kind)) = nearby.current
     {
-        active_ui.0 = Some(kind);
+        if crate::surface::interiors::has_interior(kind) {
+            commands.insert_resource(crate::surface::interiors::InteriorContext { kind });
+            next_state.set(PlayState::Inside);
+        } else {
+            active_ui.0 = Some(kind);
+        }
     }
 }
 
