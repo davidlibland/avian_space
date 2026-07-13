@@ -435,6 +435,21 @@ pub(crate) fn build_plan(
     }
 }
 
+/// Per-world tile tint: the SAME venue atlas reads differently under a
+/// cryo dome than in a desert dig — cool light on ice worlds, amber on
+/// deserts, rust on rocky mining worlds, warm neutral on garden colonies.
+/// Multiplicative, subtle: geometry and readability stay untouched.
+pub(crate) fn world_tint(surface_biome: &str) -> Color {
+    match surface_biome {
+        "garden" => Color::srgb(1.0, 0.98, 0.94),
+        "ice" => Color::srgb(0.84, 0.92, 1.0),
+        "rocky" => Color::srgb(1.0, 0.90, 0.84),
+        "desert" => Color::srgb(1.0, 0.95, 0.80),
+        // stations / cloud decks: cool artificial light
+        _ => Color::srgb(0.92, 0.95, 1.0),
+    }
+}
+
 /// Tiny deterministic hash for prop jitter (no RNG in shop plans).
 fn rng_ish(x: u32, y: u32) -> u32 {
     x.wrapping_mul(31).wrapping_add(y).wrapping_mul(2654435761) >> 16
@@ -556,6 +571,12 @@ pub(crate) fn setup_interior(
         .or_else(|| manifest.biomes.values().next());
     let Some(biome) = biome else { return };
     let atlas_image: Handle<Image> = asset_server.load(format!("{WORLDS_DIR}/{}", biome.atlas));
+    // Per-world lighting tint over the whole tileset.
+    let surface_biome = iu
+        .find_gameplay_planet(&planet)
+        .map(|(_, pd)| crate::world_assets::planet_type_to_biome(&pd.planet_type))
+        .unwrap_or("rocky");
+    let tint = world_tint(surface_biome);
     let tile_px = TILE_PX;
     let (map_w, map_h) = (WORLD_WIDTH, WORLD_HEIGHT);
 
@@ -592,16 +613,18 @@ pub(crate) fn setup_interior(
                 &lut,
             );
             let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
+            let mut tile_sprite = Sprite::from_atlas_image(
+                atlas_image.clone(),
+                TextureAtlas {
+                    layout: layout.clone(),
+                    index: index as usize,
+                },
+            );
+            tile_sprite.color = tint;
             commands.spawn((
                 DespawnOnExit(PlayState::Inside),
                 InteriorScoped,
-                Sprite::from_atlas_image(
-                    atlas_image.clone(),
-                    TextureAtlas {
-                        layout: layout.clone(),
-                        index: index as usize,
-                    },
-                ),
+                tile_sprite,
                 Transform::from_xyz(pos.x, pos.y, -10.0),
             ));
             // Solid walls block. Shops use the biome's collision rows; maze
@@ -1458,6 +1481,33 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// World tints are distinct per surface biome and subtle enough not to
+    /// crush the tile art (every channel ≥ 0.8).
+    #[test]
+    fn world_tints_are_distinct_and_subtle() {
+        let biomes = ["garden", "ice", "rocky", "desert", "interior"];
+        let mut seen = Vec::new();
+        for b in biomes {
+            let c = world_tint(b).to_srgba();
+            for ch in [c.red, c.green, c.blue] {
+                assert!((0.8..=1.0).contains(&ch), "{b}: subtle tint, got {ch}");
+            }
+            let key = (
+                (c.red * 100.0) as u32,
+                (c.green * 100.0) as u32,
+                (c.blue * 100.0) as u32,
+            );
+            assert!(!seen.contains(&key), "{b}: tint duplicates another biome");
+            seen.push(key);
+        }
+        // And the mapping actually differentiates real planets: an ice
+        // world and a desert world get different light.
+        assert_ne!(
+            world_tint(crate::world_assets::planet_type_to_biome("icy_dwarf")).to_srgba(),
+            world_tint(crate::world_assets::planet_type_to_biome("desert")).to_srgba(),
+        );
     }
 
     /// Maze venues derive from what the world is, and are rare.
