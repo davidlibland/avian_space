@@ -547,6 +547,13 @@ pub(crate) fn build_plan(
 
     // Furniture solidity → the solid mask (kept out of doorways by layout).
     let mut solid = vec![false; (map_w * map_h) as usize];
+    // Nothing walks PAST the exit door: the apron strip south of it is
+    // sealed (the rings there are walkable plating/grate otherwise).
+    for y in door.1.saturating_sub(2)..door.1 {
+        for x in door.0.saturating_sub(1)..=(door.0 + 1).min(map_w - 1) {
+            solid[(y * map_w + x) as usize] = true;
+        }
+    }
     for &(name, (px, py)) in &props {
         let (w, h, blocks) = prop_meta(name);
         if blocks {
@@ -1063,6 +1070,33 @@ pub(crate) fn setup_interior(
             bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
             Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
         ));
+        // The exit door ANIMATES: same roll-up overlay as building doors,
+        // pixel-aligned frames baked with the static jamb sprite.
+        if name == "exit_door" {
+            let frames: Vec<Handle<Image>> = (0..4)
+                .map(|k| {
+                    asset_server.load(format!(
+                        "sprites/worlds/interior_props/exit_door_panel{k}.png"
+                    ))
+                })
+                .collect();
+            commands.spawn((
+                DespawnOnExit(PlayState::Inside),
+                InteriorScoped,
+                Sprite::from_image(frames[0].clone()),
+                bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
+                Transform::from_xyz(
+                    cx,
+                    front_y,
+                    crate::surface_objects::depth_z(front_y) + 0.0002,
+                ),
+                super::BuildingDoor {
+                    frames,
+                    door_pos: Vec2::new(cx, front_y),
+                    openness: 0.0,
+                },
+            ));
+        }
     }
 
     // ── The walker: at the door coming in, at the stairs coming up ──
@@ -2331,6 +2365,31 @@ mod tests {
                 manifest.contains(&format!("biome: \"{biome}\"")),
                 "{biome}: no critters in the manifest"
             );
+        }
+    }
+
+    /// Nobody strolls PAST the exit door: the apron tiles south of it are
+    /// solid in every plan that has a door.
+    #[test]
+    fn the_apron_south_of_the_door_is_sealed() {
+        let iu = iu();
+        for (kind, planet) in [
+            (BuildingKind::Bar, "earth"),
+            (BuildingKind::Outfitter, "earth"),
+            (BuildingKind::Mine, "mars"),
+            (BuildingKind::Warehouse, "procyon_prime"),
+            (BuildingKind::Substation, "earth"),
+        ] {
+            let plan = build_plan(kind, &iu, planet, 0, &un());
+            let door = plan.door.unwrap();
+            for dy in 1..=2u32 {
+                let y = door.1.saturating_sub(dy);
+                let i = (y * WORLD_WIDTH + door.0) as usize;
+                assert!(
+                    plan.solid[i] || plan.terrain[i] >= plan.solid_min_tier,
+                    "{kind:?}@{planet}: tile {dy} south of the door must block"
+                );
+            }
         }
     }
 

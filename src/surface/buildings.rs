@@ -276,9 +276,9 @@ pub(crate) fn spawn_building_3d(
 /// baked frame.
 #[derive(Component)]
 pub(crate) struct BuildingDoor {
-    frames: Vec<Handle<Image>>,
-    door_pos: Vec2,
-    openness: f32,
+    pub(crate) frames: Vec<Handle<Image>>,
+    pub(crate) door_pos: Vec2,
+    pub(crate) openness: f32,
 }
 
 /// Roll building doors open when the player is near, closed when far.

@@ -215,18 +215,31 @@ def stairs(M, down):
                M["glow_warm" if down else "glow_cyan"])
 
 
-def exit_door(M):
-    # An unmissable way out: tall jambs + lintel, parted panels around a
-    # warm light spill, and a deep-green EXIT bar over the top.
+def exit_door_frame(M):
+    # The static part of the way out: jambs, lintel, EXIT bar. The door
+    # PANELS are baked separately as animation frames (exit_door_panel*).
     for sx in (-0.7, 0.7):
         add_box(f"jamb{sx}", (sx, 0, 1.05), (0.22, 0.28, 2.1), M["steel"])
     add_box("lintel", (0, 0, 2.2), (1.7, 0.3, 0.22), M["steel"])
-    add_box("panel_l", (-0.4, 0.1, 1.0), (0.48, 0.08, 1.9), M["iron"])
-    add_box("panel_r", (0.4, 0.1, 1.0), (0.48, 0.08, 1.9), M["iron"])
-    add_box("gap", (0, 0.14, 1.0), (0.32, 0.06, 1.9), M["glow_warm"])
     exit_green = glow_material("exit_green", C(30, 160, 60), 1.6)
     add_box("sign", (0, -0.08, 2.5), (1.2, 0.14, 0.34), exit_green)
     add_box("sign_frame", (0, 0.0, 2.5), (1.3, 0.1, 0.42), M["dark"])
+
+
+def exit_door_panels(M, openness):
+    # Roll-up panels, top pinned under the lintel; light spills through
+    # the centre gap. openness 1.0 = fully rolled (nothing to draw).
+    h = 1.9 * (1.0 - openness)
+    if h < 0.03:
+        return
+    zc = 2.05 - h / 2
+    add_box("panel_l", (-0.4, 0.1, zc), (0.48, 0.08, h), M["iron"])
+    add_box("panel_r", (0.4, 0.1, zc), (0.48, 0.08, h), M["iron"])
+    add_box("gap", (0, 0.14, zc), (0.32, 0.06, h), M["glow_warm"])
+
+
+def exit_door(M):
+    exit_door_frame(M)
 
 
 def ladder_up(M):
@@ -431,6 +444,42 @@ def main():
         d.text((x + 4, y + cell + 4), name, fill=(220, 224, 232, 255))
     cv.save(os.path.join(OUT, "interior_props_montage.png"))
     print("montage -> out/interior_props_montage.png")
+
+    # ── exit-door panel frames, bbox-aligned with the static frame so the
+    # in-game overlay (BuildingDoor) sits pixel-perfect over the prop ──
+    extent = 2.0
+    def render_raw(build):
+        reset()
+        setup_scene(extent * 2.2, RES, freestyle_thick=1.4)
+        cam_oblique()
+        build(mats())
+        tmp = os.path.join(OUT, "_prop_exitdoor_pass.png")
+        render_to(tmp)
+        return Image.open(tmp).convert("RGBA")
+
+    union = render_raw(lambda M: (exit_door_frame(M), exit_door_panels(M, 0.0)))
+    bbox = union.getbbox()
+    px_per_unit = RES / (extent * 2.2)
+    scale = PX_PER_TILE / px_per_unit
+    def finish(img):
+        img = img.crop(bbox)
+        return img.resize(
+            (max(1, round(img.width * scale)), max(1, round(img.height * scale))),
+            Image.LANCZOS,
+        )
+    if not preview:
+        for k in range(4):
+            o = k / 3.0
+            if k == 3:
+                w, h = finish(union).size
+                Image.new("RGBA", (w, h), (0, 0, 0, 0)).save(
+                    os.path.join(DEST, f"exit_door_panel{k}.png"))
+            else:
+                img = render_raw(lambda M, o=o: exit_door_panels(M, o))
+                finish(img).save(os.path.join(DEST, f"exit_door_panel{k}.png"))
+        # The static prop itself, same bbox.
+        finish(render_raw(exit_door_frame)).save(os.path.join(DEST, "exit_door.png"))
+    print("exit door frames baked")
 
 
 if __name__ == "__main__":

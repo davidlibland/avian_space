@@ -165,6 +165,16 @@ fn carve_entrance(floor: &mut [bool]) -> ((u32, u32), (u32, u32)) {
     ((sx, door_y), (sx, sy)) // (door, entry just inside)
 }
 
+/// Seal the apron strip south of the exit door so nobody strolls PAST it
+/// onto the walkable ring tiles.
+fn seal_below_door(solid: &mut [bool], door: (u32, u32)) {
+    for y in door.1.saturating_sub(2)..door.1 {
+        for x in door.0.saturating_sub(1)..=(door.0 + 2).min(W - 1) {
+            solid[idx(x, y)] = true;
+        }
+    }
+}
+
 /// Scatter `count` props of `name` onto random free floor tiles, skipping
 /// reserved tiles (entry/stairs/hunt) and tiles already claimed.
 fn scatter(
@@ -275,9 +285,10 @@ fn mine_level(rng: &mut StdRng, level: u8, n_levels: u8) -> MazeLevel {
         carve(&mut floor, x, y, PITCH + CW, PITCH + CW);
     }
 
-    let solid = vec![false; (W * H) as usize];
+    let mut solid = vec![false; (W * H) as usize];
     let (door, entry) = if level == 0 {
         let (d, e) = carve_entrance(&mut floor);
+        seal_below_door(&mut solid, d);
         (Some(d), e)
     } else {
         // Arrive at the up-shaft: a fixed corner cell.
@@ -377,6 +388,7 @@ fn warehouse_level(rng: &mut StdRng) -> MazeLevel {
     }
 
     let (door, entry) = carve_entrance(&mut floor);
+    seal_below_door(&mut solid, door);
     let hunt_spot = farthest_from(&floor, &solid, entry);
     // Aisle clutter: pallets, drums, and the odd burst crate.
     let reserved = vec![entry, hunt_spot];
@@ -472,9 +484,10 @@ fn substation_level(rng: &mut StdRng, level: u8, n_levels: u8) -> MazeLevel {
         }
     }
 
-    let solid = vec![false; (W * H) as usize];
+    let mut solid = vec![false; (W * H) as usize];
     let (door, entry) = if level == 0 {
         let (d, e) = carve_entrance(&mut floor);
+        seal_below_door(&mut solid, d);
         (Some(d), e)
     } else {
         (None, rooms[0])

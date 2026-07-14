@@ -406,7 +406,6 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_objects::animate_landscape_objects,
                 door_depth_sound,
                 crate::surface_civilians::spawn_civilians,
-                animate_building_doors,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )
@@ -416,6 +415,7 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_fauna::spawn_fauna,
                 crate::surface_fauna::run_fauna,
                 crate::surface_fauna::depth_sort_fauna,
+                animate_building_doors,
             )
                 .run_if(on_foot),
         )

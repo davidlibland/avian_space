@@ -286,6 +286,7 @@ pub(crate) fn spawn_mission_npcs(
 /// landed appears immediately.
 pub(crate) fn spawn_companion_avatars(
     mut commands: Commands,
+    state: Res<State<PlayState>>,
     roster: Option<Res<crate::carrier::EscortRoster>>,
     item_universe: Res<ItemUniverse>,
     existing: Query<&crate::surface_npc::CompanionAvatar>,
@@ -312,21 +313,37 @@ pub(crate) fn spawn_companion_avatars(
         let Some(def) = item_universe.companions.get(name) else {
             continue;
         };
-        // Beside the player, on walkable ground.
-        let base = walker_tf.translation.truncate() + Vec2::new(TILE_PX * 1.5, 0.0);
-        let tile = {
-            let t = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(base);
+        // Beside the player, on the nearest genuinely walkable tile
+        // (ring search on the CURRENT scene's cost map — never a wall,
+        // never under the parked ship).
+        let wt = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(
+            walker_tf.translation.truncate(),
+        );
+        let walkable = |t: (u32, u32)| -> bool {
             let idx = (t.1 * cost_map.width + t.0) as usize;
-            if idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY {
-                t
-            } else {
-                crate::surface_pathfinding::SurfaceCostMap::world_to_tile(
-                    walker_tf.translation.truncate(),
-                )
-            }
+            idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY
         };
+        let mut tile = wt;
+        'ring: for r in 1i32..=4 {
+            for dx in -r..=r {
+                for dy in -r..=r {
+                    if dx.abs().max(dy.abs()) != r {
+                        continue;
+                    }
+                    let c = (
+                        wt.0.saturating_add_signed(dx),
+                        wt.1.saturating_add_signed(dy),
+                    );
+                    if c != wt && walkable(c) {
+                        tile = c;
+                        break 'ring;
+                    }
+                }
+            }
+        }
         let identity = npc_identity(&item_universe, &layers, &Some(def.npc.clone()));
-        crate::surface_npc::spawn_companion_avatar(
+        let scope = state.get().clone();
+        let spawned = crate::surface_npc::spawn_companion_avatar(
             &mut commands,
             &mut layers,
             &mut images,
@@ -334,7 +351,13 @@ pub(crate) fn spawn_companion_avatars(
             identity,
             tile,
             walk_speed,
+            scope.clone(),
         );
+        if let (Some(entity), PlayState::Inside) = (spawned, scope) {
+            commands
+                .entity(entity)
+                .insert(crate::surface::interiors::InteriorScoped);
+        }
     }
 }
 

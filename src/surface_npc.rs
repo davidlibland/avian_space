@@ -695,14 +695,15 @@ pub fn spawn_companion_avatar(
     identity: Option<(String, crate::character_compositor::AvatarSpec)>,
     start_tile: (u32, u32),
     speed: f32,
-) {
+    scope: crate::PlayState,
+) -> Option<Entity> {
     let mut rng = rand::thread_rng();
     let spec = identity
         .as_ref()
         .map(|(_, spec)| spec.clone())
         .unwrap_or_else(|| layers.random_spec(&mut rng, "civilian"));
     let Some(image) = layers.composite(&spec, images) else {
-        return; // layer images still loading; idempotent caller retries
+        return None; // layer images still loading; idempotent caller retries
     };
     let start = SurfaceCostMap::tile_to_world(start_tile.0, start_tile.1);
     let behavior = NpcBehavior::with_behaviors(
@@ -715,7 +716,7 @@ pub fn spawn_companion_avatar(
     );
     let npc_entity = commands
         .spawn((
-            DespawnOnExit(crate::PlayState::Exploring),
+            DespawnOnExit(scope),
             Npc,
             CompanionAvatar(companion_key.to_string()),
             behavior,
@@ -745,6 +746,7 @@ pub fn spawn_companion_avatar(
     if let Some((name, _)) = identity {
         commands.entity(npc_entity).insert(NpcIdentity { name });
     }
+    Some(npc_entity)
 }
 
 /// What kind of objective NPC to spawn.
