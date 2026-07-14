@@ -134,7 +134,6 @@ pub struct Fauna {
 /// Load the fauna manifest, resolve the species that belong to `biome_name`,
 /// and insert [`FaunaWorld`].  Call from `setup_surface`.
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 pub fn setup_fauna(
     commands: &mut Commands,
     asset_server: &AssetServer,
