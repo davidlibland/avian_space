@@ -176,6 +176,13 @@ pub fn npc_chat_interact(
             let lines = generate_patrol_dialogue(pilot, waypoints);
             ChatContent::Dialogue { lines, current: 0 }
         }
+        Some(Behavior::Loiter) => ChatContent::Dialogue {
+            lines: vec![
+                "Good hunting out there.".to_string(),
+                format!("Fly safe, {}.", pilot),
+            ],
+            current: 0,
+        },
         Some(Behavior::FollowPlayer { .. }) => ChatContent::Dialogue {
             lines: vec![
                 "I'm coming with you, don't worry.".to_string(),

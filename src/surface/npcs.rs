@@ -304,15 +304,29 @@ pub(crate) fn spawn_companion_avatars(
     let here: std::collections::HashSet<&str> = existing.iter().map(|c| c.0.as_str()).collect();
     let walk_speed = layers.walk_speed;
     for entry in &roster.entries {
-        let crate::carrier::EscortKind::Companion { name } = &entry.kind else {
-            continue;
+        // Friends AND hired pilots walk with you (carried fighters stay
+        // with the ship).
+        let (name, identity) = match &entry.kind {
+            crate::carrier::EscortKind::Companion { name } => {
+                let Some(def) = item_universe.companions.get(name) else {
+                    continue;
+                };
+                (
+                    name,
+                    npc_identity(&item_universe, &layers, &Some(def.npc.clone())),
+                )
+            }
+            crate::carrier::EscortKind::Hired { name, .. } => {
+                // Deterministic look, seeded by the pilot's name — the same
+                // face that sat at the bar table.
+                let spec = crate::surface_npc::anonymous_mission_spec(&layers, name, "civilian");
+                (name, Some((name.clone(), spec)))
+            }
+            crate::carrier::EscortKind::Carried { .. } => continue,
         };
         if here.contains(name.as_str()) {
             continue;
         }
-        let Some(def) = item_universe.companions.get(name) else {
-            continue;
-        };
         // Beside the player, on the nearest genuinely walkable tile
         // (ring search on the CURRENT scene's cost map — never a wall,
         // never under the parked ship).
@@ -341,7 +355,6 @@ pub(crate) fn spawn_companion_avatars(
                 }
             }
         }
-        let identity = npc_identity(&item_universe, &layers, &Some(def.npc.clone()));
         let scope = state.get().clone();
         let spawned = crate::surface_npc::spawn_companion_avatar(
             &mut commands,

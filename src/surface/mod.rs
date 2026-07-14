@@ -341,6 +341,7 @@ fn spawn_building_label(commands: &mut Commands, text: &str, pos: Vec3) {
 pub fn surface_plugin(app: &mut App) {
     app.add_plugins(TilemapPlugin)
         .init_resource::<interiors::MazeChase>()
+        .init_resource::<interiors::CaptivesInTow>()
         .init_resource::<CameraZoom>()
         .init_resource::<NearbyBuilding>()
         .init_resource::<ActiveBuildingUI>()
@@ -398,7 +399,23 @@ pub fn surface_plugin(app: &mut App) {
             )
                 .run_if(in_state(PlayState::Inside)),
         )
-        .add_systems(Update, interiors::maze_fugitive_arrivals.run_if(on_foot))
+        .add_systems(
+            Update,
+            (
+                interiors::maze_fugitive_arrivals,
+                interiors::record_captives,
+                interiors::maintain_captive_avatars,
+            )
+                .run_if(on_foot),
+        )
+        .add_systems(
+            Update,
+            interiors::deliver_captives_to_garrison.run_if(in_state(PlayState::Inside)),
+        )
+        .add_systems(
+            OnEnter(crate::PlayState::Flying),
+            interiors::process_captives_on_takeoff,
+        )
         .add_systems(
             Update,
             (

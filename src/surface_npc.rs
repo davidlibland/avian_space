@@ -86,6 +86,10 @@ pub enum Behavior {
 
     /// Countdown then despawn.
     Despawn { timer: Timer },
+
+    /// Stand around indefinitely — indoor NPCs (givers who've made their
+    /// pitch, met contacts) stay at their table instead of blinking out.
+    Loiter,
 }
 
 // ── Components ───────────────────────────────────────────────────────────
@@ -495,6 +499,10 @@ pub fn run_npc_behaviors(
                 }
             }
 
+            Behavior::Loiter => {
+                vel.0 = Vec2::ZERO;
+            }
+
             Behavior::OfferMission { .. } => {
                 // Stand still, wait for player interaction.
                 // The interaction is handled by a separate system that
@@ -619,14 +627,19 @@ pub fn spawn_mission_npc(
     behavior.push(Behavior::OfferMission {
         mission_id: mission_id.to_string(),
     });
-    // After offering, patrol away.
-    behavior.push(Behavior::Patrol {
-        waypoints: Vec::new(),
-        current_idx: 0,
-    });
-    behavior.push(Behavior::Despawn {
-        timer: Timer::from_seconds(2.0, TimerMode::Once),
-    });
+    if scope == crate::PlayState::Inside {
+        // Indoors there are no patrol routes — they keep their table.
+        behavior.push(Behavior::Loiter);
+    } else {
+        // After offering, patrol away.
+        behavior.push(Behavior::Patrol {
+            waypoints: Vec::new(),
+            current_idx: 0,
+        });
+        behavior.push(Behavior::Despawn {
+            timer: Timer::from_seconds(2.0, TimerMode::Once),
+        });
+    }
 
     let npc_entity = commands
         .spawn((
@@ -832,6 +845,9 @@ pub fn spawn_objective_npc(
                 current_idx: 0,
                 repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
             });
+        }
+        _ if scope == crate::PlayState::Inside => {
+            behavior.push(Behavior::Loiter);
         }
         _ => {
             behavior.push(Behavior::Patrol {

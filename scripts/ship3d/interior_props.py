@@ -346,6 +346,15 @@ def coolant_puddle(M):
     add_sphere("pool2", (0.3, 0.18, 0.01), (0.14, 0.1, 0.01), glow)
 
 
+def jail_bars(M):
+    # A barred cell front for the garrison's holding nook.
+    add_box("sill", (0, 0, 0.06), (0.98, 0.24, 0.12), M["iron"])
+    add_box("lintel", (0, 0, 1.62), (0.98, 0.24, 0.12), M["iron"])
+    for i in range(5):
+        add_cylinder(f"bar{i}", (-0.4 + i * 0.2, 0, 0.84), 0.035, 1.5,
+                     M["steel"], axis="z")
+
+
 def gauge_panel(M):
     add_box("panel", (0, 0.12, 0.5), (0.7, 0.1, 0.9), M["steel"])
     for i in range(2):
@@ -370,6 +379,7 @@ PROPS = [
     ("warning_cone", warning_cone, 1.0),
     ("coolant_puddle", coolant_puddle, 1.1),
     ("gauge_panel", gauge_panel, 1.5),
+    ("jail_bars", jail_bars, 1.4),
     ("ladder_up", ladder_up, 1.9),
     ("bar_counter", bar_counter, 3.4),
     ("table_round", table_round, 1.3),

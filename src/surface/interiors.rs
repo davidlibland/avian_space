@@ -89,6 +89,175 @@ pub struct MazeChase {
     pub inside: std::collections::HashMap<String, u8>,
 }
 
+/// Prisoners in tow: catch-mission targets you've caught but not yet
+/// handed over. They follow you level to level and across the surface;
+/// walking them into a GARRISON ends the tow at the holding cell, and
+/// taking off hands them to the authorities.
+#[derive(Resource, Default)]
+pub struct CaptivesInTow {
+    /// mission id → the npc key for the face (None = mission-seeded look).
+    pub captives: Vec<(String, Option<String>)>,
+}
+
+/// Record catches as captives (the mission completes and pays on the
+/// catch, exactly as before — the tow is the walk afterwards).
+pub(crate) fn record_captives(
+    mut caught: MessageReader<crate::missions::NpcCaught>,
+    catalog: Res<crate::missions::MissionCatalog>,
+    mut tow: ResMut<CaptivesInTow>,
+    mut comms: ResMut<crate::hud::CommsChannel>,
+) {
+    for ev in caught.read() {
+        if tow.captives.iter().any(|(id, _)| *id == ev.mission_id) {
+            continue;
+        }
+        let Some(def) = catalog.defs.get(&ev.mission_id) else {
+            continue;
+        };
+        let crate::missions::Objective::CatchNpc { npc, .. } = &def.objective else {
+            continue;
+        };
+        tow.captives.push((ev.mission_id.clone(), npc.clone()));
+        comms.send("Prisoner secured — they'll follow you. A garrison will take them.");
+    }
+}
+
+/// Keep every captive walking behind the player, in whichever scene the
+/// player is in (levels, surface). Idempotent per mission id — the same
+/// pattern as companion avatars.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn maintain_captive_avatars(
+    mut commands: Commands,
+    state: Res<State<PlayState>>,
+    tow: Res<CaptivesInTow>,
+    iu: Res<ItemUniverse>,
+    existing: Query<&crate::surface_npc::CompanionAvatar>,
+    walker: Query<&Transform, With<Walker>>,
+    cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
+    layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let (Some(cost_map), Some(mut layers)) = (cost_map, layers) else {
+        return;
+    };
+    let Ok(walker_tf) = walker.single() else {
+        return;
+    };
+    if tow.captives.is_empty() {
+        return;
+    }
+    let here: std::collections::HashSet<&str> = existing.iter().map(|c| c.0.as_str()).collect();
+    let walk_speed = layers.walk_speed;
+    for (mission_id, npc) in &tow.captives {
+        if here.contains(mission_id.as_str()) {
+            continue;
+        }
+        let identity = match npc {
+            Some(key) => super::npc_identity(&iu, &layers, &Some(key.clone())),
+            None => Some((
+                "Prisoner".to_string(),
+                crate::surface_npc::anonymous_mission_spec(&layers, mission_id, "civilian"),
+            )),
+        };
+        let wt = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(
+            walker_tf.translation.truncate(),
+        );
+        let walkable = |t: (u32, u32)| -> bool {
+            let idx = (t.1 * cost_map.width + t.0) as usize;
+            idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY
+        };
+        let mut tile = wt;
+        'ring: for r in 1i32..=4 {
+            for dx in -r..=r {
+                for dy in -r..=r {
+                    if dx.abs().max(dy.abs()) != r {
+                        continue;
+                    }
+                    let c = (
+                        wt.0.saturating_add_signed(dx),
+                        wt.1.saturating_add_signed(dy),
+                    );
+                    if c != wt && walkable(c) {
+                        tile = c;
+                        break 'ring;
+                    }
+                }
+            }
+        }
+        let scope = state.get().clone();
+        let spawned = crate::surface_npc::spawn_companion_avatar(
+            &mut commands,
+            &mut layers,
+            &mut images,
+            mission_id,
+            identity,
+            tile,
+            walk_speed * 0.95,
+            scope.clone(),
+        );
+        if let (Some(entity), PlayState::Inside) = (spawned, scope) {
+            commands.entity(entity).insert(InteriorScoped);
+        }
+    }
+}
+
+/// Inside a GARRISON with prisoners in tow: they break off and walk to
+/// the holding cell (the barred nook), where the arrival system takes
+/// custody.
+pub(crate) fn deliver_captives_to_garrison(
+    mut commands: Commands,
+    context: Option<Res<InteriorContext>>,
+    tow: Res<CaptivesInTow>,
+    iu: Res<ItemUniverse>,
+    landed: Res<crate::planet_ui::LandedContext>,
+    unlocks: Res<crate::missions::PlayerUnlocks>,
+    avatars: Query<(Entity, &crate::surface_npc::CompanionAvatar)>,
+    marching: Query<&MazeFugitive>,
+) {
+    let Some(context) = context else { return };
+    if context.kind != BuildingKind::Garrison || tow.captives.is_empty() {
+        return;
+    }
+    let planet = landed.planet_name.clone().unwrap_or_default();
+    let plan = build_plan(BuildingKind::Garrison, &iu, &planet, 0, &unlocks);
+    let (x0, y0, rw, rh) = plan.room;
+    let cell = (x0 + rw - 2, y0 + rh - 3);
+    for (entity, avatar) in &avatars {
+        let is_captive = tow.captives.iter().any(|(id, _)| *id == avatar.0);
+        if !is_captive || marching.contains(entity) {
+            continue;
+        }
+        commands.entity(entity).insert((
+            MazeFugitive {
+                mission_id: avatar.0.clone(),
+                goal: cell,
+                next: FugitiveNext::Jailed,
+            },
+            crate::surface_npc::NpcBehavior::with_behaviors(
+                80.0,
+                [crate::surface_npc::Behavior::FleeToward {
+                    mission_id: avatar.0.clone(),
+                    goal: cell,
+                    path: Vec::new(),
+                    current_idx: 0,
+                }],
+            ),
+        ));
+    }
+}
+
+/// Taking off with prisoners still in tow: the port authorities take
+/// them off your hands.
+pub(crate) fn process_captives_on_takeoff(
+    mut tow: ResMut<CaptivesInTow>,
+    mut comms: ResMut<crate::hud::CommsChannel>,
+) {
+    if !tow.captives.is_empty() {
+        tow.captives.clear();
+        comms.send("Port authority takes your prisoners into custody.");
+    }
+}
+
 /// A fleeing hunt target with a destination: the venue door (outside) or
 /// the down shaft (inside). Arrival despawns them and advances the chase.
 #[derive(Component)]
@@ -104,6 +273,8 @@ pub(crate) enum FugitiveNext {
     IntoBuilding,
     /// Scrambles down the shaft — the chase moves one level deeper.
     Descend,
+    /// A captive marching into the garrison's holding cell.
+    Jailed,
 }
 
 /// Fugitives that reach their goal vanish ahead of the player: into the
@@ -113,6 +284,7 @@ pub(crate) fn maze_fugitive_arrivals(
     mut commands: Commands,
     fugitives: Query<(Entity, &Transform, &MazeFugitive)>,
     mut chase: ResMut<MazeChase>,
+    mut tow: ResMut<CaptivesInTow>,
     mission_log: Res<crate::missions::MissionLog>,
     mut comms: ResMut<crate::hud::CommsChannel>,
 ) {
@@ -132,6 +304,10 @@ pub(crate) fn maze_fugitive_arrivals(
                 let lvl = chase.inside.entry(fug.mission_id.clone()).or_insert(0);
                 *lvl += 1;
                 comms.send("They scramble down the shaft — keep up!");
+            }
+            FugitiveNext::Jailed => {
+                tow.captives.retain(|(id, _)| *id != fug.mission_id);
+                comms.send("The cell door clangs shut. The garrison takes custody.");
             }
         }
     }
@@ -345,7 +521,7 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         // panels block.
         "pebbles_a" | "pebbles_b" | "ore_chunk" | "pickaxe" | "pallet" | "box_spill"
         | "cable_coil" | "pipe_segment" | "warning_cone" | "coolant_puddle" => (1, 1, false),
-        "ore_pile" | "crystal" | "barrel" | "gauge_panel" => (1, 1, true),
+        "ore_pile" | "crystal" | "barrel" | "gauge_panel" | "jail_bars" => (1, 1, true),
         _ => (1, 1, false),
     }
 }
@@ -538,6 +714,10 @@ pub(crate) fn build_plan(
             props.push(("war_desk", (counter.0 - 1, counter.1)));
             props.push(("flag_stand", (counter.0 - 3, counter.1)));
             props.push(("flag_stand", (counter.0 + 2, counter.1)));
+            // The holding cell: a barred nook in the east corner. Bars
+            // seal its south face; captives enter from the west.
+            props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 4)));
+            props.push(("jail_bars", (x0 + rw - 2, y0 + rh - 4)));
         }
         BuildingKind::Outfitter | BuildingKind::Shipyard => {
             props.push(("shelf_rack", (counter.0 - 1, counter.1)));
@@ -1354,16 +1534,36 @@ pub(crate) fn hire_panel_ui(
                     .get(&pilot.ship_type)
                     .map(|d| d.max_health)
                     .unwrap_or(100);
+                let name = pilot.pilot_name.clone();
                 roster.add(
                     pilot.ship_type.clone(),
                     crate::carrier::EscortKind::Hired {
-                        name: pilot.pilot_name.clone(),
+                        name: name.clone(),
                         temperament: pilot.temperament.clone(),
                     },
                     health,
                 );
-                // They knock back the drink and head for the pad.
-                commands.entity(entity).despawn();
+                // They knock back the drink and fall in behind you — from
+                // here on the avatar system owns them (same as friends).
+                commands
+                    .entity(entity)
+                    .remove::<HirePilot>()
+                    .remove::<RigidBody>()
+                    .insert((
+                        RigidBody::Dynamic,
+                        LockedAxes::ROTATION_LOCKED,
+                        LinearDamping(10.0),
+                        LinearVelocity(Vec2::ZERO),
+                        crate::surface_npc::CompanionAvatar(name),
+                        crate::surface_npc::NpcBehavior::with_behaviors(
+                            120.0,
+                            [crate::surface_npc::Behavior::FollowPlayer {
+                                path: Vec::new(),
+                                current_idx: 0,
+                                repath_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+                            }],
+                        ),
+                    ));
             }
         });
 }
@@ -2366,6 +2566,29 @@ mod tests {
                 "{biome}: no critters in the manifest"
             );
         }
+    }
+
+    /// The garrison has a holding cell: barred nook present, bars solid,
+    /// and the cell tile reachable from the entry (captives march in).
+    #[test]
+    fn the_garrison_holding_cell_works() {
+        let iu = iu();
+        let plan = build_plan(BuildingKind::Garrison, &iu, "earth", 0, &un());
+        let (x0, y0, rw, rh) = plan.room;
+        let bars: Vec<_> = plan
+            .props
+            .iter()
+            .filter(|&&(n, _)| n == "jail_bars")
+            .collect();
+        assert_eq!(bars.len(), 2, "a barred cell front");
+        let (_, _, blocks) = prop_meta("jail_bars");
+        assert!(blocks, "bars must block");
+        let cell = (x0 + rw - 2, y0 + rh - 3);
+        let cm = cost_map_of(&plan);
+        assert!(
+            cm.find_path(plan.entry, cell).is_some(),
+            "the cell must be reachable"
+        );
     }
 
     /// Nobody strolls PAST the exit door: the apron tiles south of it are
