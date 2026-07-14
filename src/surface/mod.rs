@@ -481,7 +481,7 @@ fn save_on_explore(
 }
 
 // ── Submodules (split from the old 2,600-line surface.rs) ────────────────────
-mod buildings;
+pub(crate) mod buildings;
 mod interact;
 pub mod interiors;
 pub mod mazes;

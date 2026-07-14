@@ -240,6 +240,7 @@ pub(crate) fn deliver_captives_to_garrison(
                     goal: cell,
                     path: Vec::new(),
                     current_idx: 0,
+                    waiting: false,
                 }],
             ),
         ));

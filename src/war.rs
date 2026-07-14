@@ -467,7 +467,11 @@ fn instantiate_war_mission(
                         hint: None,
                         planet: planet_id.clone(),
                         npc_name: npc_name.clone(),
-                        building: None,
+                        // Officials bolt for the deepest cover the world
+                        // offers (mine shafts, substation levels) when it
+                        // has any.
+                        building: crate::surface::buildings::maze_venue_for_planet(&planet_id, iu)
+                            .map(|k| format!("{k:?}").to_lowercase()),
                         npc: None,
                     },
                     Vec::new(),

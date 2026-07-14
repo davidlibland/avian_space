@@ -432,8 +432,8 @@ bounty_story_2:
 
 bounty_story_2_catch:
   faction: Federation
-  briefing: "The pirate captain is hiding in Titan's smog-choked dockside quarter. Find him before he slips offworld — our intel says he's trying to buy passage out of a bar."
-  success_text: "You pin the captain against a bulkhead in the dockside bar he bolted into. He spits, but surrenders. The Federation uploads the corvette certification and proton-beam clearance to your ship the moment he's in custody. 7,000 credits too. Vasquez at Barnard Station has the next tier whenever you're ready."
+  briefing: "The pirate captain is hiding on Titan. Find him before he slips offworld — our intel says he's been sleeping in the mine workings, waiting on a berth out. Flush him from the tunnels."
+  success_text: "You run the captain down in the Titan mine, two levels beneath the daylight. He spits, but surrenders. The Federation uploads the corvette certification and proton-beam clearance to your ship the moment he's in custody. 7,000 credits too. Vasquez at Barnard Station has the next tier whenever you're ready."
   failure_text: "The captain vanished into Titan's underlayer. He'll be running a new crew within a month."
   preconditions:
     - kind: completed
@@ -444,7 +444,7 @@ bounty_story_2_catch:
     kind: catch_npc
     planet: titan
     npc_name: "the pirate captain"
-    building: bar
+    building: mine
   completion_effects:
     - kind: pay
       credits: 7000
@@ -590,7 +590,7 @@ bounty_story_6:
 
 bounty_story_6_catch:
   faction: Federation
-  briefing: "Track the Pirate King to Pluto. He'll be in the bar quarter — that's where every fugitive in Sol goes when they've got nowhere else. End this."
+  briefing: "Track the Pirate King to Pluto. He's gone underground — literally: the played-out mine beneath the dome, the last hole in Sol with no law inside it. End this."
   success_text: "You finally run the Pirate King to a stop under Pluto's thin dome. He quits all at once — no weapon, just empty hands raised like a toast. 'Took you long enough, Commander.' Vasquez comes over comms as he's cuffed: 'The border is secure for the first time in years. Carrier certification and turret clearance are yours — the full package. 22,000 credits on top. Every Federation officer in the fleet owes you a drink. The bounty board will keep posting carrier-class contracts if you're hungry for more.'"
   failure_text: "The Pirate King disappeared into Pluto's ice fields. He'll be rebuilding by next year."
   preconditions:
@@ -603,7 +603,7 @@ bounty_story_6_catch:
     planet: pluto
     npc_name: "the Uncrowned King"
     npc: free_fleet_king
-    building: bar
+    building: mine
   completion_effects:
     - kind: pay
       credits: 22000
@@ -652,8 +652,8 @@ espionage_1:
 
 espionage_2:
   faction: Federation
-  briefing: "The officer is back in the same booth, no small talk. 'Their next cell is on Mars — a mining-data courier, looks like he's trying to slip belt-survey records out to a freighter due in two days. He hangs around the Mars market. 4,500 credits if you pick him up before that freighter clears customs.'"
-  success_text: "The courier bolts when he spots you — and runs out of room among the market stalls. He drops a data-sliver that Federation techs will spend a month decoding. 4,500 credits hits your account."
+  briefing: "The officer is back in the same booth, no small talk. 'Their next cell is on Mars — a mining-data courier, looks like he's trying to slip belt-survey records out to a freighter due in two days. He's holed up in the Mars mine — belt-survey data reads like a treasure map down there. 4,500 credits if you pick him up before that freighter clears customs.'"
+  success_text: "The courier bolts when he spots you — and the tunnels run out before his luck does. He drops a data-sliver that Federation techs will spend a month decoding. 4,500 credits hits your account."
   failure_text: "The freighter lifted on schedule. Mars mining data is on its way to rebel shipyards."
   preconditions:
     - kind: completed
@@ -669,15 +669,15 @@ espionage_2:
     kind: catch_npc
     planet: mars
     npc_name: "the rebel courier"
-    building: market
+    building: mine
   completion_effects:
     - kind: pay
       credits: 4500
 
 espionage_3:
   faction: Federation
-  briefing: "The officer slides a folder across the table — a dossier thick with photos. 'This one's their handler. He recruits couriers across half the Federation, and right now he's on Kepler-22b pretending to be a shipyard inspector. He's the prize, Commander. Get him and we crack the whole network. 8,000 credits.'"
-  success_text: "You catch the handler at the shipyard, flanked by two fake aides. He doesn't even struggle — just sighs like a tired professor. 'Always the new faces,' he mutters. Federation Intelligence descends on his safe-house within the hour. Your account ticks up by 8,000 credits. 'Commander,' the officer says, 'you've earned a seat at the real table. The next briefing will be different.'"
+  briefing: "The officer slides a folder across the table — a dossier thick with photos. 'This one's their handler. He recruits couriers across half the Federation, and right now he's on Kepler-22b posing as a maintenance auditor — when anyone looks twice he vanishes into the substation levels under the colony. He's the prize, Commander. Get him and we crack the whole network. 8,000 credits.'"
+  success_text: "You catch the handler deep in the substation's pipe-runs, his two fake aides abandoned somewhere above. He doesn't even struggle — just sighs like a tired professor. 'Always the new faces,' he mutters. Federation Intelligence descends on his safe-house within the hour. Your account ticks up by 8,000 credits. 'Commander,' the officer says, 'you've earned a seat at the real table. The next briefing will be different.'"
   failure_text: "The handler slipped offworld. Every lead we had just went cold."
   preconditions:
     - kind: completed
@@ -693,7 +693,7 @@ espionage_3:
     kind: catch_npc
     planet: kepler_22b
     npc_name: "the rebel handler"
-    building: shipyard
+    building: substation
   completion_effects:
     - kind: pay
       credits: 8000
@@ -1245,8 +1245,8 @@ helios_2:
       name: helios_drone_license
 helios_3:
   faction: Helios
-  briefing: "The recruiter's smile thins. 'A problem. Free Frontier organizers seized one of our Foundry refineries over wages. Their ringleader is hiding in the Foundry station. Bring him in — quietly — before the next shareholder call. 13,000.'"
-  success_text: "You pin the organizer in a Foundry stairwell. He spits at your boots. The Combine's credits — 13,000 — hit your account before he's even processed, along with clearance for the Enforcer gunship and the seeker missiles it carries."
+  briefing: "The recruiter's smile thins. 'A problem. Free Frontier organizers seized one of our Foundry refineries over wages. Their ringleader has gone to ground in the Foundry ore galleries. Bring him in — quietly — before the next shareholder call. 13,000.'"
+  success_text: "You pin the organizer at the dead end of a Foundry gallery. He spits at your boots. The Combine's credits — 13,000 — hit your account before he's even processed, along with clearance for the Enforcer gunship and the seeker missiles it carries."
   failure_text: "The organizer rallied the workers and vanished. The strike spreads."
   preconditions:
     - kind: completed
@@ -1262,7 +1262,7 @@ helios_3:
     kind: catch_npc
     planet: foundry_station
     npc_name: "the co-op organizer"
-    building: market
+    building: mine
   completion_effects:
     - kind: pay
       credits: 13000

@@ -1381,6 +1381,17 @@ pub(super) fn instantiate_template(
             }
             let (deliver_planet, deliver_display) = all_planets[deliver_idx].clone();
             let (chase_planet, chase_display) = all_planets[chase_idx].clone();
+            // The thief goes to ground in the chase planet's maze venue
+            // when it has one — a real hunt instead of a doorstep tag.
+            let hideout_kind =
+                crate::surface::buildings::maze_venue_for_planet(&chase_planet, universe);
+            let hideout_building = hideout_kind.map(|k| format!("{k:?}").to_lowercase());
+            let hideout_label = match hideout_kind {
+                Some(crate::surface::BuildingKind::Mine) => "the mine",
+                Some(crate::surface::BuildingKind::Warehouse) => "the warehouse rows",
+                Some(crate::surface::BuildingKind::Substation) => "the substation levels",
+                _ => "the port",
+            };
 
             let stage1_id = gen_id(template_id, rng);
             let stage2_id = gen_id(template_id, rng);
@@ -1398,6 +1409,7 @@ pub(super) fn instantiate_template(
                 ("{deliver_planet_display}", deliver_display),
                 ("{chase_planet}", chase_planet.clone()),
                 ("{chase_planet_display}", chase_display),
+                ("{hideout}", hideout_label.to_string()),
             ];
 
             // Stage 1: Destroy ship + collect stolen goods.
@@ -1464,7 +1476,7 @@ pub(super) fn instantiate_template(
                     hint: None,
                     planet: chase_planet,
                     npc_name: target_name.clone(),
-                    building: None,
+                    building: hideout_building,
                     npc: None,
                 },
                 requires: Vec::new(),

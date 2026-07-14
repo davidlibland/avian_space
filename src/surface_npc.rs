@@ -74,6 +74,9 @@ pub enum Behavior {
         goal: (u32, u32),
         path: Vec<(u32, u32)>,
         current_idx: usize,
+        /// Loiter in place until the player closes in — the fugitive
+        /// should be SEEN outside before they bolt for the door.
+        waiting: bool,
     },
 
     /// Stand still with a marker.  Wait for the player to press E while
@@ -460,6 +463,7 @@ pub fn run_npc_behaviors(
                 goal,
                 path,
                 current_idx,
+                waiting,
             } => {
                 // Catchable mid-run, same rule as FleePlayer.
                 if let Some(wp) = walker_pos {
@@ -473,6 +477,17 @@ pub fn run_npc_behaviors(
                         npc.queue.pop_front();
                         continue;
                     }
+                    // Hold position until the player closes in — then bolt.
+                    if *waiting {
+                        if dist_to_player > 5.5 * TILE_PX {
+                            vel.0 = Vec2::ZERO;
+                            continue;
+                        }
+                        *waiting = false;
+                    }
+                } else if *waiting {
+                    vel.0 = Vec2::ZERO;
+                    continue;
                 }
                 // The goal is fixed: one path, computed once.
                 if path.is_empty()
@@ -833,6 +848,7 @@ pub fn spawn_objective_npc(
                 goal,
                 path: Vec::new(),
                 current_idx: 0,
+                waiting: true,
             });
         }
     }

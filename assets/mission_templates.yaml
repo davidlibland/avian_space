@@ -77,7 +77,7 @@ catch_thief:
   stage2_briefing: "Deliver the recovered {quantity} units of {commodity} to {deliver_planet_display}."
   stage2_success_text: "Cargo returned to its rightful owner."
   stage2_failure_text: "The merchant frowns. Where's the rest of the shipment?"
-  stage3_briefing: "Your sensors tracked an escape pod from the wreckage to {chase_planet_display}. Land and apprehend {target_name}."
+  stage3_briefing: "Your sensors tracked an escape pod from the wreckage to {chase_planet_display}. Ground chatter says they've gone to ground near {hideout}. Land and apprehend {target_name}."
   stage3_success_text: "Got them. {pay} credits transferred. Justice served."
   stage3_failure_text: "The thief disappeared into the crowds."
   offer:
