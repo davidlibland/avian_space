@@ -350,7 +350,7 @@ pirate_bounty_sol:
 pirate_escape_pod:
   faction: Federation
   briefing: "Land on Triton (in sol) and apprehend the pirate before they find a new ship."
-  success_text: "You corner the pirate in a frozen alley on Triton. They raise their hands. 'Alright, alright. You got me.' The Federation transfers 6,000 credits and a fighter certification to your account — the debrief confirmed this pirate had been scouting Federation convoys for months."
+  success_text: "You run the pirate down on Triton — out of breath, out of options. They raise their hands. 'Alright, alright. You got me.' The Federation transfers 6,000 credits and a fighter certification to your account — the debrief confirmed this pirate had been scouting Federation convoys for months."
   failure_text: "The pirate slipped away in the ice fields. They'll be someone else's problem now."
   preconditions:
     - kind: completed
@@ -433,7 +433,7 @@ bounty_story_2:
 bounty_story_2_catch:
   faction: Federation
   briefing: "The pirate captain is hiding in Titan's smog-choked dockside quarter. Find him before he slips offworld — our intel says he's trying to buy passage out of a bar."
-  success_text: "You pin the captain against a bulkhead in a back-alley bar. He spits, but surrenders. The Federation uploads the corvette certification and proton-beam clearance to your ship the moment he's in custody. 7,000 credits too. Vasquez at Barnard Station has the next tier whenever you're ready."
+  success_text: "You pin the captain against a bulkhead in the dockside bar he bolted into. He spits, but surrenders. The Federation uploads the corvette certification and proton-beam clearance to your ship the moment he's in custody. 7,000 credits too. Vasquez at Barnard Station has the next tier whenever you're ready."
   failure_text: "The captain vanished into Titan's underlayer. He'll be running a new crew within a month."
   preconditions:
     - kind: completed
@@ -591,7 +591,7 @@ bounty_story_6:
 bounty_story_6_catch:
   faction: Federation
   briefing: "Track the Pirate King to Pluto. He'll be in the bar quarter — that's where every fugitive in Sol goes when they've got nowhere else. End this."
-  success_text: "The Pirate King is drinking alone in a frost-rimed bar under Pluto's thin dome. He doesn't even reach for a weapon — just raises his glass. 'Took you long enough, Commander.' Vasquez comes over comms as he's cuffed: 'The border is secure for the first time in years. Carrier certification and turret clearance are yours — the full package. 22,000 credits on top. Every Federation officer in the fleet owes you a drink. The bounty board will keep posting carrier-class contracts if you're hungry for more.'"
+  success_text: "You finally run the Pirate King to a stop under Pluto's thin dome. He quits all at once — no weapon, just empty hands raised like a toast. 'Took you long enough, Commander.' Vasquez comes over comms as he's cuffed: 'The border is secure for the first time in years. Carrier certification and turret clearance are yours — the full package. 22,000 credits on top. Every Federation officer in the fleet owes you a drink. The bounty board will keep posting carrier-class contracts if you're hungry for more.'"
   failure_text: "The Pirate King disappeared into Pluto's ice fields. He'll be rebuilding by next year."
   preconditions:
     - kind: completed
@@ -653,7 +653,7 @@ espionage_1:
 espionage_2:
   faction: Federation
   briefing: "The officer is back in the same booth, no small talk. 'Their next cell is on Mars — a mining-data courier, looks like he's trying to slip belt-survey records out to a freighter due in two days. He hangs around the Mars market. 4,500 credits if you pick him up before that freighter clears customs.'"
-  success_text: "The courier tries to run when he spots you — straight into a dead-end alley behind the market. He drops a data-sliver that Federation techs will spend a month decoding. 4,500 credits hits your account."
+  success_text: "The courier bolts when he spots you — and runs out of room among the market stalls. He drops a data-sliver that Federation techs will spend a month decoding. 4,500 credits hits your account."
   failure_text: "The freighter lifted on schedule. Mars mining data is on its way to rebel shipyards."
   preconditions:
     - kind: completed
@@ -3325,7 +3325,7 @@ lost_son_3:
 # ── Venue hunts: catch missions that USE the maze interiors ──────────────────
 # (mine on Mars, warehouse rows on Procyon Prime, substation under Earth.)
 claim_jumper_mars:
-  briefing: "A dust-caked mine foreman corners you at the bar. 'Claim-jumper salted our assay reports and bolted with the originals. He's gone to ground in the Mars mine — deep, probably, he knows those tunnels. Drag him out and the co-op pays 8,000. Fair warning, pilot: he WILL run for the shafts.'"
+  briefing: "A dust-caked mine foreman corners you at the bar. 'Claim-jumper salted our assay reports and bolted with the originals. He's been living out of the Mars mine head — and he knows those tunnels. Drag him out and the co-op pays 8,000. Fair warning, pilot: the second he sees you coming he WILL run for the shafts.'"
   success_text: "You march the jumper out into the red daylight, assay folder wedged under your arm. The foreman flips through every page and nods once. 'Well hunted.'"
   failure_text: "The tunnels keep him."
   preconditions:
@@ -3365,7 +3365,7 @@ manifest_ghost:
   - kind: pay
     credits: 9000
 coolant_saboteur:
-  briefing: "A Federation liaison meets you away from the crowds. 'Someone has been rigging the coolant loops in the service level under Earth's colony — the substation. Our engineers keep finding the damage; never the hand. Catch the saboteur down there. They know the pipes, so expect a chase. 10,000, quietly.'"
+  briefing: "A Federation liaison meets you away from the crowds. 'Someone has been rigging the coolant loops in the service level under Earth's colony — the substation. Our engineers keep finding the damage; never the hand — whoever it is slips down the substation stairs the moment anyone comes looking. Catch them. They know the pipes, so expect a chase. 10,000, quietly.'"
   success_text: "You pin the saboteur against a pipe run, pockets full of scoring tools. Above ground, the liaison takes delivery without a word and pays without a receipt."
   failure_text: "The service level hums on, and somewhere down there a valve is already loosening."
   preconditions:
