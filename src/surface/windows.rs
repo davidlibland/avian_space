@@ -4,10 +4,7 @@ use super::*;
 use bevy_egui::EguiContexts;
 
 use crate::item_universe::ItemUniverse;
-use crate::missions::{
-    AbandonMission, AcceptMission, MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks,
-    render_missions_tab,
-};
+use crate::missions::{AcceptMission, MissionCatalog, MissionLog, MissionOffers, PlayerUnlocks};
 use crate::planet_ui::{
     LandedContext, render_mods_section, render_outfitter_tab, render_shipyard_tab, render_trade_tab,
 };
@@ -56,7 +53,6 @@ pub(crate) fn surface_building_ui(
     mut buy_ship_writer: MessageWriter<BuyShip>,
     ctx: BuildingUiContext,
     mut accept_writer: MessageWriter<AcceptMission>,
-    mut abandon_writer: MessageWriter<AbandonMission>,
     mut escort_roster: Option<ResMut<crate::carrier::EscortRoster>>,
     mut next_state: ResMut<NextState<PlayState>>,
 ) {
@@ -124,20 +120,31 @@ pub(crate) fn surface_building_ui(
                     }
                 }
                 BuildingKind::Bar => {
+                    // The compact job board (postings only — active
+                    // missions live in the log, one I-press away)...
                     let free = player_query
                         .single()
                         .map(|s| s.remaining_cargo_space())
                         .unwrap_or(0);
-                    render_missions_tab(
+                    crate::missions::ui::render_job_board(
                         ui,
-                        &mission_log,
                         &mission_offers,
                         &mission_catalog,
                         free,
                         &mut accept_writer,
-                        &mut abandon_writer,
                     );
-                    // The wingman desk: companions, rejoins, pilots for hire.
+                    ui.separator();
+                    // ...the bartender's rumors about who in the room has
+                    // work (those missions live on the NPCs at the tables)...
+                    crate::companions::render_bartender_rumors(
+                        ui,
+                        &mission_offers,
+                        &mission_catalog,
+                        &mission_log,
+                        &item_universe,
+                        planet_name,
+                    );
+                    // The wingman desk: your flight, dismissals, rejoins.
                     if let (Ok(mut ship), Some(roster)) =
                         (player_query.single_mut(), escort_roster.as_deref_mut())
                     {

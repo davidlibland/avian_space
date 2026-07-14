@@ -440,7 +440,7 @@ fn companion_chatter(
 /// THIS planet (rejoin), and the derived pilots-for-hire pool.
 pub fn render_companions_section(
     ui: &mut bevy_egui::egui::Ui,
-    ship: &mut Ship,
+    _ship: &mut Ship,
     roster: &mut EscortRoster,
     iu: &ItemUniverse,
     planet_name: &str,
@@ -513,49 +513,8 @@ pub fn render_companions_section(
         });
     }
 
-    // Pilots for hire (derived from the local shipyard).
-    let pool = hire_pool(iu, planet_name);
-    if !pool.is_empty() {
-        ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new("Pilots for hire").color(egui::Color32::from_rgb(200, 200, 210)),
-        );
-        for offer in pool {
-            // One copy of each pilot: skip if already flying with us.
-            let taken = roster.entries.iter().any(
-                |e| matches!(&e.kind, EscortKind::Hired { name, .. } if *name == offer.pilot_name),
-            );
-            if taken {
-                continue;
-            }
-            ui.horizontal(|ui| {
-                ui.label(format!(
-                    "{} — {} ({}) · {} cr",
-                    offer.pilot_name,
-                    offer.ship_type,
-                    offer.temperament.key(),
-                    offer.fee
-                ));
-                let can = companion_count(roster) < MAX_COMPANIONS && ship.credits >= offer.fee;
-                if ui.add_enabled(can, egui::Button::new("Hire")).clicked() {
-                    ship.credits -= offer.fee;
-                    let health = iu
-                        .ships
-                        .get(&offer.ship_type)
-                        .map(|d| d.max_health)
-                        .unwrap_or(100);
-                    roster.add(
-                        offer.ship_type.clone(),
-                        EscortKind::Hired {
-                            name: offer.pilot_name.clone(),
-                            temperament: offer.temperament.key().to_string(),
-                        },
-                        health,
-                    );
-                }
-            });
-        }
-    }
+    // Hiring moved to the bar FLOOR: the pilots sit at the east tables —
+    // walk up to one and the hire panel opens (interiors::hire_panel_ui).
 }
 
 pub fn companions_plugin(app: &mut App) {
@@ -571,3 +530,50 @@ pub fn companions_plugin(app: &mut App) {
 #[cfg(test)]
 #[path = "tests/companions_tests.rs"]
 mod tests;
+
+/// What the bartender knows: who in THIS bar is looking for a pilot, and
+/// who's drinking on a wage they'd rather earn flying. The missions
+/// themselves are offered by those NPCs at the tables (walk up, press E);
+/// active missions live in the log (I).
+pub fn render_bartender_rumors(
+    ui: &mut bevy_egui::egui::Ui,
+    offers: &crate::missions::MissionOffers,
+    catalog: &crate::missions::MissionCatalog,
+    log: &crate::missions::MissionLog,
+    iu: &ItemUniverse,
+    planet_name: &str,
+) {
+    use bevy_egui::egui;
+    let mut any = false;
+    for id in offers.npc.get(planet_name).cloned().unwrap_or_default() {
+        if !matches!(log.status(&id), crate::missions::MissionStatus::Available) {
+            continue;
+        }
+        let Some(def) = catalog.defs.get(&id) else {
+            continue;
+        };
+        let crate::missions::types::OfferKind::NpcOffer { building, npc, .. } = &def.offer else {
+            continue;
+        };
+        if building.as_deref() != Some("bar") {
+            continue;
+        }
+        any = true;
+        let who = npc
+            .as_ref()
+            .and_then(|key| iu.npcs.get(key))
+            .map(|n| n.name.clone())
+            .unwrap_or_else(|| "Someone".to_string());
+        ui.label(format!("“{who} at the tables is looking for a pilot.”"));
+    }
+    if !hire_pool(iu, planet_name).is_empty() {
+        any = true;
+        ui.label("“The pilots drinking by the east wall will fly for pay — go talk to them.”");
+    }
+    if !any {
+        ui.label(
+            egui::RichText::new("“Quiet night. Nobody's buying work or selling it.”")
+                .color(egui::Color32::GRAY),
+        );
+    }
+}

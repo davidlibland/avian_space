@@ -47,19 +47,16 @@ pub fn render_active_missions(
 }
 
 /// Render the Bar tab inside the planet UI window.
-pub fn render_missions_tab(
+/// Just the postings — the bar's compact job board (active missions live
+/// in the mission log, one I-press away).
+pub fn render_job_board(
     ui: &mut egui::Ui,
-    log: &MissionLog,
     offers: &MissionOffers,
     catalog: &MissionCatalog,
     player_free_cargo: u16,
     accept: &mut MessageWriter<AcceptMission>,
-    abandon: &mut MessageWriter<AbandonMission>,
 ) {
-    render_active_missions(ui, log, catalog, Some(abandon));
-
-    ui.separator();
-    ui.heading("Available");
+    ui.heading("Job board");
     if offers.tab.is_empty() {
         ui.label("(No postings on the board.)");
     } else {

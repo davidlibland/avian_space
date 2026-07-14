@@ -426,7 +426,8 @@ pub fn surface_plugin(app: &mut App) {
         )
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,
-            interiors::display_panel_ui.run_if(in_state(PlayState::Inside)),
+            (interiors::display_panel_ui, interiors::hire_panel_ui)
+                .run_if(in_state(PlayState::Inside)),
         )
         .add_systems(
             bevy_egui::EguiPrimaryContextPass,

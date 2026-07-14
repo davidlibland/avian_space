@@ -71,6 +71,16 @@ pub(crate) struct StairsUp;
 #[derive(Component)]
 pub(crate) struct Clerk;
 
+/// A pilot for hire, drinking at a bar table. Walk up and the hire panel
+/// opens (the outfitter-plinth pattern applied to people).
+#[derive(Component)]
+pub(crate) struct HirePilot {
+    pub pilot_name: String,
+    pub ship_type: String,
+    pub temperament: String,
+    pub fee: i128,
+}
+
 /// The maze-hunt chase ledger: for each catch mission whose target has
 /// fled INSIDE its venue, which level the fugitive is waiting on. Session
 /// resource — leave the planet mid-chase and they're still down there.
@@ -1187,6 +1197,98 @@ pub(crate) fn interior_interact_prompt(
     *last = prompt;
 }
 
+/// The hire panel: walk up to a pilot drinking at the bar's east tables
+/// and their terms appear — ship, temperament, fee, and a Hire button.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn hire_panel_ui(
+    mut contexts: EguiContexts,
+    walker: Query<&Transform, With<Walker>>,
+    pilots: Query<(Entity, &HirePilot, &Transform), Without<Walker>>,
+    iu: Res<ItemUniverse>,
+    mut roster: Option<ResMut<crate::carrier::EscortRoster>>,
+    mut player: Query<&mut Ship, With<Player>>,
+    active_ui: Res<ActiveBuildingUI>,
+    mut commands: Commands,
+) {
+    if active_ui.0.is_some() {
+        return;
+    }
+    let Ok(wtf) = walker.single() else { return };
+    let wp = wtf.translation.truncate();
+    let nearest = pilots
+        .iter()
+        .map(|(e, p, t)| (e, p, (t.translation.truncate() - wp).length()))
+        .filter(|(_, _, d)| *d < TILE_PX * 1.8)
+        .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+    let Some((entity, pilot, _)) = nearest else {
+        return;
+    };
+    let (Some(roster), Ok(mut ship)) = (roster.as_deref_mut(), player.single_mut()) else {
+        return;
+    };
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+    bevy_egui::egui::Window::new("Pilot for hire")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(bevy_egui::egui::Align2::RIGHT_CENTER, [-24.0, 0.0])
+        .show(ctx, |ui| {
+            ui.heading(&pilot.pilot_name);
+            let hull = iu.ships.get(&pilot.ship_type);
+            let hull_name = hull
+                .map(|d| {
+                    if d.display_name.is_empty() {
+                        pilot.ship_type.clone()
+                    } else {
+                        d.display_name.clone()
+                    }
+                })
+                .unwrap_or_else(|| pilot.ship_type.clone());
+            ui.label(format!("Flies: {hull_name}"));
+            if let Some(d) = hull {
+                ui.label(format!(
+                    "Hull: {}  ·  Speed: {:.0}",
+                    d.max_health, d.max_speed
+                ));
+            }
+            ui.label(match pilot.temperament.as_str() {
+                "aggressive" => "Aggressive — hunts kills past the leash.",
+                "protective" => "Protective — flies your six, guns whoever guns you.",
+                _ => "Cautious — breaks off hurt, returns patched.",
+            });
+            ui.label(format!("Fee: {} cr (one-time)", pilot.fee));
+            let count = crate::companions::companion_count(roster);
+            let can = count < crate::companions::MAX_COMPANIONS && ship.credits >= pilot.fee;
+            let btn = ui.add_enabled(can, bevy_egui::egui::Button::new("Hire"));
+            if count >= crate::companions::MAX_COMPANIONS {
+                ui.colored_label(
+                    bevy_egui::egui::Color32::from_rgb(230, 160, 100),
+                    format!(
+                        "Flight full ({count}/{}).",
+                        crate::companions::MAX_COMPANIONS
+                    ),
+                );
+            }
+            if btn.clicked() {
+                ship.credits -= pilot.fee;
+                let health = iu
+                    .ships
+                    .get(&pilot.ship_type)
+                    .map(|d| d.max_health)
+                    .unwrap_or(100);
+                roster.add(
+                    pilot.ship_type.clone(),
+                    crate::carrier::EscortKind::Hired {
+                        name: pilot.pilot_name.clone(),
+                        temperament: pilot.temperament.clone(),
+                    },
+                    health,
+                );
+                // They knock back the drink and head for the pad.
+                commands.entity(entity).despawn();
+            }
+        });
+}
+
 /// The focused display panel: stats + Buy for whatever plinth the walker is
 /// standing at. Ships show comparative bars against the current hull.
 #[allow(clippy::too_many_arguments)]
@@ -1383,6 +1485,8 @@ pub(crate) fn spawn_interior_npcs(
     cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
     chase: Res<MazeChase>,
     unlocks: Res<crate::missions::PlayerUnlocks>,
+    existing_hires: Query<&HirePilot>,
+    roster: Option<Res<crate::carrier::EscortRoster>>,
 ) {
     let (Some(context), Some(mut layers), Some(cm)) = (context, layers, cost_map) else {
         return;
@@ -1401,6 +1505,71 @@ pub(crate) fn spawn_interior_npcs(
     {
         let tile = (counter.0, (counter.1 + 1).min(y0 + rh - 1));
         crate::surface_npc::spawn_clerk(&mut commands, &mut layers, &mut images, tile);
+    }
+
+    // Pilots for hire at the EAST tables (bar only) — one NPC per pool
+    // entry not already flying with us; deterministic looks per pilot.
+    if kind == BuildingKind::Bar && context.level == 0 {
+        let taken: std::collections::HashSet<String> = existing_hires
+            .iter()
+            .map(|h| h.pilot_name.clone())
+            .collect();
+        let mut slot = 0u32;
+        for offer in crate::companions::hire_pool(&iu, &planet) {
+            let flying =
+                roster.as_deref().is_some_and(|r| {
+                    r.entries.iter().any(|e| matches!(
+                    &e.kind,
+                    crate::carrier::EscortKind::Hired { name, .. } if *name == offer.pilot_name
+                ))
+                });
+            if flying || taken.contains(&offer.pilot_name) {
+                slot += !flying as u32;
+                continue;
+            }
+            let tile = (x0 + plan.room.2 - 3, (y0 + 3 + slot * 2).min(y0 + rh - 3));
+            slot += 1;
+            use rand::SeedableRng;
+            let mut rng = rand::rngs::StdRng::seed_from_u64(
+                offer
+                    .pilot_name
+                    .bytes()
+                    .fold(0u64, |a, b| a.wrapping_mul(31).wrapping_add(b as u64)),
+            );
+            let spec = layers.random_spec(&mut rng, "civilian");
+            if let Some(image) = layers.composite(&spec, &mut images) {
+                let pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(tile.0, tile.1);
+                commands.spawn((
+                    DespawnOnExit(PlayState::Inside),
+                    InteriorScoped,
+                    crate::surface_npc::Npc,
+                    HirePilot {
+                        pilot_name: offer.pilot_name.clone(),
+                        ship_type: offer.ship_type.clone(),
+                        temperament: offer.temperament.key().to_string(),
+                        fee: offer.fee,
+                    },
+                    crate::surface_character::CharacterAnim::person(0.11),
+                    RigidBody::Static,
+                    crate::surface_objects::character_foot_collider(5.0),
+                    CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+                    Sprite::from_atlas_image(
+                        image,
+                        TextureAtlas {
+                            layout: layers.layout.clone(),
+                            index: 0,
+                        },
+                    ),
+                    Transform::from_xyz(
+                        pos.x,
+                        pos.y,
+                        crate::surface_objects::depth_z(
+                            pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET,
+                        ),
+                    ),
+                ));
+            }
+        }
     }
 
     // Offer NPCs at the tables (ground floor only; mazes have no givers).
