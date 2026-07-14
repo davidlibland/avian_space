@@ -484,7 +484,7 @@ pub(crate) fn setup_surface(
                 },
                 Sensor,
                 RigidBody::Static,
-                Collider::rectangle(tile_px * 3.0, tile_px * 3.0),
+                Collider::rectangle(tile_px * 3.4, tile_px * 3.4),
                 CollisionEventsEnabled,
                 CollisionLayers::new(
                     GameLayer::Surface,

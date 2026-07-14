@@ -61,6 +61,7 @@ pub fn npc_chat_interact(
     landed_context: Res<crate::planet_ui::LandedContext>,
     mut npc_met_writer: MessageWriter<crate::missions::NpcMet>,
     mut sfx_writer: MessageWriter<crate::sfx::SurfaceSfx>,
+    minimap: Option<Res<crate::surface::SurfaceMiniMap>>,
 ) {
     // Escape closes chat.
     if keyboard.just_pressed(KeyCode::Escape) && chat.entity.is_some() {
@@ -92,6 +93,19 @@ pub fn npc_chat_interact(
     let Ok(walker_tf) = walker_q.single() else {
         return;
     };
+
+    // The LAUNCH PAD outranks everyone too — the sensor can miss at the
+    // pad's edge (and right after spawning on it), so check the geometry
+    // directly: standing on the pad, E means launch, not small talk with
+    // whoever followed you up the ramp. (Interior maps store their door
+    // tile here — same rule, the door owns E.)
+    if let Some(mm) = &minimap {
+        let pad =
+            crate::surface_pathfinding::SurfaceCostMap::tile_to_world(mm.pad_pos.0, mm.pad_pos.1);
+        if (walker_tf.translation.truncate() - pad).length() < crate::surface::TILE_PX * 1.8 {
+            return;
+        }
+    }
     let wp = walker_tf.translation.truncate();
     let planet = landed_context.planet_name.clone().unwrap_or_default();
     let pilot = &game_state.pilot_name;
