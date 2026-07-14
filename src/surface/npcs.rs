@@ -210,8 +210,12 @@ pub(crate) fn spawn_mission_npcs(
                 ..
             } if planet == planet_name => {
                 let target_kind = building.as_deref().and_then(building_kind_from_name);
-                let maze = target_kind.is_some_and(crate::surface::mazes::is_maze);
-                if maze {
+                // EVERY building-bound catch plays the staged chase now —
+                // a bar pirate runs for the bar exactly like a mine
+                // fugitive runs for the mine (rooms just have no shafts
+                // to descend, so inside they're immediately cornered).
+                let staged = target_kind.is_some_and(crate::surface::interiors::has_interior);
+                if staged {
                     // The staged chase: the fugitive starts OUT HERE, near
                     // the venue, and bolts for its door when you close in
                     // (catch them in the open if you're quick). Once
@@ -249,9 +253,7 @@ pub(crate) fn spawn_mission_npcs(
                     }
                     continue;
                 }
-                if target_kind.is_some_and(crate::surface::interiors::has_interior) {
-                    continue;
-                }
+                // No (resolvable) building: a pure surface chase.
                 let door = building
                     .as_ref()
                     .and_then(|name| building_door.get(&name.to_lowercase()))

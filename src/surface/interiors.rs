@@ -1705,9 +1705,10 @@ pub(crate) fn spawn_interior_npcs(
             continue;
         }
 
-        let maze = super::mazes::is_maze(kind);
         let deepest = context.level + 1 == plan.levels;
-        let (spawn_tile, objective, fugitive_goal) = if is_catch && maze {
+        let (spawn_tile, objective, fugitive_goal) = if is_catch {
+            // Every catch target arrives via the staged chase — they're
+            // only in here if the ledger saw them duck through the door.
             // Chase discipline: the fugitive is on exactly one level.
             match chase.inside.get(mission_id.as_str()) {
                 Some(&lvl) if lvl == context.level => {}
@@ -2330,6 +2331,30 @@ mod tests {
                 manifest.contains(&format!("biome: \"{biome}\"")),
                 "{biome}: no critters in the manifest"
             );
+        }
+    }
+
+    /// Shop-bound catches play the SAME staged chase as maze venues: the
+    /// interior phase must corner them immediately (no shafts to run for).
+    #[test]
+    fn shop_fugitives_are_cornered_inside() {
+        let iu = iu();
+        for (kind, planet) in [
+            (BuildingKind::Bar, "triton"),
+            (BuildingKind::MechanicShop, "barnard_rock"),
+        ] {
+            let plan = build_plan(kind, &iu, planet, 0, &un());
+            let cm = cost_map_of(&plan);
+            assert!(
+                fugitive_head_start(&plan, &cm).is_none(),
+                "{kind:?}: no stairs, no head start — straight to cornered"
+            );
+            // The cornered spawn (halfway to the hunt spot) is reachable.
+            let spawn = cm
+                .find_path(plan.entry, plan.hunt_spot)
+                .and_then(|p| p.get(p.len() / 2).copied())
+                .unwrap_or(plan.hunt_spot);
+            assert!(cm.find_path(plan.entry, spawn).is_some());
         }
     }
 
