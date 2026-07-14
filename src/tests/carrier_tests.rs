@@ -767,6 +767,75 @@ mod servicing {
         assert_eq!(app.world().get::<Ship>(player).unwrap().credits, 50_000);
     }
 
+    /// THE landing-frame race (found in play): on the frame the landing
+    /// message fires, the state is still Flying, the live (damaged) escort
+    /// entities still exist, and sync_roster_health runs in the same
+    /// Update. Unordered, it could copy the damaged live hulls back over
+    /// the freshly billed repairs. Production orders service AFTER sync —
+    /// this test runs both with that ordering and a live damaged escort in
+    /// the world, for a hired escort AND a companion. (Reversing the
+    /// ordering makes this test fail — the race is real.)
+    #[test]
+    fn landing_service_survives_the_final_health_sync() {
+        let universe = iu();
+        let hull = "fighter";
+        let max = universe.ships.get(hull).unwrap().max_health;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(iu())
+            .init_resource::<EscortRoster>()
+            .add_message::<PlayerLandedOnPlanet>()
+            .add_systems(
+                Update,
+                (
+                    sync_roster_health,
+                    service_escorts_on_landing.after(sync_roster_health),
+                ),
+            );
+        let mut ship = Ship::from_ship_data(&ShipData::default(), "player");
+        ship.credits = 1_000_000;
+        app.world_mut().spawn((ship, Player));
+
+        let mut ids = Vec::new();
+        {
+            let mut roster = app.world_mut().resource_mut::<EscortRoster>();
+            for kind in [
+                EscortKind::Hired {
+                    name: "Joss".into(),
+                    temperament: "aggressive".into(),
+                },
+                EscortKind::Companion {
+                    name: "jonah_wren".into(),
+                },
+            ] {
+                ids.push(roster.add(hull.to_string(), kind, max / 3));
+            }
+        }
+        // Live, DAMAGED escort entities still in the world (fresh spawns →
+        // Changed<Ship> is true, exactly like the real landing frame).
+        for &id in &ids {
+            let mut esc = Ship::from_ship_data(universe.ships.get(hull).unwrap(), hull);
+            esc.health = max / 3;
+            app.world_mut().spawn((esc, PersistentEscort(id)));
+        }
+
+        app.world_mut().write_message(PlayerLandedOnPlanet {
+            planet: "earth".to_string(),
+        });
+        app.update();
+        app.update(); // a second frame must not re-bill or clobber either
+
+        let roster = app.world().resource::<EscortRoster>();
+        for &id in &ids {
+            let entry = roster.entries.iter().find(|e| e.id == id).unwrap();
+            assert_eq!(
+                entry.health, max,
+                "{:?}: repair must survive the same-frame health sync",
+                entry.kind
+            );
+        }
+    }
+
     /// Broke pilots get partial service: hull heals proportionally to what
     /// they can pay, and rounds only while credits last.
     #[test]

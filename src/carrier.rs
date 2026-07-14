@@ -261,9 +261,15 @@ pub fn carrier_plugin(app: &mut App) {
         use crate::session::SessionResourceExt;
         app.init_session_resource::<EscortRoster>();
     }
+    // service AFTER the health sync: on the landing frame both can run
+    // while the state is still Flying, and escort systems touch &mut Ship
+    // broadly enough that Changed<Ship> is almost always true — without
+    // this ordering, sync_roster_health could copy the still-damaged live
+    // hulls back over the freshly billed repairs.
     app.add_systems(
         Update,
         (service_escorts_on_landing, sync_escort_cargo_bonus)
+            .after(sync_roster_health)
             .run_if(not(in_state(PlayState::MainMenu))),
     );
     app.add_message::<SpawnEscort>().add_systems(
