@@ -406,12 +406,22 @@ pub fn surface_plugin(app: &mut App) {
                 crate::surface_objects::animate_landscape_objects,
                 door_depth_sound,
                 crate::surface_civilians::spawn_civilians,
-                crate::surface_fauna::spawn_fauna,
-                crate::surface_fauna::run_fauna,
-                crate::surface_fauna::depth_sort_fauna,
                 animate_building_doors,
             )
                 .run_if(in_state(PlayState::Exploring)),
+        )
+        .add_systems(
+            Update,
+            (
+                crate::surface_fauna::spawn_fauna,
+                crate::surface_fauna::run_fauna,
+                crate::surface_fauna::depth_sort_fauna,
+            )
+                .run_if(on_foot),
+        )
+        .add_systems(
+            OnExit(PlayState::Inside),
+            crate::surface_fauna::cleanup_fauna,
         )
         .add_systems(
             Update,

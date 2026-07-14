@@ -95,6 +95,8 @@ pub struct FaunaWorld {
     map_h: u32,
     rng: rand::rngs::StdRng,
     spawn_timer: Timer,
+    /// Which on-foot state owns the critters (surface or interior).
+    scope: PlayState,
 }
 
 /// Is tile (tx, ty) a valid home tile for the given terrain set? (Free fn so
@@ -132,6 +134,7 @@ pub struct Fauna {
 /// Load the fauna manifest, resolve the species that belong to `biome_name`,
 /// and insert [`FaunaWorld`].  Call from `setup_surface`.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 pub fn setup_fauna(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -142,6 +145,7 @@ pub fn setup_fauna(
     map_w: u32,
     map_h: u32,
     seed: u64,
+    scope: PlayState,
 ) {
     let manifest: FaunaManifest =
         match crate::embedded_assets::read_to_string("assets/sprites/fauna/fauna_manifest.ron")
@@ -204,6 +208,7 @@ pub fn setup_fauna(
         map_h,
         rng: rand::rngs::StdRng::seed_from_u64(seed.wrapping_add(0xFA00_0001)),
         spawn_timer: Timer::from_seconds(1.5, TimerMode::Repeating),
+        scope,
     });
 }
 
@@ -297,8 +302,9 @@ pub fn spawn_fauna(
         } else {
             depth_z(pos.y - sp.foot_off)
         };
+        let scope = world.scope.clone();
         let mut ent = commands.spawn((
-            DespawnOnExit(PlayState::Exploring),
+            DespawnOnExit(scope.clone()),
             Fauna {
                 species: sp_idx,
                 speed: sp.speed,
@@ -331,6 +337,9 @@ pub fn spawn_fauna(
         // need explicit mass (a dynamic body with no collider is mass-less → avian
         // "no mass or inertia" NaN warning).
         if !flier {
+            if scope == PlayState::Inside {
+                ent.insert(crate::surface::interiors::InteriorScoped);
+            }
             ent.insert((
                 Collider::circle(4.0),
                 CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),

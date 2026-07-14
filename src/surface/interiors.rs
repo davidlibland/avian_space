@@ -341,6 +341,11 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         "stairs_down" | "stairs_up" => (1, 1, false),
         // Exit markers stand ON the walkable door tile.
         "exit_door" | "ladder_up" => (1, 1, false),
+        // Venue clutter: mostly walk-over dressing; piles, drums and
+        // panels block.
+        "pebbles_a" | "pebbles_b" | "ore_chunk" | "pickaxe" | "pallet" | "box_spill"
+        | "cable_coil" | "pipe_segment" | "warning_cone" | "coolant_puddle" => (1, 1, false),
+        "ore_pile" | "crystal" | "barrel" | "gauge_panel" => (1, 1, true),
         _ => (1, 1, false),
     }
 }
@@ -894,6 +899,43 @@ pub(crate) fn setup_interior(
         height: map_h,
     });
     commands.insert_resource(crate::surface_pathfinding::SurfacePaths::default());
+
+    // ── Critters: the venues are ALIVE (rats and bats in the mine,
+    // sweeper bots in the rows, geckos by the coolant). Species come from
+    // the fauna manifest keyed by the venue biome; furniture tiles are
+    // baked solid so nothing wanders through a container.
+    if super::mazes::is_maze(kind) {
+        let wall_tier = plan.solid_min_tier.max(3);
+        let fauna_terrain: Vec<u32> = plan
+            .terrain
+            .iter()
+            .enumerate()
+            .map(|(i, &t)| if plan.solid[i] { wall_tier } else { t })
+            .collect();
+        let mut terrain_names: Vec<(u32, String)> = biome
+            .terrains
+            .iter()
+            .map(|t| (t.row, t.name.clone()))
+            .collect();
+        terrain_names.sort_by_key(|(row, _)| *row);
+        let terrain_names: Vec<String> = terrain_names.into_iter().map(|(_, n)| n).collect();
+        let seed = super::mazes::planet_seed(&planet).wrapping_add(context.level as u64);
+        crate::surface_fauna::setup_fauna(
+            &mut commands,
+            &asset_server,
+            &mut atlas_layouts,
+            &fauna_terrain,
+            &terrain_names,
+            biome_name,
+            map_w,
+            map_h,
+            seed,
+            PlayState::Inside,
+        );
+    } else {
+        // Shops are kept clean — no vermin between the plinths.
+        commands.remove_resource::<crate::surface_fauna::FaunaWorld>();
+    }
 
     // ── Props ──
     // Only what this player can actually buy — same filter as the
@@ -2241,6 +2283,53 @@ mod tests {
         for key in purchasable_ships(&iu, "earth", &all) {
             let label = display_label(&DisplayBinding::Ship(key.clone()), &iu);
             assert!(!label.trim().is_empty(), "{key}: label");
+        }
+    }
+
+    /// Every prop a plan can place has its sprite on disk, and every maze
+    /// venue has fauna in the manifest (the buildings are ALIVE).
+    #[test]
+    fn venue_dressing_assets_exist() {
+        let iu = iu();
+        let mut names = std::collections::HashSet::new();
+        for (kind, planet) in [
+            (BuildingKind::Mine, "ceres"),
+            (BuildingKind::Mine, "mars"),
+            (BuildingKind::Warehouse, "procyon_prime"),
+            (BuildingKind::Substation, "earth"),
+            (BuildingKind::Bar, "earth"),
+            (BuildingKind::Market, "earth"),
+        ] {
+            let ground = build_plan(kind, &iu, planet, 0, &un());
+            for level in 0..ground.levels {
+                let plan = build_plan(kind, &iu, planet, level, &un());
+                for &(name, _) in &plan.props {
+                    names.insert(name);
+                }
+                // The deep mine must actually grow crystals.
+                if kind == BuildingKind::Mine && level + 1 == plan.levels {
+                    assert!(
+                        plan.props.iter().any(|&(n, _)| n == "crystal"),
+                        "{planet}: deepest shaft glows"
+                    );
+                }
+            }
+        }
+        assert!(names.len() > 15, "premise: rich dressing ({names:?})");
+        for name in names {
+            let path = format!("assets/sprites/worlds/interior_props/{name}.png");
+            assert!(
+                std::path::Path::new(&path).exists(),
+                "{path} missing — rerun interior_props.py"
+            );
+        }
+        // Fauna manifest covers every venue biome.
+        let manifest = std::fs::read_to_string("assets/sprites/fauna/fauna_manifest.ron").unwrap();
+        for biome in ["mine", "warehouse", "substation"] {
+            assert!(
+                manifest.contains(&format!("biome: \"{biome}\"")),
+                "{biome}: no critters in the manifest"
+            );
         }
     }
 

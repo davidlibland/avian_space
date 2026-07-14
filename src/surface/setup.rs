@@ -973,6 +973,7 @@ pub(crate) fn setup_surface(
                 map_w,
                 map_h,
                 seed,
+                PlayState::Exploring,
             );
         }
 

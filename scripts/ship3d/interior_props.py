@@ -242,8 +242,121 @@ def ladder_up(M):
     add_box("hatch_rim", (0, 0.1, 2.3), (1.0, 0.6, 0.08), M["iron"])
 
 
+def pebbles(M, seed):
+    import random
+    r = random.Random(seed)
+    for i in range(r.randint(4, 7)):
+        x, y = r.uniform(-0.4, 0.4), r.uniform(-0.35, 0.35)
+        sz = r.uniform(0.04, 0.11)
+        add_sphere(f"peb{i}", (x, y, sz * 0.6), (sz, sz * 0.9, sz * 0.7),
+                   M["iron" if r.random() < 0.4 else "pipe"])
+
+
+def ore_chunk(M):
+    add_sphere("rock", (0, 0, 0.14), (0.2, 0.17, 0.14), M["iron"])
+    glint = glow_material("ore_glint", C(255, 190, 80), 1.8)
+    for x, y in ((-0.06, -0.05), (0.08, 0.02), (0.0, -0.12)):
+        add_sphere(f"vein{x}", (x, y, 0.22), (0.035, 0.035, 0.03), glint)
+
+
+def ore_pile(M):
+    for i, (x, y, sz) in enumerate(
+        ((0, 0, 0.28), (-0.25, 0.1, 0.18), (0.24, -0.05, 0.16), (0.05, 0.22, 0.15))
+    ):
+        add_sphere(f"lump{i}", (x, y, sz * 0.7), (sz, sz * 0.9, sz * 0.75), M["pipe"])
+    glint = glow_material("pile_glint", C(255, 190, 80), 1.6)
+    for x, y in ((-0.1, -0.1), (0.15, 0.12)):
+        add_sphere(f"g{x}", (x, y, 0.32), (0.04, 0.04, 0.035), glint)
+
+
+def pickaxe(M):
+    haft = add_cylinder("haft", (0, 0, 0.08), 0.035, 0.9, M["wood"], axis="y")
+    haft.rotation_euler = (0, 0, 0.5)
+    head = add_box("head", (0.18, -0.32, 0.1), (0.5, 0.07, 0.07), M["iron"])
+    head.rotation_euler = (0, 0, 0.5 + 1.57)
+
+
+def crystal(M):
+    shard = glow_material("shard", C(120, 220, 255), 2.0)
+    for i, (x, y, h, r) in enumerate(
+        ((0, 0, 0.5, 0.09), (-0.14, 0.08, 0.3, 0.06), (0.13, -0.06, 0.36, 0.07))
+    ):
+        c = add_cylinder(f"cr{i}", (x, y, h / 2), r, h, shard, axis="z", r2=0.01)
+        c.rotation_euler = (0.1 * i, 0.12 * (i - 1), 0)
+    add_sphere("base", (0, 0, 0.05), (0.22, 0.2, 0.08), M["iron"])
+
+
+def pallet(M):
+    for i in range(4):
+        add_box(f"slat{i}", (0, -0.33 + i * 0.22, 0.09), (0.9, 0.16, 0.04), M["wood"])
+    for sx in (-0.35, 0, 0.35):
+        add_box(f"bearer{sx}", (sx, 0, 0.04), (0.12, 0.85, 0.07), M["wood_dark"])
+
+
+def barrel(M):
+    add_cylinder("drum", (0, 0, 0.34), 0.24, 0.68, M["cont_blue"], axis="z", seg=14)
+    for z in (0.14, 0.34, 0.54):
+        add_cylinder(f"band{z}", (0, 0, z), 0.25, 0.04, M["iron"], axis="z", seg=14)
+
+
+def box_spill(M):
+    b = add_box("box", (-0.1, 0.05, 0.16), (0.4, 0.4, 0.32), M["crate"], bevel=0.03)
+    b.rotation_euler = (0, 0.5, 0.3)
+    for i, (x, y) in enumerate(((0.2, -0.15), (0.32, 0.05), (0.15, 0.18), (0.4, -0.05))):
+        add_sphere(f"good{i}", (x, y, 0.05), (0.05, 0.05, 0.045),
+                   M["cloth_tan" if i % 2 else "bottle_g"])
+
+
+def cable_coil(M):
+    for i in range(3):
+        add_cylinder(f"loop{i}", (0, 0, 0.05 + i * 0.05), 0.2 - i * 0.02, 0.05,
+                     M["dark"], axis="z", seg=16)
+    add_cylinder("tail", (0.3, 0.1, 0.03), 0.025, 0.5, M["dark"], axis="y")
+
+
+def pipe_segment(M):
+    p = add_cylinder("pipe", (0, 0, 0.12), 0.11, 0.9, M["pipe"], axis="y", seg=12)
+    p.rotation_euler = (0, 0, 0.4)
+    add_cylinder("flange", (0.12, -0.4, 0.12), 0.15, 0.06, M["iron"], axis="y", seg=12)
+
+
+def warning_cone(M):
+    cone = add_cylinder("cone", (0, 0, 0.24), 0.16, 0.48, M["cont_red"], axis="z",
+                        r2=0.03, seg=12)
+    add_box("base", (0, 0, 0.02), (0.36, 0.36, 0.04), M["cont_red"])
+    add_cylinder("stripe", (0, 0, 0.28), 0.115, 0.09, M["steel"], axis="z", seg=12)
+
+
+def coolant_puddle(M):
+    glow = glow_material("puddle", C(60, 210, 220), 1.4)
+    add_sphere("pool", (0, 0, 0.012), (0.4, 0.3, 0.012), glow)
+    add_sphere("pool2", (0.3, 0.18, 0.01), (0.14, 0.1, 0.01), glow)
+
+
+def gauge_panel(M):
+    add_box("panel", (0, 0.12, 0.5), (0.7, 0.1, 0.9), M["steel"])
+    for i in range(2):
+        add_cylinder(f"dial{i}", (-0.15 + i * 0.3, 0.05, 0.68), 0.09, 0.04,
+                     M["glow_warm" if i else "glow_cyan"], axis="y", seg=12)
+    add_box("conduit", (0, 0.14, 0.05), (0.1, 0.08, 0.2), M["pipe"])
+
+
 PROPS = [
     ("exit_door", exit_door, 2.0),
+    ("pebbles_a", lambda M: pebbles(M, 1), 1.0),
+    ("pebbles_b", lambda M: pebbles(M, 7), 1.0),
+    ("ore_chunk", ore_chunk, 0.9),
+    ("ore_pile", ore_pile, 1.2),
+    ("pickaxe", pickaxe, 1.2),
+    ("crystal", crystal, 1.2),
+    ("pallet", pallet, 1.3),
+    ("barrel", barrel, 1.1),
+    ("box_spill", box_spill, 1.2),
+    ("cable_coil", cable_coil, 1.1),
+    ("pipe_segment", pipe_segment, 1.3),
+    ("warning_cone", warning_cone, 1.0),
+    ("coolant_puddle", coolant_puddle, 1.1),
+    ("gauge_panel", gauge_panel, 1.5),
     ("ladder_up", ladder_up, 1.9),
     ("bar_counter", bar_counter, 3.4),
     ("table_round", table_round, 1.3),

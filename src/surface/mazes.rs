@@ -165,6 +165,32 @@ fn carve_entrance(floor: &mut [bool]) -> ((u32, u32), (u32, u32)) {
     ((sx, door_y), (sx, sy)) // (door, entry just inside)
 }
 
+/// Scatter `count` props of `name` onto random free floor tiles, skipping
+/// reserved tiles (entry/stairs/hunt) and tiles already claimed.
+fn scatter(
+    rng: &mut StdRng,
+    floor: &[bool],
+    solid: &[bool],
+    reserved: &[(u32, u32)],
+    used: &mut std::collections::HashSet<(u32, u32)>,
+    props: &mut Vec<(&'static str, (u32, u32))>,
+    name: &'static str,
+    count: usize,
+) {
+    let mut placed = 0;
+    for _ in 0..count * 12 {
+        if placed >= count {
+            break;
+        }
+        let t = (rng.gen_range(2..W - 2), rng.gen_range(2..H - 2));
+        let i = idx(t.0, t.1);
+        if floor[i] && !solid[i] && !reserved.contains(&t) && used.insert(t) {
+            props.push((name, t));
+            placed += 1;
+        }
+    }
+}
+
 // ── Mine: recursive backtracker ────────────────────────────────────────────
 
 fn mine_level(rng: &mut StdRng, level: u8, n_levels: u8) -> MazeLevel {
@@ -266,16 +292,28 @@ fn mine_level(rng: &mut StdRng, level: u8, n_levels: u8) -> MazeLevel {
     let stairs_down = (level + 1 < n_levels).then(|| farthest_from(&floor, &solid, entry));
     let hunt_spot = farthest_from(&floor, &solid, entry);
 
-    // Props: timber braces + lanterns along tunnels, an ore cart or two.
+    // Dressing: the tunnels are a WORKED dig — braces and lanterns along
+    // the ways, pebbles and ore everywhere, a dropped pickaxe; the deepest
+    // level grows glow-crystals.
     let mut props = Vec::new();
-    for _ in 0..10 {
-        let (x, y) = (rng.gen_range(2..W - 2), rng.gen_range(2..H - 2));
-        if floor[idx(x, y)] {
-            props.push((
-                ["timber_brace", "lantern", "ore_cart"][rng.gen_range(0..3)],
-                (x, y),
-            ));
-        }
+    let reserved: Vec<(u32, u32)> = [Some(entry), stairs_up, stairs_down, Some(hunt_spot)]
+        .into_iter()
+        .flatten()
+        .collect();
+    let mut used = std::collections::HashSet::new();
+    let sc = &mut |rng: &mut StdRng, props: &mut Vec<_>, used: &mut _, name, n| {
+        scatter(rng, &floor, &solid, &reserved, used, props, name, n)
+    };
+    sc(rng, &mut props, &mut used, "timber_brace", 5);
+    sc(rng, &mut props, &mut used, "lantern", 5);
+    sc(rng, &mut props, &mut used, "ore_cart", 2);
+    sc(rng, &mut props, &mut used, "pebbles_a", 8);
+    sc(rng, &mut props, &mut used, "pebbles_b", 8);
+    sc(rng, &mut props, &mut used, "ore_chunk", 6);
+    sc(rng, &mut props, &mut used, "ore_pile", 3);
+    sc(rng, &mut props, &mut used, "pickaxe", 1);
+    if level + 1 == n_levels {
+        sc(rng, &mut props, &mut used, "crystal", 4);
     }
 
     MazeLevel {
@@ -340,6 +378,25 @@ fn warehouse_level(rng: &mut StdRng) -> MazeLevel {
 
     let (door, entry) = carve_entrance(&mut floor);
     let hunt_spot = farthest_from(&floor, &solid, entry);
+    // Aisle clutter: pallets, drums, and the odd burst crate.
+    let reserved = vec![entry, hunt_spot];
+    let mut used = std::collections::HashSet::new();
+    scatter(
+        rng, &floor, &solid, &reserved, &mut used, &mut props, "pallet", 5,
+    );
+    scatter(
+        rng, &floor, &solid, &reserved, &mut used, &mut props, "barrel", 5,
+    );
+    scatter(
+        rng,
+        &floor,
+        &solid,
+        &reserved,
+        &mut used,
+        &mut props,
+        "box_spill",
+        3,
+    );
     MazeLevel {
         floor,
         solid,
@@ -433,6 +490,63 @@ fn substation_level(rng: &mut StdRng, level: u8, n_levels: u8) -> MazeLevel {
             (cx.saturating_sub(1), cy.saturating_sub(1)),
         ));
     }
+    // Service-level clutter: coils, spare pipe, cones round the works,
+    // coolant pooling on the deck, gauge panels ticking away.
+    let reserved: Vec<(u32, u32)> = [Some(entry), stairs_up, stairs_down, Some(hunt_spot)]
+        .into_iter()
+        .flatten()
+        .collect();
+    let mut used = std::collections::HashSet::new();
+    scatter(
+        rng,
+        &floor,
+        &solid,
+        &reserved,
+        &mut used,
+        &mut props,
+        "cable_coil",
+        4,
+    );
+    scatter(
+        rng,
+        &floor,
+        &solid,
+        &reserved,
+        &mut used,
+        &mut props,
+        "pipe_segment",
+        3,
+    );
+    scatter(
+        rng,
+        &floor,
+        &solid,
+        &reserved,
+        &mut used,
+        &mut props,
+        "warning_cone",
+        3,
+    );
+    scatter(
+        rng,
+        &floor,
+        &solid,
+        &reserved,
+        &mut used,
+        &mut props,
+        "coolant_puddle",
+        6,
+    );
+    scatter(
+        rng,
+        &floor,
+        &solid,
+        &reserved,
+        &mut used,
+        &mut props,
+        "gauge_panel",
+        2,
+    );
 
     MazeLevel {
         floor,

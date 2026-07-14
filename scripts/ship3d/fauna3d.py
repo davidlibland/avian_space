@@ -48,6 +48,11 @@ def mats():
         petrel=C(236, 240, 246), petrel_d=C(150, 160, 175),
         mothw=C(184, 130, 92), vult=C(66, 60, 56), vult_d=C(42, 38, 36), vbeak=C(200, 170, 90),
         bfly_o=C(238, 150, 50), bfly_p=C(220, 90, 130),
+        # venue interiors (mine / warehouse / substation)
+        batf=C(70, 62, 66), batw=C(50, 44, 50), bat_l=C(110, 98, 104),
+        crab=C(112, 102, 92), crab_d=C(78, 70, 62), crab_ore=B.glow_material("fcrabore", (1.0, 0.75, 0.3), strength=1.6),
+        sweep=C(196, 176, 60), sweep_d=C(120, 110, 44),
+        geck=C(80, 170, 150), geck_d=C(52, 120, 106), geck_l=C(140, 214, 190),
     )
 
 
@@ -263,6 +268,54 @@ def build_rat(m, frame):                         # station vermin — scurries
     _legs(m, "ratf_d", 0.1, 0.14, 0.08, 0.14, 0.03, frame)
 
 
+def build_cave_bat(m, frame):                    # flutters through the tunnels
+    tip = _flap(frame)
+    B.add_sphere("body", (0, 0.02, 0.4), (0.09, 0.14, 0.08), m["batf"])
+    B.add_sphere("head", (0, -0.12, 0.42), (0.07, 0.07, 0.06), m["batf"])
+    for sx in (-1, 1):
+        B.add_sphere(f"ear{sx}", (sx * 0.05, -0.12, 0.5), (0.03, 0.02, 0.05), m["batw"])
+        B.add_sphere(f"eye{sx}", (sx * 0.035, -0.17, 0.43), (0.015, 0.015, 0.015), m["eye"])
+        # webbed wing: a thin swept panel, tip driven by the flap phase
+        wing = B.add_box(f"wing{sx}", (sx * 0.22, 0.02, 0.42 + tip * 0.5), (0.34, 0.2, 0.015), m["batw"])
+        wing.rotation_euler = (0, sx * tip * 1.1, 0)
+
+
+def build_rock_crab(m, frame):                   # deep-shaft lumberer, ore on its back
+    b = _bob(frame)
+    B.add_sphere("shell", (0, 0.0, 0.28 + b), (0.3, 0.34, 0.22), m["crab"])
+    B.add_sphere("shell2", (0, 0.08, 0.42 + b), (0.2, 0.22, 0.14), m["crab_d"])
+    for i, (ox, oy) in enumerate([(-0.08, -0.05), (0.1, 0.02), (0.0, 0.14)]):
+        B.add_sphere(f"ore{i}", (ox, oy, 0.5 + b), (0.045, 0.045, 0.04), m["crab_ore"])
+    for sx in (-1, 1):
+        B.add_sphere(f"claw{sx}", (sx * 0.3, -0.22, 0.14 + b), (0.09, 0.11, 0.08), m["crab_d"])
+        B.add_sphere(f"eye{sx}", (sx * 0.08, -0.3, 0.32 + b), (0.025, 0.025, 0.025), m["eye"])
+    _legs(m, "crab_d", 0.26, 0.16, 0.08, 0.14, 0.035, frame)
+
+
+def build_sweeper_bot(m, frame):                 # roomba of the container rows
+    rot = {0: 0.0, 1: 0.4, 2: 0.8}[frame]
+    B.add_cylinder("disc", (0, 0, 0.1), 0.26, 0.12, m["sweep"], axis="z", seg=18)
+    B.add_cylinder("hub", (0, 0, 0.18), 0.1, 0.06, m["sweep_d"], axis="z", seg=12)
+    B.add_sphere("lens", (0, -0.22, 0.14), (0.035, 0.035, 0.03), m["dlens"])
+    for i in range(3):                            # spinning brush tufts, half-proud
+        th = rot + i * 2.1
+        B.add_box(f"brush{i}", (0.2 * math.cos(th), 0.2 * math.sin(th) - 0.12, 0.035),
+                  (0.07, 0.02, 0.05), m["sweep_d"])
+    B.add_box("bump", (0, -0.27, 0.08), (0.3, 0.03, 0.05), m["sweep_d"])
+
+
+def build_pipe_gecko(m, frame):                  # heat-seeker by the coolant runs
+    b = _bob(frame)
+    B.add_sphere("body", (0, 0.04, 0.2 + b), (0.11, 0.3, 0.08), m["geck"])
+    B.add_sphere("head", (0, -0.26, 0.22 + b), (0.09, 0.11, 0.08), m["geck"])
+    B.add_cylinder("tail", (0, 0.4, 0.18 + b), 0.05, 0.4, m["geck_l"], axis="y", r2=0.01)
+    for sx in (-1, 1):
+        B.add_sphere(f"eye{sx}", (sx * 0.06, -0.32, 0.27 + b), (0.025, 0.025, 0.025), m["eye"])
+    for i in range(3):
+        B.add_sphere(f"stripe{i}", (0, -0.1 + i * 0.14, 0.27 + b), (0.09, 0.03, 0.02), m["geck_d"])
+    _legs(m, "geck_d", 0.13, 0.18, 0.06, 0.12, 0.026, frame)
+
+
 # Each species: builder, camera (ortho/target_z/elev), tile, manifest fields.
 # Fliers render more top-down (higher elev); the game sorts them above ground.
 SPECIES = [
@@ -290,6 +343,23 @@ SPECIES = [
     # station
     dict(name="rat", builder=build_rat, ortho=1.4, target_z=0.25, tile=24, elev=50,
          biome="interior", terrains=["floor", "plating", "grate"], speed=44.0, flee_speed=122.0, group=1, flier=False),
+    # venue interiors — the maze buildings (biomes "mine"/"warehouse"/"substation")
+    dict(name="mine_rat", builder=build_rat, ortho=1.4, target_z=0.25, tile=24, elev=50,
+         biome="mine", terrains=["floor", "plating"], speed=44.0, flee_speed=122.0, group=2, flier=False),
+    dict(name="rock_crab", builder=build_rock_crab, ortho=1.8, target_z=0.35, tile=32, elev=50,
+         biome="mine", terrains=["floor"], speed=14.0, flee_speed=26.0, group=1, flier=False),
+    dict(name="cave_bat", builder=build_cave_bat, ortho=1.4, target_z=0.4, tile=24, elev=68,
+         biome="mine", terrains=["floor", "plating"], speed=54.0, flee_speed=54.0, group=2, flier=True),
+    dict(name="warehouse_rat", builder=build_rat, ortho=1.4, target_z=0.25, tile=24, elev=50,
+         biome="warehouse", terrains=["floor", "plating"], speed=44.0, flee_speed=122.0, group=2, flier=False),
+    dict(name="sweeper_bot", builder=build_sweeper_bot, ortho=1.4, target_z=0.2, tile=26, elev=50,
+         biome="warehouse", terrains=["floor"], speed=20.0, flee_speed=20.0, group=1, flier=False),
+    dict(name="inventory_drone", builder=build_drone, ortho=1.6, target_z=0.45, tile=28, elev=70,
+         biome="warehouse", terrains=["floor", "plating"], speed=42.0, flee_speed=42.0, group=1, flier=True),
+    dict(name="pipe_gecko", builder=build_pipe_gecko, ortho=1.6, target_z=0.25, tile=26, elev=50,
+         biome="substation", terrains=["floor", "plating"], speed=30.0, flee_speed=80.0, group=2, flier=False),
+    dict(name="service_drone", builder=build_drone, ortho=1.6, target_z=0.45, tile=28, elev=70,
+         biome="substation", terrains=["floor", "plating"], speed=38.0, flee_speed=38.0, group=1, flier=True),
     # fliers (flier=True): drift/circle above ground, sort over the player, no flee
     dict(name="butterfly", builder=build_butterfly, ortho=1.2, target_z=0.3, tile=22, elev=72,
          biome="garden", terrains=["grass"], speed=28.0, flee_speed=28.0, group=2, flier=True),
