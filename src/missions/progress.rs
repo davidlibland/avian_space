@@ -870,6 +870,11 @@ pub fn roll_offers_on_land(
             };
             if let Some(dest) = placement {
                 dest.push(entry_id.clone());
+                // Mark the generated entry CONSIDERED for this visit, or
+                // roll_new_offers_while_landed (which runs every landed
+                // frame) would roll it a second time — the duplicate
+                // job-board postings found in play.
+                offers.considered.insert(entry_id.clone());
                 for (id, def) in chain {
                     catalog.defs.insert(id, def);
                 }
@@ -993,10 +998,16 @@ pub fn roll_new_offers_while_landed(
         let hit = rng.gen_range(0.0..1.0) < weight.clamp(0.0, 1.0);
         offers.considered.insert(id.clone());
         if hit {
+            // Belt & braces: an id must never be POSTED twice either.
             if is_tab {
-                offers.tab.push(id);
+                if !offers.tab.contains(&id) {
+                    offers.tab.push(id);
+                }
             } else {
-                offers.npc.entry(planet.clone()).or_default().push(id);
+                let list = offers.npc.entry(planet.clone()).or_default();
+                if !list.contains(&id) {
+                    list.push(id);
+                }
             }
         }
     }

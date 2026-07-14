@@ -598,13 +598,13 @@ pub fn spawn_mission_npc(
     speed: f32,
     seek: bool,
     scope: crate::PlayState,
-) {
+) -> Option<Entity> {
     let spec = identity
         .as_ref()
         .map(|(_, spec)| spec.clone())
         .unwrap_or_else(|| anonymous_mission_spec(layers, mission_id, role));
     let Some(image) = layers.composite(&spec, images) else {
-        return; // layer images still loading; idempotent caller retries
+        return None; // layer images still loading; idempotent caller retries
     };
     let start = SurfaceCostMap::tile_to_world(door_tile.0, door_tile.1);
 
@@ -675,6 +675,7 @@ pub fn spawn_mission_npc(
             Transform::from_xyz(0.0, 16.0, 0.1).with_scale(Vec3::splat(0.6)),
         ));
     });
+    Some(npc_entity)
 }
 
 /// A companion friend's surface avatar (companions.yaml key). They walk

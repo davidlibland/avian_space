@@ -1389,6 +1389,82 @@ pub(super) mod runtime {
         );
     }
 
+    /// The duplicate-posting bug found in play: roll_offers_on_land pushed
+    /// template-generated entries into offers.tab WITHOUT marking them
+    /// considered, so roll_new_offers_while_landed (every landed frame)
+    /// offered the same id a second time. Invariant: after landing plus a
+    /// few landed frames, every posted id is in `considered`, and no offer
+    /// list contains duplicates.
+    #[test]
+    fn posted_offers_are_considered_and_never_duplicated() {
+        let mut app = App::new();
+        let app_galaxy: std::cell::RefCell<Option<crate::galaxy::GalaxyControl>> =
+            std::cell::RefCell::new(None);
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<MissionLog>()
+            .init_resource::<MissionCatalog>()
+            .init_resource::<MissionOffers>()
+            .init_resource::<crate::missions::OfferBackoff>()
+            .init_resource::<PlayerUnlocks>()
+            .init_resource::<crate::standing::FactionStandings>()
+            .add_message::<PlayerLandedOnPlanet>()
+            .add_message::<MissionStarted>()
+            .insert_resource({
+                let mut iu = crate::item_universe::parse_dir::<crate::item_universe::ItemUniverse>(
+                    std::path::Path::new("assets"),
+                )
+                .expect("assets/ must parse");
+                iu.finalize();
+                *app_galaxy.borrow_mut() = Some(crate::galaxy::GalaxyControl::seeded_from(&iu));
+                iu
+            })
+            .insert_resource(crate::planet_ui::LandedContext {
+                planet_name: Some("earth".into()),
+            })
+            .add_systems(
+                Update,
+                (
+                    progress::update_locked_to_available,
+                    progress::roll_offers_on_land,
+                    progress::roll_new_offers_while_landed,
+                )
+                    .chain(),
+            );
+        app.insert_resource(app_galaxy.into_inner().unwrap());
+
+        // Land MANY times: templates roll probabilistically, so across 60
+        // landings at Earth at least one generated ("template__hash") entry
+        // lands on the board with near-certainty.
+        let mut saw_generated = false;
+        for _ in 0..60 {
+            app.world_mut().write_message(PlayerLandedOnPlanet {
+                planet: "earth".to_string(),
+            });
+            // A few landed frames so the while-landed roller gets its shot.
+            for _ in 0..3 {
+                app.update();
+            }
+            let offers = app.world().resource::<MissionOffers>();
+            let mut all: Vec<&String> = offers.tab.iter().collect();
+            if let Some(list) = offers.npc.get("earth") {
+                all.extend(list.iter());
+            }
+            for id in &all {
+                assert!(
+                    offers.considered.contains(*id),
+                    "{id}: posted but never marked considered — the dup bug"
+                );
+                saw_generated |= id.contains("__");
+            }
+            let unique: std::collections::HashSet<&&String> = all.iter().collect();
+            assert_eq!(unique.len(), all.len(), "duplicate posting: {all:?}");
+        }
+        assert!(
+            saw_generated,
+            "premise: 60 landings should surface at least one template offer"
+        );
+    }
+
     #[test]
     fn new_offer_rolls_mid_visit_exactly_once() {
         // roll_new_offers_while_landed: a mission that becomes Available

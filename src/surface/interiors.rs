@@ -484,20 +484,23 @@ pub(crate) fn build_plan(
     match kind {
         BuildingKind::Bar => {
             props.push(("bar_counter", (counter.0 - 1, counter.1)));
-            // Round tables + stools in a loose grid clear of the walkway.
-            for (i, &(tx, ty)) in [
-                (x0 + 3, y0 + 3),
-                (x0 + 3, y0 + 6),
-                (x0 + rw - 5, y0 + 3),
-                (x0 + rw - 5, y0 + 6),
-                (x0 + rw / 2 + 2, y0 + 4),
-            ]
-            .iter()
-            .enumerate()
-            {
-                props.push(("table_round", (tx, ty)));
-                props.push(("stool", (tx + 1, ty + if i % 2 == 0 { 1 } else { 0 })));
+            // West booths: mission givers stand LEFT of their table facing
+            // it, with a free chair for you opposite (east of the table).
+            for row in 0..3u32 {
+                let ty = y0 + 3 + row * 2;
+                props.push(("table_round", (x0 + 3, ty)));
+                props.push(("stool", (x0 + 4, ty)));
             }
+            // East booths, mirrored: hire pilots stand RIGHT of their
+            // table facing it, free chair on the west side.
+            for row in 0..3u32 {
+                let ty = y0 + 3 + row * 2;
+                props.push(("table_round", (x0 + rw - 4, ty)));
+                props.push(("stool", (x0 + rw - 5, ty)));
+            }
+            // One ambience table mid-room.
+            props.push(("table_round", (x0 + rw / 2 + 2, y0 + 4)));
+            props.push(("stool", (x0 + rw / 2 + 3, y0 + 4)));
         }
         BuildingKind::Market => {
             // Two stall rows facing a central aisle.
@@ -1543,6 +1546,9 @@ pub(crate) fn spawn_interior_npcs(
             let spec = layers.random_spec(&mut rng, "civilian");
             if let Some(image) = layers.composite(&spec, &mut images) {
                 let pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(tile.0, tile.1);
+                // Standing right of their table, facing it.
+                let mut anim = crate::surface_character::CharacterAnim::person(0.11);
+                anim.facing = crate::surface_character::Facing::Left;
                 commands.spawn((
                     DespawnOnExit(PlayState::Inside),
                     InteriorScoped,
@@ -1553,7 +1559,7 @@ pub(crate) fn spawn_interior_npcs(
                         temperament: offer.temperament.key().to_string(),
                         fee: offer.fee,
                     },
-                    crate::surface_character::CharacterAnim::person(0.11),
+                    anim,
                     RigidBody::Static,
                     crate::surface_objects::character_foot_collider(5.0),
                     CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
@@ -1561,7 +1567,11 @@ pub(crate) fn spawn_interior_npcs(
                         image,
                         TextureAtlas {
                             layout: layers.layout.clone(),
-                            index: 0,
+                            index: {
+                                let mut a = crate::surface_character::CharacterAnim::person(0.11);
+                                a.facing = crate::surface_character::Facing::Left;
+                                a.atlas_index()
+                            },
                         },
                     ),
                     Transform::from_xyz(
@@ -1597,7 +1607,7 @@ pub(crate) fn spawn_interior_npcs(
             let tile = (x0 + 2, (y0 + 3 + slot * 2).min(y0 + rh - 3));
             slot += 1;
             let identity = super::npc_identity(&iu, &layers, npc);
-            crate::surface_npc::spawn_mission_npc(
+            let spawned = crate::surface_npc::spawn_mission_npc(
                 &mut commands,
                 &mut layers,
                 &mut images,
@@ -1609,6 +1619,12 @@ pub(crate) fn spawn_interior_npcs(
                 false,
                 PlayState::Inside,
             );
+            if let Some(entity) = spawned {
+                // Standing left of their booth table, facing it (east).
+                let mut anim = crate::surface_character::CharacterAnim::person(0.11);
+                anim.facing = crate::surface_character::Facing::Right;
+                commands.entity(entity).insert((anim, InteriorScoped));
+            }
         }
     }
 
