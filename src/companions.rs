@@ -161,7 +161,11 @@ const HIRE_SURNAMES: &[&str] = &[
 /// Pilots for hire at this planet's bar: fighter hulls from the LOCAL
 /// derived shipyard catalog, seeded by planet name so the same faces wait
 /// at the same bar. Empty when the planet has no shipyard.
-pub fn hire_pool(iu: &ItemUniverse, planet_name: &str) -> Vec<HireOffer> {
+pub fn hire_pool(
+    iu: &ItemUniverse,
+    planet_name: &str,
+    fallen: &std::collections::HashSet<String>,
+) -> Vec<HireOffer> {
     use rand::{Rng, SeedableRng};
     let Some((_, pd)) = iu.find_gameplay_planet(planet_name) else {
         return Vec::new();
@@ -183,7 +187,10 @@ pub fn hire_pool(iu: &ItemUniverse, planet_name: &str) -> Vec<HireOffer> {
         acc.wrapping_mul(31).wrapping_add(b as u64)
     });
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    let mut offers = Vec::new();
+    // Names come from an INDEPENDENT stream: skipping a fallen name must
+    // not reshuffle the seats' hulls and fees.
+    let mut name_rng = rand::rngs::StdRng::seed_from_u64(seed ^ 0x517E_CAFE);
+    let mut offers: Vec<HireOffer> = Vec::new();
     let count = hulls.len().min(3);
     for i in 0..count {
         let hull = hulls[rng.gen_range(0..hulls.len())].clone();
@@ -193,11 +200,25 @@ pub fn hire_pool(iu: &ItemUniverse, planet_name: &str) -> Vec<HireOffer> {
             1 => Temperament::Aggressive,
             _ => Temperament::Cautious,
         };
-        let pilot_name = format!(
-            "{} {}",
-            HIRE_FIRST_NAMES[rng.gen_range(0..HIRE_FIRST_NAMES.len())],
-            HIRE_SURNAMES[rng.gen_range(0..HIRE_SURNAMES.len())]
-        );
+        // The seat outlives the pilot: keep drawing names from the seeded
+        // sequence past any FALLEN ones (and any already seated), so a dead
+        // hire is deterministically replaced by the next name — same hull,
+        // same fee, same table, different person.
+        let mut pilot_name = String::new();
+        for _ in 0..64 {
+            let candidate = format!(
+                "{} {}",
+                HIRE_FIRST_NAMES[name_rng.gen_range(0..HIRE_FIRST_NAMES.len())],
+                HIRE_SURNAMES[name_rng.gen_range(0..HIRE_SURNAMES.len())]
+            );
+            if !fallen.contains(&candidate) && !offers.iter().any(|o| o.pilot_name == candidate) {
+                pilot_name = candidate;
+                break;
+            }
+        }
+        if pilot_name.is_empty() {
+            continue; // the whole name pool is dead — a story in itself
+        }
         offers.push(HireOffer {
             pilot_name,
             ship_type: hull,
@@ -542,6 +563,7 @@ pub fn render_bartender_rumors(
     log: &crate::missions::MissionLog,
     iu: &ItemUniverse,
     planet_name: &str,
+    fallen: &std::collections::HashSet<String>,
 ) {
     use bevy_egui::egui;
     let mut any = false;
@@ -566,7 +588,7 @@ pub fn render_bartender_rumors(
             .unwrap_or_else(|| "Someone".to_string());
         ui.label(format!("“{who} at the tables is looking for a pilot.”"));
     }
-    if !hire_pool(iu, planet_name).is_empty() {
+    if !hire_pool(iu, planet_name, fallen).is_empty() {
         any = true;
         ui.label("“The pilots drinking by the east wall will fly for pay — go talk to them.”");
     }

@@ -549,6 +549,7 @@ pub fn update_npc_markers(
                 Some(Behavior::OfferMission { .. })
                     | Some(Behavior::AwaitPlayer { .. })
                     | Some(Behavior::FleePlayer { .. })
+                    | Some(Behavior::FleeToward { .. })
                     | Some(Behavior::SeekPlayer { .. })
                     | Some(Behavior::FollowPlayer { .. })
             );
@@ -564,6 +565,23 @@ pub fn update_npc_markers(
 }
 
 // ── Spawning helpers ─────────────────────────────────────────────────────
+
+/// A stable look for a mission NPC with no `npc:` identity: seeded by the
+/// MISSION id, so the same stranger appears at every spawn — the fugitive
+/// who bolts into the mine is recognisably the same person two levels
+/// down (and on your next landing).
+pub fn anonymous_mission_spec(
+    layers: &crate::character_compositor::CharacterLayers,
+    mission_id: &str,
+    role: &str,
+) -> crate::character_compositor::AvatarSpec {
+    use rand::SeedableRng;
+    let seed = mission_id.bytes().fold(0xFACADEu64, |acc, b| {
+        acc.wrapping_mul(31).wrapping_add(b as u64)
+    });
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    layers.random_spec(&mut rng, role)
+}
 
 /// Spawn a mission-giver NPC at a building door.
 ///
@@ -581,12 +599,10 @@ pub fn spawn_mission_npc(
     seek: bool,
     scope: crate::PlayState,
 ) {
-    let mut rng = rand::thread_rng();
-
     let spec = identity
         .as_ref()
         .map(|(_, spec)| spec.clone())
-        .unwrap_or_else(|| layers.random_spec(&mut rng, role));
+        .unwrap_or_else(|| anonymous_mission_spec(layers, mission_id, role));
     let Some(image) = layers.composite(&spec, images) else {
         return; // layer images still loading; idempotent caller retries
     };
@@ -756,12 +772,10 @@ pub fn spawn_objective_npc(
     kind: ObjectiveKind,
     scope: crate::PlayState,
 ) -> Option<Entity> {
-    let mut rng = rand::thread_rng();
-
     let spec = identity
         .as_ref()
         .map(|(_, spec)| spec.clone())
-        .unwrap_or_else(|| layers.random_spec(&mut rng, role));
+        .unwrap_or_else(|| anonymous_mission_spec(layers, mission_id, role));
     let Some(image) = layers.composite(&spec, images) else {
         return None; // layer images still loading; idempotent caller retries
     };

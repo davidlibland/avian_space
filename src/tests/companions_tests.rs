@@ -199,8 +199,8 @@ fn roster_save_round_trips_both_ledgers() {
 #[test]
 fn hire_pool_is_deterministic_fighters_only_and_fee_priced() {
     let iu = universe();
-    let a = super::hire_pool(&iu, "earth");
-    let b = super::hire_pool(&iu, "earth");
+    let a = super::hire_pool(&iu, "earth", &Default::default());
+    let b = super::hire_pool(&iu, "earth", &Default::default());
     assert_eq!(a, b, "same faces wait at the same bar");
     assert!(!a.is_empty(), "Earth's shipyard staffs the bar");
     for offer in &a {
@@ -214,7 +214,7 @@ fn hire_pool_is_deterministic_fighters_only_and_fee_priced() {
     }
     // Nowhere, nobody.
     assert!(
-        super::hire_pool(&iu, "not_a_planet").is_empty(),
+        super::hire_pool(&iu, "not_a_planet", &Default::default()).is_empty(),
         "unknown planets hire nobody"
     );
 }
@@ -438,5 +438,79 @@ fn merchant_line_friends_fly_cargo_vessels() {
             crate::ship::Personality::Trader,
             "{key}: cargo friends fly trader hulls"
         );
+    }
+}
+
+#[cfg(test)]
+mod hire_replacement {
+    /// A dead hire doesn't rise from the dead: their name goes to the
+    /// fallen ledger and the same SEAT (hull, temperament, fee) is taken
+    /// by the next name in the deterministic sequence. Supply recovers;
+    /// people don't.
+    #[test]
+    fn fallen_hires_are_replaced_not_resurrected() {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        let planet = "earth";
+        let empty = Default::default();
+        let before = crate::companions::hire_pool(&iu, planet, &empty);
+        assert!(!before.is_empty(), "premise: earth hires pilots");
+        let dead = before[0].pilot_name.clone();
+
+        let mut fallen = std::collections::HashSet::new();
+        fallen.insert(dead.clone());
+        let after = crate::companions::hire_pool(&iu, planet, &fallen);
+        assert_eq!(before.len(), after.len(), "the seat is refilled");
+        assert!(
+            !after.iter().any(|o| o.pilot_name == dead),
+            "{dead} stays dead"
+        );
+        // The seat keeps its terms: same hull + fee lineup, only names move.
+        let terms = |pool: &[crate::companions::HireOffer]| {
+            pool.iter()
+                .map(|o| (o.ship_type.clone(), o.fee))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(terms(&before), terms(&after), "hull and fee are the seat's");
+        // Deterministic: same ledger, same replacement.
+        let again = crate::companions::hire_pool(&iu, planet, &fallen);
+        assert_eq!(
+            after.iter().map(|o| &o.pilot_name).collect::<Vec<_>>(),
+            again.iter().map(|o| &o.pilot_name).collect::<Vec<_>>(),
+        );
+        // Hired deaths actually reach the ledger.
+        let mut roster = crate::carrier::EscortRoster::default();
+        let id = roster.add(
+            "fighter".into(),
+            crate::carrier::EscortKind::Hired {
+                name: "Joss Pike".into(),
+                temperament: "aggressive".into(),
+            },
+            10,
+        );
+        roster.record_death(id);
+        assert!(roster.fallen.contains("Joss Pike"));
+    }
+}
+
+#[cfg(test)]
+mod fugitive_identity {
+    /// Anonymous mission NPCs keep one face: the fallback avatar spec is
+    /// seeded by mission id, so the maze fugitive looks the same on every
+    /// level and every landing — and different missions get different
+    /// strangers.
+    #[test]
+    fn anonymous_spec_is_stable_per_mission() {
+        let Some(layers) = crate::character_compositor::CharacterLayers::load_for_tests() else {
+            return; // layer assets unavailable in this environment
+        };
+        let a1 =
+            crate::surface_npc::anonymous_mission_spec(&layers, "claim_jumper_mars", "civilian");
+        let a2 =
+            crate::surface_npc::anonymous_mission_spec(&layers, "claim_jumper_mars", "civilian");
+        assert_eq!(a1, a2, "same mission, same face");
+        let b = crate::surface_npc::anonymous_mission_spec(&layers, "manifest_ghost", "civilian");
+        assert_ne!(a1, b, "different missions, different strangers");
     }
 }

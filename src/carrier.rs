@@ -154,10 +154,21 @@ impl EscortRoster {
     /// Record a death: removes the entry, and a friend goes into the
     /// permadeath ledger.
     pub fn record_death(&mut self, id: u64) {
-        if let Some(e) = self.entries.iter().find(|e| e.id == id)
-            && let EscortKind::Companion { name } = &e.kind
-        {
-            self.fallen.insert(name.clone());
+        if let Some(e) = self.entries.iter().find(|e| e.id == id) {
+            match &e.kind {
+                // Friends: permadeath — the grant can never re-fire.
+                EscortKind::Companion { name } => {
+                    self.fallen.insert(name.clone());
+                }
+                // Hires: the LEDGER remembers them too, so the bar seats a
+                // replacement pilot instead of resurrecting this one
+                // (hire_pool skips fallen names). Supply recovers; people
+                // don't.
+                EscortKind::Hired { name, .. } => {
+                    self.fallen.insert(name.clone());
+                }
+                EscortKind::Carried { .. } => {}
+            }
         }
         self.remove(id);
     }

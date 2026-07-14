@@ -1515,7 +1515,11 @@ pub(crate) fn spawn_interior_npcs(
             .map(|h| h.pilot_name.clone())
             .collect();
         let mut slot = 0u32;
-        for offer in crate::companions::hire_pool(&iu, &planet) {
+        let fallen = roster
+            .as_deref()
+            .map(|r| r.fallen.clone())
+            .unwrap_or_default();
+        for offer in crate::companions::hire_pool(&iu, &planet, &fallen) {
             let flying =
                 roster.as_deref().is_some_and(|r| {
                     r.entries.iter().any(|e| matches!(

@@ -261,6 +261,74 @@ pub fn setup_character_layers(
 }
 
 impl CharacterLayers {
+    /// Test-only construction from layers.ron with default asset handles —
+    /// enough for spec/candidate logic (random_spec etc.), no compositing.
+    #[cfg(test)]
+    pub fn load_for_tests() -> Option<Self> {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/sprites/people/layers.ron"
+        ))
+        .ok()?;
+        let manifest: LayersManifest = ron::from_str(&text).ok()?;
+        let palettes = manifest
+            .palettes
+            .into_iter()
+            .map(|(mat, p)| {
+                (
+                    mat,
+                    Palette {
+                        base: p.base.iter().filter_map(|c| hex_rgb(c)).collect(),
+                        ramps: p
+                            .ramps
+                            .into_iter()
+                            .map(|(name, r)| {
+                                (
+                                    name,
+                                    Ramp {
+                                        group: r.group,
+                                        colors: r
+                                            .colors
+                                            .iter()
+                                            .filter_map(|c| hex_rgb(c))
+                                            .collect(),
+                                    },
+                                )
+                            })
+                            .collect(),
+                    },
+                )
+            })
+            .collect();
+        let items = manifest
+            .items
+            .into_iter()
+            .map(|d| LayerItem {
+                handle: Handle::default(),
+                portrait: Handle::default(),
+                id: d.id,
+                slot: d.slot,
+                layer: d.layer,
+                z: d.z,
+                materials: d.materials,
+                sexes: d.sexes,
+                roles: d.roles,
+                tags: d.tags,
+            })
+            .collect();
+        Some(CharacterLayers {
+            items,
+            palettes,
+            layout: Handle::default(),
+            walk_speed: manifest.walk_speed,
+            tile: UVec2::new(manifest.tile_w, manifest.tile_h),
+            cols: manifest.cols,
+            rows: manifest.rows,
+            cache: HashMap::new(),
+            portrait_cache: HashMap::new(),
+        })
+    }
+
     /// Items usable in `slot` for `sex` (primary layer only), optionally
     /// filtered by role affinity: if any candidate carries `role`, only those
     /// are returned; otherwise role-neutral items (empty `roles`) are.

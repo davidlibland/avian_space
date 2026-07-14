@@ -136,6 +136,10 @@ pub(crate) fn surface_building_ui(
                     ui.separator();
                     // ...the bartender's rumors about who in the room has
                     // work (those missions live on the NPCs at the tables)...
+                    let fallen = escort_roster
+                        .as_deref()
+                        .map(|r| r.fallen.clone())
+                        .unwrap_or_default();
                     crate::companions::render_bartender_rumors(
                         ui,
                         &mission_offers,
@@ -143,6 +147,7 @@ pub(crate) fn surface_building_ui(
                         &mission_log,
                         &item_universe,
                         planet_name,
+                        &fallen,
                     );
                     // The wingman desk: your flight, dismissals, rejoins.
                     if let (Ok(mut ship), Some(roster)) =
