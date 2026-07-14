@@ -601,18 +601,22 @@ def build_mine(s, m):
     # 4×4 adit into a rock mound: timber portal, headframe, cart rail.
     w, d = 4, 4
     B.add_box("fl_pad", (0, 0, 0.06), (w, d, 0.12), m["stone"], bevel=0.02)
-    # the mound: overlapping rock domes, tallest at the back
-    B.add_sphere("rock_a", (0, 0.6, 0.4), (2.2, 1.7, 2.2), m["stone"], zclip=0.0)
-    B.add_sphere("rock_b", (-1.2, 0.2, 0.3), (1.2, 1.2, 1.4), m["stone"], zclip=0.0)
-    B.add_sphere("rock_c", (1.3, 0.4, 0.3), (1.1, 1.1, 1.2), m["stone"], zclip=0.0)
+    # The mound is built AROUND the doorway (booleans corrupt the open
+    # zclip meshes): two flanking rocks leave a real gap at the door
+    # column, the tall dome sits behind the doorway's screen rows, and
+    # the dark throat bakes into _back — so the walker in the adit is
+    # framed, never covered.
+    B.add_sphere("rock_back", (0, 1.6, 0.35), (2.2, 1.35, 2.1), m["stone"], zclip=0.0)
+    B.add_sphere("rock_top", (0, 1.2, 1.5), (1.3, 0.95, 1.0), m["stone"])
+    B.add_sphere("rock_l", (-1.7, 0.35, 0.3), (1.05, 1.35, 1.5), m["stone"], zclip=0.0)
+    B.add_sphere("rock_r", (1.7, 0.35, 0.3), (1.05, 1.35, 1.5), m["stone"], zclip=0.0)
     # timber portal at the footprint front, with a REAL adit carved
     # through the rock and a plank roll-up door (animated in-game).
     for sx in (-0.75, 0.75):
         B.add_box("portal_post", (sx, -d / 2 + 0.12, 0.8), (0.24, 0.24, 1.6), m["beam"], bevel=0.02)
     B.add_box("portal_beam", (0, -d / 2 + 0.12, 1.68), (1.9, 0.28, 0.26), m["beam"], bevel=0.02)
-    B.add_box("adit_throat", (0, 0.6, 0.72), (1.2, 1.6, 1.44), m["dark"], bevel=0.0)
+    B.add_box("adit", (0, 0.9, 0.7), (1.3, 1.2, 1.44), m["dark"], bevel=0.0)
     B.add_box("doorpanel", (0, -d / 2 + 0.1, 0.72), (1.2, 0.08, 1.44), m["beam"], bevel=0.02)
-    cut_doorway(m, ["rock_a", "rock_b", "rock_c"], 0, -d / 2, 1.24, 1.5, 0.75, d / 2 + 1.2)
     # headframe tower over the shaft
     for sx in (-0.5, 0.5):
         leg = B.add_box("hf_leg", (sx, 0.9, 1.9), (0.16, 0.16, 2.6), m["metal"], bevel=0.01)
@@ -661,7 +665,9 @@ def build_substation(s, m):
         B.add_cylinder(f"vent{i}", (vx, vy, top + 0.55), 0.22, 0.7, m["metal"], axis="z")
         B.add_box(f"vent_cap{i}", (vx, vy, top + 0.95), (0.55, 0.55, 0.08), m["dark"], bevel=0.02)
     # blast door: recessed dark opening + hazard-striped frame
-    B.add_box("blast_frame", (0, -d / 2 - 0.02, z0 + 1.05), (1.5, 0.12, 2.1), m["metal"], bevel=0.02)
+    for sx in (-0.72, 0.72):
+        B.add_box("blast_jamb", (sx, -d / 2 - 0.02, z0 + 1.0), (0.22, 0.12, 2.0), m["metal"], bevel=0.02)
+    B.add_box("blast_lintel", (0, -d / 2 - 0.02, z0 + 2.05), (1.66, 0.12, 0.22), m["metal"], bevel=0.02)
     B.add_box("doorpanel", (0, -d / 2 - 0.02, z0 + 1.0), (1.15, 0.08, 1.9), m["metal"], bevel=0.02)
     cut_doorway(m, ["body"], 0, -d / 2, 1.15, 1.9, z0 + 0.95, d / 2 + 0.3)
     B.add_box("hazard", (0, -d / 2 - 0.08, z0 + 2.2), (1.5, 0.06, 0.22), m["glow"], bevel=0.0)
