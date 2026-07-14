@@ -151,6 +151,17 @@ def planet_wireframe(ptype):
     elif ptype == "desert":
         for yoff in (-14, 2, 16):
             band(yoff)
+    elif ptype == "station":
+        # Not a world at all: a ring station schematic — hub, ring, spokes.
+        d.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], outline=LINE, width=1)
+        d.ellipse([cx - 26, cy - 26, cx + 26, cy + 26], outline=LINE, width=1)
+        for a in range(4):
+            ang = a * math.pi / 2 + math.pi / 4
+            d.line([(cx + 14 * math.cos(ang), cy + 14 * math.sin(ang)),
+                    (cx + 26 * math.cos(ang), cy + 26 * math.sin(ang))],
+                   fill=LINE, width=1)
+        d.line([(cx - r, cy), (cx - 26, cy)], fill=LINE, width=1)  # dock spars
+        d.line([(cx + 26, cy), (cx + r, cy)], fill=LINE, width=1)
     else:  # rocky, icy_dwarf → cratered
         for cxy, rr in [((40, 36), 7), ((60, 44), 9), ((46, 58), 6), ((58, 62), 5)]:
             d.ellipse([cxy[0] - rr, cxy[1] - rr, cxy[0] + rr, cxy[1] + rr], outline=LINE, width=1)
@@ -309,7 +320,7 @@ def main():
             n += 1
     asteroid_wireframe().save(os.path.join(OUT, "asteroid.png"))
     pickup_wireframe().save(os.path.join(OUT, "pickup.png"))
-    ptypes = ["habitable", "rocky", "cloud", "desert", "gas_giant", "ice_giant", "icy_dwarf"]
+    ptypes = ["habitable", "rocky", "cloud", "desert", "gas_giant", "ice_giant", "icy_dwarf", "station"]
     for pt in ptypes:
         planet_wireframe(pt).save(os.path.join(OUT, f"planet_{pt}.png"))
     print(f"wrote {n} ship + 2 generic + {len(ptypes)} planet wireframes → {os.path.relpath(OUT, ROOT)}")

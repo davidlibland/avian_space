@@ -226,7 +226,15 @@ pub(crate) fn spawn_building_3d(
     // anchor/pos), and rolls open when the player nears. Only door buildings.
     if matches!(
         func,
-        "market" | "outfitter" | "bar" | "mechanic" | "fuel_station" | "garrison"
+        "market"
+            | "outfitter"
+            | "bar"
+            | "mechanic"
+            | "fuel_station"
+            | "garrison"
+            | "mine"
+            | "warehouse"
+            | "substation"
     ) {
         let frames: Vec<Handle<Image>> = (0..4)
             .map(|k| {

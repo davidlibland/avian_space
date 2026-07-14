@@ -159,6 +159,76 @@ pub(crate) fn surface_building_ui(
                     }
                 }
                 BuildingKind::MechanicShop => {
+                    // ── Wing service: repair & rearm your companions and
+                    // hired escorts, billed to YOUR account (carried
+                    // fighters service automatically when they dock). ──
+                    if let (Some(roster), Ok(mut ship)) =
+                        (escort_roster.as_deref_mut(), player_query.single_mut())
+                    {
+                        let wing: Vec<usize> = roster
+                            .entries
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, e)| {
+                                matches!(
+                                    e.kind,
+                                    crate::carrier::EscortKind::Companion { .. }
+                                        | crate::carrier::EscortKind::Hired { .. }
+                                )
+                            })
+                            .map(|(i, _)| i)
+                            .collect();
+                        if !wing.is_empty() {
+                            ui.heading("Wing service");
+                            let mut total = 0i128;
+                            for &i in &wing {
+                                let e = &roster.entries[i];
+                                let max = item_universe
+                                    .ships
+                                    .get(&e.ship_type)
+                                    .map(|d| d.max_health)
+                                    .unwrap_or(1)
+                                    .max(1);
+                                let cost = crate::carrier::service_cost(e, &item_universe);
+                                total += cost;
+                                ui.label(format!(
+                                    "{} — hull {}/{}{}",
+                                    match &e.kind {
+                                        crate::carrier::EscortKind::Companion { name } =>
+                                            item_universe
+                                                .companions
+                                                .get(name)
+                                                .map(|d| d.name.clone())
+                                                .unwrap_or_else(|| name.clone()),
+                                        crate::carrier::EscortKind::Hired { name, .. } =>
+                                            name.clone(),
+                                        _ => e.ship_type.clone(),
+                                    },
+                                    e.health,
+                                    max,
+                                    if cost > 0 {
+                                        format!(" ({cost} cr to service)")
+                                    } else {
+                                        " (ready)".to_string()
+                                    }
+                                ));
+                            }
+                            if total > 0
+                                && ui.button(format!("Service wing ({total} cr)")).clicked()
+                            {
+                                let mut credits = ship.credits;
+                                for &i in &wing {
+                                    crate::carrier::service_entry(
+                                        &mut roster.entries[i],
+                                        &item_universe,
+                                        &mut credits,
+                                    );
+                                }
+                                ship.credits = credits;
+                            }
+                            ui.separator();
+                        }
+                    }
                     if let Ok(mut ship) = player_query.single_mut() {
                         let max_hp = ship.max_health();
                         let hp = ship.health;

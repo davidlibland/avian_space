@@ -26,13 +26,14 @@ struct CreditsText;
 #[derive(Component)]
 struct EscortPanel;
 
-/// One escort's row; holds the escort entity it reports on.
+/// One escort's row, keyed by display label (works for live escort
+/// entities in flight AND persisted roster entries on foot).
 #[derive(Component)]
-struct EscortRow(Entity);
+struct EscortRow(String);
 
-/// The fill node of an escort row's health bar.
+/// The fill node of an escort row's health bar (same label key).
 #[derive(Component)]
-struct EscortBarFill(Entity);
+struct EscortBarFill(String);
 
 #[derive(Component)]
 struct CargoText;
@@ -171,8 +172,11 @@ impl Plugin for HudPlugin {
         )
         .add_systems(
             Update,
-            (update_radar_dots, draw_target_reticle, update_escort_panel)
-                .run_if(in_state(PlayState::Flying)),
+            (update_radar_dots, draw_target_reticle).run_if(in_state(PlayState::Flying)),
+        )
+        .add_systems(
+            Update,
+            update_escort_panel.run_if(not(in_state(PlayState::MainMenu))),
         )
         .add_systems(
             Update,
@@ -509,7 +513,6 @@ fn spawn_hud(mut commands: Commands) {
             // ── Escort overview (foot of the HUD; hidden when no escorts) ──
             root.spawn((
                 EscortPanel,
-                SpaceOnlyHud,
                 Node {
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(3.0),
@@ -530,46 +533,99 @@ fn spawn_hud(mut commands: Commands) {
 /// bar widths/colors update in place every frame.
 fn update_escort_panel(
     mut commands: Commands,
+    state: Res<State<PlayState>>,
     player_query: Query<Entity, With<Player>>,
     escorts_query: Query<(Entity, &Ship, &crate::carrier::Escort)>,
+    roster: Option<Res<crate::carrier::EscortRoster>>,
+    iu: Res<crate::item_universe::ItemUniverse>,
     mut panel_query: Query<(Entity, &mut Node), With<EscortPanel>>,
     rows_query: Query<(Entity, &EscortRow)>,
     mut fills_query: Query<(&mut Node, &mut BackgroundColor, &EscortBarFill), Without<EscortPanel>>,
 ) {
-    let Ok(player_entity) = player_query.single() else {
-        return;
-    };
     let Ok((panel_entity, mut panel_node)) = panel_query.single_mut() else {
         return;
     };
+    let on_foot = matches!(*state.get(), PlayState::Exploring | PlayState::Inside);
 
-    // The player's escorts, in a stable order.
-    let mut escorts: Vec<(Entity, &Ship)> = escorts_query
-        .iter()
-        .filter(|(_, _, e)| e.mother == player_entity)
-        .map(|(ent, ship, _)| (ent, ship))
-        .collect();
-    escorts.sort_by_key(|(ent, _)| *ent);
+    // (label, health fraction), from live entities in flight or the
+    // persisted roster on foot. Carried fighters auto-dock when you land,
+    // so on foot the panel shows companions + hires only.
+    let mut wing: Vec<(String, f32)> = if on_foot {
+        roster
+            .as_deref()
+            .map(|r| {
+                r.entries
+                    .iter()
+                    .filter_map(|e| {
+                        let label = match &e.kind {
+                            crate::carrier::EscortKind::Companion { name } => iu
+                                .companions
+                                .get(name)
+                                .map(|d| d.name.clone())
+                                .unwrap_or_else(|| name.clone()),
+                            crate::carrier::EscortKind::Hired { name, .. } => name.clone(),
+                            crate::carrier::EscortKind::Carried { .. } => return None,
+                        };
+                        let max = iu
+                            .ships
+                            .get(&e.ship_type)
+                            .map(|d| d.max_health)
+                            .unwrap_or(1)
+                            .max(1) as f32;
+                        Some((label, (e.health.max(0) as f32 / max).clamp(0.0, 1.0)))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        let Ok(player_entity) = player_query.single() else {
+            return;
+        };
+        let mut live: Vec<(Entity, &Ship)> = escorts_query
+            .iter()
+            .filter(|(_, _, e)| e.mother == player_entity)
+            .map(|(ent, ship, _)| (ent, ship))
+            .collect();
+        live.sort_by_key(|(ent, _)| *ent);
+        live.iter()
+            .map(|(_, ship)| {
+                (
+                    ship.data.display_name.clone(),
+                    (ship.health.max(0) as f32 / ship.max_health().max(1) as f32).clamp(0.0, 1.0),
+                )
+            })
+            .collect()
+    };
+    // Duplicate labels (two hired Corvettes) need distinct row keys.
+    let mut seen = std::collections::HashMap::new();
+    for (label, _) in &mut wing {
+        let n = seen.entry(label.clone()).or_insert(0usize);
+        *n += 1;
+        if *n > 1 {
+            label.push_str(&format!(" ({n})"));
+        }
+    }
 
-    panel_node.display = if escorts.is_empty() {
+    panel_node.display = if wing.is_empty() {
         Display::None
     } else {
         Display::Flex
     };
 
-    // Rebuild rows when the set of escort entities changes.
-    let mut current: Vec<Entity> = rows_query.iter().map(|(_, row)| row.0).collect();
+    // Rebuild rows when the wing roster changes.
+    let mut current: Vec<String> = rows_query.iter().map(|(_, row)| row.0.clone()).collect();
     current.sort();
-    let desired: Vec<Entity> = escorts.iter().map(|(e, _)| *e).collect();
+    let mut desired: Vec<String> = wing.iter().map(|(l, _)| l.clone()).collect();
+    desired.sort();
     if current != desired {
         for (row_entity, _) in rows_query.iter() {
             safe_despawn(&mut commands, row_entity);
         }
         commands.entity(panel_entity).with_children(|panel| {
-            for (escort_entity, ship) in &escorts {
+            for (label, _) in &wing {
                 panel
                     .spawn((
-                        EscortRow(*escort_entity),
+                        EscortRow(label.clone()),
                         Node {
                             flex_direction: FlexDirection::Column,
                             row_gap: Val::Px(1.0),
@@ -578,7 +634,7 @@ fn update_escort_panel(
                     ))
                     .with_children(|row| {
                         row.spawn((
-                            Text::new(ship.data.display_name.clone()),
+                            Text::new(label.clone()),
                             TextFont {
                                 font_size: 10.0,
                                 ..default()
@@ -596,7 +652,7 @@ fn update_escort_panel(
                         ))
                         .with_children(|track| {
                             track.spawn((
-                                EscortBarFill(*escort_entity),
+                                EscortBarFill(label.clone()),
                                 Node {
                                     width: Val::Percent(100.0),
                                     height: Val::Percent(100.0),
@@ -613,10 +669,10 @@ fn update_escort_panel(
 
     // Update bar fills in place.
     for (mut node, mut bg, fill) in &mut fills_query {
-        let Some((_, ship)) = escorts.iter().find(|(e, _)| *e == fill.0) else {
+        let Some((_, frac)) = wing.iter().find(|(l, _)| *l == fill.0) else {
             continue;
         };
-        let frac = (ship.health.max(0) as f32 / ship.max_health().max(1) as f32).clamp(0.0, 1.0);
+        let frac = *frac;
         node.width = Val::Percent(frac * 100.0);
         *bg = BackgroundColor(if frac > 0.5 {
             Color::srgb(0.2, 0.9, 0.3) // healthy: green

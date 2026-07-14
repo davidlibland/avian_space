@@ -909,7 +909,34 @@ pub const ESCORT_REPAIR_PRICE_FRAC: f64 = 0.05;
 /// heal proportionally), then restock missing secondary rounds at the
 /// outfitter's per-round price. Companions have no income: every credit
 /// comes out of the player's pocket.
-fn service_entry(
+/// What full service for this entry would cost right now (hull + ammo).
+pub(crate) fn service_cost(entry: &EscortEntry, iu: &crate::item_universe::ItemUniverse) -> i128 {
+    let Some(data) = iu.ships.get(&entry.ship_type) else {
+        return 0;
+    };
+    let max = data.max_health.max(1);
+    let mut cost = 0i128;
+    if entry.health < max {
+        let damage_frac = 1.0 - entry.health as f64 / max as f64;
+        cost +=
+            ((damage_frac * ESCORT_REPAIR_PRICE_FRAC * data.price as f64).ceil() as i128).max(1);
+    }
+    for (weapon, (_, base_ammo)) in &data.base_weapons {
+        let Some(base) = base_ammo else { continue };
+        let have = entry.ammo.get(weapon).copied().unwrap_or(*base);
+        if have < *base
+            && let Some(unit) = iu
+                .outfitter_items
+                .get(weapon)
+                .and_then(|item| item.ammo_price())
+        {
+            cost += (*base - have) as i128 * unit.max(1);
+        }
+    }
+    cost
+}
+
+pub(crate) fn service_entry(
     entry: &mut EscortEntry,
     iu: &crate::item_universe::ItemUniverse,
     credits: &mut i128,

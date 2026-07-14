@@ -605,11 +605,14 @@ def build_mine(s, m):
     B.add_sphere("rock_a", (0, 0.6, 0.4), (2.2, 1.7, 2.2), m["stone"], zclip=0.0)
     B.add_sphere("rock_b", (-1.2, 0.2, 0.3), (1.2, 1.2, 1.4), m["stone"], zclip=0.0)
     B.add_sphere("rock_c", (1.3, 0.4, 0.3), (1.1, 1.1, 1.2), m["stone"], zclip=0.0)
-    # timber portal around the adit (the door plane)
+    # timber portal at the footprint front, with a REAL adit carved
+    # through the rock and a plank roll-up door (animated in-game).
     for sx in (-0.75, 0.75):
-        B.add_box("portal_post", (sx, -d / 2 + 0.35, 0.8), (0.24, 0.24, 1.6), m["beam"], bevel=0.02)
-    B.add_box("portal_beam", (0, -d / 2 + 0.35, 1.68), (1.9, 0.28, 0.26), m["beam"], bevel=0.02)
-    B.add_box("adit", (0, -d / 2 + 0.5, 0.75), (1.3, 0.3, 1.5), m["dark"], bevel=0.0)
+        B.add_box("portal_post", (sx, -d / 2 + 0.12, 0.8), (0.24, 0.24, 1.6), m["beam"], bevel=0.02)
+    B.add_box("portal_beam", (0, -d / 2 + 0.12, 1.68), (1.9, 0.28, 0.26), m["beam"], bevel=0.02)
+    B.add_box("adit_throat", (0, 0.6, 0.72), (1.2, 1.6, 1.44), m["dark"], bevel=0.0)
+    B.add_box("doorpanel", (0, -d / 2 + 0.1, 0.72), (1.2, 0.08, 1.44), m["beam"], bevel=0.02)
+    cut_doorway(m, ["rock_a", "rock_b", "rock_c"], 0, -d / 2, 1.24, 1.5, 0.75, d / 2 + 1.2)
     # headframe tower over the shaft
     for sx in (-0.5, 0.5):
         leg = B.add_box("hf_leg", (sx, 0.9, 1.9), (0.16, 0.16, 2.6), m["metal"], bevel=0.01)
@@ -635,7 +638,8 @@ def build_warehouse(s, m):
     B.add_box("dr_rail", (0, -d / 2 - 0.08, z0 + 2.8), (w - 1.0, 0.12, 0.14), m["metal"], bevel=0.0)
     for sx, pw in ((-1.9, 1.6), (1.9, 1.6)):
         B.add_box("dr_panel", (sx, -d / 2 - 0.04, z0 + 1.35), (pw, 0.1, 2.6), m["wall_d"], bevel=0.02)
-    B.add_box("dr_open", (0, -d / 2 + 0.08, z0 + 1.3), (2.2, 0.3, 2.5), m["dark"], bevel=0.0)
+    B.add_box("doorpanel", (0, -d / 2 - 0.02, z0 + 1.3), (2.2, 0.08, 2.5), m["wall_d"], bevel=0.02)
+    cut_doorway(m, ["body"], 0, -d / 2, 2.2, 2.5, z0 + 1.25, d / 2 + 0.3)
     B.add_box("sign", (0, -d / 2 - 0.12, z0 + 3.3), (2.6, 0.08, 0.5), m["glow"], bevel=0.0)
     # container stacks against the east wall
     for i, (dy, dz, mt) in enumerate(((0.0, 0.55, "trim"), (1.4, 0.55, "wall_d"), (0.7, 1.65, "metal"))):
@@ -658,7 +662,8 @@ def build_substation(s, m):
         B.add_box(f"vent_cap{i}", (vx, vy, top + 0.95), (0.55, 0.55, 0.08), m["dark"], bevel=0.02)
     # blast door: recessed dark opening + hazard-striped frame
     B.add_box("blast_frame", (0, -d / 2 - 0.02, z0 + 1.05), (1.5, 0.12, 2.1), m["metal"], bevel=0.02)
-    B.add_box("blast_open", (0, -d / 2 + 0.1, z0 + 1.0), (1.15, 0.3, 1.9), m["dark"], bevel=0.0)
+    B.add_box("doorpanel", (0, -d / 2 - 0.02, z0 + 1.0), (1.15, 0.08, 1.9), m["metal"], bevel=0.02)
+    cut_doorway(m, ["body"], 0, -d / 2, 1.15, 1.9, z0 + 0.95, d / 2 + 0.3)
     B.add_box("hazard", (0, -d / 2 - 0.08, z0 + 2.2), (1.5, 0.06, 0.22), m["glow"], bevel=0.0)
     # transformer on a pad beside the kiosk, cable up the wall
     g = "pp_tx"

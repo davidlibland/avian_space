@@ -327,6 +327,8 @@ pub fn planet_type_to_biome(planet_type: &str) -> &'static str {
         "rocky" => "rocky",
         "desert" => "desert",
         "gas_giant" => "interior",
+        // Orbital stations: no terrain at all — corridors and plazas.
+        "station" => "interior",
         _ => "rocky", // fallback
     }
 }

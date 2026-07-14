@@ -472,7 +472,9 @@ pub(crate) fn setup_surface(
                 Transform::from_xyz(fc.x, fc.y, -9.0).with_scale(Vec3::splat(scale)),
             ));
         }
-        // Centre tile is the take-off interaction sensor.
+        // The WHOLE pad is the take-off sensor: standing anywhere on it,
+        // E means "launch" — it must outrank any chatty NPC loitering
+        // there (npc chat already defers to a nearby building).
         {
             let world_pos = tile_to_world(pad_cx, pad_cy, map_w, map_h, tile_px);
             commands.spawn((
@@ -482,7 +484,7 @@ pub(crate) fn setup_surface(
                 },
                 Sensor,
                 RigidBody::Static,
-                Collider::rectangle(tile_px, tile_px),
+                Collider::rectangle(tile_px * 3.0, tile_px * 3.0),
                 CollisionEventsEnabled,
                 CollisionLayers::new(
                     GameLayer::Surface,

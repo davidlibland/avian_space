@@ -345,7 +345,7 @@ kepler_22:
         electronics: 49
         robotics: 95
     kepler_22_station:
-      planet_type: rocky
+      planet_type: station
       faction: Federation
       location: [480.0, 310.0]
       description: "A Federation naval station. Weapons parts are stockpiled here; water comes at a premium."
@@ -414,7 +414,7 @@ epsilon_eridani:
   connections: [tau_ceti, tycho_drift, vega, kepler_22, the_marches]
   planets:
     eridani_station:
-      planet_type: habitable
+      planet_type: station
       tech_level: 2
       faction: Federation
       location: [0.0, 400.0]
@@ -528,7 +528,7 @@ barnard:
         food: 5
         electronics: 22
     barnard_station:
-      planet_type: rocky
+      planet_type: station
       tech_level: 3
       faction: Federation
       location: [100.0, 350.0]
@@ -557,7 +557,7 @@ alpha_centauri:
   connections: [sol, sirius, drift, the_foundry]
   planets:
     centauri_post:
-      planet_type: rocky
+      planet_type: station
       tech_level: 1
       location: [-350.0, -250.0]
       description: A customs post that outlived the treaty that built it. Federation and Rebel patrols glare at each other across its landing grid, and the bartender waters everyone's drinks equally.
@@ -588,7 +588,7 @@ drift:
   connections: [procyon, halcyon, barnard, alpha_centauri]
   planets:
     drift_station:
-      planet_type: rocky
+      planet_type: station
       tech_level: 1
       location: [500.0, -350.0]
       description: A remote relay station bolted onto a captured iron asteroid — no ground, no flag, one long habitation ring. Whoever holds the surrounding dark this month sets the docking fees, and everyone lies about their cargo.
@@ -736,7 +736,7 @@ rigel:
         gold: 66
         electronics: 19
     rigel_station:
-      planet_type: rocky
+      planet_type: station
       faction: Rebel
       location: [-80.0, 350.0]
       description: "A Rebel resupply depot near Rigel. Exotic matter is surplus; weapons parts sell high."
@@ -838,7 +838,7 @@ deneb:
         weapons_parts: 14
         robotics: 61
     deneb_station:
-      planet_type: rocky
+      planet_type: station
       faction: Rebel
       location: [420.0, 200.0]
       description: "A Rebel orbital shipyard. Advanced weapons and hulls are assembled here for the war effort."
@@ -870,7 +870,7 @@ halcyon:
   connections: [the_verge, ceres_freehold, drift]
   planets:
     halcyon_port:
-      planet_type: habitable
+      planet_type: station
       tech_level: 2
       faction: FreeFrontier
       location: [120.0, 80.0]
@@ -962,7 +962,7 @@ the_verge:
         robotics: 38
       outfitter: []
     verge_station:
-      planet_type: rocky
+      planet_type: station
       tech_level: 2
       faction: FreeFrontier
       location: [100.0, 80.0]
@@ -1125,7 +1125,7 @@ helios_prime:
         weapons_parts: 23
         robotics: 34
     helios_orbital:
-      planet_type: rocky
+      planet_type: station
       faction: Helios
       location: [-260.0, 160.0]
       description: "A Helios robotics works in tight orbit. Automated assembly lines stamp out drone frames around the clock."
@@ -1165,7 +1165,7 @@ the_foundry:
         electronics: 11
       outfitter: []
     foundry_station:
-      planet_type: rocky
+      planet_type: station
       tech_level: 1
       faction: Helios
       location: [80.0, 60.0]
@@ -1261,7 +1261,7 @@ bastion:
         uranium: 9
       shipyard: [fed_destroyer, fed_patrol]
     bastion_yard:
-      planet_type: rocky
+      planet_type: station
       faction: Bastion
       location: [-240.0, 180.0]
       description: "A Bastion orbital yard refitting old-generation Federation hulls into grimmer, heavier siege ships."
@@ -1596,7 +1596,7 @@ lowmark:
   display_name: "Lowmark"
   planets:
     lowmark_port:
-      planet_type: rocky
+      planet_type: station
       faction: FreeFrontier
       location: [120.0, 80.0]
       description: "A low-gravity free-port where the Reaches trade ore for everything the inner worlds won't sell them."
@@ -1696,7 +1696,7 @@ tycho_drift:
         uranium: 31
       outfitter: []
     drift_annex:
-      planet_type: cloud
+      planet_type: station
       faction: Helios
       location: [-180.0, -150.0]
       description: "A pressurised cloud-station annex where Helios crews bunk between shifts."
@@ -1989,7 +1989,7 @@ the_marches:
   connections: [kepler_22, iron_march, epsilon_eridani, coldforge]
   planets:
     marches_freeport:
-      planet_type: rocky
+      planet_type: station
       tech_level: 1
       location: [300.0, -200.0]
       description: A hollowed-out planetoid flying no flag, wedged in the no-man's-land between Federation and Bastion space. Both militaries watch it; neither one runs it. Everything is for sale, including silence.
