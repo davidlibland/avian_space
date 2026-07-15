@@ -577,16 +577,22 @@ pub fn render_bartender_rumors(
         let crate::missions::types::OfferKind::NpcOffer { building, npc, .. } = &def.offer else {
             continue;
         };
-        if building.as_deref() != Some("bar") {
-            continue;
-        }
         any = true;
         let who = npc
             .as_ref()
             .and_then(|key| iu.npcs.get(key))
             .map(|n| n.name.clone())
             .unwrap_or_else(|| "Someone".to_string());
-        ui.label(format!("“{who} at the tables is looking for a pilot.”"));
+        // Bartenders hear everything: they point at the whole port's
+        // givers, not just their own tables.
+        match building.as_deref() {
+            Some("bar") | None => {
+                ui.label(format!("“{who} at the tables is looking for a pilot.”"));
+            }
+            Some(b) => {
+                ui.label(format!("“Word is {who} over at the {b} has work going.”"));
+            }
+        }
     }
     if !hire_pool(iu, planet_name, fallen).is_empty() {
         any = true;

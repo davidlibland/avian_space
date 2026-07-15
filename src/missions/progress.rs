@@ -892,8 +892,8 @@ pub fn roll_offers_on_land(
         // meet you), not the whole world. Objective NPCs (meet/catch
         // targets) are spawned from ACTIVE missions elsewhere and are
         // never capped here.
-        const OFFERS_PER_BUILDING: usize = 2;
-        const MAX_SEEKERS: usize = 1;
+        const OFFERS_PER_BUILDING: usize = 3;
+        const MAX_SEEKERS: usize = 2;
         rolled_npc.shuffle(&mut rng);
         let mut per_building: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();

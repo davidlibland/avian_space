@@ -387,6 +387,7 @@ pub fn surface_plugin(app: &mut App) {
                 building_interact,
                 update_interact_prompt,
                 spawn_mission_npcs,
+                npcs::update_building_offer_markers,
             )
                 .run_if(in_state(PlayState::Exploring)),
         )

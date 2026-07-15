@@ -459,3 +459,70 @@ pub(crate) fn building_kind_from_name(name: &str) -> Option<BuildingKind> {
     .into_iter()
     .find(|k| format!("{k:?}").to_lowercase() == name)
 }
+
+/// A "!" hovering over a building that has a mission giver waiting
+/// INSIDE — without it, indoor offers are invisible from the street.
+#[derive(Component)]
+pub(crate) struct BuildingOfferMarker(pub BuildingKind);
+
+/// Keep exterior offer markers in sync with the current offers: one gold
+/// "!" over each building whose interior holds at least one waiting giver.
+pub(crate) fn update_building_offer_markers(
+    mut commands: Commands,
+    offers: Res<crate::missions::MissionOffers>,
+    catalog: Res<crate::missions::MissionCatalog>,
+    log: Res<crate::missions::MissionLog>,
+    landed: Res<crate::planet_ui::LandedContext>,
+    buildings: Query<(&Transform, &super::Building)>,
+    markers: Query<(Entity, &BuildingOfferMarker)>,
+) {
+    let planet = landed.planet_name.clone().unwrap_or_default();
+    // Which building kinds currently have an AVAILABLE indoor giver?
+    let mut hot: std::collections::HashSet<BuildingKind> = Default::default();
+    for id in offers.npc.get(&planet).cloned().unwrap_or_default() {
+        if !matches!(log.status(&id), crate::missions::MissionStatus::Available) {
+            continue;
+        }
+        let Some(def) = catalog.defs.get(&id) else {
+            continue;
+        };
+        let crate::missions::types::OfferKind::NpcOffer { building, .. } = &def.offer else {
+            continue;
+        };
+        if let Some(kind) = building.as_deref().and_then(building_kind_from_name)
+            && crate::surface::interiors::has_interior(kind)
+        {
+            hot.insert(kind);
+        }
+    }
+    let marked: std::collections::HashSet<BuildingKind> =
+        markers.iter().map(|(_, m)| m.0).collect();
+    // Remove stale markers (offer accepted / expired).
+    for (entity, marker) in &markers {
+        if !hot.contains(&marker.0) {
+            commands.entity(entity).despawn();
+        }
+    }
+    // Add missing ones over the building's door sensor.
+    for kind in hot.difference(&marked) {
+        let Some((tf, _)) = buildings.iter().find(|(_, b)| b.kind == *kind) else {
+            continue;
+        };
+        commands.spawn((
+            DespawnOnExit(PlayState::Exploring),
+            BuildingOfferMarker(*kind),
+            Text2d::new("!"),
+            TextFont {
+                font_size: 26.0,
+                ..Default::default()
+            },
+            TextColor(Color::srgb(1.0, 0.85, 0.2)),
+            Transform::from_xyz(
+                tf.translation.x,
+                tf.translation.y + crate::surface::TILE_PX * 1.9,
+                6.0,
+            )
+            .with_scale(Vec3::splat(0.8)),
+        ));
+    }
+}
