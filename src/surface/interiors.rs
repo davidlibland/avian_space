@@ -100,11 +100,17 @@ pub struct CaptivesInTow {
 }
 
 /// Record catches as captives (the mission completes and pays on the
-/// catch, exactly as before — the tow is the walk afterwards).
+/// catch, exactly as before — the tow is the walk afterwards). The CAUGHT
+/// entity is converted into the captive avatar IN PLACE — it already
+/// follows the player post-catch, and spawning a second body next to it
+/// was the duplicate-prisoner bug.
 pub(crate) fn record_captives(
+    mut commands: Commands,
     mut caught: MessageReader<crate::missions::NpcCaught>,
     catalog: Res<crate::missions::MissionCatalog>,
     mut tow: ResMut<CaptivesInTow>,
+    npcs: Query<(Entity, &crate::surface_npc::MissionNpc)>,
+    markers: Query<(Entity, &ChildOf), With<crate::surface_npc::NpcMarker>>,
     mut comms: ResMut<crate::hud::CommsChannel>,
 ) {
     for ev in caught.read() {
@@ -118,6 +124,23 @@ pub(crate) fn record_captives(
             continue;
         };
         tow.captives.push((ev.mission_id.clone(), npc.clone()));
+        // Convert the caught body: it keeps following, gains the captive
+        // key (so the maintainer never spawns a twin), and loses the
+        // mission tag and the red ! marker.
+        for (entity, mn) in &npcs {
+            if mn.0 != ev.mission_id {
+                continue;
+            }
+            commands
+                .entity(entity)
+                .insert(crate::surface_npc::CompanionAvatar(ev.mission_id.clone()))
+                .remove::<crate::surface_npc::MissionNpc>();
+            for (marker, child_of) in &markers {
+                if child_of.parent() == entity {
+                    commands.entity(marker).despawn();
+                }
+            }
+        }
         comms.send("Prisoner secured — they'll follow you. A garrison will take them.");
     }
 }

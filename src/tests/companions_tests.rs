@@ -514,3 +514,75 @@ mod fugitive_identity {
         assert_ne!(a1, b, "different missions, different strangers");
     }
 }
+
+#[cfg(test)]
+mod captive_conversion {
+    use bevy::prelude::*;
+
+    /// Catching a target converts the caught BODY into the captive (gains
+    /// the CompanionAvatar key, loses the mission tag) — the maintainer
+    /// keys on that, so no duplicate prisoner can spawn beside it.
+    #[test]
+    fn caught_npc_converts_in_place_no_twin() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<crate::missions::MissionCatalog>()
+            .init_resource::<crate::surface::interiors::CaptivesInTow>()
+            .init_resource::<crate::hud::CommsChannel>()
+            .add_message::<crate::missions::NpcCaught>()
+            .add_systems(Update, crate::surface::interiors::record_captives);
+
+        // A catch mission in the catalog...
+        let def = crate::missions::MissionDef {
+            briefing: String::new(),
+            success_text: String::new(),
+            failure_text: String::new(),
+            preconditions: Vec::new(),
+            offer: crate::missions::types::OfferKind::Auto,
+            start_effects: Vec::new(),
+            objective: crate::missions::Objective::CatchNpc {
+                planet: "triton".into(),
+                npc_name: "the pirate".into(),
+                building: Some("bar".into()),
+                hint: None,
+                npc: None,
+            },
+            requires: Vec::new(),
+            completion_effects: Vec::new(),
+            squadron: Vec::new(),
+            faction: None,
+        };
+        app.world_mut()
+            .resource_mut::<crate::missions::MissionCatalog>()
+            .defs
+            .insert("m_catch".into(), def);
+
+        // ...and its caught body in the world.
+        let body = app
+            .world_mut()
+            .spawn(crate::surface_npc::MissionNpc("m_catch".into()))
+            .id();
+
+        app.world_mut().write_message(crate::missions::NpcCaught {
+            planet: "triton".into(),
+            mission_id: "m_catch".into(),
+        });
+        app.update();
+        app.update(); // a second frame must not double-record either
+
+        let tow = app
+            .world()
+            .resource::<crate::surface::interiors::CaptivesInTow>();
+        assert_eq!(tow.captives.len(), 1, "recorded once");
+        let e = app.world().entity(body);
+        assert!(
+            e.get::<crate::surface_npc::CompanionAvatar>()
+                .is_some_and(|c| c.0 == "m_catch"),
+            "the caught body IS the captive"
+        );
+        assert!(
+            e.get::<crate::surface_npc::MissionNpc>().is_none(),
+            "mission tag removed"
+        );
+    }
+}
