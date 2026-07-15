@@ -2672,8 +2672,10 @@ mod tests {
         }
     }
 
-    /// The garrison has a holding cell: barred nook present, bars solid,
-    /// and the cell tile reachable from the entry (captives march in).
+    /// The garrison holding cell: three bars panels (west flank, corner,
+    /// and the back panel behind the gate), a walkable animated gate as
+    /// the only way in, its frames on disk, and the cell tile flush
+    /// against the back wall — reachable from the entry THROUGH the gate.
     #[test]
     fn the_garrison_holding_cell_works() {
         let iu = iu();
@@ -2684,15 +2686,32 @@ mod tests {
             .iter()
             .filter(|&&(n, _)| n == "jail_bars")
             .collect();
-        assert_eq!(bars.len(), 2, "a barred cell front");
-        let (_, _, blocks) = prop_meta("jail_bars");
-        assert!(blocks, "bars must block");
-        let cell = (x0 + rw - 2, y0 + rh - 1);
-        let cm = cost_map_of(&plan);
+        assert_eq!(bars.len(), 3, "west flank, corner, and the back panel");
+        assert!(prop_meta("jail_bars").2, "bars must block");
+        assert!(!prop_meta("jail_gate").2, "the gate is the doorway");
         assert!(
-            cm.find_path(plan.entry, cell).is_some(),
-            "the cell must be reachable"
+            plan.props
+                .iter()
+                .any(|&(n, t)| n == "jail_bars" && t == (x0 + rw - 2, y0 + rh)),
+            "the back panel stands directly behind the gate"
         );
+        assert!(
+            plan.props
+                .iter()
+                .any(|&(n, t)| n == "jail_gate" && t == (x0 + rw - 2, y0 + rh - 2)),
+            "the gate guards the cell's south face"
+        );
+        let cell = (x0 + rw - 2, y0 + rh - 1);
+        let gate = (x0 + rw - 2, y0 + rh - 2);
+        let cm = cost_map_of(&plan);
+        let path = cm
+            .find_path(plan.entry, cell)
+            .expect("the cell must be reachable");
+        assert!(path.contains(&gate), "the only way in is through the gate");
+        for k in 0..4 {
+            let p = format!("assets/sprites/worlds/interior_props/jail_gate{k}.png");
+            assert!(std::path::Path::new(&p).exists(), "{p} missing");
+        }
     }
 
     /// Nobody strolls PAST the exit door: the apron tiles south of it are
