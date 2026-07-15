@@ -637,3 +637,45 @@ mod write_probe {
         std::fs::remove_file("pilots/Save Probe.yaml").ok();
     }
 }
+
+#[cfg(test)]
+mod live_save_probe {
+    use bevy::prelude::*;
+    use bevy::state::app::StatesPlugin;
+
+    /// Drive the REAL save triggers through real state transitions and
+    /// assert bytes hit the disk — reproducing the playtest's "nothing
+    /// ever saves" if the wiring is broken.
+    #[test]
+    fn state_transitions_write_the_pilot_file() {
+        let path = std::path::Path::new("pilots/Live Probe.yaml");
+        std::fs::remove_file(path).ok();
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.init_state::<crate::PlayState>();
+        app.init_resource::<crate::session::SessionSaveData>();
+        app.insert_resource(crate::game_save::PlayerGameState {
+            pilot_name: "Live Probe".into(),
+            ..Default::default()
+        });
+        // The exact registrations the game uses for the on-foot saves.
+        app.add_systems(
+            OnEnter(crate::PlayState::Exploring),
+            crate::surface::save_on_explore_for_tests,
+        );
+
+        app.update();
+        app.world_mut()
+            .resource_mut::<NextState<crate::PlayState>>()
+            .set(crate::PlayState::Exploring);
+        app.update();
+        app.update();
+
+        assert!(
+            path.exists(),
+            "entering Exploring must write the pilot file"
+        );
+        std::fs::remove_file(path).ok();
+    }
+}
