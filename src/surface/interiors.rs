@@ -84,13 +84,16 @@ pub(crate) fn animate_jail_gate(
     mut commands: Commands,
     time: Res<Time>,
     marchers: Query<(&Transform, &MazeFugitive)>,
+    walker: Query<&Transform, With<Walker>>,
     mut gates: Query<(Entity, &mut JailGate, &mut Sprite, Has<Collider>)>,
 ) {
     for (entity, mut gate, mut sprite, has_collider) in &mut gates {
         let approaching = marchers.iter().any(|(tf, fug)| {
             matches!(fug.next, FugitiveNext::Jailed)
                 && (tf.translation.truncate() - gate.pos).length() < TILE_PX * 2.2
-        });
+        }) || walker
+            .single()
+            .is_ok_and(|tf| (tf.translation.truncate() - gate.pos).length() < TILE_PX * 1.8);
         let target = if approaching { 1.0 } else { 0.0 };
         let step = time.delta_secs() * 4.0;
         gate.openness += (target - gate.openness).clamp(-step, step);
@@ -796,6 +799,9 @@ pub(crate) fn build_plan(
             // marching prisoner (a collider seals it while closed).
             props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 1)));
             props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 2)));
+            // The cell's own back bars, standing against the room wall
+            // directly behind the gate.
+            props.push(("jail_bars", (x0 + rw - 2, y0 + rh)));
             props.push(("jail_gate", (x0 + rw - 2, y0 + rh - 2)));
         }
         BuildingKind::Outfitter | BuildingKind::Shipyard => {
