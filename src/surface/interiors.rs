@@ -812,11 +812,24 @@ pub(crate) fn build_plan(
 
     // Furniture solidity → the solid mask (kept out of doorways by layout).
     let mut solid = vec![false; (map_w * map_h) as usize];
-    // Nothing walks PAST the exit door: the apron strip south of it is
-    // sealed (the rings there are walkable plating/grate otherwise).
-    for y in door.1.saturating_sub(2)..door.1 {
-        for x in door.0.saturating_sub(1)..=(door.0 + 1).min(map_w - 1) {
-            solid[(y * map_w + x) as usize] = true;
+    // Seal the APRON: the ±1 tier rings around the room are plating/grate
+    // — walkable tiers — so without this the player could step out of the
+    // room ANYWHERE along its perimeter, stroll the ring, and re-enter
+    // (the playtest walked into the garrison jail from behind this way).
+    // Only the designed floor — the room and its entrance corridor — is
+    // walkable.
+    let in_room = |x: u32, y: u32| x >= x0 && x < x0 + rw && y >= y0 && y < y0 + rh;
+    let in_corridor = |x: u32, y: u32| {
+        x >= corridor.0
+            && x < corridor.0 + corridor.2
+            && y >= corridor.1
+            && y < corridor.1 + corridor.3
+    };
+    for y in 0..map_h {
+        for x in 0..map_w {
+            if !in_room(x, y) && !in_corridor(x, y) && terrain[(y * map_w + x) as usize] < T_WALL {
+                solid[(y * map_w + x) as usize] = true;
+            }
         }
     }
     for &(name, (px, py)) in &props {
@@ -874,6 +887,7 @@ fn maze_plan(kind: BuildingKind, planet: &str, level: u8) -> InteriorPlan {
     let level = level.min(levels - 1);
     let mut lv = super::mazes::build_maze_level(kind, seed, level);
     let terrain = super::mazes::terrain_from_floor(&lv.floor);
+    super::mazes::seal_apron(&mut lv.solid, &lv.floor, &terrain);
     if let Some((sx, sy)) = lv.stairs_down {
         lv.props.push(("stairs_down", (sx, sy)));
     }
@@ -2720,6 +2734,35 @@ mod tests {
         for k in 0..4 {
             let p = format!("assets/sprites/worlds/interior_props/jail_gate{k}.png");
             assert!(std::path::Path::new(&p).exists(), "{p} missing");
+        }
+    }
+
+    /// THE apron exploit (how the playtest really got into the jail): the
+    /// plating/grate rings around every room are walkable TIERS, so they
+    /// must be sealed — from inside a shop, every tile you can reach is
+    /// designed floor (room or entrance corridor), never the ring.
+    #[test]
+    fn the_apron_ring_is_never_reachable() {
+        let iu = iu();
+        for (kind, planet) in [
+            (BuildingKind::Garrison, "earth"),
+            (BuildingKind::Bar, "earth"),
+            (BuildingKind::Mine, "mars"),
+            (BuildingKind::Warehouse, "procyon_prime"),
+        ] {
+            let plan = build_plan(kind, &iu, planet, 0, &un());
+            let cm = cost_map_of(&plan);
+            let (x0, y0, rw, rh) = plan.room;
+            // A tile just OUTSIDE the room's north-east corner (the jail
+            // walk-around) must be unreachable from the entry.
+            let outside = (
+                (x0 + rw).min(WORLD_WIDTH - 1),
+                (y0 + rh).min(WORLD_HEIGHT - 1),
+            );
+            assert!(
+                cm.find_path(plan.entry, outside).is_none(),
+                "{kind:?}@{planet}: the apron at {outside:?} is reachable — sealed no more"
+            );
         }
     }
 

@@ -165,12 +165,13 @@ fn carve_entrance(floor: &mut [bool]) -> ((u32, u32), (u32, u32)) {
     ((sx, door_y), (sx, sy)) // (door, entry just inside)
 }
 
-/// Seal the apron strip south of the exit door so nobody strolls PAST it
-/// onto the walkable ring tiles.
-fn seal_below_door(solid: &mut [bool], door: (u32, u32)) {
-    for y in door.1.saturating_sub(2)..door.1 {
-        for x in door.0.saturating_sub(1)..=(door.0 + 2).min(W - 1) {
-            solid[idx(x, y)] = true;
+/// Seal every walkable-tier tile that is NOT designed floor: the ±1 tier
+/// rings around tunnels and halls are plating — walkable — so without
+/// this the apron is a secret corridor along every wall.
+pub(crate) fn seal_apron(solid: &mut [bool], floor: &[bool], terrain: &[u32]) {
+    for i in 0..solid.len() {
+        if !floor[i] && terrain[i] < 2 {
+            solid[i] = true;
         }
     }
 }
@@ -285,10 +286,9 @@ fn mine_level(rng: &mut StdRng, level: u8, n_levels: u8) -> MazeLevel {
         carve(&mut floor, x, y, PITCH + CW, PITCH + CW);
     }
 
-    let mut solid = vec![false; (W * H) as usize];
+    let solid = vec![false; (W * H) as usize];
     let (door, entry) = if level == 0 {
         let (d, e) = carve_entrance(&mut floor);
-        seal_below_door(&mut solid, d);
         (Some(d), e)
     } else {
         // Arrive at the up-shaft: a fixed corner cell.
@@ -388,7 +388,6 @@ fn warehouse_level(rng: &mut StdRng) -> MazeLevel {
     }
 
     let (door, entry) = carve_entrance(&mut floor);
-    seal_below_door(&mut solid, door);
     let hunt_spot = farthest_from(&floor, &solid, entry);
     // Aisle clutter: pallets, drums, and the odd burst crate.
     let reserved = vec![entry, hunt_spot];
@@ -484,10 +483,9 @@ fn substation_level(rng: &mut StdRng, level: u8, n_levels: u8) -> MazeLevel {
         }
     }
 
-    let mut solid = vec![false; (W * H) as usize];
+    let solid = vec![false; (W * H) as usize];
     let (door, entry) = if level == 0 {
         let (d, e) = carve_entrance(&mut floor);
-        seal_below_door(&mut solid, d);
         (Some(d), e)
     } else {
         (None, rooms[0])
