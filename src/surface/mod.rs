@@ -17,7 +17,9 @@ use crate::PlayState;
 /// Player walking speed (below the run-animation threshold, 80).
 const WALK_SPEED: f32 = 70.0;
 /// Player speed while holding Shift (plays the run cycle).
-const RUN_SPEED: f32 = 120.0;
+// Shift-run: quick enough to cross the colony (and run down fleeing
+// targets) without trivialising the maze chases.
+const RUN_SPEED: f32 = 165.0;
 const WALKER_RADIUS: f32 = 6.0;
 const WALKER_DAMPING: f32 = 10.0;
 

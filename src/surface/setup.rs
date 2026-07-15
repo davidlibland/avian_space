@@ -247,7 +247,7 @@ pub(crate) fn setup_surface(
             let (bw, bh) = tmpl.map(|t| (t.width, t.height)).unwrap_or((2, 2));
             let spacing = min_building_spacing.max(bw.max(bh) + 2);
 
-            let pos = walkable_positions.iter().find(|&&(x, y)| {
+            let valid = |x: u32, y: u32| {
                 if x + bw >= map_w || y + bh >= map_h || x < 1 || y < 1 {
                     return false;
                 }
@@ -269,7 +269,22 @@ pub(crate) fn setup_surface(
                     let dy = (y as i32 - py as i32).unsigned_abs();
                     dx + dy >= spacing
                 })
-            });
+            };
+            // The BAR anchors the port's social life (offers, hires,
+            // rumors): of all valid spots, it takes the one nearest the
+            // pad so a fresh landing is a short walk from the action.
+            let pos = if *kind == BuildingKind::Bar {
+                walkable_positions
+                    .iter()
+                    .filter(|&&(x, y)| valid(x, y))
+                    .min_by_key(|&&(x, y)| {
+                        let cx = x as i64 + bw as i64 / 2 - pad_cx as i64;
+                        let cy = y as i64 + bh as i64 / 2 - pad_cy as i64;
+                        cx * cx + cy * cy
+                    })
+            } else {
+                walkable_positions.iter().find(|&&(x, y)| valid(x, y))
+            };
 
             if let Some(&(tx, ty)) = pos {
                 placed_buildings.push((tx, ty, bw, bh));
