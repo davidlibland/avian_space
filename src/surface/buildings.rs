@@ -285,17 +285,20 @@ pub(crate) struct BuildingDoor {
 pub(crate) fn animate_building_doors(
     time: Res<Time>,
     walker: Query<&Transform, With<Walker>>,
+    npcs: Query<&Transform, (With<crate::surface_npc::Npc>, Without<Walker>)>,
     mut doors: Query<(&mut BuildingDoor, &mut Sprite)>,
 ) {
     let Ok(player) = walker.single() else { return };
     let pp = player.translation.truncate();
     const OPEN_RADIUS: f32 = TILE_PX * 2.5;
     for (mut door, mut sprite) in &mut doors {
-        let target = if door.door_pos.distance(pp) < OPEN_RADIUS {
-            1.0
-        } else {
-            0.0
-        };
+        // Doors open for ANYONE at the threshold — the player or an NPC
+        // heading in/out (fugitives bolting inside, companions trailing).
+        let someone_near = door.door_pos.distance(pp) < OPEN_RADIUS
+            || npcs
+                .iter()
+                .any(|t| door.door_pos.distance(t.translation.truncate()) < OPEN_RADIUS);
+        let target = if someone_near { 1.0 } else { 0.0 };
         let step = time.delta_secs() * 5.0;
         door.openness += (target - door.openness).clamp(-step, step);
         door.openness = door.openness.clamp(0.0, 1.0);

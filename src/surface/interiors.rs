@@ -77,13 +77,16 @@ pub(crate) struct JailGate {
 }
 
 /// Drive the cell gate from the PRISONER's position (not the player's):
-/// open while a jail-bound fugitive is at the threshold, shut otherwise.
+/// open while a jail-bound fugitive is at the threshold, shut otherwise —
+/// and while shut, the gate is a real WALL (collider), so the player
+/// can't stroll through the bars.
 pub(crate) fn animate_jail_gate(
+    mut commands: Commands,
     time: Res<Time>,
     marchers: Query<(&Transform, &MazeFugitive)>,
-    mut gates: Query<(&mut JailGate, &mut Sprite)>,
+    mut gates: Query<(Entity, &mut JailGate, &mut Sprite, Has<Collider>)>,
 ) {
-    for (mut gate, mut sprite) in &mut gates {
+    for (entity, mut gate, mut sprite, has_collider) in &mut gates {
         let approaching = marchers.iter().any(|(tf, fug)| {
             matches!(fug.next, FugitiveNext::Jailed)
                 && (tf.translation.truncate() - gate.pos).length() < TILE_PX * 2.2
@@ -92,6 +95,22 @@ pub(crate) fn animate_jail_gate(
         let step = time.delta_secs() * 4.0;
         gate.openness += (target - gate.openness).clamp(-step, step);
         gate.openness = gate.openness.clamp(0.0, 1.0);
+        // Solid while mostly shut, passable while mostly open.
+        let solid = gate.openness < 0.5;
+        if solid && !has_collider {
+            commands.entity(entity).insert((
+                RigidBody::Static,
+                Collider::rectangle(TILE_PX, TILE_PX),
+                CollisionLayers::new(
+                    crate::GameLayer::Surface,
+                    [crate::GameLayer::Surface, crate::GameLayer::Character],
+                ),
+            ));
+        } else if !solid && has_collider {
+            commands
+                .entity(entity)
+                .remove::<(RigidBody, Collider, CollisionLayers)>();
+        }
         let n = gate.frames.len();
         if n == 0 {
             continue;
@@ -262,7 +281,7 @@ pub(crate) fn deliver_captives_to_garrison(
     let planet = landed.planet_name.clone().unwrap_or_default();
     let plan = build_plan(BuildingKind::Garrison, &iu, &planet, 0, &unlocks);
     let (x0, y0, rw, rh) = plan.room;
-    let cell = (x0 + rw - 2, y0 + rh - 2);
+    let cell = (x0 + rw - 2, y0 + rh - 1);
     for (entity, avatar) in &avatars {
         let is_captive = tow.captives.iter().any(|(id, _)| *id == avatar.0);
         if !is_captive || marching.contains(entity) {
@@ -770,12 +789,14 @@ pub(crate) fn build_plan(
             props.push(("war_desk", (counter.0 - 1, counter.1)));
             props.push(("flag_stand", (counter.0 - 3, counter.1)));
             props.push(("flag_stand", (counter.0 + 2, counter.1)));
-            // The holding cell: the back-east corner, walled by the room
-            // on two sides, bars on the west flank and the corner, and an
-            // ANIMATED gate on the cell's south face — the only way in.
+            // The holding cell: flush against the room's back and east
+            // walls (no gap row — the room wall IS the cell's back wall),
+            // bars on the west flank and corner, and an ANIMATED gate on
+            // the south face — the only way in, and it only opens for a
+            // marching prisoner (a collider seals it while closed).
+            props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 1)));
             props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 2)));
-            props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 3)));
-            props.push(("jail_gate", (x0 + rw - 2, y0 + rh - 3)));
+            props.push(("jail_gate", (x0 + rw - 2, y0 + rh - 2)));
         }
         BuildingKind::Outfitter | BuildingKind::Shipyard => {
             props.push(("shelf_rack", (counter.0 - 1, counter.1)));
@@ -2660,7 +2681,7 @@ mod tests {
         assert_eq!(bars.len(), 2, "a barred cell front");
         let (_, _, blocks) = prop_meta("jail_bars");
         assert!(blocks, "bars must block");
-        let cell = (x0 + rw - 2, y0 + rh - 2);
+        let cell = (x0 + rw - 2, y0 + rh - 1);
         let cm = cost_map_of(&plan);
         assert!(
             cm.find_path(plan.entry, cell).is_some(),
