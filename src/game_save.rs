@@ -349,10 +349,23 @@ pub fn game_save_plugin(app: &mut App) {
         )
         .add_systems(
             OnEnter(PlayState::Flying),
-            // consume_pending_load runs last so session resources can read it.
-            (spawn_player_on_enter_flying, consume_pending_load).chain(),
+            // consume_pending_load must run AFTER every load_session_data
+            // (they were unordered — a lost race meant resources hydrating
+            // from an already-removed pending load).
+            (
+                spawn_player_on_enter_flying,
+                consume_pending_load.after(crate::session::SessionLoadSet),
+            )
+                .chain(),
         )
-        .add_systems(OnEnter(PlayState::MainMenu), cleanup_on_enter_menu)
+        // Save BEFORE the menu wipes the session — this is the safety net
+        // for every route to the menu (from space, from inside a building,
+        // from anywhere): without it, progress since the last surface
+        // transition silently vanished.
+        .add_systems(
+            OnEnter(PlayState::MainMenu),
+            (save_pilot, cleanup_on_enter_menu).chain(),
+        )
         // Save when landing/taking off
         .add_systems(OnEnter(PlayState::Landed), save_pilot)
         .add_systems(OnExit(PlayState::Landed), save_pilot);

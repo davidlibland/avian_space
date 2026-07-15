@@ -603,3 +603,37 @@ fn test_inference_net_batched() {
     assert_eq!(nav_target_logits.len(), batch_size * TARGET_OUTPUT_DIM);
     assert_eq!(wep_target_logits.len(), batch_size * TARGET_OUTPUT_DIM);
 }
+#[cfg(test)]
+mod save_probe {
+    #[test]
+    fn maze_hunter_round_trips() {
+        let txt = std::fs::read_to_string("pilots/Maze Hunter.yaml").unwrap();
+        let save: crate::game_save::PilotSave = serde_yaml::from_str(&txt).expect("load");
+        let out = serde_yaml::to_string(&save).expect("re-serialize");
+        let _: crate::game_save::PilotSave = serde_yaml::from_str(&out).expect("re-load");
+        println!("round trip ok, {} bytes", out.len());
+    }
+}
+
+#[cfg(test)]
+mod write_probe {
+    #[test]
+    fn write_save_actually_writes() {
+        let txt = std::fs::read_to_string("pilots/Maze Hunter.yaml").unwrap();
+        let mut save: crate::game_save::PilotSave = serde_yaml::from_str(&txt).unwrap();
+        save.pilot_name = "Save Probe".into();
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        let gs = crate::game_save::PlayerGameState::from_save(&save, &iu);
+        let mut session = crate::session::SessionSaveData::default();
+        session.resources.insert(
+            "mission_statuses".into(),
+            serde_yaml::to_value(&save.resources["mission_statuses"]).unwrap(),
+        );
+        crate::game_save::write_save(&gs, &session);
+        let written = std::fs::read_to_string("pilots/Save Probe.yaml").expect("file written");
+        assert!(written.contains("mission_statuses"));
+        std::fs::remove_file("pilots/Save Probe.yaml").ok();
+    }
+}

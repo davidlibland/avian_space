@@ -102,6 +102,11 @@ fn load_session_data<R: SessionResource>(
     }
 }
 
+/// All `load_session_data::<R>` hydrators run in this set on entering
+/// Flying; the pending-load consumer is ordered after it.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SessionLoadSet;
+
 // ── App extension ────────────────────────────────────────────────────────────
 
 pub trait SessionResourceExt {
@@ -125,7 +130,10 @@ impl SessionResourceExt for App {
         self.add_systems(OnEnter(PlayState::MainMenu), reset_resource::<R>);
 
         // Restore from save when entering Flying (after pilot selection).
-        self.add_systems(OnEnter(PlayState::Flying), load_session_data::<R>);
+        self.add_systems(
+            OnEnter(PlayState::Flying),
+            load_session_data::<R>.in_set(SessionLoadSet),
+        );
 
         if R::SAVE_KEY.is_some() {
             // Keep save buffer up-to-date.
