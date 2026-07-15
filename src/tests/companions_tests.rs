@@ -526,17 +526,40 @@ mod captive_conversion {
     use bevy::prelude::*;
 
     /// Catching a target converts the caught BODY into the captive (gains
-    /// the CompanionAvatar key, loses the mission tag) — the maintainer
-    /// keys on that, so no duplicate prisoner can spawn beside it.
+    /// the CompanionAvatar key, loses the mission tag) — and because the
+    /// convert and respawn phases live in ONE system sharing one presence
+    /// set, no duplicate prisoner can spawn beside it, not even in the
+    /// conversion frame (the exact race the playtest caught twice).
     #[test]
     fn caught_npc_converts_in_place_no_twin() {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins)
-            .init_resource::<crate::missions::MissionCatalog>()
+            .add_plugins(bevy::state::app::StatesPlugin);
+        app.init_state::<crate::PlayState>();
+        app.init_resource::<crate::missions::MissionCatalog>()
             .init_resource::<crate::surface::interiors::CaptivesInTow>()
             .init_resource::<crate::hud::CommsChannel>()
+            .init_resource::<bevy::asset::Assets<bevy::image::Image>>()
+            .insert_resource({
+                let mut iu: crate::item_universe::ItemUniverse =
+                    crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+                iu.finalize();
+                iu
+            })
+            .insert_resource(crate::surface_pathfinding::SurfaceCostMap {
+                data: vec![1.0; 64 * 64],
+                width: 64,
+                height: 64,
+            })
             .add_message::<crate::missions::NpcCaught>()
-            .add_systems(Update, crate::surface::interiors::record_captives);
+            .add_systems(Update, crate::surface::interiors::manage_captives);
+        if let Some(layers) = crate::character_compositor::CharacterLayers::load_for_tests() {
+            // With layers + cost map + walker present, phase 2 is LIVE:
+            // it reaches the presence check every frame, so a conversion
+            // that failed to count as "present" would spawn the twin here
+            // — the exact race the playtest caught twice.
+            app.insert_resource(layers);
+        }
 
         // A catch mission in the catalog...
         let def = crate::missions::MissionDef {
@@ -563,11 +586,13 @@ mod captive_conversion {
             .defs
             .insert("m_catch".into(), def);
 
-        // ...and its caught body in the world.
+        // ...its caught body in the world, and the player walker.
         let body = app
             .world_mut()
             .spawn(crate::surface_npc::MissionNpc("m_catch".into()))
             .id();
+        app.world_mut()
+            .spawn((crate::surface::Walker, Transform::from_xyz(0.0, 0.0, 0.0)));
 
         app.world_mut().write_message(crate::missions::NpcCaught {
             planet: "triton".into(),
@@ -589,6 +614,14 @@ mod captive_conversion {
         assert!(
             e.get::<crate::surface_npc::MissionNpc>().is_none(),
             "mission tag removed"
+        );
+        let mut q = app
+            .world_mut()
+            .query::<&crate::surface_npc::CompanionAvatar>();
+        assert_eq!(
+            q.iter(app.world()).count(),
+            1,
+            "exactly one captive body — no twin"
         );
     }
 }

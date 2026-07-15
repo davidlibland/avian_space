@@ -135,20 +135,38 @@ pub struct CaptivesInTow {
     pub captives: Vec<(String, Option<String>)>,
 }
 
-/// Record catches as captives (the mission completes and pays on the
-/// catch, exactly as before — the tow is the walk afterwards). The CAUGHT
-/// entity is converted into the captive avatar IN PLACE — it already
-/// follows the player post-catch, and spawning a second body next to it
-/// was the duplicate-prisoner bug.
-pub(crate) fn record_captives(
+/// The captive lifecycle, in ONE system so there is no frame where the
+/// ledger and the world disagree (the old split — record in one system,
+/// maintain avatars in another — raced: the maintainer couldn't see the
+/// just-converted body through deferred commands and spawned a twin).
+///
+/// Phase 1: catches convert the caught BODY into the captive in place
+/// (it already follows the player; it gains the avatar key, loses the
+/// mission tag and marker). Phase 2: any ledgered captive with no body in
+/// the current scene (level change, surface return) is respawned beside
+/// the player. Both phases share one `present` set, so a conversion this
+/// frame can never be double-spawned this frame.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn manage_captives(
     mut commands: Commands,
+    state: Res<State<PlayState>>,
     mut caught: MessageReader<crate::missions::NpcCaught>,
     catalog: Res<crate::missions::MissionCatalog>,
     mut tow: ResMut<CaptivesInTow>,
+    iu: Res<ItemUniverse>,
     npcs: Query<(Entity, &crate::surface_npc::MissionNpc)>,
     markers: Query<(Entity, &ChildOf), With<crate::surface_npc::NpcMarker>>,
+    existing: Query<&crate::surface_npc::CompanionAvatar>,
+    walker: Query<&Transform, With<Walker>>,
+    cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
+    layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
+    mut images: ResMut<Assets<Image>>,
     mut comms: ResMut<crate::hud::CommsChannel>,
 ) {
+    let mut present: std::collections::HashSet<String> =
+        existing.iter().map(|c| c.0.clone()).collect();
+
+    // ── Phase 1: convert fresh catches in place ──
     for ev in caught.read() {
         if tow.captives.iter().any(|(id, _)| *id == ev.mission_id) {
             continue;
@@ -160,9 +178,6 @@ pub(crate) fn record_captives(
             continue;
         };
         tow.captives.push((ev.mission_id.clone(), npc.clone()));
-        // Convert the caught body: it keeps following, gains the captive
-        // key (so the maintainer never spawns a twin), and loses the
-        // mission tag and the red ! marker.
         for (entity, mn) in &npcs {
             if mn.0 != ev.mission_id {
                 continue;
@@ -176,39 +191,26 @@ pub(crate) fn record_captives(
                     commands.entity(marker).despawn();
                 }
             }
+            // The converted body counts as present RIGHT NOW — this is
+            // the line that kills the twin.
+            present.insert(ev.mission_id.clone());
         }
         comms.send("Prisoner secured — they'll follow you. A garrison will take them.");
     }
-}
 
-/// Keep every captive walking behind the player, in whichever scene the
-/// player is in (levels, surface). Idempotent per mission id — the same
-/// pattern as companion avatars.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn maintain_captive_avatars(
-    mut commands: Commands,
-    state: Res<State<PlayState>>,
-    tow: Res<CaptivesInTow>,
-    iu: Res<ItemUniverse>,
-    existing: Query<&crate::surface_npc::CompanionAvatar>,
-    walker: Query<&Transform, With<Walker>>,
-    cost_map: Option<Res<crate::surface_pathfinding::SurfaceCostMap>>,
-    layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
-    mut images: ResMut<Assets<Image>>,
-) {
+    // ── Phase 2: re-embody ledgered captives missing from this scene ──
+    if tow.captives.is_empty() {
+        return;
+    }
     let (Some(cost_map), Some(mut layers)) = (cost_map, layers) else {
         return;
     };
     let Ok(walker_tf) = walker.single() else {
         return;
     };
-    if tow.captives.is_empty() {
-        return;
-    }
-    let here: std::collections::HashSet<&str> = existing.iter().map(|c| c.0.as_str()).collect();
     let walk_speed = layers.walk_speed;
     for (mission_id, npc) in &tow.captives {
-        if here.contains(mission_id.as_str()) {
+        if present.contains(mission_id.as_str()) {
             continue;
         }
         let identity = match npc {

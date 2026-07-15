@@ -406,8 +406,7 @@ pub fn surface_plugin(app: &mut App) {
             Update,
             (
                 interiors::maze_fugitive_arrivals,
-                interiors::record_captives,
-                interiors::maintain_captive_avatars,
+                interiors::manage_captives,
             )
                 .run_if(on_foot),
         )
