@@ -192,6 +192,7 @@ pub fn npc_chat_interact(
         },
         Some(Behavior::FleePlayer { .. })
         | Some(Behavior::FleeToward { .. })
+        | Some(Behavior::MarchTo { .. })
         | Some(Behavior::Despawn { .. })
         | None => {
             // Can't chat with fleeing/despawning NPCs.

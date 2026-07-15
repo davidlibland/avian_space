@@ -96,6 +96,16 @@ pub enum Behavior {
     /// Stand around indefinitely — indoor NPCs (givers who've made their
     /// pitch, met contacts) stay at their table instead of blinking out.
     Loiter,
+
+    /// Walk to a fixed tile, no interaction semantics at all — the
+    /// captive's march to the cell. (FleeToward is CATCHABLE, which made
+    /// the jail march instantly "caught" by the adjacent player: pop →
+    /// empty queue → despawn → ledger respawn → flicker.)
+    MarchTo {
+        goal: (u32, u32),
+        path: Vec<(u32, u32)>,
+        current_idx: usize,
+    },
 }
 
 // ── Components ───────────────────────────────────────────────────────────
@@ -215,6 +225,7 @@ pub fn run_npc_behaviors(
                 | Some(Behavior::FollowPlayer { .. })
                 | Some(Behavior::FleePlayer { .. })
                 | Some(Behavior::FleeToward { waiting: false, .. })
+                | Some(Behavior::MarchTo { .. })
         );
         if wants_to_move && moved < 0.5 {
             npc.stuck_secs += time.delta_secs();
@@ -241,6 +252,9 @@ pub fn run_npc_behaviors(
                     path, current_idx, ..
                 })
                 | Some(Behavior::FleeToward {
+                    path, current_idx, ..
+                })
+                | Some(Behavior::MarchTo {
                     path, current_idx, ..
                 }) => {
                     path.clear();
@@ -580,6 +594,33 @@ pub fn run_npc_behaviors(
 
             Behavior::Loiter => {
                 vel.0 = Vec2::ZERO;
+            }
+
+            Behavior::MarchTo {
+                goal,
+                path,
+                current_idx,
+            } => {
+                if path.is_empty()
+                    && let Some(cm) = cost_map.as_ref()
+                {
+                    let my_tile = find_nearest_walkable(pos, cm);
+                    if let Some(p) = cm.find_path(my_tile, *goal) {
+                        *path = p;
+                        *current_idx = 0;
+                    }
+                }
+                if *current_idx < path.len() {
+                    let (tx, ty) = path[*current_idx];
+                    let target = SurfaceCostMap::tile_to_world(tx, ty);
+                    if (target - foot(pos)).length() < WAYPOINT_ARRIVE_DIST {
+                        *current_idx += 1;
+                    } else {
+                        vel.0 = steer_to(target, pos, speed);
+                    }
+                } else {
+                    vel.0 = Vec2::ZERO;
+                }
             }
 
             Behavior::OfferMission { .. } => {

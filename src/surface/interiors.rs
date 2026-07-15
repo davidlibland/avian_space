@@ -298,12 +298,10 @@ pub(crate) fn deliver_captives_to_garrison(
             },
             crate::surface_npc::NpcBehavior::with_behaviors(
                 80.0,
-                [crate::surface_npc::Behavior::FleeToward {
-                    mission_id: avatar.0.clone(),
+                [crate::surface_npc::Behavior::MarchTo {
                     goal: cell,
                     path: Vec::new(),
                     current_idx: 0,
-                    waiting: false,
                 }],
             ),
         ));
@@ -599,7 +597,8 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         | "cable_coil" | "pipe_segment" | "warning_cone" | "coolant_puddle" => (1, 1, false),
         "ore_pile" | "crystal" | "barrel" | "gauge_panel" | "jail_bars" => (1, 1, true),
         // The gate is the doorway — walkable; the animation sells it.
-        "jail_gate" => (1, 1, false),
+        // The back panel is scenery ON the cell tile (prisoner in front).
+        "jail_gate" | "jail_bars_back" => (1, 1, false),
         _ => (1, 1, false),
     }
 }
@@ -799,9 +798,10 @@ pub(crate) fn build_plan(
             // marching prisoner (a collider seals it while closed).
             props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 1)));
             props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 2)));
-            // The cell's own back bars, standing against the room wall
-            // directly behind the gate.
-            props.push(("jail_bars", (x0 + rw - 2, y0 + rh)));
+            // The cell's own back bars, drawn on the cell row itself so
+            // they LINE UP with the west column's back panel (non-solid —
+            // the prisoner stands in front of them).
+            props.push(("jail_bars_back", (x0 + rw - 2, y0 + rh - 1)));
             props.push(("jail_gate", (x0 + rw - 2, y0 + rh - 2)));
         }
         BuildingKind::Outfitter | BuildingKind::Shipyard => {
@@ -1346,11 +1346,16 @@ pub(crate) fn setup_interior(
             ));
             continue;
         }
+        // Aliased sprites (same art, different placement semantics).
+        let sprite_name = match name {
+            "jail_bars_back" => "jail_bars",
+            other => other,
+        };
         commands.spawn((
             DespawnOnExit(PlayState::Inside),
             InteriorScoped,
             Sprite::from_image(
-                asset_server.load(format!("sprites/worlds/interior_props/{name}.png")),
+                asset_server.load(format!("sprites/worlds/interior_props/{sprite_name}.png")),
             ),
             bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
             Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
@@ -2686,14 +2691,18 @@ mod tests {
             .iter()
             .filter(|&&(n, _)| n == "jail_bars")
             .collect();
-        assert_eq!(bars.len(), 3, "west flank, corner, and the back panel");
+        assert_eq!(bars.len(), 2, "west flank and corner");
         assert!(prop_meta("jail_bars").2, "bars must block");
         assert!(!prop_meta("jail_gate").2, "the gate is the doorway");
         assert!(
             plan.props
                 .iter()
-                .any(|&(n, t)| n == "jail_bars" && t == (x0 + rw - 2, y0 + rh)),
-            "the back panel stands directly behind the gate"
+                .any(|&(n, t)| n == "jail_bars_back" && t == (x0 + rw - 2, y0 + rh - 1)),
+            "the back panel sits ON the cell row, aligned with the west back panel"
+        );
+        assert!(
+            !prop_meta("jail_bars_back").2,
+            "the back panel is scenery — the cell tile stays walkable"
         );
         assert!(
             plan.props
