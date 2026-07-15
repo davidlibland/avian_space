@@ -218,31 +218,11 @@ pub(crate) fn maintain_captive_avatars(
                 crate::surface_npc::anonymous_mission_spec(&layers, mission_id, "civilian"),
             )),
         };
-        let wt = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(
+        let tile = super::npcs::follower_spawn_tile(
+            &cost_map,
             walker_tf.translation.truncate(),
+            mission_id,
         );
-        let walkable = |t: (u32, u32)| -> bool {
-            let idx = (t.1 * cost_map.width + t.0) as usize;
-            idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY
-        };
-        let mut tile = wt;
-        'ring: for r in 1i32..=4 {
-            for dx in -r..=r {
-                for dy in -r..=r {
-                    if dx.abs().max(dy.abs()) != r {
-                        continue;
-                    }
-                    let c = (
-                        wt.0.saturating_add_signed(dx),
-                        wt.1.saturating_add_signed(dy),
-                    );
-                    if c != wt && walkable(c) {
-                        tile = c;
-                        break 'ring;
-                    }
-                }
-            }
-        }
         let scope = state.get().clone();
         let spawned = crate::surface_npc::spawn_companion_avatar(
             &mut commands,
@@ -1641,6 +1621,7 @@ pub(crate) fn hire_panel_ui(
                 );
                 // They knock back the drink and fall in behind you — from
                 // here on the avatar system owns them (same as friends).
+                let (offset, pace) = crate::surface_npc::formation_params(&name);
                 commands
                     .entity(entity)
                     .remove::<HirePilot>()
@@ -1652,11 +1633,12 @@ pub(crate) fn hire_panel_ui(
                         LinearVelocity(Vec2::ZERO),
                         crate::surface_npc::CompanionAvatar(name),
                         crate::surface_npc::NpcBehavior::with_behaviors(
-                            120.0,
+                            120.0 * pace,
                             [crate::surface_npc::Behavior::FollowPlayer {
                                 path: Vec::new(),
                                 current_idx: 0,
                                 repath_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+                                offset,
                             }],
                         ),
                     ));
@@ -1908,14 +1890,11 @@ pub(crate) fn spawn_interior_npcs(
             }
             let tile = (x0 + plan.room.2 - 3, (y0 + 3 + slot * 2).min(y0 + rh - 3));
             slot += 1;
-            use rand::SeedableRng;
-            let mut rng = rand::rngs::StdRng::seed_from_u64(
-                offer
-                    .pilot_name
-                    .bytes()
-                    .fold(0u64, |a, b| a.wrapping_mul(31).wrapping_add(b as u64)),
-            );
-            let spec = layers.random_spec(&mut rng, "civilian");
+            // The SAME seeded face their follower/landing avatar uses —
+            // the pilot you sized up at the table is the pilot who flies
+            // with you.
+            let spec =
+                crate::surface_npc::anonymous_mission_spec(&layers, &offer.pilot_name, "civilian");
             if let Some(image) = layers.composite(&spec, &mut images) {
                 let pos = crate::surface_pathfinding::SurfaceCostMap::tile_to_world(tile.0, tile.1);
                 // Standing right of their table, facing it.

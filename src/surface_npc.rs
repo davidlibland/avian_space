@@ -53,6 +53,9 @@ pub enum Behavior {
         path: Vec<(u32, u32)>,
         current_idx: usize,
         repath_timer: Timer,
+        /// Personal formation slot relative to the player — followers with
+        /// distinct offsets fan out instead of stacking into one sprite.
+        offset: Vec2,
     },
 
     /// Run away from the player.  Completes when the player gets adjacent
@@ -375,16 +378,19 @@ pub fn run_npc_behaviors(
                 path,
                 current_idx,
                 repath_timer,
+                offset,
             } => {
                 let Some(wp) = walker_pos else {
                     vel.0 = Vec2::ZERO;
                     continue;
                 };
 
-                let dist_to_player = (pos - wp).length();
-
-                // When adjacent, just stop and wait (don't pop the behavior).
-                if dist_to_player < ADJACENT_DIST_TILES * TILE_PX {
+                // Each follower keeps to their OWN spot beside the player.
+                let station = wp + *offset;
+                let dist_to_station = (pos - station).length();
+                if dist_to_station < TILE_PX * 0.9
+                    || (pos - wp).length() < ADJACENT_DIST_TILES * TILE_PX * 0.66
+                {
                     vel.0 = Vec2::ZERO;
                     // Keep repathing so we follow if the player moves away.
                     repath_timer.tick(time.delta());
@@ -397,7 +403,7 @@ pub fn run_npc_behaviors(
                     path.is_empty() || *current_idx >= path.len() || repath_timer.just_finished();
                 if needs_repath && let Some(cm) = cost_map.as_ref() {
                     let start = find_nearest_walkable(pos, cm);
-                    let goal = find_nearest_walkable(wp, cm);
+                    let goal = find_nearest_walkable(station, cm);
                     if let Some(new_path) = cm.find_path(start, goal) {
                         let skip = new_path
                             .iter()
@@ -647,6 +653,19 @@ pub fn update_npc_markers(
 
 // ── Spawning helpers ─────────────────────────────────────────────────────
 
+/// A follower's personal formation offset + pace, derived from their key:
+/// distinct slots and slightly different strides keep escorts, friends and
+/// prisoners from stacking into a single sprite.
+pub fn formation_params(key: &str) -> (Vec2, f32) {
+    let h = key
+        .bytes()
+        .fold(0x5EEDu64, |a, b| a.wrapping_mul(131).wrapping_add(b as u64));
+    let angle = (h % 360) as f32 * std::f32::consts::PI / 180.0;
+    let radius = TILE_PX * (1.2 + ((h >> 9) % 10) as f32 * 0.14);
+    let pace = 0.88 + ((h >> 17) % 25) as f32 / 100.0;
+    (Vec2::new(angle.cos(), angle.sin()) * radius, pace)
+}
+
 /// A stable look for a mission NPC with no `npc:` identity: seeded by the
 /// MISSION id, so the same stranger appears at every spawn — the fugitive
 /// who bolts into the mine is recognisably the same person two levels
@@ -792,12 +811,14 @@ pub fn spawn_companion_avatar(
         return None; // layer images still loading; idempotent caller retries
     };
     let start = SurfaceCostMap::tile_to_world(start_tile.0, start_tile.1);
+    let (offset, pace) = formation_params(companion_key);
     let behavior = NpcBehavior::with_behaviors(
-        speed,
+        speed * pace,
         [Behavior::FollowPlayer {
             path: Vec::new(),
             current_idx: 0,
             repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
+            offset,
         }],
     );
     let npc_entity = commands
@@ -918,6 +939,7 @@ pub fn spawn_objective_npc(
                 path: Vec::new(),
                 current_idx: 0,
                 repath_timer: Timer::from_seconds(REPATH_INTERVAL, TimerMode::Repeating),
+                offset: formation_params(mission_id).0,
             });
         }
         _ if scope == crate::PlayState::Inside => {

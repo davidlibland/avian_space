@@ -327,34 +327,8 @@ pub(crate) fn spawn_companion_avatars(
         if here.contains(name.as_str()) {
             continue;
         }
-        // Beside the player, on the nearest genuinely walkable tile
-        // (ring search on the CURRENT scene's cost map — never a wall,
-        // never under the parked ship).
-        let wt = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(
-            walker_tf.translation.truncate(),
-        );
-        let walkable = |t: (u32, u32)| -> bool {
-            let idx = (t.1 * cost_map.width + t.0) as usize;
-            idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY
-        };
-        let mut tile = wt;
-        'ring: for r in 1i32..=4 {
-            for dx in -r..=r {
-                for dy in -r..=r {
-                    if dx.abs().max(dy.abs()) != r {
-                        continue;
-                    }
-                    let c = (
-                        wt.0.saturating_add_signed(dx),
-                        wt.1.saturating_add_signed(dy),
-                    );
-                    if c != wt && walkable(c) {
-                        tile = c;
-                        break 'ring;
-                    }
-                }
-            }
-        }
+        // Beside the player, walkable, fanned out by their formation slot.
+        let tile = follower_spawn_tile(&cost_map, walker_tf.translation.truncate(), name);
         let scope = state.get().clone();
         let spawned = crate::surface_npc::spawn_companion_avatar(
             &mut commands,
@@ -525,4 +499,50 @@ pub(crate) fn update_building_offer_markers(
             .with_scale(Vec3::splat(0.8)),
         ));
     }
+}
+
+/// The spawn tile for a follower appearing beside the player: walkable,
+/// preferring the direction of THEIR formation slot, so simultaneous
+/// spawns (friend + hire + prisoner on a scene change) fan out instead
+/// of stacking on the single nearest tile.
+pub(crate) fn follower_spawn_tile(
+    cost_map: &crate::surface_pathfinding::SurfaceCostMap,
+    walker_pos: Vec2,
+    key: &str,
+) -> (u32, u32) {
+    let wt = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(walker_pos);
+    let walkable = |t: (u32, u32)| -> bool {
+        let idx = (t.1 * cost_map.width + t.0) as usize;
+        idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY
+    };
+    let (offset, _) = crate::surface_npc::formation_params(key);
+    let dir = offset.normalize_or_zero();
+    // First choice: their own slot direction, nearest first.
+    for r in 1i32..=4 {
+        let c = (
+            wt.0.saturating_add_signed((dir.x * r as f32).round() as i32),
+            wt.1.saturating_add_signed((dir.y * r as f32).round() as i32),
+        );
+        if c != wt && walkable(c) {
+            return c;
+        }
+    }
+    // Fallback: full ring scan.
+    for r in 1i32..=4 {
+        for dx in -r..=r {
+            for dy in -r..=r {
+                if dx.abs().max(dy.abs()) != r {
+                    continue;
+                }
+                let c = (
+                    wt.0.saturating_add_signed(dx),
+                    wt.1.saturating_add_signed(dy),
+                );
+                if c != wt && walkable(c) {
+                    return c;
+                }
+            }
+        }
+    }
+    wt
 }

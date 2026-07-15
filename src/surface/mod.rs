@@ -480,6 +480,15 @@ pub fn surface_plugin(app: &mut App) {
 // Save
 // ---------------------------------------------------------------------------
 
+/// Test alias (the real system is private).
+#[cfg(test)]
+pub fn save_on_explore_for_tests(
+    game_state: Res<crate::game_save::PlayerGameState>,
+    session_data: Res<crate::session::SessionSaveData>,
+) {
+    crate::game_save::write_save(&game_state, &session_data);
+}
+
 fn save_on_explore(
     game_state: Res<crate::game_save::PlayerGameState>,
     session_data: Res<crate::session::SessionSaveData>,

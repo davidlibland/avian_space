@@ -312,21 +312,6 @@ fn save_pilot(game_state: Res<PlayerGameState>, session_data: Res<SessionSaveDat
     write_save(&game_state, &session_data);
 }
 
-/// Menu-entry save, guarded by the player still EXISTING: a dead pilot's
-/// ship was despawned at the explosion, so death skips the save and the
-/// pilot rolls back to their last one.
-fn save_pilot_on_menu(
-    game_state: Res<PlayerGameState>,
-    session_data: Res<SessionSaveData>,
-    player: Query<(), With<Player>>,
-) {
-    if player.is_empty() {
-        info!("menu save skipped (no live player — death rolls back)");
-        return;
-    }
-    write_save(&game_state, &session_data);
-}
-
 /// Despawn the player entity and reset PlayerGameState when returning to the
 /// main menu.  Session resources are reset independently by their own
 /// `init_session_resource` registrations.
@@ -376,14 +361,7 @@ pub fn game_save_plugin(app: &mut App) {
             )
                 .chain(),
         )
-        // Save BEFORE the menu wipes the session — the safety net for
-        // every LIVE route to the menu. Death is the exception: the ship
-        // is already despawned by then, and skipping the save is what
-        // makes death roll you back to your last landing.
-        .add_systems(
-            OnEnter(PlayState::MainMenu),
-            (save_pilot_on_menu, cleanup_on_enter_menu).chain(),
-        )
+        .add_systems(OnEnter(PlayState::MainMenu), cleanup_on_enter_menu)
         // Save when landing/taking off
         .add_systems(OnEnter(PlayState::Landed), save_pilot)
         .add_systems(OnExit(PlayState::Landed), save_pilot);

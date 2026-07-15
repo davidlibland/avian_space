@@ -325,6 +325,13 @@ fn load_pilot_panel(
                             resources: save.resources.clone(),
                         });
                         *game_state = PlayerGameState::from_save(&save, item_universe);
+                        // Saves must return to THE FILE we loaded: a
+                        // hand-made file whose NAME differs from its
+                        // pilot_name field would otherwise fork — the game
+                        // writing "<pilot_name>.yaml" while the menu keeps
+                        // loading the original, which never updates
+                        // ("my pilot never saves").
+                        game_state.pilot_name = save_name.clone();
                         next_state.set(PlayState::Flying);
                     }
                 }

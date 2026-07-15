@@ -586,3 +586,33 @@ mod captive_conversion {
         );
     }
 }
+
+#[cfg(test)]
+mod formation {
+    /// Followers get DISTINCT formation slots and paces — that's what
+    /// keeps a friend, a hire and a prisoner from marching as one sprite.
+    #[test]
+    fn formation_params_are_distinct_and_sane() {
+        let keys = ["Joss Pike", "jonah_wren", "claim_jumper_mars", "Vera Moss"];
+        let mut offsets = Vec::new();
+        for k in keys {
+            let (off, pace) = crate::surface_npc::formation_params(k);
+            let r = off.length() / crate::surface::TILE_PX;
+            assert!((1.0..=2.8).contains(&r), "{k}: slot radius {r} in range");
+            assert!((0.85..=1.15).contains(&pace), "{k}: pace {pace} in range");
+            // Deterministic.
+            assert_eq!(off, crate::surface_npc::formation_params(k).0);
+            offsets.push(off);
+        }
+        for i in 0..offsets.len() {
+            for j in (i + 1)..offsets.len() {
+                assert!(
+                    (offsets[i] - offsets[j]).length() > crate::surface::TILE_PX * 0.5,
+                    "slots {i}/{j} too close: {:?} vs {:?}",
+                    offsets[i],
+                    offsets[j]
+                );
+            }
+        }
+    }
+}
