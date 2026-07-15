@@ -103,6 +103,10 @@ pub struct NpcBehavior {
     pub queue: VecDeque<Behavior>,
     /// Movement speed (pixels per second).
     pub speed: f32,
+    /// Stuck detection: last frame's position + how long we've been
+    /// commanding movement without actually moving.
+    pub last_pos: Option<Vec2>,
+    pub stuck_secs: f32,
 }
 
 impl NpcBehavior {
@@ -110,6 +114,8 @@ impl NpcBehavior {
         Self {
             queue: VecDeque::new(),
             speed,
+            last_pos: None,
+            stuck_secs: 0.0,
         }
     }
 
@@ -117,6 +123,8 @@ impl NpcBehavior {
         Self {
             queue: behaviors.into_iter().collect(),
             speed,
+            last_pos: None,
+            stuck_secs: 0.0,
         }
     }
 
@@ -188,6 +196,56 @@ pub fn run_npc_behaviors(
     for (entity, mut npc, tf, mut vel) in &mut npcs {
         let pos = tf.translation.truncate();
         let speed = npc.speed;
+
+        // ── Stuck detection: an NPC grinding against geometry (bumped off
+        // its route, or a collider the cost map doesn't know) never
+        // recovers on its own — patrols in particular steer at a stale
+        // waypoint forever. If a MOVING behavior hasn't actually moved for
+        // a while, drop its path so it re-plans from where it really is
+        // (patrols pick a whole new route).
+        let moved = npc.last_pos.map(|lp| pos.distance(lp)).unwrap_or(f32::MAX);
+        npc.last_pos = Some(pos);
+        let wants_to_move = matches!(
+            npc.queue.front(),
+            Some(Behavior::Patrol { .. })
+                | Some(Behavior::SeekPlayer { .. })
+                | Some(Behavior::FollowPlayer { .. })
+                | Some(Behavior::FleePlayer { .. })
+                | Some(Behavior::FleeToward { waiting: false, .. })
+        );
+        if wants_to_move && moved < 0.5 {
+            npc.stuck_secs += time.delta_secs();
+        } else {
+            npc.stuck_secs = 0.0;
+        }
+        if npc.stuck_secs > 1.5 {
+            npc.stuck_secs = 0.0;
+            match npc.queue.front_mut() {
+                Some(Behavior::Patrol {
+                    waypoints,
+                    current_idx,
+                }) => {
+                    waypoints.clear();
+                    *current_idx = 0;
+                }
+                Some(Behavior::SeekPlayer {
+                    path, current_idx, ..
+                })
+                | Some(Behavior::FollowPlayer {
+                    path, current_idx, ..
+                })
+                | Some(Behavior::FleePlayer {
+                    path, current_idx, ..
+                })
+                | Some(Behavior::FleeToward {
+                    path, current_idx, ..
+                }) => {
+                    path.clear();
+                    *current_idx = 0;
+                }
+                _ => {}
+            }
+        }
 
         let Some(behavior) = npc.queue.front_mut() else {
             // No behaviors left — stop and despawn.
