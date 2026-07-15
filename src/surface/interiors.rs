@@ -67,6 +67,42 @@ pub(crate) struct StairsDown;
 #[derive(Component)]
 pub(crate) struct StairsUp;
 
+/// The garrison cell's animated gate: bars rise as a marching prisoner
+/// approaches, and drop once they're inside.
+#[derive(Component)]
+pub(crate) struct JailGate {
+    pub frames: Vec<Handle<Image>>,
+    pub pos: Vec2,
+    pub openness: f32,
+}
+
+/// Drive the cell gate from the PRISONER's position (not the player's):
+/// open while a jail-bound fugitive is at the threshold, shut otherwise.
+pub(crate) fn animate_jail_gate(
+    time: Res<Time>,
+    marchers: Query<(&Transform, &MazeFugitive)>,
+    mut gates: Query<(&mut JailGate, &mut Sprite)>,
+) {
+    for (mut gate, mut sprite) in &mut gates {
+        let approaching = marchers.iter().any(|(tf, fug)| {
+            matches!(fug.next, FugitiveNext::Jailed)
+                && (tf.translation.truncate() - gate.pos).length() < TILE_PX * 2.2
+        });
+        let target = if approaching { 1.0 } else { 0.0 };
+        let step = time.delta_secs() * 4.0;
+        gate.openness += (target - gate.openness).clamp(-step, step);
+        gate.openness = gate.openness.clamp(0.0, 1.0);
+        let n = gate.frames.len();
+        if n == 0 {
+            continue;
+        }
+        let frame = ((gate.openness * (n - 1) as f32).round() as usize).min(n - 1);
+        if sprite.image != gate.frames[frame] {
+            sprite.image = gate.frames[frame].clone();
+        }
+    }
+}
+
 /// The clerk behind the counter — ambience; the counter does the business.
 #[derive(Component)]
 pub(crate) struct Clerk;
@@ -244,7 +280,7 @@ pub(crate) fn deliver_captives_to_garrison(
     let planet = landed.planet_name.clone().unwrap_or_default();
     let plan = build_plan(BuildingKind::Garrison, &iu, &planet, 0, &unlocks);
     let (x0, y0, rw, rh) = plan.room;
-    let cell = (x0 + rw - 2, y0 + rh - 3);
+    let cell = (x0 + rw - 2, y0 + rh - 2);
     for (entity, avatar) in &avatars {
         let is_captive = tow.captives.iter().any(|(id, _)| *id == avatar.0);
         if !is_captive || marching.contains(entity) {
@@ -318,6 +354,21 @@ pub(crate) fn maze_fugitive_arrivals(
         if (tf.translation.truncate() - goal).length() > TILE_PX * 0.9 {
             continue;
         }
+        if matches!(fug.next, FugitiveNext::Jailed) {
+            // They STAY in the cell — stripped of their marching orders,
+            // loitering behind the bars until the scene ends.
+            tow.captives.retain(|(id, _)| *id != fug.mission_id);
+            commands
+                .entity(entity)
+                .remove::<MazeFugitive>()
+                .remove::<crate::surface_npc::CompanionAvatar>()
+                .insert(crate::surface_npc::NpcBehavior::with_behaviors(
+                    0.0,
+                    [crate::surface_npc::Behavior::Loiter],
+                ));
+            comms.send("The cell door clangs shut. The garrison takes custody.");
+            continue;
+        }
         commands.entity(entity).despawn();
         match fug.next {
             FugitiveNext::IntoBuilding => {
@@ -329,10 +380,7 @@ pub(crate) fn maze_fugitive_arrivals(
                 *lvl += 1;
                 comms.send("They scramble down the shaft — keep up!");
             }
-            FugitiveNext::Jailed => {
-                tow.captives.retain(|(id, _)| *id != fug.mission_id);
-                comms.send("The cell door clangs shut. The garrison takes custody.");
-            }
+            FugitiveNext::Jailed => unreachable!("handled above"),
         }
     }
     chase.inside.retain(|id, _| {
@@ -546,6 +594,8 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         "pebbles_a" | "pebbles_b" | "ore_chunk" | "pickaxe" | "pallet" | "box_spill"
         | "cable_coil" | "pipe_segment" | "warning_cone" | "coolant_puddle" => (1, 1, false),
         "ore_pile" | "crystal" | "barrel" | "gauge_panel" | "jail_bars" => (1, 1, true),
+        // The gate is the doorway — walkable; the animation sells it.
+        "jail_gate" => (1, 1, false),
         _ => (1, 1, false),
     }
 }
@@ -738,10 +788,12 @@ pub(crate) fn build_plan(
             props.push(("war_desk", (counter.0 - 1, counter.1)));
             props.push(("flag_stand", (counter.0 - 3, counter.1)));
             props.push(("flag_stand", (counter.0 + 2, counter.1)));
-            // The holding cell: a barred nook in the east corner. Bars
-            // seal its south face; captives enter from the west.
-            props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 4)));
-            props.push(("jail_bars", (x0 + rw - 2, y0 + rh - 4)));
+            // The holding cell: the back-east corner, walled by the room
+            // on two sides, bars on the west flank and the corner, and an
+            // ANIMATED gate on the cell's south face — the only way in.
+            props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 2)));
+            props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 3)));
+            props.push(("jail_gate", (x0 + rw - 2, y0 + rh - 3)));
         }
         BuildingKind::Outfitter | BuildingKind::Shipyard => {
             props.push(("shelf_rack", (counter.0 - 1, counter.1)));
@@ -1265,6 +1317,26 @@ pub(crate) fn setup_interior(
         let base = super::tile_to_world(px, py, map_w, map_h, tile_px);
         let front_y = base.y - tile_px * 0.5;
         let cx = base.x + (w as f32 - 1.0) * 0.5 * tile_px;
+        if name == "jail_gate" {
+            let frames: Vec<Handle<Image>> = (0..4)
+                .map(|k| {
+                    asset_server.load(format!("sprites/worlds/interior_props/jail_gate{k}.png"))
+                })
+                .collect();
+            commands.spawn((
+                DespawnOnExit(PlayState::Inside),
+                InteriorScoped,
+                Sprite::from_image(frames[0].clone()),
+                bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
+                Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
+                JailGate {
+                    frames,
+                    pos: Vec2::new(cx, front_y),
+                    openness: 0.0,
+                },
+            ));
+            continue;
+        }
         commands.spawn((
             DespawnOnExit(PlayState::Inside),
             InteriorScoped,
@@ -2607,7 +2679,7 @@ mod tests {
         assert_eq!(bars.len(), 2, "a barred cell front");
         let (_, _, blocks) = prop_meta("jail_bars");
         assert!(blocks, "bars must block");
-        let cell = (x0 + rw - 2, y0 + rh - 3);
+        let cell = (x0 + rw - 2, y0 + rh - 2);
         let cm = cost_map_of(&plan);
         assert!(
             cm.find_path(plan.entry, cell).is_some(),

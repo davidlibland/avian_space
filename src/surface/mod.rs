@@ -413,7 +413,11 @@ pub fn surface_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            interiors::deliver_captives_to_garrison.run_if(in_state(PlayState::Inside)),
+            (
+                interiors::deliver_captives_to_garrison,
+                interiors::animate_jail_gate,
+            )
+                .run_if(in_state(PlayState::Inside)),
         )
         .add_systems(
             OnEnter(crate::PlayState::Flying),

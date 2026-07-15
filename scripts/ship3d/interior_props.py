@@ -349,10 +349,24 @@ def coolant_puddle(M):
 def jail_bars(M):
     # A barred cell front for the garrison's holding nook.
     add_box("sill", (0, 0, 0.06), (0.98, 0.24, 0.12), M["iron"])
-    add_box("lintel", (0, 0, 1.62), (0.98, 0.24, 0.12), M["iron"])
+    add_box("lintel", (0, 0, 2.12), (0.98, 0.24, 0.12), M["iron"])
     for i in range(5):
-        add_cylinder(f"bar{i}", (-0.4 + i * 0.2, 0, 0.84), 0.035, 1.5,
+        add_cylinder(f"bar{i}", (-0.4 + i * 0.2, 0, 1.09), 0.035, 2.0,
                      M["steel"], axis="z")
+
+
+def jail_gate(M, openness):
+    # The cell GATE: bars retract up into the lintel as it opens. Posts
+    # and lintel are in every frame; only the bars travel.
+    for sx in (-0.46, 0.46):
+        add_box(f"post{sx}", (sx, 0, 1.06), (0.12, 0.24, 2.12), M["iron"])
+    add_box("lintel", (0, 0, 2.12), (0.98, 0.24, 0.16), M["iron"])
+    h = 1.9 * (1.0 - openness)
+    if h > 0.05:
+        zc = 2.0 - h / 2
+        for i in range(4):
+            add_cylinder(f"bar{i}", (-0.3 + i * 0.2, 0, zc), 0.035, h,
+                         M["steel"], axis="z")
 
 
 def gauge_panel(M):
@@ -489,6 +503,19 @@ def main():
                 finish(img).save(os.path.join(DEST, f"exit_door_panel{k}.png"))
         # The static prop itself, same bbox.
         finish(render_raw(exit_door_frame)).save(os.path.join(DEST, "exit_door.png"))
+
+        # ── jail gate frames (frame 0 = closed defines the shared bbox) ──
+        g0 = render_raw(lambda M: jail_gate(M, 0.0))
+        gb = g0.getbbox()
+        def gfinish(img):
+            img = img.crop(gb)
+            return img.resize(
+                (max(1, round(img.width * scale)), max(1, round(img.height * scale))),
+                Image.LANCZOS,
+            )
+        for k in range(4):
+            img = render_raw(lambda M, o=k / 3.0: jail_gate(M, o))
+            gfinish(img).save(os.path.join(DEST, f"jail_gate{k}.png"))
     print("exit door frames baked")
 
 
