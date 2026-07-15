@@ -254,7 +254,10 @@ fn spawn_companion(
     ship.health = health;
     app.world_mut()
         .spawn((
-            Escort { mother: player },
+            Escort {
+                mother: player,
+                anchor: Entity::PLACEHOLDER,
+            },
             temperament,
             ship,
             EscortMode::Escort,
@@ -378,7 +381,10 @@ fn chatter_speaks_once_then_rate_limits() {
         100,
     );
     app.world_mut().spawn((
-        Escort { mother: player },
+        Escort {
+            mother: player,
+            anchor: Entity::PLACEHOLDER,
+        },
         crate::carrier::PersistentEscort(id),
         Position(Vec2::ZERO),
     ));

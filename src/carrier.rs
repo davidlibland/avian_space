@@ -41,6 +41,19 @@ const DOCK_DESPAWN_SCALE: f32 = ANIM_MIN_SCALE;
 #[derive(Component)]
 pub struct Escort {
     pub mother: Entity,
+    /// Invisible formation-slot entity this escort stations on while in
+    /// Escort mode: its Position tracks mother + personal offset every
+    /// frame. Dock mode targets the MOTHER directly (exact approach), so
+    /// carrier docking is unaffected.
+    pub anchor: Entity,
+}
+
+/// The moving formation slot an escort stations on.
+#[derive(Component)]
+pub struct FormationAnchor {
+    pub escort: Entity,
+    /// Offset from the mother, rotated with her heading when under way.
+    pub slot: Vec2,
 }
 
 /// The escort lives in a carrier bay on the mother: it may dock to despawn
@@ -290,6 +303,7 @@ pub fn carrier_plugin(app: &mut App) {
             spawn_mission_squadrons,
             respawn_roster_escorts,
             spawn_escort_ships,
+            update_formation_anchors,
             sync_roster_health,
             escort_launch_movement,
             player_escort_input,
@@ -443,7 +457,28 @@ fn spawn_escort_ships(
         // avian2d will initialize Rotation from this on the first physics step.
         let _mother_heading = mother_tf.rotation;
 
-        let _escort_entity = commands
+        // Personal formation slot: deterministic per roster entry (stable
+        // across respawns), random for one-shot squadron wings.
+        let slot_seed = roster_id.unwrap_or_else(|| {
+            use rand::Rng;
+            rand::thread_rng().r#gen::<u64>()
+        });
+        let slot_angle = (slot_seed
+            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            .rotate_left(17)
+            % 360) as f32
+            * std::f32::consts::PI
+            / 180.0;
+        let slot_radius = 110.0 + (slot_seed.wrapping_mul(31) % 5) as f32 * 14.0;
+        let slot = Vec2::new(slot_angle.cos(), slot_angle.sin()) * slot_radius;
+        let anchor = commands
+            .spawn((
+                DespawnOnExit(PlayState::Flying),
+                Position(event.position),
+                LinearVelocity(mother_vel.0),
+            ))
+            .id();
+        let escort_entity = commands
             .spawn((
                 DespawnOnExit(PlayState::Flying),
                 AIShip {
@@ -451,6 +486,7 @@ fn spawn_escort_ships(
                 },
                 Escort {
                     mother: event.mother,
+                    anchor,
                 },
                 initial_mode,
                 bundle,
@@ -463,6 +499,13 @@ fn spawn_escort_ships(
                 || is_bay_launch,
             )
             .insert((Position(event.position), LinearVelocity(mother_vel.0)))
+            .id();
+        commands.entity(anchor).insert(FormationAnchor {
+            escort: escort_entity,
+            slot,
+        });
+        let _escort_entity = commands
+            .entity(escort_entity)
             .insert_if(
                 CarriedBy {
                     weapon_type: event.carried.clone().unwrap_or_default(),
@@ -527,6 +570,37 @@ fn escort_launch_movement(
 // Target sync
 // ---------------------------------------------------------------------------
 
+/// Keep each formation anchor glued to mother + slot (rotated with her
+/// heading when she's under way), and clean up anchors whose escort died.
+fn update_formation_anchors(
+    mut commands: Commands,
+    mut anchors: Query<(Entity, &FormationAnchor, &mut Position, &mut LinearVelocity)>,
+    escorts: Query<&Escort>,
+    mothers: Query<(&Position, &LinearVelocity), Without<FormationAnchor>>,
+) {
+    for (entity, anchor, mut pos, mut vel) in &mut anchors {
+        let Ok(escort) = escorts.get(anchor.escort) else {
+            commands.entity(entity).despawn();
+            continue;
+        };
+        let Ok((mother_pos, mother_vel)) = mothers.get(escort.mother) else {
+            continue;
+        };
+        let slot = if mother_vel.0.length() > 30.0 {
+            let dir = mother_vel.0.normalize();
+            // Rotate the slot into the mother's travel frame.
+            Vec2::new(
+                anchor.slot.x * dir.x - anchor.slot.y * dir.y,
+                anchor.slot.x * dir.y + anchor.slot.y * dir.x,
+            )
+        } else {
+            anchor.slot
+        };
+        pos.0 = mother_pos.0 + slot;
+        vel.0 = mother_vel.0;
+    }
+}
+
 /// Handle mode transitions and apply nav/weapons targets accordingly.
 ///
 /// Attack mode is sticky on its specific target. When that target is gone,
@@ -569,7 +643,13 @@ fn update_escort_modes(
                 ship.nav_target = Some(target.clone());
                 ship.weapons_target = Some(target.clone());
             }
-            EscortMode::Escort | EscortMode::Dock => {
+            EscortMode::Escort => {
+                // Station on THIS escort's formation slot, not the mother's
+                // hull — a full wing fans out instead of dog-piling her.
+                ship.nav_target = Some(Target::Ship(escort.anchor));
+                ship.weapons_target = None;
+            }
+            EscortMode::Dock => {
                 ship.nav_target = Some(Target::Ship(escort.mother));
                 ship.weapons_target = None;
             }

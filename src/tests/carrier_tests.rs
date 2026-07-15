@@ -171,7 +171,10 @@ fn dock_order_falls_back_to_formation_for_squadrons() {
     let carried = app
         .world_mut()
         .spawn((
-            Escort { mother: player },
+            Escort {
+                mother: player,
+                anchor: Entity::PLACEHOLDER,
+            },
             CarriedBy {
                 weapon_type: "fighter_bay".into(),
             },
@@ -180,7 +183,13 @@ fn dock_order_falls_back_to_formation_for_squadrons() {
         .id();
     let wing = app
         .world_mut()
-        .spawn((Escort { mother: player }, EscortMode::Escort))
+        .spawn((
+            Escort {
+                mother: player,
+                anchor: Entity::PLACEHOLDER,
+            },
+            EscortMode::Escort,
+        ))
         .id();
 
     let mut input = ButtonInput::<KeyCode>::default();
@@ -233,13 +242,21 @@ fn order_sounds_require_escorts() {
     assert!(press(&mut app, KeyCode::KeyN).is_empty());
 
     // A wings-only flight: B acknowledges with the formation cue, not dock.
-    app.world_mut()
-        .spawn((Escort { mother: player }, EscortMode::Escort));
+    app.world_mut().spawn((
+        Escort {
+            mother: player,
+            anchor: Entity::PLACEHOLDER,
+        },
+        EscortMode::Escort,
+    ));
     assert_eq!(press(&mut app, KeyCode::KeyB), vec![EscortSfx::Escort]);
 
     // With a carried escort present, B is a real dock order.
     app.world_mut().spawn((
-        Escort { mother: player },
+        Escort {
+            mother: player,
+            anchor: Entity::PLACEHOLDER,
+        },
         CarriedBy {
             weapon_type: "fighter_bay".into(),
         },
@@ -485,7 +502,10 @@ mod roster {
         let escort = app
             .world_mut()
             .spawn((
-                Escort { mother: player },
+                Escort {
+                    mother: player,
+                    anchor: Entity::PLACEHOLDER,
+                },
                 CarriedBy {
                     weapon_type: "fighter_bay".into(),
                 },
@@ -550,7 +570,10 @@ mod roster {
         );
         wounded.health = 10;
         app.world_mut().spawn((
-            Escort { mother: player },
+            Escort {
+                mother: player,
+                anchor: Entity::PLACEHOLDER,
+            },
             CarriedBy {
                 weapon_type: "fighter_bay".into(),
             },

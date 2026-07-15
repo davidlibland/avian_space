@@ -634,7 +634,10 @@ fn population_cull_spares_escorts_and_mission_targets() {
             AIShip {
                 personality: Personality::Fighter,
             },
-            crate::carrier::Escort { mother: player },
+            crate::carrier::Escort {
+                mother: player,
+                anchor: Entity::PLACEHOLDER,
+            },
         ))
         .id();
     let target = app
