@@ -204,13 +204,13 @@ pub(crate) fn manage_captives(
             if mn.0 != ev.mission_id {
                 continue;
             }
-            commands
-                .entity(entity)
-                .insert(crate::surface_npc::CompanionAvatar(ev.mission_id.clone()))
-                .remove::<crate::surface_npc::MissionNpc>();
+            if let Ok(mut e) = commands.get_entity(entity) {
+                e.insert(crate::surface_npc::CompanionAvatar(ev.mission_id.clone()))
+                    .remove::<crate::surface_npc::MissionNpc>();
+            }
             for (marker, child_of) in &markers {
                 if child_of.parent() == entity {
-                    commands.entity(marker).despawn();
+                    crate::utils::safe_despawn(&mut commands, marker);
                 }
             }
             // The converted body counts as present RIGHT NOW — this is
@@ -290,7 +290,10 @@ pub(crate) fn deliver_captives_to_garrison(
         if !is_captive || marching.contains(entity) {
             continue;
         }
-        commands.entity(entity).insert((
+        let Ok(mut ec) = commands.get_entity(entity) else {
+            continue;
+        };
+        ec.insert((
             MazeFugitive {
                 mission_id: avatar.0.clone(),
                 goal: cell,
@@ -360,18 +363,18 @@ pub(crate) fn maze_fugitive_arrivals(
             // They STAY in the cell — stripped of their marching orders,
             // loitering behind the bars until the scene ends.
             tow.captives.retain(|(id, _)| *id != fug.mission_id);
-            commands
-                .entity(entity)
-                .remove::<MazeFugitive>()
-                .remove::<crate::surface_npc::CompanionAvatar>()
-                .insert(crate::surface_npc::NpcBehavior::with_behaviors(
-                    0.0,
-                    [crate::surface_npc::Behavior::Loiter],
-                ));
+            if let Ok(mut e) = commands.get_entity(entity) {
+                e.remove::<MazeFugitive>()
+                    .remove::<crate::surface_npc::CompanionAvatar>()
+                    .insert(crate::surface_npc::NpcBehavior::with_behaviors(
+                        0.0,
+                        [crate::surface_npc::Behavior::Loiter],
+                    ));
+            }
             comms.send("The cell door clangs shut. The garrison takes custody.");
             continue;
         }
-        commands.entity(entity).despawn();
+        crate::utils::safe_despawn(&mut commands, entity);
         match fug.next {
             FugitiveNext::IntoBuilding => {
                 chase.inside.insert(fug.mission_id.clone(), 0);
@@ -1670,26 +1673,25 @@ pub(crate) fn hire_panel_ui(
                 // They knock back the drink and fall in behind you — from
                 // here on the avatar system owns them (same as friends).
                 let (offset, pace) = crate::surface_npc::formation_params(&name);
-                commands
-                    .entity(entity)
-                    .remove::<HirePilot>()
-                    .remove::<RigidBody>()
-                    .insert((
-                        RigidBody::Dynamic,
-                        LockedAxes::ROTATION_LOCKED,
-                        LinearDamping(10.0),
-                        LinearVelocity(Vec2::ZERO),
-                        crate::surface_npc::CompanionAvatar(name),
-                        crate::surface_npc::NpcBehavior::with_behaviors(
-                            120.0 * pace,
-                            [crate::surface_npc::Behavior::FollowPlayer {
-                                path: Vec::new(),
-                                current_idx: 0,
-                                repath_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
-                                offset,
-                            }],
-                        ),
-                    ));
+                let Ok(mut ec) = commands.get_entity(entity) else {
+                    return;
+                };
+                ec.remove::<HirePilot>().remove::<RigidBody>().insert((
+                    RigidBody::Dynamic,
+                    LockedAxes::ROTATION_LOCKED,
+                    LinearDamping(10.0),
+                    LinearVelocity(Vec2::ZERO),
+                    crate::surface_npc::CompanionAvatar(name),
+                    crate::surface_npc::NpcBehavior::with_behaviors(
+                        120.0 * pace,
+                        [crate::surface_npc::Behavior::FollowPlayer {
+                            path: Vec::new(),
+                            current_idx: 0,
+                            repath_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+                            offset,
+                        }],
+                    ),
+                ));
             }
         });
 }

@@ -1075,3 +1075,55 @@ mod fleet_cargo {
         );
     }
 }
+
+#[cfg(test)]
+mod cargo_readout_crash {
+    use crate::ship::{Ship, ShipData};
+
+    /// THE playtest crash: with a wingman enrolled, escort_cargo_bonus
+    /// makes remaining_cargo_space() exceed the hull's base cargo_space,
+    /// and the old Info/Cargo tab readouts computed
+    /// `data.cargo_space - remaining_cargo_space()` in u16 — instant
+    /// subtract-overflow panic on clicking the tab. The readouts now use
+    /// current_cargo()/cargo_capacity(), which can never disagree.
+    #[test]
+    fn cargo_readouts_survive_a_wingmans_hold() {
+        let mut ship = Ship::from_ship_data(&ShipData::default(), "p");
+        ship.escort_cargo_bonus = 500;
+        // Prove the crashing state exists: the OLD expression underflows.
+        assert!(
+            ship.data
+                .cargo_space
+                .checked_sub(ship.remaining_cargo_space())
+                .is_none(),
+            "this is exactly the state that panicked the old UI"
+        );
+        // The new readout pair is always consistent.
+        assert!(ship.cargo_capacity() >= ship.current_cargo());
+        assert_eq!(
+            ship.cargo_capacity() - ship.current_cargo(),
+            ship.remaining_cargo_space()
+        );
+    }
+
+    /// Selling the last copy of a weapon removes it and pays ONCE — the
+    /// old branch left a ghost zero-count entry that paid out again.
+    #[test]
+    fn selling_the_last_weapon_pays_once() {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        let mut ship = Ship::from_ship_data(&ShipData::default(), "p");
+        ship.credits = 100_000;
+        ship.data.gun_mounts = 4; // default hull has no mounts...
+        ship.data.item_space = 50; // ...and no equipment space
+        ship.buy_weapon("laser", &iu, 1.0);
+        assert!(ship.credits < 100_000, "premise: the buy succeeded");
+        let after_buy = ship.credits;
+        ship.sell_weapon("laser", &iu);
+        let after_sell = ship.credits;
+        assert!(after_sell > after_buy, "sale pays");
+        ship.sell_weapon("laser", &iu);
+        assert_eq!(ship.credits, after_sell, "nothing left to sell — no payout");
+    }
+}

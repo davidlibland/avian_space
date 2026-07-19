@@ -136,8 +136,18 @@ fn track_nearby_planet(
     }
     for event in collision_ends.read() {
         let (a, b) = (event.collider1, event.collider2);
-        if (planets.contains(a) && players.contains(b))
-            || (planets.contains(b) && players.contains(a))
+        let ended_planet = if planets.contains(a) && players.contains(b) {
+            Some(a)
+        } else if planets.contains(b) && players.contains(a) {
+            Some(b)
+        } else {
+            None
+        };
+        // Only clear if THE STORED planet's overlap ended — a same-frame
+        // leave-A/enter-B used to clobber the fresh planet (landing key
+        // dead until re-approach).
+        if let Some(p) = ended_planet
+            && nearby.0 == Some(p)
         {
             nearby.0 = None;
         }

@@ -95,9 +95,11 @@ pub fn apply_start_effects(
                     quantity,
                     reserved,
                 } => {
-                    *ship.cargo.entry(commodity.clone()).or_insert(0) += quantity;
+                    let slot = ship.cargo.entry(commodity.clone()).or_insert(0);
+                    *slot = slot.saturating_add(*quantity);
                     if *reserved {
-                        *ship.reserved_cargo.entry(commodity.clone()).or_insert(0) += quantity;
+                        let r = ship.reserved_cargo.entry(commodity.clone()).or_insert(0);
+                        *r = r.saturating_add(*quantity);
                     }
                 }
             }
@@ -504,6 +506,13 @@ pub fn spawn_mission_targets(
         } else {
             (0, 0)
         };
+        // A stale save can reference a hull that no longer exists in
+        // ships.yaml — ship_bundle PANICS on unknown types, so refuse the
+        // whole wave up front instead of crashing mid-flight.
+        if !item_universe.ships.contains_key(ship_type) {
+            warn!("mission target hull '{ship_type}' unknown — skipping spawn");
+            continue;
+        }
         for i in 0..need {
             // Targets arrive from hyperspace like ambient traffic — no ship
             // ever silently pops into existence mid-mission.
@@ -1302,7 +1311,10 @@ pub(super) fn instantiate_template(
             }
             let (sys_id, sys_display) = systems[rng.gen_range(0..systems.len())].clone();
             let ship_type = ship_type_pool[rng.gen_range(0..ship_type_pool.len())].clone();
-            let count = rand_in_range_u8(rng, *count_range);
+            // A zero-target destroy mission can never resolve (targets only
+            // spawn for need > 0 and completion fires on ShipDestroyed) —
+            // clamp to at least one.
+            let count = rand_in_range_u8(rng, *count_range).max(1);
             let pay = rand_in_range_i128(rng, *pay_range);
 
             let vars = [

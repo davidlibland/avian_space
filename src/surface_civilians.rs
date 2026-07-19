@@ -18,6 +18,12 @@ use crate::surface_pathfinding::SurfacePaths;
 /// Target average number of civilians walking at once.
 const TARGET_CIVILIAN_COUNT: f32 = 2.0;
 
+/// Ambient wanderers only — mission givers, clerks, companions and
+/// prisoners all carry `Npc` too, and counting THEM against the ambient
+/// cap silently emptied the streets whenever the player had company.
+#[derive(Component)]
+pub struct Civilian;
+
 // ── Components ───────────────────────────────────────────────────────────
 
 use crate::character_compositor::CharacterLayers;
@@ -54,7 +60,7 @@ pub fn spawn_civilians(
     paths_res: Option<Res<SurfacePaths>>,
     mut spawn_timer: ResMut<CivilianSpawnTimer>,
     time: Res<Time>,
-    existing: Query<(), With<Npc>>,
+    existing: Query<(), With<Civilian>>,
 ) {
     let (Some(mut layers), Some(paths)) = (layers, paths_res) else {
         return;
@@ -115,6 +121,7 @@ pub fn spawn_civilians(
     commands.spawn((
         DespawnOnExit(PlayState::Exploring),
         Npc,
+        Civilian,
         behavior,
         CharacterAnim::person(0.11),
         RigidBody::Dynamic,

@@ -227,7 +227,9 @@ pub fn run_npc_behaviors(
                 | Some(Behavior::FleeToward { waiting: false, .. })
                 | Some(Behavior::MarchTo { .. })
         );
-        if wants_to_move && moved < 0.5 {
+        // Threshold in px/SECOND (was px/frame: at 120 Hz a normal walk
+        // fell under it and every NPC thrashed through stuck-recovery).
+        if wants_to_move && moved < 30.0 * time.delta_secs() {
             npc.stuck_secs += time.delta_secs();
         } else {
             npc.stuck_secs = 0.0;
@@ -267,7 +269,7 @@ pub fn run_npc_behaviors(
         let Some(behavior) = npc.queue.front_mut() else {
             // No behaviors left — stop and despawn.
             vel.0 = Vec2::ZERO;
-            commands.entity(entity).despawn();
+            crate::utils::safe_despawn(&mut commands, entity);
             continue;
         };
 
@@ -1067,6 +1069,9 @@ fn steer_to(target: Vec2, pos: Vec2, speed: f32) -> Vec2 {
 
 /// Whether a tile is walkable on the cost map.
 fn walkable(cm: &SurfaceCostMap, tile: (u32, u32)) -> bool {
+    if tile.0 >= cm.width || tile.1 >= cm.height {
+        return false; // row-wrap guard: idx math would alias another tile
+    }
     let idx = (tile.1 * cm.width + tile.0) as usize;
     idx < cm.data.len() && cm.data[idx] < f32::INFINITY
 }

@@ -764,18 +764,20 @@ impl Ship {
         }
         // Increment count if the weapon is already present in either map.
         if let Some(ws) = self.weapon_systems.primary.get_mut(weapon_type) {
-            ws.number += 1;
+            ws.number = ws.number.saturating_add(1);
             self.credits -= price;
             return;
         }
         if let Some(ws) = self.weapon_systems.secondary.get_mut(weapon_type) {
-            ws.number += 1;
+            ws.number = ws.number.saturating_add(1);
             self.credits -= price;
             return;
         }
-        // New weapon: insert into the correct map based on whether it uses ammo.
+        // New weapon: insert into the correct map based on whether it uses
+        // ammo. The FIRST unit pays the marked-up price like every later
+        // one (it used to slip through at base price).
         if let Some(new_weapon) = WeaponSystem::from_type(weapon_type, 1, None, item_universe) {
-            self.credits -= outfitter_item.price();
+            self.credits -= price;
             if new_weapon.ammo_quantity.is_some() {
                 self.weapon_systems
                     .secondary
@@ -787,6 +789,14 @@ impl Ship {
             }
         }
     }
+    /// Whether an installed weapon actually tracks ammo (has a Some slot).
+    fn weapon_ammo_slot_exists(&self, weapon_type: &str) -> bool {
+        self.weapon_systems
+            .secondary
+            .get(weapon_type)
+            .is_some_and(|ws| ws.ammo_quantity.is_some())
+    }
+
     pub fn sell_weapon(&mut self, weapon_type: &str, item_universe: &ItemUniverse) {
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
@@ -794,9 +804,14 @@ impl Ship {
         if let std::collections::hash_map::Entry::Occupied(mut view) =
             self.weapon_systems.find_weapon_entry(weapon_type)
         {
-            self.credits += outfitter_item.price();
             let val = view.get_mut();
-            if val.number > 0 {
+            if val.number == 0 {
+                // Ghost entry (shouldn't exist) — clean it up, pay nothing.
+                view.remove_entry();
+                return;
+            }
+            self.credits += outfitter_item.price();
+            if val.number > 1 {
                 val.number -= 1;
             } else {
                 view.remove_entry();
@@ -804,6 +819,9 @@ impl Ship {
         }
     }
     pub fn buy_max_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
+        if !self.weapon_ammo_slot_exists(weapon_type) {
+            return; // nothing to load rounds into — don't charge
+        }
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };
@@ -835,6 +853,9 @@ impl Ship {
         }
     }
     pub fn buy_ammo(&mut self, weapon_type: &str, item_universe: &ItemUniverse, markup: f32) {
+        if !self.weapon_ammo_slot_exists(weapon_type) {
+            return; // nothing to load rounds into — don't charge
+        }
         let Some(outfitter_item) = item_universe.outfitter_items.get(weapon_type) else {
             return;
         };

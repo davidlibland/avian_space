@@ -214,7 +214,12 @@ impl crate::session::SessionResource for EscortRoster {
     fn from_save(data: Self::SaveData, _: &crate::item_universe::ItemUniverse) -> Self {
         let mut roster = Self::default();
         for e in data.entries {
-            roster.add(e.ship_type, e.kind, e.health);
+            let id = roster.add(e.ship_type, e.kind, e.health);
+            // add() starts with empty ammo — restore the PERSISTED rounds,
+            // or every save/load silently refills the racks for free.
+            if let Some(entry) = roster.get_mut(id) {
+                entry.ammo = e.ammo;
+            }
         }
         roster.fallen = data.fallen.into_iter().collect();
         roster.parked = data.parked.into_iter().collect();
@@ -580,7 +585,7 @@ fn update_formation_anchors(
 ) {
     for (entity, anchor, mut pos, mut vel) in &mut anchors {
         let Ok(escort) = escorts.get(anchor.escort) else {
-            commands.entity(entity).despawn();
+            crate::utils::safe_despawn(&mut commands, entity);
             continue;
         };
         let Ok((mother_pos, mother_vel)) = mothers.get(escort.mother) else {
@@ -814,12 +819,22 @@ fn begin_escort_dock(
 /// command), cancel the dock and let it act normally again.
 fn cancel_escort_dock(
     mut commands: Commands,
-    mut escorts: Query<(Entity, &EscortMode, &DockingEscort, &mut Sprite)>,
+    mut escorts: Query<(
+        Entity,
+        &EscortMode,
+        &DockingEscort,
+        &mut Sprite,
+        &mut MaxLinearSpeed,
+        &Ship,
+    )>,
 ) {
-    for (entity, mode, dock, mut sprite) in &mut escorts {
+    for (entity, mode, dock, mut sprite, mut max_speed, ship) in &mut escorts {
         if !matches!(mode, EscortMode::Dock) {
-            // Restore the full display size (atlas tiles are decoupled from it).
+            // Restore the full display size (atlas tiles are decoupled from it)
+            // AND the cruise speed the dock animation was winding down —
+            // a cancelled dock used to leave the escort permanently slow.
             sprite.custom_size = Some(dock.full_size);
+            max_speed.0 = ship.data.max_speed;
             commands.entity(entity).remove::<DockingEscort>();
         }
     }
@@ -1086,6 +1101,7 @@ pub(crate) fn service_entry(
 /// fighters don't count (they spend half their lives inside the bay), and
 /// mission squadron wings aren't the player's to load. Writes only on
 /// change so it doesn't dirty the player's Ship every frame.
+#[allow(clippy::type_complexity)]
 fn sync_escort_cargo_bonus(
     roster: Option<Res<EscortRoster>>,
     iu: Res<crate::item_universe::ItemUniverse>,
@@ -1106,7 +1122,7 @@ fn sync_escort_cargo_bonus(
                 })
                 .filter_map(|e| iu.ships.get(&e.ship_type))
                 .map(|d| d.cargo_space)
-                .sum()
+                .fold(0u16, |a, b| a.saturating_add(b))
         })
         .unwrap_or(0);
     if ship.escort_cargo_bonus != bonus {

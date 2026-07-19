@@ -428,7 +428,10 @@ pub fn render_outfitter_tab(
                 if buy.clicked() {
                     ship.buy_weapon(&item, item_universe, markup);
                 }
-                if ui.button("Sell").clicked() {
+                if ui
+                    .add_enabled(owned > 0, egui::Button::new("Sell"))
+                    .clicked()
+                {
                     ship.sell_weapon(&item, item_universe);
                 }
                 ui.label(match ammo {
@@ -516,7 +519,11 @@ pub fn render_mods_section(
                         if ui.button("Buy").clicked() {
                             ship.buy_mod(&name, item_universe, markup);
                         }
-                        if ui.button("Sell").clicked() {
+                        let owned_mods = ship.mods.get(&name).copied().unwrap_or(0);
+                        if ui
+                            .add_enabled(owned_mods > 0, egui::Button::new("Sell"))
+                            .clicked()
+                        {
                             ship.sell_mod(&name, item_universe);
                         }
                     });

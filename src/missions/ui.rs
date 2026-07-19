@@ -537,8 +537,8 @@ fn render_info_tab(
             ui.label("Cargo space:");
             ui.label(format!(
                 "{} / {} t",
-                ship.data.cargo_space - ship.remaining_cargo_space(),
-                ship.data.cargo_space
+                ship.current_cargo(),
+                ship.cargo_capacity()
             ));
             ui.end_row();
             ui.label("Item slots:");
@@ -591,11 +591,11 @@ fn render_cargo_tab(
     item_universe: &ItemUniverse,
     pickup_drop: &mut MessageWriter<PickupDrop>,
 ) {
-    let used = ship.data.cargo_space - ship.remaining_cargo_space();
+    let used = ship.current_cargo();
     ui.label(format!(
         "Cargo hold: {} / {} t ({} free)",
         used,
-        ship.data.cargo_space,
+        ship.cargo_capacity(),
         ship.remaining_cargo_space()
     ));
     ui.separator();

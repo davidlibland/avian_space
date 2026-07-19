@@ -319,7 +319,16 @@ pub(crate) fn setup_surface(
                     .collect();
                 for row in 0..tmpl.height {
                     for col in 0..tmpl.width {
-                        let tile_idx = tmpl.tiles[row as usize][col as usize];
+                        // Guard: template RON with a short tiles grid must
+                        // not panic every surface entry.
+                        let Some(tile_idx) = tmpl
+                            .tiles
+                            .get(row as usize)
+                            .and_then(|r| r.get(col as usize))
+                            .copied()
+                        else {
+                            continue;
+                        };
                         if tile_idx == 0 {
                             continue;
                         } // transparent
@@ -333,13 +342,21 @@ pub(crate) fn setup_surface(
             }
         }
 
-        // Mechanic building: all tiles except garage doors are solid.
-        for row in 0..3u32 {
-            for col in 0..4u32 {
-                let atlas_row = 2 - row;
-                let is_garage = atlas_row == 2 && (col == 1 || col == 2);
+        // Mechanic building: pathfinding solids must MATCH the physics
+        // colliders (6 cols × 4 rows centred on the sprite, garage doors
+        // open) — the old 4×3 patch left 14 tiles A*-walkable but
+        // physically walled, and NPCs ground against them.
+        for row in 0..4u32 {
+            for col in 0..6u32 {
+                let tx_i = mech_x as i32 - 1 + col as i32;
+                if tx_i < 0 {
+                    continue;
+                }
+                let tx = tx_i as u32;
+                let ty = mech_y + row;
+                let is_garage = row == 0 && (tx == mech_x + 1 || tx == mech_x + 2);
                 if !is_garage {
-                    solid_building_tiles.insert((mech_x + col, mech_y + row));
+                    solid_building_tiles.insert((tx, ty));
                 }
             }
         }
@@ -837,7 +854,16 @@ pub(crate) fn setup_surface(
                 if let Some(tmpl) = templates.get(ti) {
                     for row in 0..tmpl.height {
                         for col in 0..tmpl.width {
-                            let tile_idx = tmpl.tiles[row as usize][col as usize];
+                            // Guard: template RON with a short tiles grid must
+                            // not panic every surface entry.
+                            let Some(tile_idx) = tmpl
+                                .tiles
+                                .get(row as usize)
+                                .and_then(|r| r.get(col as usize))
+                                .copied()
+                            else {
+                                continue;
+                            };
                             if tile_idx == 0 {
                                 continue;
                             }

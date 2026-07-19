@@ -164,14 +164,13 @@ pub struct CharacterLayers {
 }
 
 fn hex_rgb(s: &str) -> Option<[u8; 3]> {
+    // Parse via checked sub-slices: a multi-byte character in a malformed
+    // color string must return None, not panic on a char boundary.
     let s = s.trim_start_matches('#');
-    if s.len() < 6 {
-        return None;
-    }
     Some([
-        u8::from_str_radix(&s[0..2], 16).ok()?,
-        u8::from_str_radix(&s[2..4], 16).ok()?,
-        u8::from_str_radix(&s[4..6], 16).ok()?,
+        u8::from_str_radix(s.get(0..2)?, 16).ok()?,
+        u8::from_str_radix(s.get(2..4)?, 16).ok()?,
+        u8::from_str_radix(s.get(4..6)?, 16).ok()?,
     ])
 }
 

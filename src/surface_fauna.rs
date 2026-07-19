@@ -434,7 +434,10 @@ pub fn run_fauna(
                 if fauna.timer.just_finished() {
                     // Pick a nearby valid home tile to wander to.
                     let (map_w, map_h) = (world.map_w, world.map_h);
-                    let sp_ref = &world.species[fauna.species];
+                    let sp_ref = match world.species.get(fauna.species) {
+                        Some(s) => s,
+                        None => continue,
+                    };
                     let idxs = &sp_ref.terrain_idxs;
                     let group = sp_ref.group;
                     // Herd species bias the search toward the flock centroid.

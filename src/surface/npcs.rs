@@ -474,7 +474,7 @@ pub(crate) fn update_building_offer_markers(
     // Remove stale markers (offer accepted / expired).
     for (entity, marker) in &markers {
         if !hot.contains(&marker.0) {
-            commands.entity(entity).despawn();
+            crate::utils::safe_despawn(&mut commands, entity);
         }
     }
     // Add missing ones over the building's door sensor.
@@ -512,6 +512,9 @@ pub(crate) fn follower_spawn_tile(
 ) -> (u32, u32) {
     let wt = crate::surface_pathfinding::SurfaceCostMap::world_to_tile(walker_pos);
     let walkable = |t: (u32, u32)| -> bool {
+        if t.0 >= cost_map.width || t.1 >= cost_map.height {
+            return false; // row-wrap guard
+        }
         let idx = (t.1 * cost_map.width + t.0) as usize;
         idx < cost_map.data.len() && cost_map.data[idx] < f32::INFINITY
     };
