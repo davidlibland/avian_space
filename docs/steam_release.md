@@ -1,9 +1,10 @@
 # Steam release — license audit, gaps, and process
 
 Audited 2026-07-20. Verdict up front: **nothing blocks a commercial Steam
-release**, but there are obligations to honor (LPC art attribution — now
-built into the main menu) and **one open item: 51 sound files with
-unrecorded origins** that must be documented or replaced first.
+release**. All licenses are cleared and recorded: dependencies
+permissive, LPC character-art attribution shipped in the main menu's
+Credits screen, and every sound file's source is documented (in-house
+synthesis, Kenney CC0, TTSMaker commercial terms).
 
 ---
 
