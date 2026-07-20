@@ -88,6 +88,50 @@ the name**).
 
 ---
 
+## 2b. Steam + Mac App Store dual distribution
+
+**No store-to-store conflict.** Valve's distribution agreement is
+non-exclusive; Apple's likewise. Shipping the same game on both is
+common. The practical notes:
+
+* **Steam keys are the only parity obligation.** Valve's key rules
+  require you not to give OTHER stores a better deal when using
+  Steam-generated keys. Selling an independent MAS build is outside
+  that; still, keep pricing roughly consistent for goodwill.
+* **Two build variants.** MAS requires the App Sandbox entitlement and
+  an "Apple Distribution" certificate + provisioning profile;
+  Steam/mac uses Developer ID + notarization. Same code, two signing
+  paths. (Saves in `~/Library/Application Support/AvianSpace` map into
+  the sandbox container automatically.)
+* **Anti-steering:** the MAS build must not link out to "buy on
+  Steam" or reference other stores' purchasing.
+* **No Steamworks SDK inside the MAS build** (and no MAS receipt
+  checking in the Steam build) — keep store integrations per-variant.
+
+**The one real wrinkle: CC art vs App Store DRM.** CC-BY 3.0 and
+CC-BY-SA 3.0 forbid distributing the licensed work behind "effective
+technological measures" that restrict recipients' rights — and Mac App
+Store delivery wraps apps in FairPlay DRM. This is the same class of
+issue that got GPL apps (VLC) pulled from the App Store.
+
+* **On Steam this is a non-issue IF we don't enable Valve's optional
+  DRM wrapper** — ship DRM-free on Steam (recommended; it's opt-in and
+  most indies skip it).
+* **OGA-BY 3.0 entries are explicitly fine** — OGA-BY exists precisely
+  to remove CC's anti-DRM clause. CC0 entries are fine anywhere.
+* For LPC entries whose ONLY licenses are CC-BY/CC-BY-SA/GPL, MAS
+  distribution is legally gray (the community's "parallel
+  distribution" workaround — also offering the art DRM-free — is
+  accepted by many artists but not settled law).
+* **Options if MAS matters:** (1) audit `CREDITS-SPRITES.md` and
+  restrict the compositor to layers from OGA-BY/CC0 entries for the
+  MAS build; (2) contact the handful of SA-only artists for a waiver;
+  (3) treat MAS as lower priority and ship Steam (DRM-free) +
+  optionally itch.io first. Enforcement risk is low, but "low risk"
+  is a business decision, not a legal clearance.
+
+---
+
 ## 3. The Steam process, step by step
 
 1. **Steamworks account** — partner.steamgames.com → "Join Steamworks".
