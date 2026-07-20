@@ -49,22 +49,17 @@ obligations:
    use Valve's default Subscriber Agreement or carve out third-party
    art credits.
 
-### Audio — ONE OPEN ITEM
+### Audio — CLEAR (confirmed 2026-07-20)
 * All **weapon** SFX: synthesized in-house
-  (`scripts/synth_weapon_sounds.py`) — clear.
-* **51 files have no recorded origin** (see
-  `assets/sounds/CREDITS-SOUNDS.md`): explosions, jump/landing,
-  thruster, UI, door, footsteps, escort voice lines.
-  * The footstep sets (`footstep_<surface>_000..004`) match the naming
-    of Kenney's CC0 audio packs — if that's where they came from,
-    they're fine; record it.
-  * The escort voice lines (`escorts/*.mp3`) look like TTS output —
-    TTS **terms of service vary**; some (e.g. certain online services)
-    restrict commercial redistribution. Needs confirmation.
-  * **Action:** for each file, either (a) record source + license in
-    CREDITS-SOUNDS.md, or (b) replace it — extend
-    `synth_weapon_sounds.py` to cover explosions/UI/thruster, or pull
-    CC0 equivalents from kenney.nl and note it.
+  (`scripts/synth_weapon_sounds.py`).
+* Ambient/UI/footsteps/explosions: **Kenney** packs — CC0 1.0.
+* Escort voice lines: **TTSMaker** — their Commercial License Terms
+  grant 100% commercial usage rights to generated audio, attribution
+  optional. (Minor diligence note: TTSMaker marks a usage scope per
+  VOICE in their UI — worth a one-time glance that the voices used
+  were commercial-scope, which nearly all are.)
+* Per-file record: `assets/sounds/CREDITS-SOUNDS.md`; all three
+  sources credited in the in-game Credits screen.
 
 ---
 
@@ -73,7 +68,7 @@ obligations:
 | Gap | Status | Priority |
 |---|---|---|
 | In-game credits (license obligation) | **DONE this pass** | — |
-| Sound provenance (51 files) | **OPEN — user input or replacement** | Blocking |
+| Sound provenance (51 files) | **DONE — Kenney CC0 + TTSMaker, recorded** | — |
 | Settings: master volume / music / SFX sliders | Missing | High — Steam players expect it |
 | Settings: fullscreen/windowed toggle, resolution | Missing (fixed window) | High |
 | Window icon + app icon | Missing | Medium |
@@ -128,7 +123,7 @@ the name**).
    builds pushed to the default branch.
 
 ### Suggested order from today
-1. Resolve the 51 sound files (confirm or replace). ← only blocker
+1. ~~Resolve the 51 sound files~~ DONE (Kenney CC0 + TTSMaker).
 2. Settings menu (volume + fullscreen) and window icon.
 3. Windows/Linux build scripts + macOS signing; test on hardware.
 4. Register Steamworks, reserve the name, start the store page art.

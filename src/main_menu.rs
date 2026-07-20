@@ -140,6 +140,11 @@ fn main_menu_ui(
                             "Composited from the Liberated Pixel Cup (LPC)                              collection — see the full per-artist list below.                              LPC art is used under its own licenses (CC0 /                              OGA-BY 3.0 / CC-BY / CC-BY-SA 3.0); those                              licenses cover the art only, not the game.",
                         );
                         ui.separator();
+                        ui.heading("Audio");
+                        ui.label(
+                            "Weapon sounds synthesized for this game.                              Ambient, UI and footstep sounds from Kenney                              (kenney.nl), CC0. Escort voice lines generated                              with TTSMaker (ttsmaker.com).",
+                        );
+                        ui.separator();
                         ui.heading("UI fonts");
                         ui.label(
                             "Embedded egui fonts under the SIL Open Font                              License 1.1 and the Ubuntu Font Licence 1.0.",
