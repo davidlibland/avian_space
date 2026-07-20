@@ -10,6 +10,9 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 
 #[derive(Resource, Default)]
 struct MainMenuState {
+    /// Credits window open (LPC art attribution is a license obligation,
+    /// so this must stay reachable from the shipped menu).
+    show_credits: bool,
     new_pilot_name: String,
     new_pilot_gender: Gender,
     /// Avatar being built in the creator (None until first shown/edited).
@@ -109,6 +112,46 @@ fn main_menu_ui(
             ui.heading(egui::RichText::new("AVIAN SPACE").size(48.0));
         });
         ui.add_space(24.0);
+
+        // Credits: character art is LPC (CC-BY-SA/OGA-BY et al.) — visible
+        // attribution from the shipped menu is a license obligation, not
+        // just courtesy.
+        egui::TopBottomPanel::bottom("menu_footer").show_inside(ui, |ui| {
+            ui.horizontal(|ui| {
+                if ui.small_button("Credits & Licenses").clicked() {
+                    menu_state.show_credits = !menu_state.show_credits;
+                }
+            });
+        });
+        if menu_state.show_credits {
+            let mut open = true;
+            egui::Window::new("Credits & Licenses")
+                .open(&mut open)
+                .default_size([560.0, 480.0])
+                .show(ui.ctx(), |ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.heading("Avian Space");
+                        ui.label(
+                            "Code, ship/world/creature art, and weapon sound                              effects created for this game.",
+                        );
+                        ui.separator();
+                        ui.heading("Character sprites");
+                        ui.label(
+                            "Composited from the Liberated Pixel Cup (LPC)                              collection — see the full per-artist list below.                              LPC art is used under its own licenses (CC0 /                              OGA-BY 3.0 / CC-BY / CC-BY-SA 3.0); those                              licenses cover the art only, not the game.",
+                        );
+                        ui.separator();
+                        ui.heading("UI fonts");
+                        ui.label(
+                            "Embedded egui fonts under the SIL Open Font                              License 1.1 and the Ubuntu Font Licence 1.0.",
+                        );
+                        ui.separator();
+                        ui.monospace(include_str!("../assets/CREDITS-SPRITES.md"));
+                    });
+                });
+            if !open {
+                menu_state.show_credits = false;
+            }
+        }
 
         // Two columns when there are saves to load; centered single panel
         // otherwise. Side-by-side keeps the avatar creator on screen without
