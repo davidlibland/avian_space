@@ -410,13 +410,15 @@ fn validate_preconditions(preconds: &[Precondition], id: &str, label: &str, iu: 
 }
 
 fn validate_offer(offer: &OfferKind, id: &str, label: &str, planets: &HashSet<&str>) {
-    if let OfferKind::NpcOffer { planet, .. } = offer
-        && !planets.contains(planet.as_str())
-    {
-        warn!(
-            "{label} \"{id}\" NpcOffer references planet \"{planet}\" \
-                 which does not exist in any star system"
-        );
+    if let OfferKind::NpcOffer { planet, .. } = offer {
+        for planet in planet {
+            if !planets.contains(planet.as_str()) {
+                warn!(
+                    "{label} \"{id}\" NpcOffer references planet \"{planet}\" \
+                         which does not exist in any star system"
+                );
+            }
+        }
     }
 }
 
@@ -1199,9 +1201,12 @@ fn check_mission_coherence(iu: &ItemUniverse, p: &mut Vec<String>) {
         if let OfferKind::NpcOffer {
             planet, building, ..
         } = &def.offer
-            && let Some(pd) = find_planet(iu, planet)
         {
-            check_surface(id, "offered on", planet, pd, building.as_deref(), p);
+            for planet in planet {
+                if let Some(pd) = find_planet(iu, planet) {
+                    check_surface(id, "offered on", planet, pd, building.as_deref(), p);
+                }
+            }
         }
         // surface objectives
         match &def.objective {

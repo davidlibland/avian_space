@@ -213,7 +213,8 @@ fn standing_on_mission_complete(
             continue;
         };
         if let OfferKind::NpcOffer { planet, .. } = &def.offer
-            && let Some(f) = crate::galaxy::effective_planet_faction(&galaxy, &iu, planet)
+            && let Some(p0) = planet.first()
+            && let Some(f) = crate::galaxy::effective_planet_faction(&galaxy, &iu, p0)
         {
             standings.adjust(&f, MISSION_BONUS);
             if let Some(service) = service.as_deref_mut() {

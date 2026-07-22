@@ -359,7 +359,7 @@ fn instantiate_war_mission(
                     failure_text: subst(failure_text, &vars),
                     preconditions: Vec::new(),
                     offer: OfferKind::NpcOffer {
-                        planet: String::new(), // placed directly into offers
+                        planet: Vec::new(), // placed directly into offers
                         weight: 1.0,
                         // Overt war work is OFFICIAL: the duty officer waits
                         // at the faction's garrison.
@@ -633,7 +633,7 @@ fn instantiate_war_mission(
                     failure_text: subst(failure_text, &vars),
                     preconditions: Vec::new(),
                     offer: OfferKind::NpcOffer {
-                        planet: String::new(),
+                        planet: Vec::new(),
                         weight: 1.0,
                         // Covert work is DENIABLE: a stranger sidles up in the
                         // bar, never anyone in a uniform.

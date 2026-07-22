@@ -835,7 +835,9 @@ pub fn roll_offers_on_land(
                 }
                 OfferKind::NpcOffer {
                     planet: p, weight, ..
-                } if p == planet => npc.push((id.clone(), backoff.effective_weight(id, *weight))),
+                } if p.iter().any(|x| x == planet) => {
+                    npc.push((id.clone(), backoff.effective_weight(id, *weight)))
+                }
                 _ => {}
             }
         }
@@ -868,7 +870,7 @@ pub fn roll_offers_on_land(
                 }
                 OfferKind::NpcOffer {
                     planet: p, weight, ..
-                } if p == planet => {
+                } if p.iter().any(|x| x == planet) => {
                     if rng.gen_range(0.0..1.0) < weight.clamp(0.0, 1.0) {
                         Some(&mut rolled_npc)
                     } else {
@@ -994,7 +996,7 @@ pub fn roll_new_offers_while_landed(
             OfferKind::Tab { weight } => Some((id.clone(), *weight, true)),
             OfferKind::NpcOffer {
                 planet: p, weight, ..
-            } if *p == planet => Some((id.clone(), *weight, false)),
+            } if p.contains(&planet) => Some((id.clone(), *weight, false)),
             _ => None,
         })
         .collect();

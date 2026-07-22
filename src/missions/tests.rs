@@ -412,6 +412,23 @@ fn travel_and_land_objectives_zero_space() {
 // ── Serde round-trips ───────────────────────────────────────────────────────
 
 #[test]
+fn npc_offer_planet_accepts_string_or_list() {
+    let one: OfferKind =
+        serde_yaml::from_str("kind: npc_offer\nplanet: earth\nweight: 1.0").unwrap();
+    let OfferKind::NpcOffer { planet, .. } = one else {
+        panic!("wrong variant");
+    };
+    assert_eq!(planet, vec!["earth".to_string()]);
+
+    let many: OfferKind =
+        serde_yaml::from_str("kind: npc_offer\nplanet: [earth, mars]\nweight: 1.0").unwrap();
+    let OfferKind::NpcOffer { planet, .. } = many else {
+        panic!("wrong variant");
+    };
+    assert_eq!(planet, vec!["earth".to_string(), "mars".to_string()]);
+}
+
+#[test]
 fn mission_status_serde_roundtrip() {
     let statuses = vec![
         MissionStatus::Locked,
@@ -470,7 +487,7 @@ fn mission_def_yaml_roundtrip_land_with_requires() {
         failure_text: "Failed.".into(),
         preconditions: Vec::new(),
         offer: OfferKind::NpcOffer {
-            planet: "earth".into(),
+            planet: vec!["earth".into()],
             weight: 0.5,
             building: None,
             approach: Default::default(),
@@ -1497,7 +1514,7 @@ pub(super) mod runtime {
 
         let mut def = dummy_def();
         def.offer = OfferKind::NpcOffer {
-            planet: "earth".into(),
+            planet: vec!["earth".into()],
             weight: 1.0,
             building: None,
             approach: NpcApproach::Wait,

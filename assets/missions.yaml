@@ -144,15 +144,15 @@ scavenge_iron_deliver:
 
 mining_story_1:
   faction: Merchant
-  briefing: "A weather-beaten Mining Guild recruiter loiters near the shipyard, eyeing incoming pilots. She waves you over. 'Kid, we're short on haulers. Shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 300 credits, paid the moment it's aboard.'"
+  briefing: "A weather-beaten Mining Guild recruiter leans on the bar, eyeing incoming pilots. She waves you over. 'Kid, we're short on haulers. Shoot up some asteroids around Sol and bring back 4 units of clean iron — no market-bought slag. 300 credits, paid the moment it's aboard.'"
   success_text: "Your comm pings — the recruiter has seen the manifest. 'Good iron, kid. Go see the foreman at the Mars market — she's got bigger work.'"
   failure_text: "The recruiter snorts. 'Don't waste my time again.'"
   preconditions: []
   offer:
     kind: npc_offer
-    planet: earth
+    planet: [earth, moon, venus]
     weight: 1.0
-    building: shipyard
+    building: bar
     npc: guild_recruiter
   objective:
     kind: collect_pickups
@@ -222,12 +222,12 @@ mining_story_3:
 merchant_story_1:
   faction: Merchant
   briefing: "A Merchant Guild rep is haggling with a vendor near the market. He spots you and breaks away. 'You look like you need work. Short run — 8 units of food to Moon colony. Good shakedown for a new pilot. 700 on delivery, and we'll get you certified for a real cargo ship. Come find me at Moon's market when it's done.'"
-  success_text: "The rep on Moon hands over the credits and a certification chit. 'Freighter license. Spend wisely. Come find me at the market for the next run.'"
+  success_text: "The rep on Moon hands over the credits and a certification chit. 'Freighter license. Spend wisely. Come find me at the Moon market for the next run.'"
   failure_text: "The rep shrugs. 'The Guild's got other pilots.'"
   preconditions: []
   offer:
     kind: npc_offer
-    planet: earth
+    planet: [earth, mars, venus]
     weight: 1.0
     building: market
     npc: merchant_rep
@@ -326,15 +326,15 @@ merchant_story_3:
 
 pirate_bounty_sol:
   faction: Federation
-  briefing: "A Federation officer jogs over from the shipyard, waving you down. 'Pilot — we need you. There's a pirate corvette tearing through merchant convoys in Sol. Weak ship, but they've hit three transports this week alone. Destroy them — 1,800 credits, enough to pick up a fighter if that's your thing.'"
+  briefing: "A Federation officer pushes off the bar and waves you down. 'Pilot — we need you. There's a pirate corvette tearing through merchant convoys in Sol. Weak ship, but they've hit three transports this week alone. Destroy them — 1,800 credits, enough to pick up a fighter if that's your thing.'"
   success_text: "As the corvette breaks apart, your sensors pick up a faint thruster signature — an escape pod, accelerating hard toward the outer system. The officer's voice crackles over comms: 'Don't let them disappear. Our intel says the pod is heading for Triton. Land there and apprehend the pirate before they find a new ship.'"
   failure_text: "The officer shakes her head. 'They got away. Maybe next time.'"
   preconditions: []
   offer:
     kind: npc_offer
-    planet: earth
+    planet: [earth, venus, moon]
     weight: 1.0
-    building: shipyard
+    building: bar
     approach: seek
   objective:
     kind: destroy_ships
@@ -350,7 +350,7 @@ pirate_bounty_sol:
 pirate_escape_pod:
   faction: Federation
   briefing: "Land on Triton (in sol) and apprehend the pirate before they find a new ship."
-  success_text: "You run the pirate down on Triton — out of breath, out of options. They raise their hands. 'Alright, alright. You got me.' The Federation transfers 600 credits and a fighter certification to your account — the debrief confirmed this pirate had been scouting Federation convoys for months."
+  success_text: "You run the pirate down on Triton — out of breath, out of options. They raise their hands. 'Alright, alright. You got me.' The Federation transfers 600 credits and a fighter certification to your account — the debrief confirmed this pirate had been scouting Federation convoys for months. Vasquez posts her contracts at the Earth shipyard when you want more."
   failure_text: "The pirate slipped away in the ice fields. They'll be someone else's problem now."
   preconditions:
     - kind: completed
@@ -630,13 +630,13 @@ bounty_story_6_catch:
 
 espionage_1:
   faction: Federation
-  briefing: "A Federation Intelligence officer nurses a drink at the back of the Earth bar. She doesn't look up until you're seated. 'You clean? Good. A Sirius Cell operative has been lifting naval dispatches out of our Earth comm-center. He made our tail yesterday and he's gone to ground on the surface. Run him down before extraction — 600 credits. We don't exist, and neither does this conversation.'"
-  success_text: "You corner the operative behind the market loading bays. He has a burst-transmitter in his hand — you get to it first. The officer's voice, three hours later: 'Clean work. Credits are in your account. Come back when you're ready for the next one.'"
+  briefing: "A Federation Intelligence officer nurses a drink at the back of the bar. She doesn't look up until you're seated. 'You clean? Good. A Sirius Cell operative has been lifting naval dispatches out of our Earth comm-center. He made our tail yesterday and he's gone to ground on the surface. Run him down before extraction — 600 credits. We don't exist, and neither does this conversation.'"
+  success_text: "You corner the operative behind the market loading bays. He has a burst-transmitter in his hand — you get to it first. The officer's voice, three hours later: 'Clean work. Credits are in your account. Come back when you're ready for the next one.' 'Next job comes the same way — the Earth bar, same booth.'"
   failure_text: "The operative made his extraction window. Whatever he had is already on a rebel data-lance halfway to Sirius."
   preconditions: []
   offer:
     kind: npc_offer
-    planet: earth
+    planet: [earth, kepler_22b]
     weight: 1.0
     building: bar
     approach: wait
@@ -1028,15 +1028,15 @@ espionage_final:
 # ══════════════════════════════════════════════════════════════════════════════
 frontier_1:
   faction: FreeFrontier
-  briefing: "A weather-beaten harbormaster corners you in the Halcyon free port. 'You fly like you can fight. Pirates are gutting our ice convoys — two corvettes, working the Halcyon lanes. Run them off and the Reaches won't forget it. 800, and Coalition papers — our prospectors and ore-dredgers, and the flak gun they mount, are yours after that. The fighting hulls you earn one at a time.'"
-  success_text: "The harbormaster's voice comes warm over the link. 'You're one of us now. Ceres yard sells you our working hulls — the prospector, the dredger, the flak gun. The fast hulls come as you prove them. Come find me — there's more.'"
+  briefing: "A weather-beaten harbormaster corners you in the free-port bar. 'You fly like you can fight. Pirates are gutting our ice convoys — two corvettes, working the Halcyon lanes. Run them off and the Reaches won't forget it. 800, and Coalition papers — our prospectors and ore-dredgers, and the flak gun they mount, are yours after that. The fighting hulls you earn one at a time.'"
+  success_text: "The harbormaster's voice comes warm over the link. 'You're one of us now. Ceres yard sells you our working hulls — the prospector, the dredger, the flak gun. The fast hulls come as you prove them. Come find me — there's more.' New Guild contracts post at the Halcyon Port market."
   failure_text: "The convoys burn. The harbormaster won't look at you."
   preconditions:
     - kind: completed
       mission: pirate_bounty_sol
   offer:
     kind: npc_offer
-    planet: halcyon_port
+    planet: [halcyon_port, ceres, kuiper_haven]
     weight: 1.0
     building: bar
     approach: seek
@@ -1183,15 +1183,15 @@ frontier_5:
 # ══════════════════════════════════════════════════════════════════════════════
 helios_1:
   faction: Helios
-  briefing: "A Helios recruiter in a spotless suit finds you at Helios Prime. 'We headhunt talent. Pirates are circling an automated ore convoy near the Foundry — two of them. Clear them; the shareholders thank you. 800, plus a Combine trade clearance — our courier and freight hulls, and the lance sidearm they ship with, open to you. The combat line you earn separately.'"
-  success_text: "'Efficient. The Combine likes efficient.' 800 credits, and your Helios trade clearance is live — the logistics hulls (courier, freighter, hauler) and the Helios lance are yours at any Combine yard. Prove yourself further and the war hulls follow."
+  briefing: "A Helios recruiter in a spotless suit finds you across the bar. 'We headhunt talent. Pirates are circling an automated ore convoy near the Foundry — two of them. Clear them; the shareholders thank you. 800, plus a Combine trade clearance — our courier and freight hulls, and the lance sidearm they ship with, open to you. The combat line you earn separately.'"
+  success_text: "'Efficient. The Combine likes efficient.' 800 credits, and your Helios trade clearance is live — the logistics hulls (courier, freighter, hauler) and the Helios lance are yours at any Combine yard. Prove yourself further and the war hulls follow. Logistics keeps a desk at the Helios Prime market."
   failure_text: "The convoy is lost. The recruiter has already moved on to the next candidate."
   preconditions:
     - kind: completed
       mission: pirate_bounty_sol
   offer:
     kind: npc_offer
-    planet: helios_prime
+    planet: [helios_prime, tycho]
     weight: 1.0
     building: bar
     approach: seek
@@ -1329,15 +1329,15 @@ helios_5:
 # ══════════════════════════════════════════════════════════════════════════════
 bastion_1:
   faction: Bastion
-  briefing: "An iron-faced officer meets you at Iron March. 'The Federation has gone soft. We have not. Prove you understand: there are Rebel ships in the Drift, fat and unpunished. Two of them. End them. 900 — and the Bastion will arm you: our work hulls and the chaingun they mount. The warships you earn by proving your spine.'"
-  success_text: "'Order is a thing you enforce.' The officer uploads Bastion clearance — the ore-dredger, the collier, and the chaingun are yours at any Anvil yard. The warships come one at a time, as you earn them. 900 credits."
+  briefing: "An iron-faced officer meets you in the bar. 'The Federation has gone soft. We have not. Prove you understand: there are Rebel ships in the Drift, fat and unpunished. Two of them. End them. 900 — and the Bastion will arm you: our work hulls and the chaingun they mount. The warships you earn by proving your spine.'"
+  success_text: "'Order is a thing you enforce.' The officer uploads Bastion clearance — the ore-dredger, the collier, and the chaingun are yours at any Anvil yard. The warships come one at a time, as you earn them. 900 credits. Munitions contracts post at the Iron March market."
   failure_text: "'Weakness.' The officer turns away."
   preconditions:
     - kind: completed
       mission: bounty_story_2_catch
   offer:
     kind: npc_offer
-    planet: iron_march
+    planet: [iron_march, bastion, coldforge]
     weight: 1.0
     building: bar
     approach: seek
@@ -1487,15 +1487,15 @@ bastion_5:
 # ══════════════════════════════════════════════════════════════════════════════
 order_1:
   faction: Order
-  briefing: "A robed proctor watches you in the Tau Ceti ruins — and approaches only because you did not loot. 'Smugglers strip the sacred sites for trinkets. Three of them defile a ruin now. Stop them, and recover what they have taken — the relics are not yours, nor theirs. 900. The Order will know you then.'"
-  success_text: "The looters are scattered; the relics recovered, unspoiled. The proctor's blessing arrives over comms. 'You may walk in the Order now. Our pilgrim hulls — the quarryman and the almoner — and the relic-lance they bear are open to the faithful. The war-relics you earn by deeper devotion.' 900 credits."
+  briefing: "A robed proctor watches you from the end of the bar — the Order has marked you as one who passes the old ruins without looting. 'Smugglers strip the sacred sites for trinkets. Three of them defile a ruin now. Stop them, and recover what they have taken — the relics are not yours, nor theirs. 900. The Order will know you then.'"
+  success_text: "The looters are scattered; the relics recovered, unspoiled. The proctor's blessing arrives over comms. 'You may walk in the Order now. Our pilgrim hulls — the quarryman and the almoner — and the relic-lance they bear are open to the faithful. The war-relics you earn by deeper devotion.' 900 credits. The proctor keeps a seat in the Sanctum bar."
   failure_text: "The relics are gone, sold for scrap-price. The proctor mourns."
   preconditions:
     - kind: completed
       mission: bounty_story_4_catch
   offer:
     kind: npc_offer
-    planet: tau_ceti_4
+    planet: [tau_ceti_4, sanctum, saints_rest]
     weight: 1.0
     building: bar
     approach: seek
@@ -1639,14 +1639,14 @@ order_5:
 rift_1:
   faction: Precursor
   briefing: "Federation Intelligence, the Order, and the Free Frontier speak as one for the first time in history: the Rift is waking. Two Sentinels guard the way into the deep. Break them. There is no precedent for what you are about to do. 7,000. The coalition sends a Federation patrol and an Order acolyte to fly at your side."
-  success_text: "The Sentinels shatter into drifting violet light. The way into the Rift is open. 7,000 credits — and silence on every comm channel."
+  success_text: "The Sentinels shatter into drifting violet light. The way into the Rift is open. 7,000 credits — and silence on every comm channel. When the deep stirs again, word will find you at Threshold Watch."
   failure_text: "The Sentinels held. The deep stays sealed — for now."
   preconditions:
     - kind: completed
       mission: order_5
   offer:
     kind: npc_offer
-    planet: threshold_watch
+    planet: [threshold_watch, threshold_chapel]
     weight: 1.0
     building: bar
     approach: seek
@@ -1869,7 +1869,7 @@ weight_of_order_5:
 
 east_wind_1:
   faction: Rebel
-  briefing: "A woman in a worn flight jacket slides into the seat across from you in the Titan bar. 'You fly like someone who's tired of being told where. There's a wind blowing in from the frontier, friend, and it's blowing east. If you want in, there's a cell leader waiting on Barnard Station. Codeword's the same as the wind. 600 to make the introduction.'"
+  briefing: "A woman in a worn flight jacket slides into the seat across from you in the bar. 'You fly like someone who's tired of being told where. There's a wind blowing in from the frontier, friend, and it's blowing east. If you want in, there's a cell leader waiting on Barnard Station. Codeword's the same as the wind. 600 to make the introduction.'"
   success_text: "The cell leader hears the codeword and relaxes a fraction. 'East wind. Good. We can use a pilot who isn't on anyone's payroll. Stay close — the work gets realer from here.'"
   failure_text: "The contact on Barnard waits, decides you aren't coming, and is gone."
   preconditions:
@@ -1877,7 +1877,7 @@ east_wind_1:
       mission: pirate_bounty_sol
   offer:
     kind: npc_offer
-    planet: titan
+    planet: [titan, triton, charon]
     weight: 1.0
     building: bar
     approach: seek
@@ -2055,7 +2055,7 @@ east_wind_7:
 
 no_flag_1:
   faction: Pirate
-  briefing: "A fixer in the Pluto bar doesn't give a name. 'Got eight units of exotic matter that never officially existed, and a Federation sweep between here and Triton. Run it to my man on Triton without getting scanned and there's 1,000 in it. No flags, no records, no questions.'"
+  briefing: "A fixer in the bar doesn't give a name. 'Got eight units of exotic matter that never officially existed, and a Federation sweep between here and Triton. Run it to my man on Triton without getting scanned and there's 1,000 in it. No flags, no records, no questions.'"
   success_text: "The Triton contact weighs the crates and grins. 'Clean run. The fixer was right about you.' Out here, a reputation for not getting caught is worth more than the cargo."
   failure_text: "The Federation sweep tags your hold, and the fixer writes you off as a liability."
   preconditions:
@@ -2063,7 +2063,7 @@ no_flag_1:
       mission: pirate_bounty_sol
   offer:
     kind: npc_offer
-    planet: pluto
+    planet: [pluto, charon, io]
     weight: 1.0
     building: bar
     approach: seek
@@ -2321,14 +2321,14 @@ invisible_hand_5:
 reclamation_1:
   faction: Precursor
   briefing: "Envoy Chandra finds you before you find her. 'The Sleeper is dead, but its brood scattered when it fell. Seekers have gone to ground in the Verge, striking at Frontier convoys from the drift ice. The Reaches held the line for us once — now we hold it for them. Take a coalition wing and burn the embers out.'"
-  success_text: "The last seeker comes apart against the ice field. The Verge convoys fly unescorted within the week — and the Free Frontier's flag flies higher over the Reaches for it. 8,000 credits, wired with the coalition's thanks."
+  success_text: "The last seeker comes apart against the ice field. The Verge convoys fly unescorted within the week — and the Free Frontier's flag flies higher over the Reaches for it. 8,000 credits, wired with the coalition's thanks. The envoy waits at Threshold Watch."
   failure_text: "The seekers melt back into the drift ice. The convoys keep dying, and the Verge remembers who left."
   preconditions:
     - kind: completed
       mission: rift_final
   offer:
     kind: npc_offer
-    planet: threshold_watch
+    planet: [threshold_watch, threshold_chapel]
     weight: 1.0
     building: bar
     npc: rift_envoy

@@ -63,7 +63,11 @@ pub enum OfferKind {
     /// An NPC on the planet surface offers this mission.  The NPC either
     /// seeks the player or waits near a building.
     NpcOffer {
-        planet: String,
+        /// Planet(s) where the giver can appear — YAML accepts a single
+        /// string (`planet: earth`) or a list, so storyline entry points
+        /// can be findable on several worlds. First entry is canonical.
+        #[serde(deserialize_with = "one_or_many")]
+        planet: Vec<String>,
         weight: f32,
         /// Which building the NPC starts at (e.g. "bar", "market").
         /// If absent or not present on this planet, a random building is chosen.
@@ -78,6 +82,24 @@ pub enum OfferKind {
         #[serde(default)]
         npc: Option<String>,
     },
+}
+
+/// Deserialize either a single string or a list of strings into a Vec —
+/// lets `planet:` offer sites stay terse in YAML while supporting lists.
+fn one_or_many<'de, D>(d: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    Ok(match OneOrMany::deserialize(d)? {
+        OneOrMany::One(s) => vec![s],
+        OneOrMany::Many(v) => v,
+    })
 }
 
 /// How a mission-giver NPC approaches the player.
