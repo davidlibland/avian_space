@@ -83,6 +83,15 @@ struct MiniMapImage;
 #[derive(Component)]
 struct MiniMapPlayerDot;
 
+/// Marks the mini-map container node (parent of image / dot / offer marks).
+#[derive(Component)]
+struct MiniMapRoot;
+
+/// A small gold "!" on the mini-map mirroring a building's offer marker,
+/// keyed by building kind.
+#[derive(Component)]
+struct MiniMapOfferMark(crate::surface::BuildingKind);
+
 #[derive(Component)]
 struct RadarDot;
 
@@ -189,7 +198,71 @@ impl Plugin for HudPlugin {
             Update,
             update_minimap_player_dot
                 .run_if(in_state(PlayState::Exploring).or(in_state(PlayState::Inside))),
-        );
+        )
+        // Runs in every state so marks clear when their markers despawn.
+        .add_systems(Update, update_minimap_offer_marks);
+    }
+}
+
+/// Mirror each exterior building-offer "!" as a small gold "!" on the
+/// mini-map (a kid-requested feature: see at a glance which buildings have
+/// work waiting). Marks are diffed against the world markers every frame,
+/// so accepting the offer or leaving the surface clears them.
+fn update_minimap_offer_marks(
+    mut commands: Commands,
+    minimap: Option<Res<crate::surface::SurfaceMiniMap>>,
+    root_q: Query<Entity, With<MiniMapRoot>>,
+    source: Query<(&crate::surface::BuildingOfferMarker, &Transform)>,
+    marks: Query<(Entity, &MiniMapOfferMark)>,
+) {
+    let Ok(root) = root_q.single() else {
+        return;
+    };
+    let hot: std::collections::HashMap<crate::surface::BuildingKind, Vec2> = source
+        .iter()
+        .map(|(m, tf)| (m.0, tf.translation.truncate()))
+        .collect();
+    for (entity, mark) in &marks {
+        if !hot.contains_key(&mark.0) {
+            crate::utils::safe_despawn(&mut commands, entity);
+        }
+    }
+    let Some(minimap) = minimap else {
+        return;
+    };
+    let marked: std::collections::HashSet<crate::surface::BuildingKind> =
+        marks.iter().map(|(_, m)| m.0).collect();
+    let (map_w, map_h) = (minimap.map_w as f32, minimap.map_h as f32);
+    let tile_px = crate::surface::TILE_PX;
+    let display_size = RADAR_SIZE - 4.0;
+    for (kind, pos) in hot {
+        if marked.contains(&kind) {
+            continue;
+        }
+        // The world marker floats 1.9 tiles above the building — undo that
+        // to mark the building itself. Same tile→pixel math as the player dot.
+        let tx = pos.x / tile_px + map_w / 2.0;
+        let ty = (pos.y - 1.9 * tile_px) / tile_px + map_h / 2.0;
+        let px = (tx / map_w * display_size).clamp(0.0, display_size - 6.0);
+        let py = ((1.0 - ty / map_h) * display_size).clamp(0.0, display_size - 6.0);
+        let mark = commands
+            .spawn((
+                MiniMapOfferMark(kind),
+                Text::new("!"),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.85, 0.2)),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(px - 2.0),
+                    top: Val::Px(py - 8.0),
+                    ..default()
+                },
+            ))
+            .id();
+        commands.entity(root).add_child(mark);
     }
 }
 
@@ -234,6 +307,7 @@ fn spawn_hud(mut commands: Commands) {
             // ── Mini-map (surface only, hidden by default) ──────────────
             root.spawn((
                 SurfaceOnlyHud,
+                MiniMapRoot,
                 Node {
                     width: Val::Px(RADAR_SIZE),
                     height: Val::Px(RADAR_SIZE),

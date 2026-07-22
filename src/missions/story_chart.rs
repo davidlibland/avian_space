@@ -95,11 +95,27 @@ pub fn build_story_graph(
     unlocks: &PlayerUnlocks,
     universe: &ItemUniverse,
 ) -> StoryGraph {
-    // Story mission set: authored + faction-tagged.
+    // Story mission set: authored missions that are faction-tagged OR part
+    // of a mission chain (linked by a Completed/Failed precondition, like
+    // the factionless lost_son arc — those draw in neutral grey). Isolated
+    // factionless one-offs stay out. Generated/template missions never
+    // enter `universe.missions`, so they can't appear.
+    let mut chained: std::collections::HashSet<&str> = Default::default();
+    for (id, d) in universe.missions.iter() {
+        for p in &d.preconditions {
+            let (Precondition::Completed { mission } | Precondition::Failed { mission }) = p else {
+                continue;
+            };
+            if universe.missions.contains_key(mission) {
+                chained.insert(id.as_str());
+                chained.insert(mission.as_str());
+            }
+        }
+    }
     let ids: Vec<&String> = universe
         .missions
         .iter()
-        .filter(|(_, d)| d.faction.is_some())
+        .filter(|(id, d)| d.faction.is_some() || chained.contains(id.as_str()))
         .map(|(id, _)| id)
         .collect();
     let in_set: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
@@ -291,5 +307,24 @@ mod tests {
         assert!(NodeUi::Failed.shows_name());
         assert!(!NodeUi::Next.shows_name());
         assert!(!NodeUi::Impossible.shows_name());
+    }
+
+    #[test]
+    fn factionless_chains_are_in_the_story_set() {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        // The lost_son arc (finding Jonah) has no faction tag but is a
+        // Completed-precondition chain — it must chart. Completing part 1
+        // reveals part 2 as reachable, so the graph includes both.
+        let mut log = MissionLog::default();
+        log.set("lost_son_1", MissionStatus::Completed);
+        let graph = build_story_graph(&log, &PlayerUnlocks::default(), &iu);
+        for id in ["lost_son_1", "lost_son_2"] {
+            assert!(
+                graph.nodes.iter().any(|n| n.id == id),
+                "{id} missing from story graph"
+            );
+        }
     }
 }

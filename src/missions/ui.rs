@@ -278,6 +278,9 @@ fn render_mission_log(
         .collapsible(false)
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        // Wide enough that the Story chart shows a few columns before
+        // scrolling (it previously auto-sized to the narrowest tab).
+        .min_width(780.0)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut state.tab, MissionLogTab::Missions, "Missions");
