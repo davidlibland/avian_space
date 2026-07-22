@@ -211,10 +211,9 @@ pub fn write_save(game_state: &PlayerGameState, session_data: &SessionSaveData) 
     let save = game_state.to_save(session_data);
     match serde_yaml::to_string(&save) {
         Ok(s) => match std::fs::write(&path, &s) {
-            // Loud on purpose: a playtest reported silently missing saves,
-            // and an unmissable log line per save is the cheapest
-            // diagnostic there is.
-            Ok(()) => info!("saved pilot '{}' → {path:?}", game_state.pilot_name),
+            // Failures stay loud; the per-save success line is debug-level
+            // (still lands in bug-report log tails via RUST_LOG=debug).
+            Ok(()) => debug!("saved pilot '{}' → {path:?}", game_state.pilot_name),
             Err(e) => error!("FAILED to write pilot save to {path:?}: {e}"),
         },
         Err(e) => error!("FAILED to serialise pilot save: {e}"),
