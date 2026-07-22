@@ -82,6 +82,9 @@ fn help_window(
     mut state: ResMut<HelpUiOpen>,
     mut settings_open: ResMut<crate::settings::SettingsUiOpen>,
     play_state: Res<State<PlayState>>,
+    #[cfg(feature = "bugreport")] mut bug_report: bevy::prelude::MessageWriter<
+        crate::bug_report::FileBugReport,
+    >,
 ) {
     if !state.open {
         return;
@@ -134,6 +137,11 @@ fn help_window(
                 }
                 if ui.button("Settings").clicked() {
                     settings_open.0 = !settings_open.0;
+                }
+                #[cfg(feature = "bugreport")]
+                if ui.button("Report a problem  [F8]").clicked() {
+                    bug_report.write(crate::bug_report::FileBugReport);
+                    close = true;
                 }
             });
         });
@@ -272,12 +280,21 @@ fn surface_controls() -> Vec<Group> {
 }
 
 fn universal_controls() -> Vec<Group> {
+    #[cfg(feature = "bugreport")]
+    let bindings: &'static [(&'static str, &'static str)] = &[
+        ("F1  or  ?", "Open / close this help"),
+        ("I", "Mission log (missions, story, info, cargo)"),
+        ("Esc", "Close open UI, or return to main menu"),
+        ("F8", "Report a problem (saves screenshot + game state)"),
+    ];
+    #[cfg(not(feature = "bugreport"))]
+    let bindings: &'static [(&'static str, &'static str)] = &[
+        ("F1  or  ?", "Open / close this help"),
+        ("I", "Mission log (missions, story, info, cargo)"),
+        ("Esc", "Close open UI, or return to main menu"),
+    ];
     vec![Group {
         title: "",
-        bindings: &[
-            ("F1  or  ?", "Open / close this help"),
-            ("I", "Mission log (missions, story, info, cargo)"),
-            ("Esc", "Close open UI, or return to main menu"),
-        ],
+        bindings,
     }]
 }

@@ -36,6 +36,8 @@ mod rl_collection;
 mod rl_obs;
 mod session;
 mod ambience;
+#[cfg(feature = "bugreport")]
+mod bug_report;
 mod music;
 mod settings;
 mod sfx;
@@ -421,10 +423,17 @@ fn build_app(
         // Game uses pixel-scale world units (radii in tens, distances in hundreds-to-thousands).
         // Default spatial scale (1.0) attenuates anything beyond a few units to silence — shrink
         // it so spatial sounds remain audible across the play area.
-        app.add_plugins(DefaultPlugins.set(bevy::audio::AudioPlugin {
+        let plugins = DefaultPlugins.set(bevy::audio::AudioPlugin {
             default_spatial_scale: bevy::audio::SpatialScale::new(0.003),
             ..default()
-        }));
+        });
+        // Tester builds mirror log lines into a ring buffer for bug reports.
+        #[cfg(feature = "bugreport")]
+        let plugins = plugins.set(bevy::log::LogPlugin {
+            custom_layer: bug_report::log_capture_layer,
+            ..default()
+        });
+        app.add_plugins(plugins);
     }
 
     // ── Physics ──────────────────────────────────────────────────────────
@@ -457,6 +466,8 @@ fn build_app(
             sfx::sfx_plugin,
             music::music_plugin,
             ambience::ambience_plugin,
+            #[cfg(feature = "bugreport")]
+            bug_report::bug_report_plugin,
             explosions::ship_smoke_plugin, // damage smoke — rendering only
         ));
     }

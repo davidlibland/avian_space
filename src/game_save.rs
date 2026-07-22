@@ -241,7 +241,7 @@ pub fn user_data_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-fn pilots_dir() -> PathBuf {
+pub(crate) fn pilots_dir() -> PathBuf {
     #[cfg(feature = "bundle")]
     {
         if let Some(home) = std::env::var_os("HOME") {

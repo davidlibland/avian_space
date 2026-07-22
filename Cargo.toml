@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-dev = ["bevy/dynamic_linking"]
+dev = ["bevy/dynamic_linking", "bugreport"]
+# One-key in-game bug reporter (F8): bundles screenshot + pilot save + log
+# tail + context for tester builds. Excluded from store releases; `dev`
+# builds include it.
+bugreport = ["dep:tracing"]
 # Use the native CUDA backend for training (Linux / Windows boxes with the
 # CUDA toolkit installed). When disabled, training runs on the default `wgpu`
 # backend, which uses Metal on macOS and Vulkan on Linux.
@@ -32,6 +36,8 @@ ron = "0.12.1"
 clap = { version = "4", features = ["derive"] }
 bevy_embedded_assets = { version = "0.15", optional = true }
 include_dir = { version = "0.7", optional = true }
+# Only for the `bugreport` log-capture layer (already in the tree via bevy).
+tracing = { version = "0.1", optional = true }
 
 # ── Lint policy ───────────────────────────────────────────────────────────────
 # Bevy systems legitimately take many params and query tuples get wide —
