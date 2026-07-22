@@ -331,19 +331,34 @@ fn render_story_tab(
         return;
     }
 
-    // Legend.
+    // Legend. Node FILLS are faction colors; status is shown as a corner
+    // badge (done/active/failed) or the node's center glyph (next/closed),
+    // so the legend previews exactly those marks.
     ui.horizontal_wrapped(|ui| {
-        let chip = |ui: &mut egui::Ui, label: &str, col: egui::Color32| {
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-            ui.painter().rect_filled(rect, 2.0, col);
+        let badge_chip = |ui: &mut egui::Ui, label: &str, col: egui::Color32, glyph: &str| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(15.0, 15.0), egui::Sense::hover());
+            draw_status_badge(ui.painter(), rect.center(), col, glyph);
             ui.label(label);
             ui.add_space(8.0);
         };
-        chip(ui, "done", egui::Color32::from_rgb(90, 170, 100));
-        chip(ui, "active", egui::Color32::from_rgb(230, 200, 90));
-        chip(ui, "next", egui::Color32::from_gray(110));
-        chip(ui, "failed", egui::Color32::from_rgb(170, 70, 70));
-        chip(ui, "closed", egui::Color32::from_gray(60));
+        let node_chip = |ui: &mut egui::Ui, label: &str, glyph: &str| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(18.0, 13.0), egui::Sense::hover());
+            ui.painter().rect_filled(rect, 3.0, egui::Color32::from_gray(60));
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                glyph,
+                egui::FontId::proportional(9.0),
+                egui::Color32::from_gray(140),
+            );
+            ui.label(label);
+            ui.add_space(8.0);
+        };
+        badge_chip(ui, "done", BADGE_DONE, "\u{2714}");
+        badge_chip(ui, "active", BADGE_ACTIVE, "\u{25b6}");
+        badge_chip(ui, "failed", BADGE_FAILED, "\u{2716}");
+        node_chip(ui, "next", "?");
+        node_chip(ui, "closed", "\u{1f512}");
     });
     ui.separator();
 
@@ -462,8 +477,41 @@ fn render_story_tab(
                         egui::Color32::from_gray(90),
                     );
                 }
+
+                // Status badge in the top-right corner — the node fill stays
+                // the storyline's faction color.
+                match n.ui {
+                    NodeUi::Completed => {
+                        draw_status_badge(&p, rect.right_top(), BADGE_DONE, "\u{2714}")
+                    }
+                    NodeUi::Active => {
+                        draw_status_badge(&p, rect.right_top(), BADGE_ACTIVE, "\u{25b6}")
+                    }
+                    NodeUi::Failed => {
+                        draw_status_badge(&p, rect.right_top(), BADGE_FAILED, "\u{2716}")
+                    }
+                    NodeUi::Next | NodeUi::Impossible => {}
+                }
             }
         });
+}
+
+const BADGE_DONE: egui::Color32 = egui::Color32::from_rgb(90, 170, 100);
+const BADGE_ACTIVE: egui::Color32 = egui::Color32::from_rgb(230, 200, 90);
+const BADGE_FAILED: egui::Color32 = egui::Color32::from_rgb(180, 75, 75);
+
+/// A small circular status badge (used on node corners and in the legend).
+fn draw_status_badge(p: &egui::Painter, center: egui::Pos2, col: egui::Color32, glyph: &str) {
+    const R: f32 = 7.0;
+    p.circle_filled(center, R, col);
+    p.circle_stroke(center, R, egui::Stroke::new(1.0, egui::Color32::from_gray(25)));
+    p.text(
+        center,
+        egui::Align2::CENTER_CENTER,
+        glyph,
+        egui::FontId::proportional(8.0),
+        text_on(col),
+    );
 }
 
 /// Desaturate + darken a color toward grey by `1.0 - keep` (keep in [0,1]).
