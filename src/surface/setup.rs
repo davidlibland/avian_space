@@ -551,7 +551,7 @@ pub(crate) fn setup_surface(
                 Sprite {
                     image: asset_server.load(format!("sprites/factions/pad_{stem}.png")),
                     // Sized to stay inside the pad's inner disc.
-                    custom_size: Some(Vec2::splat(tile_px * 1.55)),
+                    custom_size: Some(Vec2::splat(tile_px * 1.15)),
                     ..default()
                 },
                 // Above the pad sprite (-9), below all depth-sorted actors.
