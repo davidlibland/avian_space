@@ -51,6 +51,17 @@ slot is aiming at — worth a listen before each session.
 | **Style** | Orchestral / film-score (try `_SOUNDTRK.STY` or any "Film Score" RealStyle with French horn or brass) |
 | **Mood** | Noble, unhurried — a navy patrolling calm space. Confident, never aggressive. |
 
+```
+a) | D | D | G | D |
+| Bm | G | A | A |
+| D | A/C# | Bm | G |
+| Em | G | D/A A | D |
+b) | G | D/F# | Em | Bm |
+| G | D/F# | E7 | A |
+| D | F#m | G | Gm |
+| D/A | A7 | D | D |
+```
+
 ## 2. Embers
 | | |
 |---|---|
@@ -58,6 +69,17 @@ slot is aiming at — worth a listen before each session.
 | **Key / Tempo** | E minor / 112 |
 | **Style** | Driving folk-rock / celtic rock (try `_IRISHRK.STY` or a 16th-note acoustic-rock RealStyle) |
 | **Mood** | Gritty, urgent, low strings and driving percussion — a cause worth losing for. Momentum without triumph. |
+
+```
+a) | Em | Em | C | C |
+| G | D | Em | Em |
+| Em | Em | C | C |
+| Am | B7 | Em | Em |
+b) | C | G | D | Em |
+| C | G | B7 | B7 |
+| Am | Em | C | G |
+| Am | B7 | Em | Em |
+```
 
 ## 3. The Long Haul
 | | |
@@ -67,6 +89,17 @@ slot is aiming at — worth a listen before each session.
 | **Style** | Slow country/americana ballad with pedal steel or dobro (try `_COUNTRYB.STY` or a "Campfire" style) |
 | **Mood** | Sparse americana against the void — loneliness that's chosen, not suffered. |
 
+```
+a) | G | G | C/G | G |
+| Em | C | D | D |
+| G | G/B | C | Am |
+| G/D | D7 | G | G |
+b) | C | C | G | G |
+| Em | Em | D | D |
+| C | G/B | Am | C/D |
+| G | C/G | G | G |
+```
+
 ## 4. Cold Light
 | | |
 |---|---|
@@ -74,6 +107,17 @@ slot is aiming at — worth a listen before each session.
 | **Key / Tempo** | A minor / 100 |
 | **Style** | Minimal synth-pop / electronica (try `_ELECPOP.STY` or any "EuroDance/Synth" RealStyle) |
 | **Mood** | Clean, automated, machine-precise with a faint melancholy. Repetition is the point. |
+
+```
+a) | Am | Am | F | F |
+| C | C | G | G |
+| Am | Am | F | F |
+| C | G/B | Am | Am |
+b) | F | F | Am | Am |
+| Dm | Dm | E7 | E7 |
+| F | G | Am | F |
+| Dm | E7 | Am | Am |
+```
 
 ## 5. Anvil
 | | |
@@ -83,6 +127,17 @@ slot is aiming at — worth a listen before each session.
 | **Style** | Heavy rock / metal (try `_HVYROCK.STY` or a "Heavy Rock 8ths" RealStyle) |
 | **Mood** | Industrial, forge-rhythm, power chords like hammer blows. The faction that builds hulls hears its own foundries. |
 
+```
+a) | Cm | Cm | Ab | Ab |
+| Bb | Bb | Cm | Cm |
+| Cm | Cm | Ab | Ab |
+| G | G | Cm | Cm |
+b) | Fm | Fm | Cm | Cm |
+| Ab | Eb | G | G |
+| Fm | Ab | Cm | Bb |
+| Ab | G | Cm | Cm |
+```
+
 ## 6. Vespers
 | | |
 |---|---|
@@ -91,6 +146,17 @@ slot is aiming at — worth a listen before each session.
 | **Style** | New-age / slow gospel-choir pad style (try `_NEWAGE.STY` or any slow style with a choir/organ RealTrack) |
 | **Mood** | Choral, liturgical, open fifths — a monastery in vacuum. More stillness than motion. |
 
+```
+a) | F | F | C/F | F |
+| Bb/F | F | C | C |
+| F | F | Gm | Dm |
+| Bb | C | F | F |
+b) | Dm | Dm | Bb | Bb |
+| F/A | F/A | C | C |
+| Dm | Bb | F/A | Gm |
+| Bb/C | C | F | F |
+```
+
 ## 7. No Colors
 | | |
 |---|---|
@@ -98,6 +164,17 @@ slot is aiming at — worth a listen before each session.
 | **Key / Tempo** | B minor / 96 |
 | **Style** | Minor-key tango / gypsy-jazz / spy groove (try `_GYPSYJZ.STY` or a "Tango"/"Spy" flavored RealStyle) |
 | **Mood** | Tense, muted, coiled — an ostinato that never resolves. For pirate space AND contested systems: menace, not swashbuckling. |
+
+```
+a) | Bm | Bm | Bm/A | Bm/A |
+| G | G | F#7 | F#7 |
+| Bm | Bm | Bm/A | Bm/A |
+| G | F#7 | Bm | Bm |
+b) | Em | Em | Bm | Bm |
+| G | Em | F#7 | F#7 |
+| Bm | D | G | Em |
+| C#m7b5 | F#7 | Bm | Bm |
+```
 
 ---
 
