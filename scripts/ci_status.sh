@@ -2,7 +2,7 @@
 # CI status for a commit (default: HEAD). Public repo — no auth needed.
 # Usage: scripts/ci_status.sh [sha]
 set -euo pipefail
-sha="${1:-$(git rev-parse HEAD)}"
+sha="$(git rev-parse "${1:-HEAD}")"
 curl -s --max-time 15 \
   "https://api.github.com/repos/davidlibland/avian_space/actions/runs?head_sha=$sha" \
   | python3 -c '
@@ -12,5 +12,6 @@ if not runs:
     print("no CI runs found for this commit (yet)")
 for r in runs:
     concl = r["conclusion"] or r["status"]
-    print(f"{concl:12} {r[\"name\"]}  {r[\"head_sha\"][:8]}  {r[\"html_url\"]}")
+    name, sha, url = r["name"], r["head_sha"][:8], r["html_url"]
+    print(f"{concl:12} {name}  {sha}  {url}")
 '
