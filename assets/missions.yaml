@@ -4,7 +4,7 @@
 # (mission log, I) ends the whole tutorial — the rest stays locked forever,
 # which is the intended exit for experienced pilots.
 tutorial_flight:
-  briefing: "Flight check, pilot. Thrust with UP, turn with LEFT/RIGHT, and hold DOWN to flip for a braking burn. Now find the ground: cycle planet targets with [ and ], select Earth, hold A — the intercept autopilot — and press L when close to request docking. (F1 shows every control.)"
+  briefing: "Flight check, pilot. Thrust with UP, turn with LEFT/RIGHT, and hold DOWN to flip for a braking burn. Now find the ground: cycle planet targets with [ and ], select Earth, hold A — the intercept autopilot — and press L when close to request docking. TAB cycles nearby ships and R snaps to the nearest trouble, when there is any. (F1 shows every control.)"
   success_text: "Clean approach, clean landing."
   failure_text: "Tutorial ended. You clearly know your way around a cockpit — the rest of the course stands down."
   preconditions: []
@@ -17,7 +17,7 @@ tutorial_flight:
   - kind: pay
     credits: 300
 tutorial_mining:
-  briefing: "Welcome to the ground: walk with WASD and press E to enter buildings. Stop by the OUTFITTER and buy a Laser — rocks are money. Then lift off and press Q to target the nearest asteroid: hold A to auto-aim and press SPACE to break it up. Press P to target the iron in the debris, then hold A and UP and the autopilot flies the scoop — 2 units and you're done."
+  briefing: "Welcome to the ground: walk with WASD and press E to enter buildings. Stop by the OUTFITTER and buy a Laser — rocks are money. Then lift off and press Q to target the nearest asteroid: hold A to auto-aim and press SPACE to break it up. (Heavier guns ride in secondary mounts later — W cycles them, LEFT-SHIFT fires.) Press P to target the iron in the debris, then hold A and UP and the autopilot flies the scoop — 2 units and you're done."
   success_text: "Ore in the hold. Sell it at any market — every planet pays its own price."
   failure_text: "Tutorial ended. The asteroids will keep."
   preconditions:
@@ -50,7 +50,7 @@ tutorial_jump:
     credits: 300
 tutorial_trade:
   briefing: "Last lesson: money. Land on Barnard Rock and open the market — the price tags read cheap or expensive against the galactic average. Buy what's cheap here, sell it where it's dear, and shift-click to trade in bulk. Your mission log is I; missions find you in bars and markets."
-  success_text: "That's the whole game, pilot: fly, fight, haul, and choose your friends carefully. A dockworker on Earth is already looking for a pilot like you."
+  success_text: "That's the whole game, pilot: fly, fight, haul, and choose your friends carefully. A dockworker on Earth is already looking for a pilot like you — and when you want steadier work, Earth is where the stories start: the Mining Guild and Federation recruit in its bar, the Merchant Guild at its market."
   failure_text: "Tutorial ended. The market will miss you."
   preconditions:
   - kind: completed
