@@ -35,6 +35,7 @@ mod ppo;
 mod rl_collection;
 mod rl_obs;
 mod session;
+mod settings;
 mod sfx;
 mod ship;
 mod ship_anim;
@@ -449,6 +450,7 @@ fn build_app(
             HudPlugin::default(),
             comms::comms_plugin,
             main_menu_plugin,
+            settings::settings_plugin,
             missions_ui_plugin,
             sfx::sfx_plugin,
             explosions::ship_smoke_plugin, // damage smoke — rendering only

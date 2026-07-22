@@ -230,6 +230,17 @@ pub fn write_save(game_state: &PlayerGameState, session_data: &SessionSaveData) 
 ///   `./pilots/` if `$HOME` is unset.
 /// * Without the feature (dev / `cargo run`): `./pilots/` relative to CWD,
 ///   matching the existing repo-local behaviour.
+/// Per-platform user-data root (settings live here; pilots in a subdir).
+pub fn user_data_dir() -> PathBuf {
+    #[cfg(feature = "bundle")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join("Library/Application Support/AvianSpace");
+        }
+    }
+    PathBuf::from(".")
+}
+
 fn pilots_dir() -> PathBuf {
     #[cfg(feature = "bundle")]
     {

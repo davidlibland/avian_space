@@ -76,9 +76,11 @@ fn help_corner_button(mut egui_contexts: EguiContexts, mut state: ResMut<HelpUiO
         });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn help_window(
     mut egui_contexts: EguiContexts,
     mut state: ResMut<HelpUiOpen>,
+    mut settings_open: ResMut<crate::settings::SettingsUiOpen>,
     play_state: Res<State<PlayState>>,
 ) {
     if !state.open {
@@ -129,6 +131,9 @@ fn help_window(
             ui.horizontal(|ui| {
                 if ui.button("Close  [F1 / Esc]").clicked() {
                     close = true;
+                }
+                if ui.button("Settings").clicked() {
+                    settings_open.0 = !settings_open.0;
                 }
             });
         });
@@ -213,7 +218,6 @@ fn flying_controls() -> Vec<Group> {
             bindings: &[
                 ("J", "Star map / hyperspace jump"),
                 ("L", "Land on nearby planet"),
-                ("I", "Mission log"),
             ],
         },
     ]
@@ -232,10 +236,36 @@ fn surface_controls() -> Vec<Group> {
             ],
         },
         Group {
-            title: "Interaction",
+            title: "Interaction (E does it all)",
             bindings: &[
-                ("E", "Interact with NPC or building"),
+                ("E on the pad", "Launch back to space"),
+                ("E at a door", "Enter the building (all shops are walk-in)"),
+                ("E near an NPC", "Talk — givers with a ! offer missions"),
                 ("Esc", "Close dialogue / UI"),
+            ],
+        },
+        Group {
+            title: "Inside buildings",
+            bindings: &[
+                (
+                    "Walk to a display",
+                    "Item / ship panel opens — buy & sell there",
+                ),
+                (
+                    "E at the counter",
+                    "Full shop window (trade, repair, refuel, wing service)",
+                ),
+                ("E at a table pilot", "Hire an escort (bar, east tables)"),
+                ("E at stairs", "Descend / climb mine & substation levels"),
+                ("E at the lit EXIT", "Leave the building"),
+            ],
+        },
+        Group {
+            title: "Hunts & prisoners",
+            bindings: &[
+                ("Chase (Shift!)", "Fleeing targets bolt for their hideout"),
+                ("Touch them", "Caught — they follow you as a prisoner"),
+                ("Garrison visit", "Prisoners march themselves into the cell"),
             ],
         },
     ]
@@ -245,7 +275,8 @@ fn universal_controls() -> Vec<Group> {
     vec![Group {
         title: "",
         bindings: &[
-            ("F1", "Open / close this help"),
+            ("F1  or  ?", "Open / close this help"),
+            ("I", "Mission log (missions, story, info, cargo)"),
             ("Esc", "Close open UI, or return to main menu"),
         ],
     }]

@@ -66,6 +66,7 @@ fn refresh_saves(mut menu_state: ResMut<MainMenuState>) {
 fn main_menu_ui(
     mut commands: Commands,
     mut egui_contexts: EguiContexts,
+    mut settings_open: ResMut<crate::settings::SettingsUiOpen>,
     mut menu_state: ResMut<MainMenuState>,
     mut game_state: ResMut<PlayerGameState>,
     mut current_system: ResMut<CurrentStarSystem>,
@@ -118,6 +119,9 @@ fn main_menu_ui(
         // just courtesy.
         egui::TopBottomPanel::bottom("menu_footer").show_inside(ui, |ui| {
             ui.horizontal(|ui| {
+                if ui.small_button("Settings").clicked() {
+                    settings_open.0 = !settings_open.0;
+                }
                 if ui.small_button("Credits & Licenses").clicked() {
                     menu_state.show_credits = !menu_state.show_credits;
                 }
