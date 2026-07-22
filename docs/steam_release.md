@@ -70,8 +70,8 @@ obligations:
 |---|---|---|
 | In-game credits (license obligation) | **DONE this pass** | — |
 | Sound provenance (51 files) | **DONE — Kenney CC0 + TTSMaker, recorded** | — |
-| Settings: master volume / music / SFX sliders | Missing | High — Steam players expect it |
-| Settings: fullscreen/windowed toggle, resolution | Missing (fixed window) | High |
+| Settings: master volume slider | **DONE** (settings.yaml, live-applied) | — |
+| Settings: fullscreen/windowed toggle | **DONE** (borderless fullscreen) | — |
 | Window icon + app icon | Missing | Medium |
 | Windows + Linux builds | Only macOS bundle script exists | Blocking for those depots |
 | macOS: codesign + notarization | Not set up (Gatekeeper will block unsigned) | Blocking for macOS depot |
