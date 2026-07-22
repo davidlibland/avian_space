@@ -546,16 +546,25 @@ pub(crate) fn setup_surface(
         {
             let stem = crate::galaxy::faction_asset_stem(&faction);
             let world_pos = tile_to_world(pad_cx, pad_cy, map_w, map_h, tile_px);
+            // The pad is baked at the 50° oblique camera (buildings3d.py):
+            // a circle painted on the touchdown surface therefore projects
+            // to an ellipse (y squashed by sin 50°) lifted by the surface
+            // height z·cos 50° (inner well top ≈ z 0.34 tile-units).
+            let (sin50, cos50) = (50f32.to_radians().sin(), 50f32.to_radians().cos());
+            let diameter = tile_px * 1.5; // dark inner well is 1.7 tiles wide
             commands.spawn((
                 DespawnOnExit(PlayState::Exploring),
                 Sprite {
                     image: asset_server.load(format!("sprites/factions/pad_{stem}.png")),
-                    // Sized to stay inside the pad's inner disc.
-                    custom_size: Some(Vec2::splat(tile_px * 1.15)),
+                    custom_size: Some(Vec2::new(diameter, diameter * sin50)),
                     ..default()
                 },
                 // Above the pad sprite (-9), below all depth-sorted actors.
-                Transform::from_xyz(world_pos.x, world_pos.y, -8.5),
+                Transform::from_xyz(
+                    world_pos.x,
+                    world_pos.y + 0.34 * cos50 * tile_px,
+                    -8.5,
+                ),
             ));
         }
 
