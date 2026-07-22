@@ -9,6 +9,9 @@ All sources confirmed 2026-07-20:
   whose [Commercial License Terms](https://ttsmaker.com/copyright_and_commercial_license_terms)
   grant 100% commercial usage rights to generated audio, attribution
   optional (credited in-game anyway).
+- **Planet/venue ambience** (`ambience/`, 29 files): synthesized in-house
+  (`scripts/synth_ambience.py`) — no third-party rights. Music in
+  `assets/music/` is covered by its own `CREDITS-MUSIC.md`.
 
 | file | source |
 |---|---|

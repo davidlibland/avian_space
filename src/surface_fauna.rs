@@ -57,7 +57,6 @@ struct FaunaManifest {
 
 #[derive(Deserialize, Debug)]
 struct FaunaSpeciesDef {
-    #[allow(dead_code)] // kept for manifest readability / debugging
     name: String,
     sheet: String,
     biome: String,
@@ -74,6 +73,9 @@ struct FaunaSpeciesDef {
 
 /// A spawnable species resolved for the current surface's biome.
 struct FaunaSpecies {
+    /// Manifest key ("deer", "mine_rat", …) — lets the ambience director
+    /// pick a call sound for a spawned critter.
+    key: String,
     image: Handle<Image>,
     layout: Handle<TextureAtlasLayout>,
     /// Home-terrain indices into the current biome's terrain table.
@@ -101,6 +103,20 @@ pub struct FaunaWorld {
 
 /// Is tile (tx, ty) a valid home tile for the given terrain set? (Free fn so
 /// callers can split-borrow `FaunaWorld`'s rng and grid fields independently.)
+impl FaunaWorld {
+    /// Manifest key for a critter's species index (see [`Fauna::species_idx`]).
+    pub fn species_key(&self, idx: usize) -> Option<&str> {
+        self.species.get(idx).map(|s| s.key.as_str())
+    }
+}
+
+impl Fauna {
+    /// Index into [`FaunaWorld`]'s species table.
+    pub fn species_idx(&self) -> usize {
+        self.species
+    }
+}
+
 fn tile_ok(terrain: &[u32], map_w: u32, map_h: u32, idxs: &[u32], tx: i32, ty: i32) -> bool {
     if tx < 0 || ty < 0 || tx as u32 >= map_w || ty as u32 >= map_h {
         return false;
@@ -185,6 +201,7 @@ pub fn setup_fauna(
             None,
         ));
         species.push(FaunaSpecies {
+            key: def.name.clone(),
             image: asset_server.load(def.sheet.clone()),
             layout,
             terrain_idxs,

@@ -160,10 +160,36 @@ pub(crate) struct TerrainSpeedModifier(f32);
 pub(crate) struct FootstepData {
     /// (surface_name, volume) per terrain index.
     terrains: Vec<(String, f32)>,
+    /// Semantic terrain name from the biome manifest ("water", "lava",
+    /// "grass", …) per terrain index — the ambience director keys off these.
+    names: Vec<String>,
     /// Terrain index per tile, flat array (map_w × map_h, bottom-up).
     terrain_map: Vec<u32>,
     map_w: u32,
     map_h: u32,
+}
+
+impl FootstepData {
+    /// Count tiles named `name` within a square of `radius` tiles around a
+    /// world position. Used by the ambience director to fade in water/lava
+    /// beds as the player approaches them.
+    pub(crate) fn count_terrain_near(&self, pos: Vec2, radius: i32, name: &str) -> u32 {
+        if self.terrain_map.is_empty() {
+            return 0;
+        }
+        let cx = (pos.x / TILE_PX + self.map_w as f32 / 2.0 - 0.5).round() as i32;
+        let cy = (pos.y / TILE_PX + self.map_h as f32 / 2.0 - 0.5).round() as i32;
+        let mut count = 0;
+        for ty in (cy - radius).max(0)..=(cy + radius).min(self.map_h as i32 - 1) {
+            for tx in (cx - radius).max(0)..=(cx + radius).min(self.map_w as i32 - 1) {
+                let idx = self.terrain_map[(ty as u32 * self.map_w + tx as u32) as usize];
+                if self.names.get(idx as usize).is_some_and(|n| n == name) {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
 }
 
 impl Default for TerrainSpeedModifier {

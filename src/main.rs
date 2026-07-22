@@ -35,6 +35,7 @@ mod ppo;
 mod rl_collection;
 mod rl_obs;
 mod session;
+mod ambience;
 mod music;
 mod settings;
 mod sfx;
@@ -455,6 +456,7 @@ fn build_app(
             missions_ui_plugin,
             sfx::sfx_plugin,
             music::music_plugin,
+            ambience::ambience_plugin,
             explosions::ship_smoke_plugin, // damage smoke — rendering only
         ));
     }

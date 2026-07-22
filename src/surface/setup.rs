@@ -961,8 +961,14 @@ pub(crate) fn setup_surface(
                         .collect()
                 })
                 .unwrap_or_default();
+            let names: Vec<String> = manifest
+                .biomes
+                .get(biome_name)
+                .map(|b| b.terrains.iter().map(|t| t.name.clone()).collect())
+                .unwrap_or_default();
             commands.insert_resource(FootstepData {
                 terrains: footstep_terrains,
+                names,
                 terrain_map: terrain_flat.clone(),
                 map_w,
                 map_h,
