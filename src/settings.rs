@@ -12,13 +12,22 @@ use serde::{Deserialize, Serialize};
 pub struct GameSettings {
     /// 0.0..=1.0 — multiplies every sound via Bevy's `GlobalVolume`.
     pub master_volume: f32,
+    /// 0.0..=1.0 — music level relative to master, applied live by the
+    /// music director's fade system.
+    #[serde(default = "default_music_volume")]
+    pub music_volume: f32,
     pub fullscreen: bool,
+}
+
+fn default_music_volume() -> f32 {
+    0.7
 }
 
 impl Default for GameSettings {
     fn default() -> Self {
         Self {
             master_volume: 1.0,
+            music_volume: default_music_volume(),
             fullscreen: false,
         }
     }
@@ -95,10 +104,15 @@ fn settings_ui(
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
-            ui.horizontal(|ui| {
+            egui::Grid::new("volume_sliders").show(ui, |ui| {
                 ui.label("Master volume");
                 ui.add(egui::Slider::new(&mut edited.master_volume, 0.0..=1.0).show_value(false));
                 ui.label(format!("{:.0}%", edited.master_volume * 100.0));
+                ui.end_row();
+                ui.label("Music volume");
+                ui.add(egui::Slider::new(&mut edited.music_volume, 0.0..=1.0).show_value(false));
+                ui.label(format!("{:.0}%", edited.music_volume * 100.0));
+                ui.end_row();
             });
             ui.checkbox(&mut edited.fullscreen, "Fullscreen (borderless)");
             ui.add_space(6.0);

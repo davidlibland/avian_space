@@ -146,7 +146,7 @@ fn main_menu_ui(
                         ui.separator();
                         ui.heading("Audio");
                         ui.label(
-                            "Weapon sounds synthesized for this game.                              Ambient, UI and footstep sounds from Kenney                              (kenney.nl), CC0. Escort voice lines generated                              with TTSMaker (ttsmaker.com).",
+                            "Weapon sounds and music synthesized for this                              game. Ambient, UI and footstep sounds from                              Kenney (kenney.nl), CC0. Escort voice lines                              generated with TTSMaker (ttsmaker.com).",
                         );
                         ui.separator();
                         ui.heading("UI fonts");
