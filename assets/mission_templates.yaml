@@ -8,7 +8,7 @@ random_delivery:
     weight: 0.4
   commodity_pool: [food, water, electronics, chemicals, fuel_cells]
   quantity_range: [5, 15]
-  pay_range: [500, 2500]
+  pay_range: [200, 1100]
   reserved: true
 
 urgent_delivery:
@@ -24,7 +24,7 @@ urgent_delivery:
       mission: deliver_wheat_intro
   commodity_pool: [electronics, chemicals, weapons_parts, exotic_matter]
   quantity_range: [3, 8]
-  pay_range: [2500, 6000]
+  pay_range: [1100, 2700]
   reserved: true
 
 collect_then_deliver:
@@ -39,7 +39,7 @@ collect_then_deliver:
     kind: tab
     weight: 0.2
   quantity_range: [3, 8]
-  pay_range: [2000, 5000]
+  pay_range: [900, 2250]
 
 mining_guild_contract:
   kind: collect_from_asteroid_field
@@ -53,7 +53,7 @@ mining_guild_contract:
     - kind: has_unlock
       name: mining_templates_unlocked
   quantity_range: [4, 12]
-  pay_range: [1500, 4000]
+  pay_range: [700, 1800]
 
 collect_from_random_asteroid_field:
   kind: collect_from_asteroid_field
@@ -67,7 +67,7 @@ collect_from_random_asteroid_field:
     - kind: completed
       mission: scavenge_iron
   quantity_range: [3, 10]
-  pay_range: [400, 2000]
+  pay_range: [200, 900]
 
 catch_thief:
   kind: catch_thief
@@ -90,7 +90,7 @@ catch_thief:
   target_name: "the thief"
   commodity_pool: [electronics, exotic_matter, weapons_parts]
   quantity_range: [3, 8]
-  pay_range: [8000, 20000]
+  pay_range: [3600, 9000]
 
 federation_bounty:
   kind: bounty_hunt
@@ -105,7 +105,7 @@ federation_bounty:
       name: bounty_hunter_license
   ship_type_pool: [pirate_corvette, pirate_missile_boat, pirate_carrier]
   count_range: [1, 3]
-  pay_range: [6000, 30000]
+  pay_range: [2700, 13500]
   target_name: Pirate Hostiles
 
 # ── Arrest flow ──────────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ war_raid:
   squadron_size: 0
   count_range: [2, 3]
   influence_delta: 0.08
-  pay_range: [8000, 12000]
+  pay_range: [3600, 5400]
   min_standing: 10.0
   tier: 1
 war_rapid_defense:
@@ -159,7 +159,7 @@ war_rapid_defense:
   squadron_size: 0
   count_range: [2, 3]
   influence_delta: 0.08
-  pay_range: [8000, 12000]
+  pay_range: [3600, 5400]
   min_standing: 10.0
   tier: 1
 war_battle_defense:
@@ -171,7 +171,7 @@ war_battle_defense:
   squadron_size: 3
   count_range: [4, 6]
   influence_delta: 0.15
-  pay_range: [18000, 26000]
+  pay_range: [8100, 11700]
   min_standing: 10.0
   tier: 2
 war_battle_offense:
@@ -183,7 +183,7 @@ war_battle_offense:
   squadron_size: 3
   count_range: [4, 6]
   influence_delta: 0.15
-  pay_range: [18000, 26000]
+  pay_range: [8100, 11700]
   min_standing: 10.0
   tier: 2
 war_decisive_push:
@@ -195,7 +195,7 @@ war_decisive_push:
   squadron_size: 4
   count_range: [6, 8]
   influence_delta: 0.25
-  pay_range: [35000, 48000]
+  pay_range: [15750, 21600]
   min_standing: 10.0
   tier: 3
 covert_smuggle_arms:
@@ -208,7 +208,7 @@ covert_smuggle_arms:
     commodity: weapons_parts
     quantity: 8
   influence_delta: 0.1
-  pay_range: [8000, 12000]
+  pay_range: [3600, 5400]
   min_standing: 10.0
   tier: 1
   enemy_standing_penalty: 4.0
@@ -221,7 +221,7 @@ covert_meet_dissidents:
     kind: meet_contact
     npc_name: "the dissident organizer"
   influence_delta: 0.08
-  pay_range: [6000, 9000]
+  pay_range: [2700, 4050]
   min_standing: 10.0
   tier: 1
   enemy_standing_penalty: 2.0
@@ -234,7 +234,7 @@ covert_snatch_official:
     kind: catch_official
     npc_name: "the garrison commander"
   influence_delta: 0.12
-  pay_range: [13000, 19000]
+  pay_range: [5850, 8550]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 6.0
@@ -248,7 +248,7 @@ covert_hearts_minds:
     commodity: medical_supplies
     quantity: 10
   influence_delta: 0.08
-  pay_range: [5000, 8000]
+  pay_range: [2250, 3600]
   min_standing: 10.0
   tier: 1
 covert_propaganda:
@@ -264,7 +264,7 @@ covert_propaganda:
     quantity: 6
     npc_name: "the cell organizer"
   influence_delta: 0.1
-  pay_range: [7000, 11000]
+  pay_range: [3150, 4950]
   min_standing: 10.0
   tier: 1
   enemy_standing_penalty: 3.0
@@ -277,7 +277,7 @@ covert_steal_docs:
     kind: meet_contact
     npc_name: "the ministry mole"
   influence_delta: 0.1
-  pay_range: [10000, 14000]
+  pay_range: [4500, 6300]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 4.0
@@ -290,7 +290,7 @@ covert_cut_supply:
     kind: cut_supply
     count: 3
   influence_delta: 0.12
-  pay_range: [13000, 19000]
+  pay_range: [5850, 8550]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 5.0
@@ -306,7 +306,7 @@ covert_extract_defector:
     kind: extract
     npc_name: "the defecting officer"
   influence_delta: 0.14
-  pay_range: [16000, 23000]
+  pay_range: [7200, 10350]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 6.0
@@ -320,7 +320,7 @@ covert_plant_intel:
     commodity: electronics
     quantity: 2
   influence_delta: 0.12
-  pay_range: [11000, 16000]
+  pay_range: [4950, 7200]
   min_standing: 10.0
   tier: 2
   enemy_standing_penalty: 4.0
@@ -333,7 +333,7 @@ covert_bribe_governor:
     kind: bribe
     npc_name: "the governor's bagman"
   influence_delta: 0.2
-  pay_range: [-40000, -30000]
+  pay_range: [-18000, -13500]
   min_standing: 10.0
   tier: 3
   enemy_standing_penalty: 1.0
@@ -348,7 +348,7 @@ covert_rescue_pows:
     kind: extract
     npc_name: "the senior POW officer"
   influence_delta: 0.18
-  pay_range: [22000, 30000]
+  pay_range: [9900, 13500]
   min_standing: 10.0
   tier: 3
   enemy_standing_penalty: 8.0
