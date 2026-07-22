@@ -4,9 +4,11 @@
 //! biome, or the interior venue (bar gets its own track; other interiors keep
 //! the surface theme, ducked).
 //!
-//! Tracks live at `assets/music/<key>.ogg`. The current files are synthesized
-//! placeholders (`scripts/synth_music_placeholders.py`); finished renders
-//! replace them file-for-file — see docs/music_and_ambience_plan.md.
+//! Tracks live at `assets/music/<key>.ogg`. Slots with a finished
+//! Band-in-a-Box render ALSO keep the original synthesized pad as
+//! `<key>_pad.ogg`, and the director slowly alternates between the two —
+//! song for a stretch, ambient chords for a stretch — with the usual
+//! crossfade. See docs/music_and_ambience_plan.md and docs/biab_briefs/.
 
 use bevy::audio::{AudioSink, PlaybackMode, PlaybackSettings, Volume};
 use bevy::prelude::*;
@@ -18,6 +20,30 @@ use crate::surface::BuildingKind;
 const FADE_SECS: f32 = 2.5;
 /// Interiors other than the bar keep the surface theme at reduced level.
 const INTERIOR_DUCK: f32 = 0.45;
+/// How long each variant (render / pad) plays before rotating to the next.
+const VARIANT_SECS: f32 = 160.0;
+
+/// Slots that have BOTH a finished render (`<key>.ogg`) and the kept
+/// synth-pad variant (`<key>_pad.ogg`). Update as renders arrive; a test
+/// asserts this list matches the files on disk.
+const RENDERED: &[&str] = &[
+    "space_federation",
+    "space_rebel",
+    "space_freefrontier",
+    "space_helios",
+    "space_bastion",
+    "space_order",
+    "space_pirate",
+];
+
+/// File stems for a slot, in rotation order (render first).
+fn variant_stems(slot: &str) -> Vec<String> {
+    if RENDERED.contains(&slot) {
+        vec![slot.to_string(), format!("{slot}_pad")]
+    } else {
+        vec![slot.to_string()]
+    }
+}
 
 /// What should be playing: a track key (file stem) and a gain multiplier.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -30,8 +56,15 @@ pub(crate) struct MusicCue {
 /// fading toward; 0.0 means it is on its way out and is despawned on arrival.
 #[derive(Component)]
 struct MusicTrack {
-    key: &'static str,
+    stem: String,
     target: f32,
+}
+
+/// Tracks how long the current slot has been playing, for variant rotation.
+#[derive(Default)]
+struct SlotClock {
+    slot: String,
+    elapsed: f32,
 }
 
 fn faction_track(controller: Option<&str>) -> &'static str {
@@ -102,6 +135,8 @@ fn direct_music(
     landed: Res<crate::planet_ui::LandedContext>,
     interior: Option<Res<crate::surface::interiors::InteriorContext>>,
     iu: Res<crate::item_universe::ItemUniverse>,
+    time: Res<Time>,
+    mut clock: Local<SlotClock>,
     mut tracks: Query<&mut MusicTrack>,
 ) {
     let controller = galaxy.controller(&current_system.0);
@@ -118,9 +153,20 @@ fn direct_music(
         interior.map(|c| c.kind),
     );
 
+    // Variant rotation: within one slot, alternate render ↔ synth pad on a
+    // slow clock; entering a new slot always starts on the render.
+    if clock.slot != cue.key {
+        clock.slot = cue.key.to_string();
+        clock.elapsed = 0.0;
+    } else {
+        clock.elapsed += time.delta_secs();
+    }
+    let variants = variant_stems(cue.key);
+    let stem = &variants[(clock.elapsed / VARIANT_SECS) as usize % variants.len()];
+
     let mut already_playing = false;
     for mut track in &mut tracks {
-        if track.key == cue.key {
+        if &track.stem == stem {
             already_playing = true;
             if track.target != cue.gain {
                 track.target = cue.gain;
@@ -131,14 +177,14 @@ fn direct_music(
     }
     if !already_playing {
         commands.spawn((
-            AudioPlayer::new(asset_server.load(format!("music/{}.ogg", cue.key))),
+            AudioPlayer::new(asset_server.load(format!("music/{stem}.ogg"))),
             PlaybackSettings {
                 mode: PlaybackMode::Loop,
                 volume: Volume::Linear(0.0),
                 ..default()
             },
             MusicTrack {
-                key: cue.key,
+                stem: stem.clone(),
                 target: cue.gain,
             },
         ));
@@ -272,11 +318,30 @@ mod tests {
             keys.push(surface_track(p));
         }
         for key in keys {
-            let path = format!("assets/music/{key}.ogg");
-            assert!(
-                std::path::Path::new(&path).exists(),
-                "missing music file {path}"
-            );
+            for stem in variant_stems(key) {
+                let path = format!("assets/music/{stem}.ogg");
+                assert!(
+                    std::path::Path::new(&path).exists(),
+                    "missing music file {path}"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn rendered_list_matches_the_files_on_disk() {
+        // Every `_pad.ogg` on disk must be listed in RENDERED and vice
+        // versa — keeps the rotation list honest as renders arrive.
+        let mut on_disk: Vec<String> = std::fs::read_dir("assets/music")
+            .unwrap()
+            .filter_map(|e| {
+                let name = e.ok()?.file_name().into_string().ok()?;
+                Some(name.strip_suffix("_pad.ogg")?.to_string())
+            })
+            .collect();
+        on_disk.sort();
+        let mut listed: Vec<String> = RENDERED.iter().map(|s| s.to_string()).collect();
+        listed.sort();
+        assert_eq!(on_disk, listed);
     }
 }

@@ -13,19 +13,21 @@ music. Two generations of files share the same names:
    an original work of the developer. (The RealTracks source material
    itself is never redistributed — only finished renders ship.)
 
-When a finished track replaces a placeholder, note it here:
+When a finished track replaces a placeholder, note it here. For
+rendered slots the synth pad is KEPT as `<key>_pad.ogg` — the music
+director alternates between song and pad in-game.
 
 | File | Status |
 |---|---|
 | menu.ogg | placeholder (synth) |
 | bar.ogg | placeholder (synth) |
-| space_federation.ogg | placeholder (synth) |
-| space_rebel.ogg | placeholder (synth) |
-| space_freefrontier.ogg | placeholder (synth) |
-| space_helios.ogg | placeholder (synth) |
-| space_bastion.ogg | placeholder (synth) |
-| space_order.ogg | placeholder (synth) |
-| space_pirate.ogg | placeholder (synth) |
+| space_federation.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
+| space_rebel.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
+| space_freefrontier.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
+| space_helios.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
+| space_bastion.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
+| space_order.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
+| space_pirate.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
 | surface_garden.ogg | placeholder (synth) |
 | surface_ice.ogg | placeholder (synth) |
 | surface_rocky.ogg | placeholder (synth) |
