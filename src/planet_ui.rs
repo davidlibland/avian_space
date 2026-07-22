@@ -32,11 +32,20 @@ pub fn planet_ui_plugin(app: &mut App) {
 /// egui activates the keyboard-focused widget on Space/Enter — but Space is
 /// FIRE in flight, so any HUD button that ever retains focus (a mouse-clicked
 /// "?" or toast Dismiss) turns later Space presses into stray UI clicks.
-/// The ONLY widget in the game that legitimately needs keyboard focus is the
-/// pilot-name field in the main menu; everywhere else, surrender any egui
-/// focus every frame so the whole class of bug is structurally impossible —
-/// no per-button `surrender_focus()` convention to remember.
-fn drop_egui_keyboard_focus(mut egui_contexts: EguiContexts) {
+/// The ONLY widgets that legitimately need keyboard focus are the pilot-name
+/// field in the main menu and the bug-report note box (tester builds, where
+/// the game's keyboard is swallowed while it's open); everywhere else,
+/// surrender any egui focus every frame so the whole class of bug is
+/// structurally impossible — no per-button `surrender_focus()` convention to
+/// remember.
+fn drop_egui_keyboard_focus(
+    mut egui_contexts: EguiContexts,
+    #[cfg(feature = "bugreport")] bug_note: Res<crate::bug_report::BugReportUi>,
+) {
+    #[cfg(feature = "bugreport")]
+    if bug_note.is_noting() {
+        return;
+    }
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };

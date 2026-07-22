@@ -158,6 +158,25 @@ pub(crate) fn write_report_files(dir: &std::path::Path, meta: &ReportMeta) -> st
 pub struct BugReportUi {
     pending: Option<PathBuf>,
     note: String,
+    /// The note field grabs keyboard focus once per capture.
+    focus_given: bool,
+}
+
+impl BugReportUi {
+    /// True while the tester is (potentially) typing a note — game keyboard
+    /// input is suppressed and egui keeps its focus for the duration.
+    pub fn is_noting(&self) -> bool {
+        self.pending.is_some()
+    }
+}
+
+/// While the note window is open, blank the game's view of the keyboard so
+/// typing "i" can't open the mission log (egui reads its own input stream
+/// and is unaffected). Runs right after input collection each frame.
+fn swallow_keys_while_noting(ui: Res<BugReportUi>, mut keys: ResMut<ButtonInput<KeyCode>>) {
+    if ui.is_noting() {
+        keys.reset_all();
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -197,6 +216,7 @@ fn trigger_bug_report(
             comms.send("Bug report saved — thanks!");
             ui.pending = Some(dir);
             ui.note.clear();
+            ui.focus_given = false;
         }
         Err(e) => {
             error!("failed to write bug report to {dir:?}: {e}");
@@ -221,12 +241,16 @@ fn note_ui(mut egui_contexts: EguiContexts, mut ui_state: ResMut<BugReportUi>) {
         .show(ctx, |ui| {
             ui.label("Got it — screenshot and game state are saved.");
             ui.label("Want to say what happened? (you can skip this)");
-            ui.add(
+            let resp = ui.add(
                 egui::TextEdit::multiline(&mut ui_state.note)
                     .hint_text("e.g. \"I clicked the door and the screen went black\"")
                     .desired_rows(3)
                     .desired_width(320.0),
             );
+            if !ui_state.focus_given {
+                resp.request_focus();
+                ui_state.focus_given = true;
+            }
             if ui.button("Done").clicked() {
                 done = true;
             }
@@ -251,6 +275,10 @@ fn note_ui(mut egui_contexts: EguiContexts, mut ui_state: ResMut<BugReportUi>) {
 pub fn bug_report_plugin(app: &mut App) {
     app.add_message::<FileBugReport>()
         .init_resource::<BugReportUi>()
+        .add_systems(
+            PreUpdate,
+            swallow_keys_while_noting.after(bevy::input::InputSystems),
+        )
         .add_systems(Update, trigger_bug_report)
         .add_systems(EguiPrimaryContextPass, note_ui);
 }
