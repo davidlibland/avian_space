@@ -1,11 +1,8 @@
-The Fleet
-Key=D, Tempo=84
-
 a) | D | D | G | D |
-| Bm | G | A | A... |
+| Bm | G | A | A |
 | D | A/C# | Bm | G |
 | Em | G | D/A A | D |
 b) | G | D/F# | Em | Bm |
-| G | D/F# | E7 | A... |
+| G | D/F# | E7 | A |
 | D | F#m | G | Gm |
-| D/A | A7 | D | D... |
+| D/A | A7 | D | D |

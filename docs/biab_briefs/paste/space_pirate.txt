@@ -1,11 +1,8 @@
-No Colors
-Key=Bm, Tempo=96
-
 a) | Bm | Bm | Bm/A | Bm/A |
 | G | G | F#7 | F#7 |
 | Bm | Bm | Bm/A | Bm/A |
 | G | F#7 | Bm | Bm |
 b) | Em | Em | Bm | Bm |
-| G | Em | F#7 | F#7.. |
+| G | Em | F#7 | F#7 |
 | Bm | D | G | Em |
-| C#m7b5 | F#7 | Bm | Bm... |
+| C#m7b5 | F#7 | Bm | Bm |

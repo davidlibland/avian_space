@@ -1,11 +1,8 @@
-Vespers
-Key=F, Tempo=66
-
 a) | F | F | C/F | F |
-| Bb/F | F | C | C... |
+| Bb/F | F | C | C |
 | F | F | Gm | Dm |
-| Bb | C | F | F... |
+| Bb | C | F | F |
 b) | Dm | Dm | Bb | Bb |
 | F/A | F/A | C | C |
 | Dm | Bb | F/A | Gm |
-| Bb/C | C | F | F... |
+| Bb/C | C | F | F |

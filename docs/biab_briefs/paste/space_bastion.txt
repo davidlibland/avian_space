@@ -1,11 +1,8 @@
-Anvil
-Key=Cm, Tempo=92
-
 a) | Cm | Cm | Ab | Ab |
-| Bb | Bb | Cm | Cm.. |
+| Bb | Bb | Cm | Cm |
 | Cm | Cm | Ab | Ab |
-| G | G | Cm | Cm.. |
+| G | G | Cm | Cm |
 b) | Fm | Fm | Cm | Cm |
-| Ab | Eb | G | G.. |
+| Ab | Eb | G | G |
 | Fm | Ab | Cm | Bb |
-| Ab | G | Cm | Cm... |
+| Ab | G | Cm | Cm |
