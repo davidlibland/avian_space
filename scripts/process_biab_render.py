@@ -29,12 +29,17 @@ BEATS = 128  # 32 bars of 4/4 — the brief-pack form
 
 
 def main(in_path, stem, tempo):
+    # Decode via ffmpeg to float32 — BIAB exports 24-bit WAVs, which the
+    # wave module would happily hand us as garbage if read as int16.
     with wave.open(in_path) as w:
         sr = w.getframerate()
         ch = w.getnchannels()
-        raw = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
-    raw = raw[: len(raw) // ch * ch]  # drop stray padding samples
-    x = raw.reshape(-1, ch).astype(np.float64) / 32768.0
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    raw = subprocess.run(
+        [ff, "-loglevel", "error", "-i", in_path, "-f", "f32le", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    x = np.frombuffer(raw, dtype=np.float32).reshape(-1, ch).astype(np.float64)
 
     loop_secs = BEATS * 60.0 / float(tempo)
     n = round(loop_secs * sr)
@@ -64,11 +69,15 @@ def main(in_path, stem, tempo):
         w.setsampwidth(2)
         w.setframerate(sr)
         w.writeframes((body * 32767).astype(np.int16).tobytes())
-    ff = imageio_ffmpeg.get_ffmpeg_exe()
     subprocess.run([ff, "-y", "-loglevel", "error", "-i", tmp_wav,
                     "-c:a", "libvorbis", "-q:a", "5", out_ogg], check=True)
     os.remove(tmp_wav)
-    print(f"{stem}.ogg  {n/sr:.1f}s loop  ({os.path.getsize(out_ogg)//1024} KiB)")
+    rms = float(np.sqrt(np.mean(body**2)))
+    crest = 0.90 / max(rms, 1e-9)
+    print(f"{stem}.ogg  {n/sr:.1f}s loop  rms={rms:.3f} crest={crest:.1f}  "
+          f"({os.path.getsize(out_ogg)//1024} KiB)")
+    if crest < 2.0:
+        print(f"  WARNING: crest factor {crest:.1f} looks like noise, not music")
 
 
 if __name__ == "__main__":
