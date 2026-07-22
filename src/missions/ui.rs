@@ -400,7 +400,7 @@ fn render_story_tab(
                         egui::pos2(a.max.x, a.center().y),
                         egui::pos2(b.min.x, b.center().y),
                     ],
-                    egui::Stroke::new(1.5, col),
+                    egui::Stroke::new(1.5_f32, col),
                 );
             }
 
@@ -411,29 +411,29 @@ fn render_story_tab(
                 let (fill, stroke, text_col) = match n.ui {
                     NodeUi::Completed => (
                         base,
-                        egui::Stroke::new(1.0, egui::Color32::from_gray(20)),
+                        egui::Stroke::new(1.0_f32, egui::Color32::from_gray(20)),
                         text_on(base),
                     ),
                     NodeUi::Active => (
                         base,
-                        egui::Stroke::new(2.5, egui::Color32::from_rgb(240, 210, 90)),
+                        egui::Stroke::new(2.5_f32, egui::Color32::from_rgb(240, 210, 90)),
                         text_on(base),
                     ),
                     // Next: faction hue retained but muted + no text.
                     NodeUi::Next => (
                         mute(base, 0.32),
-                        egui::Stroke::new(1.0, mute(base, 0.6)),
+                        egui::Stroke::new(1.0_f32, mute(base, 0.6)),
                         egui::Color32::TRANSPARENT,
                     ),
                     NodeUi::Failed => (
                         mute(base, 0.4),
-                        egui::Stroke::new(1.5, egui::Color32::from_rgb(150, 60, 60)),
+                        egui::Stroke::new(1.5_f32, egui::Color32::from_rgb(150, 60, 60)),
                         egui::Color32::from_gray(150),
                     ),
                     // Closed branch: barely-there hue, locked.
                     NodeUi::Impossible => (
                         mute(base, 0.15),
-                        egui::Stroke::new(1.0, egui::Color32::from_gray(70)),
+                        egui::Stroke::new(1.0_f32, egui::Color32::from_gray(70)),
                         egui::Color32::TRANSPARENT,
                     ),
                 };
@@ -508,7 +508,7 @@ fn draw_status_badge(p: &egui::Painter, center: egui::Pos2, col: egui::Color32, 
     p.circle_stroke(
         center,
         R,
-        egui::Stroke::new(1.0, egui::Color32::from_gray(25)),
+        egui::Stroke::new(1.0_f32, egui::Color32::from_gray(25)),
     );
     p.text(
         center,

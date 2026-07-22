@@ -341,7 +341,7 @@ fn jump_ui(
                         {
                             painter.line_segment(
                                 [from, to_screen(other.map_position)],
-                                Stroke::new(1.0, Color32::from_rgb(40, 50, 90)),
+                                Stroke::new(1.0_f32, Color32::from_rgb(40, 50, 90)),
                             );
                         }
                     }
@@ -375,7 +375,7 @@ fn jump_ui(
                             painter.circle_stroke(
                                 pos,
                                 NODE_R + 4.0,
-                                Stroke::new(1.5, Color32::from_rgb(255, 220, 80)),
+                                Stroke::new(1.5_f32, Color32::from_rgb(255, 220, 80)),
                             );
                         }
                     }
@@ -396,9 +396,13 @@ fn jump_ui(
                     painter.circle_filled(pos, NODE_R, fill);
                     if is_current {
                         // "You are here" — bright white ring.
-                        painter.circle_stroke(pos, NODE_R + 1.5, Stroke::new(2.0, Color32::WHITE));
+                        painter.circle_stroke(
+                            pos,
+                            NODE_R + 1.5,
+                            Stroke::new(2.0_f32, Color32::WHITE),
+                        );
                     } else if is_visited {
-                        painter.circle_stroke(pos, NODE_R, Stroke::new(1.0, dim(base, 0.35)));
+                        painter.circle_stroke(pos, NODE_R, Stroke::new(1.0_f32, dim(base, 0.35)));
                     }
 
                     if is_visited {
@@ -422,7 +426,7 @@ fn jump_ui(
                         painter.rect_stroke(
                             rect,
                             1.0,
-                            Stroke::new(1.5, Color32::from_rgb(220, 50, 50)),
+                            Stroke::new(1.5_f32, Color32::from_rgb(220, 50, 50)),
                             egui::StrokeKind::Outside,
                         );
                     }
@@ -454,7 +458,7 @@ fn jump_ui(
                         painter.add(egui::Shape::convex_polygon(
                             points,
                             Color32::from_rgba_unmultiplied(180, 40, 40, 120),
-                            Stroke::new(1.0, Color32::from_rgb(200, 60, 60)),
+                            Stroke::new(1.0_f32, Color32::from_rgb(200, 60, 60)),
                         ));
                     }
                 }

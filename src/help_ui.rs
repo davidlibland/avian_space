@@ -65,7 +65,7 @@ fn help_corner_button(mut egui_contexts: EguiContexts, mut state: ResMut<HelpUiO
             let button = egui::Button::new(label)
                 .min_size(egui::Vec2::splat(28.0))
                 .fill(Color32::from_rgba_unmultiplied(0, 0, 0, 160))
-                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(140, 180, 220)));
+                .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(140, 180, 220)));
             // NB: egui would "click" this button on Space (= FIRE) if it ever
             // kept keyboard focus; `drop_egui_keyboard_focus` (planet_ui.rs)
             // clears all egui focus outside the main menu to prevent that.
