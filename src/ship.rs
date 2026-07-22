@@ -977,6 +977,12 @@ impl ShipBundle {
         self.ship.health = health.max(1);
     }
 
+    /// Name the bundled ship for HUD labels — friends and hires fly under
+    /// their pilot's name, not their bare hull type.
+    pub fn set_display_name(&mut self, name: &str) {
+        self.ship.data.display_name = name.to_string();
+    }
+
     /// Current secondary ammo of the bundled ship (weapon type → rounds).
     pub fn ship_ammo(&self) -> std::collections::HashMap<String, u32> {
         self.ship

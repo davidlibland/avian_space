@@ -224,8 +224,212 @@ pub enum MissionLogTab {
     #[default]
     Missions,
     Story,
+    Fleet,
     Info,
     Cargo,
+}
+
+/// One row of the Fleet tab, precomputed OUTSIDE the egui window closure
+/// (portrait registration needs `&mut EguiContexts`, which `ctx_mut`
+/// borrows for the whole closure).
+struct FleetRow {
+    name: String,
+    kind: &'static str,
+    detail: String,
+    hull: String,
+    health: i32,
+    max_health: i32,
+    portrait: Option<egui::TextureId>,
+}
+
+fn title_case(id: &str) -> String {
+    id.split('_')
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Gather roster rows + parked/fallen lists, compositing a 64px portrait
+/// per named pilot (cached by spec inside the compositor).
+#[allow(clippy::type_complexity)]
+fn build_fleet_rows(
+    egui_contexts: &mut EguiContexts,
+    roster: &crate::carrier::EscortRoster,
+    iu: &ItemUniverse,
+    layers: &mut Option<bevy::prelude::ResMut<crate::character_compositor::CharacterLayers>>,
+    images: &mut bevy::prelude::Assets<Image>,
+) -> (Vec<FleetRow>, Vec<String>, Vec<String>) {
+    let hull_name = |ship_type: &str| -> (String, i32) {
+        iu.ships
+            .get(ship_type)
+            .map(|d| {
+                let n = if d.display_name.is_empty() {
+                    title_case(ship_type)
+                } else {
+                    d.display_name.clone()
+                };
+                (n, d.max_health)
+            })
+            .unwrap_or_else(|| (title_case(ship_type), 0))
+    };
+    fn portrait(
+        egui_contexts: &mut EguiContexts,
+        layers: &mut Option<bevy::prelude::ResMut<crate::character_compositor::CharacterLayers>>,
+        images: &mut bevy::prelude::Assets<Image>,
+        spec: &crate::character_compositor::AvatarSpec,
+    ) -> Option<egui::TextureId> {
+        let handle = layers.as_mut()?.composite_portrait(spec, images)?;
+        Some(egui_contexts.add_image(bevy_egui::EguiTextureHandle::Strong(handle)))
+    }
+    let rows = roster
+        .entries
+        .iter()
+        .map(|e| {
+            let (hull, max_health) = hull_name(&e.ship_type);
+            match &e.kind {
+                crate::carrier::EscortKind::Companion { name } => {
+                    let def = iu.companions.get(name);
+                    let display = def.map(|d| d.name.clone()).unwrap_or_else(|| name.clone());
+                    let spec = def.and_then(|d| {
+                        let npc = iu.npcs.get(&d.npc)?;
+                        let role = npc.role.as_deref().unwrap_or("civilian");
+                        layers
+                            .as_ref()
+                            .map(|l| l.spec_for_npc(&d.npc, npc.avatar.as_ref(), role))
+                    });
+                    FleetRow {
+                        name: display,
+                        kind: "Friend",
+                        detail: def.map(|d| d.bio.clone()).unwrap_or_default(),
+                        hull,
+                        health: e.health,
+                        max_health,
+                        portrait: spec
+                            .as_ref()
+                            .and_then(|s| portrait(egui_contexts, layers, images, s)),
+                    }
+                }
+                crate::carrier::EscortKind::Hired { name, temperament } => {
+                    let spec = layers
+                        .as_ref()
+                        .map(|l| crate::surface_npc::anonymous_mission_spec(l, name, "civilian"));
+                    FleetRow {
+                        name: name.clone(),
+                        kind: "Hired pilot",
+                        detail: format!("{temperament} · dismiss at any bar"),
+                        hull,
+                        health: e.health,
+                        max_health,
+                        portrait: spec
+                            .as_ref()
+                            .and_then(|s| portrait(egui_contexts, layers, images, s)),
+                    }
+                }
+                crate::carrier::EscortKind::Carried { weapon_type } => FleetRow {
+                    name: format!("Bay fighter ({})", title_case(weapon_type)),
+                    kind: "Carried",
+                    detail: "launches from the carrier bay".into(),
+                    hull,
+                    health: e.health,
+                    max_health,
+                    portrait: None,
+                },
+            }
+        })
+        .collect();
+    let named = |key: &str| {
+        iu.companions
+            .get(key)
+            .map(|d| format!("{} — waiting on {}", d.name, title_case(&d.home_planet)))
+            .unwrap_or_else(|| key.to_string())
+    };
+    let mut parked: Vec<String> = roster.parked.iter().map(|k| named(k)).collect();
+    parked.sort();
+    let mut fallen: Vec<String> = roster
+        .fallen
+        .iter()
+        .map(|k| {
+            iu.companions
+                .get(k)
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| k.clone())
+        })
+        .collect();
+    fallen.sort();
+    (rows, parked, fallen)
+}
+
+/// The Fleet tab: everyone flying (or walking) with you.
+fn render_fleet_tab(ui: &mut egui::Ui, rows: &[FleetRow], parked: &[String], fallen: &[String]) {
+    if rows.is_empty() && parked.is_empty() && fallen.is_empty() {
+        ui.label(
+            "No wingmates yet. Friends join at the end of their storylines;\n\
+             pilots for hire wait at bar tables; carriers field bay fighters.",
+        );
+        return;
+    }
+    egui::ScrollArea::vertical()
+        .max_height(420.0)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            for row in rows {
+                ui.horizontal(|ui| {
+                    if let Some(tex) = row.portrait {
+                        ui.image(egui::load::SizedTexture::new(tex, [48.0, 48.0]));
+                    } else {
+                        ui.add_space(52.0);
+                    }
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(&row.name).strong());
+                            let (chip, color) = match row.kind {
+                                "Friend" => ("friend", egui::Color32::from_rgb(120, 200, 130)),
+                                "Hired pilot" => ("hired", egui::Color32::from_rgb(120, 170, 230)),
+                                _ => ("fighter", egui::Color32::GRAY),
+                            };
+                            ui.label(egui::RichText::new(chip).small().color(color));
+                        });
+                        let hull_line = if row.max_health > 0 {
+                            format!("{} — hull {}/{}", row.hull, row.health, row.max_health)
+                        } else {
+                            format!("{} — hull {}", row.hull, row.health)
+                        };
+                        ui.label(egui::RichText::new(hull_line).small());
+                        if !row.detail.is_empty() {
+                            ui.label(
+                                egui::RichText::new(&row.detail)
+                                    .small()
+                                    .color(egui::Color32::GRAY),
+                            );
+                        }
+                    });
+                });
+                ui.separator();
+            }
+            if !parked.is_empty() {
+                ui.label(egui::RichText::new("Ashore").strong());
+                for p in parked {
+                    ui.label(egui::RichText::new(p).small());
+                }
+                ui.separator();
+            }
+            if !fallen.is_empty() {
+                ui.label(egui::RichText::new("Remembered").strong());
+                for f in fallen {
+                    ui.label(
+                        egui::RichText::new(f)
+                            .small()
+                            .color(egui::Color32::from_gray(120)),
+                    );
+                }
+            }
+        });
 }
 
 #[derive(Resource, Default)]
@@ -263,10 +467,28 @@ fn render_mission_log(
     mut abandon: MessageWriter<AbandonMission>,
     mut pickup_drop: MessageWriter<PickupDrop>,
     standings: Res<crate::standing::FactionStandings>,
+    roster: Option<Res<crate::carrier::EscortRoster>>,
+    mut layers: Option<bevy::prelude::ResMut<crate::character_compositor::CharacterLayers>>,
+    mut images: bevy::prelude::ResMut<Assets<Image>>,
 ) {
     if !state.open {
         return;
     }
+    // Fleet rows are built before `ctx_mut` borrows the contexts (portrait
+    // texture registration needs `&mut EguiContexts`).
+    let fleet = if state.tab == MissionLogTab::Fleet {
+        roster.as_ref().map(|r| {
+            build_fleet_rows(
+                &mut egui_contexts,
+                r,
+                &item_universe,
+                &mut layers,
+                &mut images,
+            )
+        })
+    } else {
+        None
+    };
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
@@ -285,6 +507,7 @@ fn render_mission_log(
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut state.tab, MissionLogTab::Missions, "Missions");
                 ui.selectable_value(&mut state.tab, MissionLogTab::Story, "Story");
+                ui.selectable_value(&mut state.tab, MissionLogTab::Fleet, "Fleet");
                 ui.selectable_value(&mut state.tab, MissionLogTab::Info, "Info");
                 ui.selectable_value(&mut state.tab, MissionLogTab::Cargo, "Cargo");
             });
@@ -296,6 +519,12 @@ fn render_mission_log(
                 MissionLogTab::Story => {
                     render_story_tab(ui, &log, &unlocks, &item_universe);
                 }
+                MissionLogTab::Fleet => match &fleet {
+                    Some((rows, parked, fallen)) => render_fleet_tab(ui, rows, parked, fallen),
+                    None => {
+                        ui.label("No fleet data.");
+                    }
+                },
                 MissionLogTab::Info => {
                     render_info_tab(ui, &ship, &game_state, &item_universe, &standings);
                 }

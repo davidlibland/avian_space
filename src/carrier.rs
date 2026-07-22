@@ -433,6 +433,19 @@ fn spawn_escort_ships(
         {
             bundle.set_ship_health(entry.health);
             bundle.set_ship_ammo(&entry.ammo);
+            // Friends and hires fly under their own name — without this the
+            // HUD labels them by bare hull ("shuttle" instead of "Jonah Wren").
+            match &entry.kind {
+                EscortKind::Companion { name } => {
+                    if let Some(d) = item_universe.companions.get(name) {
+                        bundle.set_display_name(&d.name);
+                    }
+                }
+                EscortKind::Hired { name, .. } => {
+                    bundle.set_display_name(name);
+                }
+                EscortKind::Carried { .. } => {}
+            }
             roster_temperament = match &entry.kind {
                 EscortKind::Companion { name } => {
                     item_universe.companions.get(name).map(|d| d.temperament)
