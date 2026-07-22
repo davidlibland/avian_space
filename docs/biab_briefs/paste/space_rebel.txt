@@ -1,0 +1,11 @@
+Embers
+Key=Em, Tempo=112
+
+a) | Em | Em | C | C |
+| G | D | Em | Em |
+| Em | Em | C | C |
+| Am | B7 | Em | Em |
+b) | C | G | D | Em |
+| C | G | B7 | B7 |
+| Am | Em | C | G |
+| Am | B7 | Em | Em... |

@@ -1,0 +1,11 @@
+The Long Haul
+Key=G, Tempo=76
+
+a) | G | G | C/G | G |
+| Em | C | D | D |
+| G | G/B | C | Am |
+| G/D | D7 | G | G... |
+b) | C | C | G | G |
+| Em | Em | D | D |
+| C | G/B | Am | C/D |
+| G | C/G | G | G... |

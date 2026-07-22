@@ -1,0 +1,11 @@
+Cold Light
+Key=Am, Tempo=100
+
+a) | Am | Am | ^F | F |
+| C | C | ^G | G |
+| Am | Am | ^F | F |
+| C | G/B | Am | Am |
+b) | F | F | Am | Am |
+| Dm | Dm | E7 | E7 |
+| F | G | Am | F |
+| Dm | E7 | Am | Am |
