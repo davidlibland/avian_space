@@ -560,11 +560,7 @@ pub(crate) fn setup_surface(
                     ..default()
                 },
                 // Above the pad sprite (-9), below all depth-sorted actors.
-                Transform::from_xyz(
-                    world_pos.x,
-                    world_pos.y + 0.34 * cos50 * tile_px,
-                    -8.5,
-                ),
+                Transform::from_xyz(world_pos.x, world_pos.y + 0.34 * cos50 * tile_px, -8.5),
             ));
         }
 

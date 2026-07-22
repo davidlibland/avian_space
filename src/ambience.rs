@@ -294,7 +294,13 @@ fn one_shots(
                 rng.r#gen_range(-5.0..5.0) * TILE_PX,
                 0.0,
             );
-            spawn_call(&mut commands, &asset_server, stem, volume, walker_pos + offset);
+            spawn_call(
+                &mut commands,
+                &asset_server,
+                stem,
+                volume,
+                walker_pos + offset,
+            );
         }
     }
 }
@@ -317,7 +323,19 @@ mod tests {
             ("interior", "interior_hum"), // stations: life support, no wind
         ] {
             let beds = bed_targets(&PlayState::Exploring, None, biome, 0, 0, 0);
-            assert_eq!(beds, vec![(key, if biome == "ice" { 0.55 } else if biome == "interior" { 0.45 } else { 0.5 })]);
+            assert_eq!(
+                beds,
+                vec![(
+                    key,
+                    if biome == "ice" {
+                        0.55
+                    } else if biome == "interior" {
+                        0.45
+                    } else {
+                        0.5
+                    }
+                )]
+            );
         }
     }
 
@@ -348,13 +366,32 @@ mod tests {
 
     #[test]
     fn bar_murmur_scales_with_patrons_and_needs_someone_present() {
-        let empty = bed_targets(&PlayState::Inside, Some(BuildingKind::Bar), "garden", 0, 0, 0);
+        let empty = bed_targets(
+            &PlayState::Inside,
+            Some(BuildingKind::Bar),
+            "garden",
+            0,
+            0,
+            0,
+        );
         assert!(!empty.iter().any(|(k, _)| *k == "bar_murmur"));
-        let quiet = bed_targets(&PlayState::Inside, Some(BuildingKind::Bar), "garden", 0, 0, 2);
-        let busy = bed_targets(&PlayState::Inside, Some(BuildingKind::Bar), "garden", 0, 0, 8);
-        let vol = |beds: &[(&str, f32)]| {
-            beds.iter().find(|(k, _)| *k == "bar_murmur").unwrap().1
-        };
+        let quiet = bed_targets(
+            &PlayState::Inside,
+            Some(BuildingKind::Bar),
+            "garden",
+            0,
+            0,
+            2,
+        );
+        let busy = bed_targets(
+            &PlayState::Inside,
+            Some(BuildingKind::Bar),
+            "garden",
+            0,
+            0,
+            8,
+        );
+        let vol = |beds: &[(&str, f32)]| beds.iter().find(|(k, _)| *k == "bar_murmur").unwrap().1;
         assert!(vol(&quiet) < vol(&busy));
         assert!(vol(&busy) <= 0.5);
     }
@@ -370,11 +407,30 @@ mod tests {
         // Species list mirrors assets/sprites/fauna/fauna_manifest.ron; the
         // silent ones are deliberate.
         for species in [
-            "deer", "rabbit", "fox", "butterfly", "songbird", "rock_monster",
-            "lava_salamander", "ember_moth", "ice_monster", "snow_hare",
-            "petrel", "sand_lizard", "scarab", "vulture", "mine_rat",
-            "rock_crab", "cave_bat", "warehouse_rat", "sweeper_bot",
-            "inventory_drone", "pipe_gecko", "service_drone", "rat", "drone",
+            "deer",
+            "rabbit",
+            "fox",
+            "butterfly",
+            "songbird",
+            "rock_monster",
+            "lava_salamander",
+            "ember_moth",
+            "ice_monster",
+            "snow_hare",
+            "petrel",
+            "sand_lizard",
+            "scarab",
+            "vulture",
+            "mine_rat",
+            "rock_crab",
+            "cave_bat",
+            "warehouse_rat",
+            "sweeper_bot",
+            "inventory_drone",
+            "pipe_gecko",
+            "service_drone",
+            "rat",
+            "drone",
         ] {
             if let Some((stem, _, _)) = species_call(species) {
                 let path = format!("assets/{}", ambience_path(stem));
@@ -388,8 +444,22 @@ mod tests {
             bed_targets(&PlayState::Exploring, None, "rocky", 0, 99, 0),
             bed_targets(&PlayState::Exploring, None, "interior", 0, 0, 0),
             bed_targets(&PlayState::Inside, Some(BuildingKind::Mine), "", 0, 0, 0),
-            bed_targets(&PlayState::Inside, Some(BuildingKind::Substation), "", 0, 0, 0),
-            bed_targets(&PlayState::Inside, Some(BuildingKind::Warehouse), "", 0, 0, 0),
+            bed_targets(
+                &PlayState::Inside,
+                Some(BuildingKind::Substation),
+                "",
+                0,
+                0,
+                0,
+            ),
+            bed_targets(
+                &PlayState::Inside,
+                Some(BuildingKind::Warehouse),
+                "",
+                0,
+                0,
+                0,
+            ),
             bed_targets(&PlayState::Inside, Some(BuildingKind::Bar), "", 0, 0, 4),
         ]
         .concat()

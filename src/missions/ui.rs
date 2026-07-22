@@ -343,7 +343,8 @@ fn render_story_tab(
         };
         let node_chip = |ui: &mut egui::Ui, label: &str, glyph: &str| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(18.0, 13.0), egui::Sense::hover());
-            ui.painter().rect_filled(rect, 3.0, egui::Color32::from_gray(60));
+            ui.painter()
+                .rect_filled(rect, 3.0, egui::Color32::from_gray(60));
             ui.painter().text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
@@ -504,7 +505,11 @@ const BADGE_FAILED: egui::Color32 = egui::Color32::from_rgb(180, 75, 75);
 fn draw_status_badge(p: &egui::Painter, center: egui::Pos2, col: egui::Color32, glyph: &str) {
     const R: f32 = 7.0;
     p.circle_filled(center, R, col);
-    p.circle_stroke(center, R, egui::Stroke::new(1.0, egui::Color32::from_gray(25)));
+    p.circle_stroke(
+        center,
+        R,
+        egui::Stroke::new(1.0, egui::Color32::from_gray(25)),
+    );
     p.text(
         center,
         egui::Align2::CENTER_CENTER,

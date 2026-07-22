@@ -55,7 +55,12 @@ impl bevy::log::tracing_subscriber::Layer<bevy::log::tracing_subscriber::Registr
         let mut visitor = MsgVisitor(String::new());
         event.record(&mut visitor);
         let meta = event.metadata();
-        let line = format!("{:5} {}: {}", meta.level().as_str(), meta.target(), visitor.0);
+        let line = format!(
+            "{:5} {}: {}",
+            meta.level().as_str(),
+            meta.target(),
+            visitor.0
+        );
         if let Ok(mut ring) = LOG_RING.lock() {
             if ring.len() >= LOG_CAP {
                 ring.pop_front();

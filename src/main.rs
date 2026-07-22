@@ -23,22 +23,22 @@ mod planets;
 mod policy_asset;
 use planets::planets_plugin;
 mod ai_ships;
+mod ambience;
+#[cfg(feature = "bugreport")]
+mod bug_report;
 mod character_compositor;
 mod config;
 mod consts;
 mod embedded_assets;
 mod gae;
 mod model;
+mod music;
 mod optimal_control;
 mod pickups;
 mod ppo;
 mod rl_collection;
 mod rl_obs;
 mod session;
-mod ambience;
-#[cfg(feature = "bugreport")]
-mod bug_report;
-mod music;
 mod settings;
 mod sfx;
 mod ship;
