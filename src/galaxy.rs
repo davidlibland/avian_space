@@ -188,6 +188,12 @@ pub fn effective_planet_faction(
     galaxy.controller(sys_name).map(String::from)
 }
 
+/// File stem for a faction's crest sprites: `sprites/factions/<kind>_<stem>.png`
+/// (see `scripts/gen_crests.py`, which emits one set per factions.yaml entry).
+pub fn faction_asset_stem(name: &str) -> String {
+    name.to_lowercase()
+}
+
 // ── Messages ─────────────────────────────────────────────────────────────────
 
 /// A system's controller changed (None = became contested). Consumers

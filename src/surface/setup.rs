@@ -534,6 +534,29 @@ pub(crate) fn setup_surface(
                 Vec3::new(label_world.x, label_world.y + tile_px * 0.8, 5.0),
             );
         }
+        // Controlled worlds paint the governing faction's crest on the pad
+        // center (the parked ship is never rendered, so the center is free).
+        // Freeports leave the pad unmarked — absence is a cue too.
+        if let Some(faction) =
+            crate::galaxy::effective_planet_faction(&galaxy, &item_universe, &planet_name)
+            && item_universe
+                .factions
+                .get(&faction)
+                .is_some_and(|fd| !fd.neutral)
+        {
+            let stem = crate::galaxy::faction_asset_stem(&faction);
+            let world_pos = tile_to_world(pad_cx, pad_cy, map_w, map_h, tile_px);
+            commands.spawn((
+                DespawnOnExit(PlayState::Exploring),
+                Sprite {
+                    image: asset_server.load(format!("sprites/factions/pad_{stem}.png")),
+                    custom_size: Some(Vec2::splat(tile_px * 2.4)),
+                    ..default()
+                },
+                // Above the pad sprite (-9), below all depth-sorted actors.
+                Transform::from_xyz(world_pos.x, world_pos.y, -8.5),
+            ));
+        }
 
         // ── Spawn mechanic shop next to the landing pad ──────────────
         let mech_atlas_handle: Option<Handle<Image>> =
@@ -747,28 +770,26 @@ pub(crate) fn setup_surface(
                         tile_px,
                         &spr.props,
                     );
-                    // The garrison flies the CONTROLLING faction's colors: a
-                    // grayscale cloth sprite tinted at runtime, pinned to the
-                    // baked flagpole (model: pole at (w/2+0.55, -d/2+0.3),
-                    // finial z≈4.2; screen offset = (x, Δdepth·sin50° +
-                    // z·cos50°) in tiles — see build_garrison in
-                    // scripts/ship3d/buildings3d.py).
+                    // The garrison flies the CONTROLLING faction's crest flag
+                    // (per-faction cloth from scripts/gen_crests.py), pinned
+                    // to the baked flagpole (model: pole at (w/2+0.55,
+                    // -d/2+0.3), finial z≈4.2; screen offset = (x,
+                    // Δdepth·sin50° + z·cos50°) in tiles — see build_garrison
+                    // in scripts/ship3d/buildings3d.py).
                     if kind == BuildingKind::Garrison
-                        && let Some(color) = crate::galaxy::effective_planet_faction(
+                        && let Some(faction) = crate::galaxy::effective_planet_faction(
                             &galaxy,
                             &item_universe,
                             &planet_name,
                         )
-                        .and_then(|f| item_universe.factions.get(&f))
-                        .map(|fd| fd.color)
                     {
+                        let stem = crate::galaxy::faction_asset_stem(&faction);
                         let offset = Vec2::new(4.25, 2.61) * tile_px;
                         commands.spawn((
                             DespawnOnExit(PlayState::Exploring),
                             Sprite {
                                 image: asset_server
-                                    .load(format!("{WORLDS_DIR}/buildings3d/flag.png")),
-                                color: Color::srgb_u8(color[0], color[1], color[2]),
+                                    .load(format!("sprites/factions/flag_{stem}.png")),
                                 custom_size: Some(Vec2::new(1.3, 0.84) * tile_px),
                                 ..default()
                             },

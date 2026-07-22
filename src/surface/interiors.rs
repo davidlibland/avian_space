@@ -584,6 +584,9 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         "fuel_pump" => (1, 1, true),
         "war_desk" => (2, 1, true),
         "flag_stand" => (1, 1, false),
+        // Hangs on the wall face row — resolved to the controlling
+        // faction's crest at spawn time.
+        "faction_banner" => (1, 1, false),
         "crate_stack" => (1, 1, true),
         // Containers are already solid in the maze mask — visual only here.
         "container_a" | "container_b" => (4, 2, false),
@@ -794,6 +797,11 @@ pub(crate) fn build_plan(
             props.push(("war_desk", (counter.0 - 1, counter.1)));
             props.push(("flag_stand", (counter.0 - 3, counter.1)));
             props.push(("flag_stand", (counter.0 + 2, counter.1)));
+            // Crest banners on the back wall, flanking the desk above the
+            // flag stands (the wall row sits one tile above the top floor
+            // row; sprites resolve to the controlling faction at spawn).
+            props.push(("faction_banner", (counter.0 - 3, y0 + rh)));
+            props.push(("faction_banner", (counter.0 + 2, y0 + rh)));
             // The holding cell: flush against the room's back and east
             // walls (no gap row — the room wall IS the cell's back wall),
             // bars on the west flank and corner, and an ANIMATED gate on
@@ -958,7 +966,7 @@ pub(crate) fn setup_interior(
     context: Option<Res<InteriorContext>>,
     landed: Res<crate::planet_ui::LandedContext>,
     iu: Res<ItemUniverse>,
-    current_system: Res<CurrentStarSystem>,
+    (current_system, galaxy): (Res<CurrentStarSystem>, Res<crate::galaxy::GalaxyControl>),
     asset_server: Res<AssetServer>,
     game_state: Res<crate::game_save::PlayerGameState>,
     mut character_layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
@@ -1338,11 +1346,28 @@ pub(crate) fn setup_interior(
     }
 
     // ── Prop sprites (baked at 32 px/tile, bottom-center anchored) ──
+    // The garrison's wall banners resolve to the CONTROLLING faction's
+    // crest at spawn time (the plan itself is faction-agnostic).
+    let faction_stem = crate::galaxy::effective_planet_faction(&galaxy, &iu, &planet)
+        .map(|f| crate::galaxy::faction_asset_stem(&f));
     for &(name, (px, py)) in &plan.props {
         let (w, _h, _) = prop_meta(name);
         let base = super::tile_to_world(px, py, map_w, map_h, tile_px);
         let front_y = base.y - tile_px * 0.5;
         let cx = base.x + (w as f32 - 1.0) * 0.5 * tile_px;
+        if name == "faction_banner" {
+            let Some(stem) = &faction_stem else { continue };
+            commands.spawn((
+                DespawnOnExit(PlayState::Inside),
+                InteriorScoped,
+                Sprite::from_image(
+                    asset_server.load(format!("sprites/factions/banner_{stem}.png")),
+                ),
+                bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
+                Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
+            ));
+            continue;
+        }
         if name == "jail_gate" {
             let frames: Vec<Handle<Image>> = (0..4)
                 .map(|k| {
@@ -2736,6 +2761,35 @@ mod tests {
         for k in 0..4 {
             let p = format!("assets/sprites/worlds/interior_props/jail_gate{k}.png");
             assert!(std::path::Path::new(&p).exists(), "{p} missing");
+        }
+    }
+
+    #[test]
+    fn garrison_hangs_crest_banners_and_every_faction_has_crest_assets() {
+        let iu = iu();
+        let plan = build_plan(BuildingKind::Garrison, &iu, "earth", 0, &un());
+        let (_x0, y0, _rw, rh) = plan.room;
+        let banners: Vec<_> = plan
+            .props
+            .iter()
+            .filter(|&&(n, _)| n == "faction_banner")
+            .collect();
+        assert_eq!(banners.len(), 2, "two banners flank the war desk");
+        assert!(
+            banners.iter().all(|&&(_, (_, ty))| ty == y0 + rh),
+            "banners hang on the wall face row above the room"
+        );
+        assert!(!prop_meta("faction_banner").2, "banners are scenery");
+        // Every faction in the registry ships a full crest sprite set, so
+        // the runtime lookups (flag / banner / pad) can never 404.
+        let yaml = std::fs::read_to_string("assets/factions.yaml").unwrap();
+        let map: serde_yaml::Mapping = serde_yaml::from_str(&yaml).unwrap();
+        for key in map.keys() {
+            let stem = crate::galaxy::faction_asset_stem(key.as_str().unwrap());
+            for kind in ["crest", "flag", "banner", "pad"] {
+                let p = format!("assets/sprites/factions/{kind}_{stem}.png");
+                assert!(std::path::Path::new(&p).exists(), "{p} missing");
+            }
         }
     }
 
