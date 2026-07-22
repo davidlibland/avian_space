@@ -546,12 +546,16 @@ pub(crate) fn setup_surface(
         {
             let stem = crate::galaxy::faction_asset_stem(&faction);
             let world_pos = tile_to_world(pad_cx, pad_cy, map_w, map_h, tile_px);
-            // The pad is baked at the 50° oblique camera (buildings3d.py):
-            // a circle painted on the touchdown surface therefore projects
-            // to an ellipse (y squashed by sin 50°) lifted by the surface
-            // height z·cos 50° (inner well top ≈ z 0.34 tile-units).
-            let (sin50, cos50) = (50f32.to_radians().sin(), 50f32.to_radians().cos());
-            let diameter = tile_px * 1.5; // dark inner well is 1.7 tiles wide
+            // The pad is baked at the 50° oblique camera, so a circle on the
+            // touchdown surface is an ellipse on screen (y squashed by
+            // sin 50°) and the well's PROJECTED center sits 0.235 tiles
+            // BELOW the pad's world tile center: the bake squashes the
+            // 1.5-tile ground depth to 1.5·sin50 ≈ 1.15 and the surface
+            // height lifts it back by only z·cos50 ≈ 0.11. Both constants
+            // measured against the baked sprite (well center at image
+            // (52, 42) of colony_pad.png, anchor (0, -0.4753)).
+            let sin50 = 50f32.to_radians().sin();
+            let diameter = tile_px * 1.5; // dark inner well is ~1.6 tiles wide
             commands.spawn((
                 DespawnOnExit(PlayState::Exploring),
                 Sprite {
@@ -560,7 +564,7 @@ pub(crate) fn setup_surface(
                     ..default()
                 },
                 // Above the pad sprite (-9), below all depth-sorted actors.
-                Transform::from_xyz(world_pos.x, world_pos.y + 0.34 * cos50 * tile_px, -8.5),
+                Transform::from_xyz(world_pos.x, world_pos.y - 0.235 * tile_px, -8.5),
             ));
         }
 
