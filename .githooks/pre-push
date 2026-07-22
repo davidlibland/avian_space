@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Local mirror of CI's gates (fmt, clippy -D warnings, tests) so a push
+# can't fail CI on something checkable in seconds. Skip with --no-verify.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+echo "pre-push: cargo fmt --check"
+cargo fmt --check
+echo "pre-push: cargo clippy (deny warnings)"
+cargo clippy --features dev --all-targets -- -D warnings 2>&1 | tail -2
+echo "pre-push: cargo test"
+cargo test --features dev 2>&1 | tail -2
+echo "pre-push: all gates green"
