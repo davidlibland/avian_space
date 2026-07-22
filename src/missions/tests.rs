@@ -1665,7 +1665,8 @@ mod tutorial {
         iu.missions.insert("a3".into(), chain(Some("a2"), None));
         iu.missions
             .insert("b".into(), chain(Some("a1"), Some("a2")));
-        // A non-story mission (no faction) must be excluded.
+        // A factionless one-off charts too (in neutral grey) — the reveal
+        // logic, not the inclusion set, is the clutter control.
         iu.missions.insert("side".into(), dummy_def());
 
         let mut log = MissionLog::default();
@@ -1681,7 +1682,9 @@ mod tutorial {
         assert_eq!(ui_of("a2"), Some(NodeUi::Next));
         assert_eq!(ui_of("a3"), None, "a3 requirements unmet → hidden");
         assert_eq!(ui_of("b"), None, "b requirements unmet → hidden");
-        assert_eq!(ui_of("side"), None, "non-story mission excluded");
+        let side = g.nodes.iter().find(|n| n.id == "side").expect("charts");
+        assert_eq!(side.ui, NodeUi::Next, "no preconditions → offerable");
+        assert_eq!(side.color, [120, 120, 120], "factionless → neutral grey");
         assert!(!ui_of("a2").unwrap().shows_name(), "next hides its name");
 
         // Now complete a2: a3 becomes Next; branch b becomes Impossible

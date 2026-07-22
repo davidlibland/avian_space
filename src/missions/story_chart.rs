@@ -95,29 +95,12 @@ pub fn build_story_graph(
     unlocks: &PlayerUnlocks,
     universe: &ItemUniverse,
 ) -> StoryGraph {
-    // Story mission set: authored missions that are faction-tagged OR part
-    // of a mission chain (linked by a Completed/Failed precondition, like
-    // the factionless lost_son arc — those draw in neutral grey). Isolated
-    // factionless one-offs stay out. Generated/template missions never
-    // enter `universe.missions`, so they can't appear.
-    let mut chained: std::collections::HashSet<&str> = Default::default();
-    for (id, d) in universe.missions.iter() {
-        for p in &d.preconditions {
-            let (Precondition::Completed { mission } | Precondition::Failed { mission }) = p else {
-                continue;
-            };
-            if universe.missions.contains_key(mission) {
-                chained.insert(id.as_str());
-                chained.insert(mission.as_str());
-            }
-        }
-    }
-    let ids: Vec<&String> = universe
-        .missions
-        .iter()
-        .filter(|(id, d)| d.faction.is_some() || chained.contains(id.as_str()))
-        .map(|(id, _)| id)
-        .collect();
+    // Story mission set: ALL authored missions. Template-generated missions
+    // can't appear — they live only in the runtime catalog, never in
+    // `universe.missions` — and clutter control is the reveal logic below
+    // (`ui_of` hides anything the player hasn't earned a look at), not this
+    // set. Factionless arcs (lost_son, friend chains) draw in neutral grey.
+    let ids: Vec<&String> = universe.missions.keys().collect();
     let in_set: std::collections::HashSet<&str> = ids.iter().map(|s| s.as_str()).collect();
 
     let def = |id: &str| universe.missions.get(id);
