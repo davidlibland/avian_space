@@ -18,9 +18,9 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "docs", "biab_briefs", "musi
 
 # title, key-fifths, tempo, chart (bars separated by |, sections a)/b) ignored
 SONGS = {
-    "space_federation": ("The Fleet", 2, 84, """
-        D | D | G | D | Bm | G | A | A | D | A/C# | Bm | G | Em | G | D/A A | D |
-        G | D/F# | Em | Bm | G | D/F# | E7 | A | D | F#m | G | Gm | D/A | A7 | D | D"""),
+    "space_federation": ("The Fleet", 1, 84, """
+        Em | Em | C | G | Am | Em | B7 | B7 | Em | Em | C | G | Am | B7 | Em | Em |
+        G | G | D | D | C | C | B7 | B7 | Em | D | C | G | Am | B7 | Em | Em"""),
     "space_rebel": ("Embers", 1, 112, """
         Em | Em | C | C | G | D | Em | Em | Em | Em | C | C | Am | B7 | Em | Em |
         C | G | D | Em | C | G | B7 | B7 | Am | Em | C | G | Am | B7 | Em | Em"""),
@@ -70,39 +70,42 @@ SONGS = {
 MELODIES = {
     # The Fleet — military: dotted bugle rhythms, hammered repeats, clipped
     # cadences. The Federation is CONTROLLING; the tune marches, never sings.
+    # The Fleet — the user's motif: a held B (the fifth) resolving onto E,
+    # with a drum-roll 16th snap (E E-F#-G) driving into the next downbeat.
+    # E aeolian, B7 cadences. Restated, transposed to each chord, peaked in B.
     "space_federation": [
-        [("A4", 1.5), ("A4", 0.5), ("A4", 1), ("D5", 1)],
-        [("F#5", 1.5), ("D5", 0.5), ("A4", 2)],
-        [("B4", 1.5), ("B4", 0.5), ("D5", 1), ("B4", 1)],
-        [("A4", 3), ("A4", 1)],
-        [("F#5", 1.5), ("D5", 0.5), ("B4", 1), ("D5", 1)],
-        [("G4", 1.5), ("G4", 0.5), ("B4", 1), ("D5", 1)],
-        [("C#5", 1.5), ("A4", 0.5), ("E5", 1), ("C#5", 1)],
-        [("A4", 1), ("A4", 1), ("A4", 2)],
-        [("A4", 1.5), ("A4", 0.5), ("A4", 1), ("D5", 1)],
-        [("E5", 1.5), ("C#5", 0.5), ("A4", 1), ("E4", 1)],
-        [("F#4", 1.5), ("B4", 0.5), ("D5", 2)],
-        [("D5", 1), ("B4", 1), ("G4", 2)],
-        [("E4", 1.5), ("E4", 0.5), ("G4", 1), ("B4", 1)],
-        [("G4", 1), ("B4", 1), ("D5", 2)],
-        [("F#4", 1), ("D4", 1), ("E4", 2)],
-        [("D4", 1.5), ("D4", 0.5), ("D4", 2)],
-        [("G4", 1), ("B4", 1), ("D5", 1.5), ("D5", 0.5)],
-        [("F#5", 1.5), ("D5", 0.5), ("A4", 2)],
-        [("E5", 1.5), ("B4", 0.5), ("G4", 1), ("B4", 1)],
-        [("D5", 1), ("D5", 1), ("B4", 2)],
-        [("G4", 1), ("B4", 1), ("D5", 1.5), ("D5", 0.5)],
-        [("F#5", 1.5), ("D5", 0.5), ("A4", 2)],
-        [("G#4", 1.5), ("G#4", 0.5), ("B4", 1), ("E5", 1)],
-        [("E5", 1), ("C#5", 1), ("A4", 2)],
-        [("F#5", 1.5), ("F#5", 0.5), ("E5", 1), ("D5", 1)],
-        [("C#5", 1.5), ("C#5", 0.5), ("A4", 2)],
-        [("D5", 1), ("G5", 1.5), ("G5", 0.5), ("F#5", 1)],
-        [("Bb4", 1.5), ("Bb4", 0.5), ("G4", 2)],
-        [("F#5", 1.5), ("D5", 0.5), ("A4", 2)],
-        [("E5", 1.5), ("E5", 0.5), ("C#5", 2)],
-        [("D5", 1), ("A4", 1), ("F#4", 1), ("A4", 1)],
-        [("D5", 4)],
+        [("B4", 2), ("E4", 1), ("E4", 0.25), ("F#4", 0.25), ("G4", 0.5)],
+        [("B4", 2), ("E4", 1), ("E4", 0.25), ("F#4", 0.25), ("G4", 0.5)],
+        [("C5", 2), ("G4", 1), ("G4", 0.25), ("A4", 0.25), ("B4", 0.5)],
+        [("B4", 2), ("G4", 1), ("G4", 0.25), ("A4", 0.25), ("B4", 0.5)],
+        [("C5", 2), ("A4", 1), ("A4", 0.25), ("B4", 0.25), ("C5", 0.5)],
+        [("B4", 2), ("G4", 1), ("E4", 0.25), ("F#4", 0.25), ("G4", 0.5)],
+        [("F#4", 2), ("D#4", 1), ("D#4", 0.25), ("E4", 0.25), ("F#4", 0.5)],
+        [("B4", 2), ("A4", 1), ("F#4", 1)],
+        [("B4", 2), ("E4", 1), ("E4", 0.25), ("F#4", 0.25), ("G4", 0.5)],
+        [("B4", 2), ("E5", 1), ("D5", 0.25), ("C5", 0.25), ("B4", 0.5)],
+        [("C5", 2), ("G4", 1), ("G4", 0.25), ("A4", 0.25), ("B4", 0.5)],
+        [("D5", 2), ("B4", 1), ("G4", 1)],
+        [("C5", 2), ("A4", 1), ("A4", 0.25), ("B4", 0.25), ("C5", 0.5)],
+        [("D#5", 2), ("B4", 1), ("F#4", 1)],
+        [("E5", 2), ("B4", 1), ("G4", 1)],
+        [("E4", 2), ("E4", 1), ("E4", 1)],
+        [("D5", 2), ("G4", 1), ("G4", 0.25), ("A4", 0.25), ("B4", 0.5)],
+        [("D5", 2), ("B4", 1), ("G4", 1)],
+        [("A4", 2), ("F#4", 1), ("F#4", 0.25), ("G4", 0.25), ("A4", 0.5)],
+        [("D5", 2), ("A4", 1), ("F#4", 1)],
+        [("C5", 2), ("G4", 1), ("G4", 0.25), ("A4", 0.25), ("B4", 0.5)],
+        [("E5", 2), ("C5", 1), ("G4", 1)],
+        [("F#5", 2), ("D#5", 1), ("D#5", 0.25), ("E5", 0.25), ("F#5", 0.5)],
+        [("F#5", 2), ("D#5", 1), ("B4", 1)],
+        [("G5", 2), ("E5", 1), ("E5", 0.25), ("F#5", 0.25), ("G5", 0.5)],
+        [("F#5", 2), ("D5", 1), ("A4", 1)],
+        [("E5", 2), ("C5", 1), ("G4", 1)],
+        [("D5", 2), ("B4", 1), ("G4", 1)],
+        [("C5", 2), ("A4", 1), ("A4", 0.25), ("B4", 0.25), ("C5", 0.5)],
+        [("B4", 2), ("F#4", 1), ("D#4", 0.25), ("E4", 0.25), ("F#4", 0.5)],
+        [("E5", 2), ("B4", 1), ("G4", 1)],
+        [("E4", 4)],
     ],
     # Embers — modal folk grit, eighth-note runs, momentum without triumph.
     "space_rebel": [
@@ -404,7 +407,7 @@ def measure_xml(n, chords, fifths, tempo, melody=None):
     if n == 1:
         x += (
             "      <attributes>\n"
-            "        <divisions>2</divisions>\n"
+            "        <divisions>4</divisions>\n"
             f"        <key><fifths>{fifths}</fifths></key>\n"
             "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
             "        <clef><sign>G</sign><line>2</line></clef>\n"
@@ -423,7 +426,7 @@ def measure_xml(n, chords, fifths, tempo, melody=None):
             "      </direction>\n"
         )
     # One chord: whole-bar duration under it. Two: half-bar (beats 1 and 3).
-    durs = {1: [8], 2: [4, 4]}[len(chords)]
+    durs = {1: [16], 2: [8, 8]}[len(chords)]
     # Harmony elements attach at the current musical position: emit chord 1,
     # notes filling its half, then chord 2, then the rest of the melody bar.
     if melody is None:
@@ -435,9 +438,9 @@ def measure_xml(n, chords, fifths, tempo, melody=None):
             )
     else:
         assert sum(q for _, q in melody) == 4, f"bar {n} melody != 4 beats"
-        notes = [(p, int(q * 2)) for p, q in melody]  # divisions=2
+        notes = [(p, int(q * 4)) for p, q in melody]  # divisions=4
         pos = 0
-        chord_at = {0: chords[0]} if len(chords) == 1 else {0: chords[0], 4: chords[1]}
+        chord_at = {0: chords[0]} if len(chords) == 1 else {0: chords[0], 8: chords[1]}
         for pitch, d in notes:
             if pos in chord_at:
                 x += harmony_xml(chord_at.pop(pos))

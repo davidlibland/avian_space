@@ -1,8 +1,8 @@
-a) | D | D | G | D |
-| Bm | G | A | A |
-| D | A/C# | Bm | G |
-| Em | G | D/A A | D |
-b) | G | D/F# | Em | Bm |
-| G | D/F# | E7 | A |
-| D | F#m | G | Gm |
-| D/A | A7 | D | D |
+a) | Em | Em | C | G |
+| Am | Em | B7 | B7 |
+| Em | Em | C | G |
+| Am | B7 | Em | Em |
+b) | G | G | D | D |
+| C | C | B7 | B7 |
+| Em | D | C | G |
+| Am | B7 | Em | Em |

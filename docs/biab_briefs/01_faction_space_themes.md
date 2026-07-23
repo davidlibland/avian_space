@@ -57,20 +57,20 @@ slot is aiming at — worth a listen before each session.
 | | |
 |---|---|
 | **File** | `space_federation.wav` |
-| **Key / Tempo** | D major / 84 |
-| **Style** | Orchestral / film-score (try `_SOUNDTRK.STY` or any "Film Score" RealStyle with French horn or brass) |
-| **StylePicker (UltraPAK)** | Category: Soundtrack/Classical · even 8ths · ~84 · search "film score", "epic orchestral" |
-| **Mood** | Noble, unhurried — a navy patrolling calm space. Confident, never aggressive. |
+| **Key / Tempo** | E minor / 84 |
+| **Style** | Military march / dark film-score — snare rolls wanted (a march or "Epic Percussion" RealStyle; brass + field drums) |
+| **StylePicker (UltraPAK)** | Category: Soundtrack/Classical · even 8/16ths · ~84 · search "march", "military", "epic percussion", "film score" |
+| **Mood** | Controlling: drum rolls, a held fifth (B) resolving onto E, snap-pickup march figures. E aeolian with B7 bite. |
 
 ```
-a) | D | D | G | D |
-| Bm | G | A | A |
-| D | A/C# | Bm | G |
-| Em | G | D/A A | D |
-b) | G | D/F# | Em | Bm |
-| G | D/F# | E7 | A |
-| D | F#m | G | Gm |
-| D/A | A7 | D | D |
+a) | Em | Em | C | G |
+| Am | Em | B7 | B7 |
+| Em | Em | C | G |
+| Am | B7 | Em | Em |
+b) | G | G | D | D |
+| C | C | B7 | B7 |
+| Em | D | C | G |
+| Am | B7 | Em | Em |
 ```
 
 ## 2. Embers
