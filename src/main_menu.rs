@@ -135,6 +135,9 @@ fn main_menu_ui(
                 .show(ui.ctx(), |ui| {
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.heading("Avian Space");
+                        ui.label("Developer: David Li-Bland");
+                        ui.label("Game design: Clare Li-Bland and Wesley Li-Bland");
+                        ui.add_space(4.0);
                         ui.label(
                             "Code, ship/world/creature art, and weapon sound                              effects created for this game.",
                         );
