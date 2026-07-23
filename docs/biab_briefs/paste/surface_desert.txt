@@ -1,0 +1,8 @@
+a) | E | E | E | E |
+| D/E | D/E | E | E |
+| E | E | G | G |
+| D | D | E | E |
+b) | A | A | E | E |
+| G | D | E | E |
+| A | G | E | D |
+| E | E | E | E |

@@ -178,5 +178,4 @@ b) | Em | Em | Bm | Bm |
 
 ---
 
-Next packs (later): surface biome themes (5), the bar's jazz set, and
-the title theme.
+Pack 2 (surface biomes, bar, title): `02_surface_bar_title_themes.md`.
