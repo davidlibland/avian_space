@@ -1076,60 +1076,165 @@ pub(crate) fn setup_interior(
             (hi_y + 4).min(map_h),
         )
     };
-    for ty in 0..map_h {
-        for tx in 0..map_w {
-            let index = crate::world_assets::tile_texture_index(
-                &map2d,
-                tx as i32,
-                ty as i32,
-                map_w as i32,
-                map_h as i32,
-                &lut,
-            );
-            let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
-            let mut tile_sprite = Sprite::from_atlas_image(
-                atlas_image.clone(),
-                TextureAtlas {
-                    layout: layout.clone(),
-                    index: index as usize,
-                },
-            );
-            tile_sprite.color = tint;
-            commands.spawn((
-                DespawnOnExit(PlayState::Inside),
-                InteriorScoped,
-                tile_sprite,
-                Transform::from_xyz(pos.x, pos.y, -10.0),
-            ));
-            // Solid walls block. Shops use the biome's collision rows; maze
-            // venues also solidify the grate tier (3-tile-thin walls) and
-            // any furniture/container tiles from the plan.
-            let tier = map2d[ty as usize][tx as usize];
-            let idx = (ty * map_w + tx) as usize;
-            let solid = tier >= plan.solid_min_tier
-                || plan.solid[idx]
-                || biome
-                    .terrains
-                    .iter()
-                    .find(|t| t.row == tier)
-                    .map(|t| t.collision == 1)
-                    .unwrap_or(false);
-            let in_collider_band = tx >= walkable_bounds.0
-                && ty >= walkable_bounds.1
-                && tx < walkable_bounds.2
-                && ty < walkable_bounds.3;
-            if solid && in_collider_band {
+    // PROTOTYPE (station "interior" biome only): LimeZu-style binary
+    // floor/wall with real wall height. The other venues keep the tiered
+    // path below until this is proven and generalised.
+    let is_proto = biome_name == "interior";
+    let collidable = |tx: u32, ty: u32| -> bool {
+        let tier = map2d[ty as usize][tx as usize];
+        let idx = (ty * map_w + tx) as usize;
+        tier >= plan.solid_min_tier
+            || plan.solid[idx]
+            || biome
+                .terrains
+                .iter()
+                .find(|t| t.row == tier)
+                .map(|t| t.collision == 1)
+                .unwrap_or(false)
+    };
+    let in_band = |tx: u32, ty: u32| -> bool {
+        tx >= walkable_bounds.0
+            && ty >= walkable_bounds.1
+            && tx < walkable_bounds.2
+            && ty < walkable_bounds.3
+    };
+
+    if is_proto {
+        // Binary terrain: 1 = wall (collidable structure), 0 = floor.
+        let bin: Vec<Vec<u32>> = (0..map_h)
+            .map(|y| {
+                (0..map_w)
+                    .map(|x| if collidable(x, y) { 1 } else { 0 })
+                    .collect()
+            })
+            .collect();
+        let proto_atlas: Handle<Image> =
+            asset_server.load(format!("{WORLDS_DIR}/interior_proto_atlas.png"));
+        let proto_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(manifest.tile_size),
+            manifest.atlas_cols,
+            2,
+            None,
+            None,
+        ));
+        let face_image: Handle<Image> =
+            asset_server.load(format!("{WORLDS_DIR}/interior_proto_face.png"));
+        let face_h = 44u32;
+        let face_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::new(manifest.tile_size, face_h),
+            4,
+            1,
+            None,
+            None,
+        ));
+        for ty in 0..map_h {
+            for tx in 0..map_w {
+                let index = crate::world_assets::tile_texture_index(
+                    &bin,
+                    tx as i32,
+                    ty as i32,
+                    map_w as i32,
+                    map_h as i32,
+                    &lut,
+                );
+                let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
+                let mut tile_sprite = Sprite::from_atlas_image(
+                    proto_atlas.clone(),
+                    TextureAtlas {
+                        layout: proto_layout.clone(),
+                        index: index as usize,
+                    },
+                );
+                tile_sprite.color = tint;
                 commands.spawn((
                     DespawnOnExit(PlayState::Inside),
                     InteriorScoped,
-                    RigidBody::Static,
-                    Collider::rectangle(tile_px, tile_px),
-                    CollisionLayers::new(
-                        GameLayer::Surface,
-                        [GameLayer::Surface, GameLayer::Character],
-                    ),
-                    Transform::from_xyz(pos.x, pos.y, 0.0),
+                    tile_sprite,
+                    Transform::from_xyz(pos.x, pos.y, -10.0),
                 ));
+                if collidable(tx, ty) && in_band(tx, ty) {
+                    commands.spawn((
+                        DespawnOnExit(PlayState::Inside),
+                        InteriorScoped,
+                        RigidBody::Static,
+                        Collider::rectangle(tile_px, tile_px),
+                        CollisionLayers::new(
+                            GameLayer::Surface,
+                            [GameLayer::Surface, GameLayer::Character],
+                        ),
+                        Transform::from_xyz(pos.x, pos.y, 0.0),
+                    ));
+                }
+                // Wall FACE: a wall cell whose south neighbour (y-1, screen
+                // down) is floor shows a shaded vertical face hanging into
+                // the room, y-sorted so the walker occludes it.
+                let south_floor = ty == 0 || !collidable(tx, ty - 1);
+                if bin[ty as usize][tx as usize] == 1 && south_floor {
+                    let variant = ((tx * 7 + ty * 13) % 4) as usize;
+                    let top_y = pos.y - tile_px * 0.5; // south edge of the wall
+                    let bottom_y = top_y - face_h as f32;
+                    let mut face = Sprite::from_atlas_image(
+                        face_image.clone(),
+                        TextureAtlas {
+                            layout: face_layout.clone(),
+                            index: variant,
+                        },
+                    );
+                    face.color = tint;
+                    commands.spawn((
+                        DespawnOnExit(PlayState::Inside),
+                        InteriorScoped,
+                        face,
+                        bevy::sprite::Anchor(Vec2::new(0.0, 0.5)), // top-centre
+                        Transform::from_xyz(
+                            pos.x,
+                            top_y,
+                            crate::surface_objects::depth_z(bottom_y),
+                        ),
+                    ));
+                }
+            }
+        }
+    } else {
+        for ty in 0..map_h {
+            for tx in 0..map_w {
+                let index = crate::world_assets::tile_texture_index(
+                    &map2d,
+                    tx as i32,
+                    ty as i32,
+                    map_w as i32,
+                    map_h as i32,
+                    &lut,
+                );
+                let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
+                let mut tile_sprite = Sprite::from_atlas_image(
+                    atlas_image.clone(),
+                    TextureAtlas {
+                        layout: layout.clone(),
+                        index: index as usize,
+                    },
+                );
+                tile_sprite.color = tint;
+                commands.spawn((
+                    DespawnOnExit(PlayState::Inside),
+                    InteriorScoped,
+                    tile_sprite,
+                    Transform::from_xyz(pos.x, pos.y, -10.0),
+                ));
+                if collidable(tx, ty) && in_band(tx, ty) {
+                    let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
+                    commands.spawn((
+                        DespawnOnExit(PlayState::Inside),
+                        InteriorScoped,
+                        RigidBody::Static,
+                        Collider::rectangle(tile_px, tile_px),
+                        CollisionLayers::new(
+                            GameLayer::Surface,
+                            [GameLayer::Surface, GameLayer::Character],
+                        ),
+                        Transform::from_xyz(pos.x, pos.y, 0.0),
+                    ));
+                }
             }
         }
     }
