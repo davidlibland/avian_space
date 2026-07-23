@@ -20,8 +20,10 @@ use crate::surface::BuildingKind;
 const FADE_SECS: f32 = 2.5;
 /// Interiors other than the bar keep the surface theme at reduced level.
 const INTERIOR_DUCK: f32 = 0.45;
-/// How long each variant (render / pad) plays before rotating to the next.
-const VARIANT_SECS: f32 = 160.0;
+/// How long a rendered take plays before rotating to the next variant.
+const RENDER_SECS: f32 = 160.0;
+/// The synth pad is an interlude, not a set: one minute is plenty.
+const PAD_SECS: f32 = 60.0;
 
 /// Slots that have BOTH a finished render (`<key>.ogg`) and the kept
 /// synth-pad variant (`<key>_pad.ogg`). Update as renders arrive; a test
@@ -176,8 +178,30 @@ fn direct_music(
     } else {
         clock.elapsed += time.delta_secs();
     }
+    // Walk the rotation schedule: renders hold the stage, the pad is a
+    // short interlude between them.
     let variants = variant_stems(cue.key);
-    let stem = &variants[(clock.elapsed / VARIANT_SECS) as usize % variants.len()];
+    let seg = |s: &str| {
+        if s.ends_with("_pad") {
+            PAD_SECS
+        } else {
+            RENDER_SECS
+        }
+    };
+    let cycle: f32 = variants.iter().map(|s| seg(s)).sum();
+    let mut into = clock.elapsed % cycle;
+    let stem = variants
+        .iter()
+        .find(|s| {
+            let d = seg(s);
+            if into < d {
+                true
+            } else {
+                into -= d;
+                false
+            }
+        })
+        .unwrap_or(&variants[0]);
 
     let mut already_playing = false;
     for mut track in &mut tracks {
