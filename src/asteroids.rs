@@ -161,7 +161,12 @@ pub fn asteroid_plugin(app: &mut App) {
         )))
         .init_resource::<AsteroidAtlases>()
         .add_systems(Startup, load_asteroid_atlases)
-        .add_systems(Update, asteroid_field_gravity)
+        // FixedUpdate, NOT Update: avian consumes accumulated forces once
+        // per physics step (FixedPostUpdate). Applying per rendered frame
+        // made gravity framerate-dependent — and while the game was PAUSED
+        // (physics stopped, Update still running) the force banked up and
+        // fired all at once on unpause, blasting the field apart.
+        .add_systems(FixedUpdate, asteroid_field_gravity)
         .add_systems(Update, handle_shatter.run_if(in_state(PlayState::Flying)))
         .add_systems(
             Update,

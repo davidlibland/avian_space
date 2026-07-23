@@ -722,10 +722,22 @@ fn sync_ui_pause(
     help: Res<help_ui::HelpUiOpen>,
     jump: Res<jump_ui::JumpUiOpen>,
     log: Res<missions::ui::MissionLogOpen>,
+    settings: Option<Res<settings::SettingsUiOpen>>,
+    #[cfg(feature = "bugreport")] bug_note: Option<Res<bug_report::BugReportUi>>,
     play_state: Res<State<PlayState>>,
     mut virtual_time: ResMut<Time<Virtual>>,
 ) {
-    let want_paused = help.open || jump.open || log.open || *play_state.get() == PlayState::Landed;
+    // Options: these UIs exist only in windowed builds (headless registers
+    // neither plugin).
+    let mut want_paused = help.open
+        || jump.open
+        || log.open
+        || settings.is_some_and(|s| s.0)
+        || *play_state.get() == PlayState::Landed;
+    #[cfg(feature = "bugreport")]
+    {
+        want_paused |= bug_note.is_some_and(|b| b.is_noting());
+    }
     if want_paused != virtual_time.is_paused() {
         if want_paused {
             virtual_time.pause();

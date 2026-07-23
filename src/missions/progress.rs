@@ -513,10 +513,19 @@ pub fn spawn_mission_targets(
             warn!("mission target hull '{ship_type}' unknown — skipping spawn");
             continue;
         }
+        // Mission targets arrive near the planetary center, just far enough
+        // out that reaching it takes ~5s at the hull's cruise speed — close
+        // enough to find, far enough to see coming.
+        let cruise = item_universe
+            .ships
+            .get(ship_type)
+            .map(|s| s.max_speed)
+            .unwrap_or(300.0);
+        let arrival_radius = (cruise * 5.0).clamp(800.0, 3000.0);
         for i in 0..need {
             // Targets arrive from hyperspace like ambient traffic — no ship
             // ever silently pops into existence mid-mission.
-            let (pos, vel) = crate::ai_ships::jump_in_entry(&mut rng);
+            let (pos, vel) = crate::ai_ships::jump_in_entry_at(&mut rng, arrival_radius);
             jump_flash_writer.write(crate::explosions::TriggerJumpFlash {
                 location: pos,
                 size: 8.0,

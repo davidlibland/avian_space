@@ -313,8 +313,15 @@ fn spawn_ai_ship_at(
 /// Entry point + inbound velocity for a hyperspace arrival: a random spot on
 /// the system edge, moving roughly toward the center at jump speed.
 pub fn jump_in_entry(rng: &mut impl Rng) -> (Vec2, Vec2) {
+    jump_in_entry_at(rng, JUMP_IN_RADIUS)
+}
+
+/// Like [`jump_in_entry`] but at a caller-chosen radius — mission targets
+/// arrive CLOSE to the planetary center so the player isn't left chasing
+/// dots across half the system.
+pub fn jump_in_entry_at(rng: &mut impl Rng, radius: f32) -> (Vec2, Vec2) {
     let theta = rng.gen_range(0.0_f32..(2.0 * PI));
-    let edge_pos = Vec2::new(theta.cos(), theta.sin()) * JUMP_IN_RADIUS;
+    let edge_pos = Vec2::new(theta.cos(), theta.sin()) * radius;
     // Velocity points roughly toward the system center with a small random spread.
     let inbound_dir = -edge_pos.normalize();
     let spread_angle = rng.gen_range(-0.2_f32..0.2_f32);
