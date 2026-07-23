@@ -470,6 +470,7 @@ fn render_mission_log(
     roster: Option<Res<crate::carrier::EscortRoster>>,
     mut layers: Option<bevy::prelude::ResMut<crate::character_compositor::CharacterLayers>>,
     mut images: bevy::prelude::ResMut<Assets<Image>>,
+    asset_server: Res<bevy::asset::AssetServer>,
 ) {
     if !state.open {
         return;
@@ -489,6 +490,23 @@ fn render_mission_log(
     } else {
         None
     };
+    // Faction crest chips for the story chart — registered up front for the
+    // same borrow reason.
+    let crests: std::collections::HashMap<String, egui::TextureId> =
+        if state.tab == MissionLogTab::Story {
+            item_universe
+                .factions
+                .keys()
+                .map(|f| {
+                    let stem = crate::galaxy::faction_asset_stem(f);
+                    let handle = asset_server.load(format!("sprites/factions/crest_{stem}.png"));
+                    let tex = egui_contexts.add_image(bevy_egui::EguiTextureHandle::Strong(handle));
+                    (f.clone(), tex)
+                })
+                .collect()
+        } else {
+            Default::default()
+        };
     let Ok(ctx) = egui_contexts.ctx_mut() else {
         return;
     };
@@ -517,7 +535,7 @@ fn render_mission_log(
                     render_active_missions(ui, &log, &catalog, Some(&mut abandon));
                 }
                 MissionLogTab::Story => {
-                    render_story_tab(ui, &log, &unlocks, &item_universe);
+                    render_story_tab(ui, &log, &unlocks, &item_universe, &crests);
                 }
                 MissionLogTab::Fleet => match &fleet {
                     Some((rows, parked, fallen)) => render_fleet_tab(ui, rows, parked, fallen),
@@ -554,6 +572,7 @@ fn render_story_tab(
     log: &MissionLog,
     unlocks: &super::log::PlayerUnlocks,
     universe: &ItemUniverse,
+    crests: &std::collections::HashMap<String, egui::TextureId>,
 ) {
     use super::story_chart::{NodeUi, build_story_graph};
 
@@ -670,6 +689,22 @@ fn render_story_tab(
                     ),
                 };
                 p.rect(rect, 5.0, fill, stroke, egui::StrokeKind::Inside);
+
+                // Faction crest chip on the node's left edge — teaches the
+                // crests by association with the colors. Locked branches
+                // stay unmarked.
+                if !matches!(n.ui, NodeUi::Impossible)
+                    && let Some(tex) = n.faction.as_ref().and_then(|f| crests.get(f))
+                {
+                    let c = egui::pos2(rect.min.x + 10.0, rect.center().y);
+                    let chip = egui::Rect::from_center_size(c, egui::vec2(14.0, 14.0));
+                    p.image(
+                        *tex,
+                        chip,
+                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                        egui::Color32::WHITE,
+                    );
+                }
 
                 if n.ui.shows_name() {
                     p.text(

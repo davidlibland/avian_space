@@ -819,6 +819,37 @@ pub(crate) fn setup_surface(
                             ),
                         ));
                     }
+                    // License-issuing buildings (shipyard, outfitter) hang a
+                    // small crest plaque beside the door on controlled worlds
+                    // — freeport shops stay unmarked, so a company town and a
+                    // frontier port read differently at a glance.
+                    if matches!(kind, BuildingKind::Shipyard | BuildingKind::Outfitter)
+                        && let Some(faction) = crate::galaxy::effective_planet_faction(
+                            &galaxy,
+                            &item_universe,
+                            &planet_name,
+                        )
+                        && item_universe
+                            .factions
+                            .get(&faction)
+                            .is_some_and(|fd| !fd.neutral)
+                    {
+                        let stem = crate::galaxy::faction_asset_stem(&faction);
+                        commands.spawn((
+                            DespawnOnExit(PlayState::Exploring),
+                            Sprite {
+                                image: asset_server
+                                    .load(format!("sprites/factions/crest_{stem}.png")),
+                                custom_size: Some(Vec2::splat(tile_px * 0.45)),
+                                ..default()
+                            },
+                            Transform::from_xyz(
+                                fc.x - tile_px * 0.95,
+                                fc.y + tile_px * 0.62,
+                                crate::surface_objects::depth_z(fc.y) + 0.0004,
+                            ),
+                        ));
+                    }
                 }
             } else {
                 let world_pos = tile_to_world(anchor_tx, anchor_ty, map_w, map_h, tile_px);
