@@ -64,6 +64,48 @@ SONGS = {
         Am | F | C | G | Am | F | C/E | G | F | F | C/E | Am | Dm7 | G | C | C"""),
 }
 
+# Optional composed melody per song: list of 32 bars, each a list of
+# (pitch, quarters) with pitch like "F#4" (None = rest). BIAB loads these
+# onto the Melody track and the band accompanies the tune.
+MELODIES = {
+    "space_federation": [
+        # A — the Fleet theme: stately, horn-like, stepwise with clean leaps.
+        [("D4", 1), ("F#4", 1), ("A4", 2)],
+        [("B4", 1), ("A4", 1), ("F#4", 2)],
+        [("G4", 1), ("A4", 1), ("B4", 2)],
+        [("A4", 3), ("F#4", 1)],
+        [("B4", 1), ("C#5", 1), ("D5", 2)],
+        [("B4", 1), ("G4", 1), ("D5", 2)],
+        [("C#5", 1), ("B4", 1), ("A4", 2)],
+        [("E4", 2), ("A4", 2)],
+        [("D4", 1), ("F#4", 1), ("A4", 2)],
+        [("C#5", 1), ("A4", 1), ("E5", 2)],
+        [("D5", 1), ("C#5", 1), ("B4", 2)],
+        [("B4", 1), ("A4", 1), ("G4", 2)],
+        [("G4", 1), ("F#4", 1), ("E4", 2)],
+        [("G4", 1), ("B4", 1), ("D5", 2)],
+        [("F#4", 2), ("E4", 2)],
+        [("D4", 4)],
+        # B — lifts a fourth, peaks, and resolves home through the Gm color.
+        [("B4", 1), ("D5", 1), ("G5", 2)],
+        [("F#5", 1), ("D5", 1), ("A4", 2)],
+        [("E5", 1), ("D5", 1), ("B4", 2)],
+        [("D5", 1), ("C#5", 1), ("B4", 2)],
+        [("B4", 1), ("D5", 1), ("G5", 2)],
+        [("F#5", 1), ("D5", 1), ("A4", 2)],
+        [("G#4", 1), ("B4", 1), ("E5", 2)],
+        [("E5", 2), ("C#5", 2)],
+        [("F#5", 1), ("E5", 1), ("D5", 2)],
+        [("C#5", 2), ("A4", 2)],
+        [("B4", 1), ("C#5", 1), ("D5", 2)],
+        [("Bb4", 2), ("G4", 2)],
+        [("F#4", 1), ("A4", 1), ("D5", 2)],
+        [("E5", 2), ("C#5", 2)],
+        [("D5", 3), ("A4", 1)],
+        [("D5", 4)],
+    ],
+}
+
 KINDS = [  # ordered: longest suffix first
     ("maj7", "major-seventh"),
     ("m7b5", "half-diminished"),
@@ -112,7 +154,7 @@ def harmony_xml(sym):
     return x
 
 
-def measure_xml(n, chords, fifths, tempo):
+def measure_xml(n, chords, fifths, tempo, melody=None):
     x = f'    <measure number="{n}">\n'
     if n == 1:
         x += (
@@ -135,21 +177,48 @@ def measure_xml(n, chords, fifths, tempo):
             f"{mark}</rehearsal></direction-type>\n"
             "      </direction>\n"
         )
-    # One chord: whole-bar rest under it. Two: half-bar rests (beats 1 and 3).
+    # One chord: whole-bar duration under it. Two: half-bar (beats 1 and 3).
     durs = {1: [8], 2: [4, 4]}[len(chords)]
-    for sym, d in zip(chords, durs):
-        x += harmony_xml(sym)
-        x += (
-            "      <note><rest/>"
-            f"<duration>{d}</duration><voice>1</voice></note>\n"
-        )
+    # Harmony elements attach at the current musical position: emit chord 1,
+    # notes filling its half, then chord 2, then the rest of the melody bar.
+    if melody is None:
+        for sym, d in zip(chords, durs):
+            x += harmony_xml(sym)
+            x += (
+                "      <note><rest/>"
+                f"<duration>{d}</duration><voice>1</voice></note>\n"
+            )
+    else:
+        assert sum(q for _, q in melody) == 4, f"bar {n} melody != 4 beats"
+        notes = [(p, int(q * 2)) for p, q in melody]  # divisions=2
+        pos = 0
+        chord_at = {0: chords[0]} if len(chords) == 1 else {0: chords[0], 4: chords[1]}
+        for pitch, d in notes:
+            if pos in chord_at:
+                x += harmony_xml(chord_at.pop(pos))
+            if pitch is None:
+                x += f"      <note><rest/><duration>{d}</duration><voice>1</voice></note>\n"
+            else:
+                m2 = re.match(r"^([A-G])([#b]?)(\d)$", pitch)
+                step, acc, octave = m2.group(1), m2.group(2), m2.group(3)
+                alter = {"#": 1, "b": -1}.get(acc, 0)
+                x += "      <note><pitch>"
+                x += f"<step>{step}</step>"
+                if alter:
+                    x += f"<alter>{alter}</alter>"
+                x += f"<octave>{octave}</octave></pitch>"
+                x += f"<duration>{d}</duration><voice>1</voice></note>\n"
+            pos += d
+        assert not chord_at, f"bar {n}: 2nd chord lands mid-note (beat-3 chord needs a note boundary there)"
     x += "    </measure>\n"
     return x
 
 
-def song_xml(title, fifths, tempo, chart):
+def song_xml(title, fifths, tempo, chart, melody=None):
     bars = [b.strip() for b in chart.replace("\n", " ").split("|") if b.strip()]
     assert len(bars) == 32, f"{title}: {len(bars)} bars"
+    if melody is not None:
+        assert len(melody) == 32, f"{title}: melody has {len(melody)} bars"
     x = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 '
@@ -164,7 +233,8 @@ def song_xml(title, fifths, tempo, chart):
     for i, bar in enumerate(bars, 1):
         chords = bar.split()
         assert 1 <= len(chords) <= 2, f"{title} bar {i}: {bar!r}"
-        x += measure_xml(i, chords, fifths, tempo)
+        mbar = melody[i - 1] if melody is not None else None
+        x += measure_xml(i, chords, fifths, tempo, mbar)
     x += "  </part>\n</score-partwise>\n"
     return x
 
@@ -173,7 +243,9 @@ if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     for stem, (title, fifths, tempo, chart) in SONGS.items():
         path = os.path.join(OUT, f"{stem}.musicxml")
+        melody = MELODIES.get(stem)
         with open(path, "w") as f:
-            f.write(song_xml(title, fifths, tempo, chart))
-        print(f"  {stem}.musicxml  ({title}, tempo {tempo})")
+            f.write(song_xml(title, fifths, tempo, chart, melody))
+        tag = " + melody" if melody else ""
+        print(f"  {stem}.musicxml  ({title}, tempo {tempo}{tag})")
     print(f"Done → {os.path.relpath(OUT)}")
