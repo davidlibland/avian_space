@@ -226,7 +226,7 @@ def song_xml(title, fifths, tempo, chart, melody=None):
         '<score-partwise version="4.0">\n'
         f"  <work><work-title>{title}</work-title></work>\n"
         "  <part-list>\n"
-        '    <score-part id="P1"><part-name>Lead sheet</part-name></score-part>\n'
+        '    <score-part id="P1"><part-name>Melody</part-name></score-part>\n'
         "  </part-list>\n"
         '  <part id="P1">\n'
     )

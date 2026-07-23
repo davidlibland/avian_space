@@ -3,7 +3,7 @@
 <score-partwise version="4.0">
   <work><work-title>Scree</work-title></work>
   <part-list>
-    <score-part id="P1"><part-name>Lead sheet</part-name></score-part>
+    <score-part id="P1"><part-name>Melody</part-name></score-part>
   </part-list>
   <part id="P1">
     <measure number="1">
