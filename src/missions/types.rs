@@ -10,6 +10,11 @@ pub struct MissionDef {
     /// the mission in the story chart; None = neutral/unaffiliated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub faction: Option<String>,
+    /// Optional where-to-find-it flavor line, shown as hover text on the
+    /// story chart when this is the next available mission. When absent, a
+    /// hint is derived from the offer (planet/building).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
     #[serde(default)]
     pub preconditions: Vec<Precondition>,
     pub offer: OfferKind,

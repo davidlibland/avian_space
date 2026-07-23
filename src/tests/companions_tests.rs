@@ -94,6 +94,7 @@ fn grant_app() -> App {
         }],
         squadron: vec![],
         faction: None,
+        hint: None,
     };
     app.world_mut()
         .resource_mut::<MissionCatalog>()
@@ -580,6 +581,7 @@ mod captive_conversion {
             completion_effects: Vec::new(),
             squadron: Vec::new(),
             faction: None,
+            hint: None,
         };
         app.world_mut()
             .resource_mut::<crate::missions::MissionCatalog>()

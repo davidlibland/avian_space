@@ -55,6 +55,7 @@ fn basic_universe() -> ItemUniverse {
         completion_effects: vec![],
         squadron: Vec::new(),
         faction: None,
+        hint: None,
     };
     ItemUniverse {
         weapons: HashMap::new(),
@@ -113,6 +114,7 @@ fn sample_mission_def(name: &str) -> MissionDef {
         completion_effects: vec![],
         squadron: Vec::new(),
         faction: None,
+        hint: None,
     }
 }
 

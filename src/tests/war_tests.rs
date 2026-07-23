@@ -467,6 +467,7 @@ fn war_ids_skip_persisted_missions_from_prior_sessions() {
         }],
         squadron: vec![],
         faction: None,
+        hint: None,
     };
     app.world_mut()
         .resource_mut::<MissionCatalog>()

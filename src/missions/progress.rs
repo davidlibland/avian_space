@@ -1158,6 +1158,7 @@ pub(super) fn instantiate_template(
                 ],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1203,6 +1204,7 @@ pub(super) fn instantiate_template(
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1261,6 +1263,7 @@ pub(super) fn instantiate_template(
                 completion_effects: Vec::new(),
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
             let stage2 = MissionDef {
                 briefing: subst(stage2_briefing, &vars),
@@ -1289,6 +1292,7 @@ pub(super) fn instantiate_template(
                 ],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
             vec![(stage1_id, stage1), (stage2_id, stage2)]
         }
@@ -1346,6 +1350,7 @@ pub(super) fn instantiate_template(
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
             vec![(gen_id(template_id, rng), def)]
         }
@@ -1449,6 +1454,7 @@ pub(super) fn instantiate_template(
                 completion_effects: Vec::new(),
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
 
             // Stage 2: Deliver the stolen goods.
@@ -1474,6 +1480,7 @@ pub(super) fn instantiate_template(
                 }],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
 
             // Stage 3: Catch the thief on a planet.
@@ -1497,6 +1504,7 @@ pub(super) fn instantiate_template(
                 completion_effects: vec![CompletionEffect::Pay { credits: pay }],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             };
 
             vec![(stage1_id, s1), (stage2_id, s2), (stage3_id, s3)]

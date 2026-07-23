@@ -658,6 +658,16 @@ fn render_story_tab(
             // Nodes.
             for n in &graph.nodes {
                 let rect = node_at(n.col, n.row).translate(origin);
+                // Hover: hint for the next mission, briefing while active,
+                // story-so-far once resolved.
+                if !n.hover.is_empty() {
+                    ui.interact(
+                        rect,
+                        egui::Id::new(("story_node", n.col, n.row)),
+                        egui::Sense::hover(),
+                    )
+                    .on_hover_text(&n.hover);
+                }
                 let base = egui::Color32::from_rgb(n.color[0], n.color[1], n.color[2]);
                 let (fill, stroke, text_col) = match n.ui {
                     NodeUi::Completed => (

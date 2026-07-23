@@ -423,6 +423,7 @@ fn arrest_on_landing(
                 completion_effects: Vec::new(),
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             },
         );
 
@@ -448,6 +449,7 @@ fn arrest_on_landing(
                 completion_effects: vec![CompletionEffect::Pay { credits: -fine }, restore.clone()],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             },
         );
 
@@ -473,6 +475,7 @@ fn arrest_on_landing(
                 completion_effects: vec![restore.clone()],
                 squadron: Vec::new(),
                 faction: None,
+                hint: None,
             },
         );
 
@@ -501,6 +504,7 @@ fn arrest_on_landing(
                     ],
                     squadron: Vec::new(),
                     faction: None,
+                    hint: None,
                 },
             );
         }

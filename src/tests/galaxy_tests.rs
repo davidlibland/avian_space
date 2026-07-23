@@ -280,6 +280,7 @@ fn mission_shift_flips_system_and_restocks() {
         }],
         squadron: Vec::new(),
         faction: None,
+        hint: None,
     };
     // Two war missions push Federation influence in (Rebel) procyon.
     for (id, delta) in [("war1", 0.5), ("war2", 0.35)] {

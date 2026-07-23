@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 
 use super::log::{MissionLog, PlayerUnlocks};
-use super::types::{MissionStatus, Precondition};
+use super::types::{MissionDef, MissionStatus, OfferKind, Precondition};
 use crate::item_universe::ItemUniverse;
 
 /// Visual state of a node in the player-facing chart.
@@ -56,6 +56,9 @@ pub struct StoryNode {
     pub ui: NodeUi,
     /// Unlocks granted on completion (shown on completed nodes).
     pub grants: Vec<String>,
+    /// Hover text: a where-to-find-it hint for Next nodes, the briefing
+    /// while Active, and the story-so-far summary once resolved.
+    pub hover: String,
     pub col: u32,
     pub row: u32,
 }
@@ -86,6 +89,52 @@ fn prettify(id: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Where-to-find-it hover for a not-yet-taken mission. An authored
+/// `hint:` always wins; otherwise the hint is derived from the offer —
+/// explicit for chain entries, and subtler the deeper the mission sits
+/// (column depth), so late-story steps stay a little mysterious.
+pub(crate) fn derive_hint(def: &MissionDef, universe: &ItemUniverse, depth: u32) -> String {
+    if let Some(h) = &def.hint {
+        return h.clone();
+    }
+    match &def.offer {
+        OfferKind::NpcOffer {
+            planet, building, ..
+        } => {
+            let names: Vec<String> = planet.iter().map(|p| prettify(p)).collect();
+            match depth {
+                0 | 1 => {
+                    let place = building
+                        .as_deref()
+                        .map(|b| format!("in the {b}"))
+                        .unwrap_or_else(|| "by someone waiting".to_string());
+                    let list = match names.len() {
+                        0 => "an unknown world".to_string(),
+                        1 => names[0].clone(),
+                        _ => format!(
+                            "{} or {}",
+                            names[..names.len() - 1].join(", "),
+                            names.last().unwrap()
+                        ),
+                    };
+                    format!("Offered {place} on {list}.")
+                }
+                2 => format!("Look for the giver on {}.", names.join(" / ")),
+                _ => {
+                    let sys = planet
+                        .first()
+                        .and_then(|p| universe.find_gameplay_planet(p))
+                        .map(|(s, _)| prettify(s))
+                        .unwrap_or_else(|| "deep".to_string());
+                    format!("Rumor points somewhere in the {sys} system.")
+                }
+            }
+        }
+        OfferKind::Auto => "Follows on its own once the way is clear.".to_string(),
+        OfferKind::Tab { .. } => "Posted to mission boards when available.".to_string(),
+    }
 }
 
 /// Build the player-facing story graph. Only authored missions carrying a
@@ -233,6 +282,13 @@ pub fn build_story_graph(
                     _ => None,
                 })
                 .collect();
+            let hover = match revealed[id] {
+                NodeUi::Completed => d.success_text.clone(),
+                NodeUi::Failed => d.failure_text.clone(),
+                NodeUi::Active => d.briefing.clone(),
+                NodeUi::Next => derive_hint(d, universe, col as u32),
+                NodeUi::Impossible => "This path has closed.".to_string(),
+            };
             node_index.insert(id, nodes.len());
             nodes.push(StoryNode {
                 id: id.to_string(),
@@ -241,6 +297,7 @@ pub fn build_story_graph(
                 color,
                 ui: revealed[id],
                 grants,
+                hover,
                 col: col as u32,
                 row: row as u32,
             });
@@ -290,6 +347,28 @@ mod tests {
         assert!(NodeUi::Failed.shows_name());
         assert!(!NodeUi::Next.shows_name());
         assert!(!NodeUi::Impossible.shows_name());
+    }
+
+    #[test]
+    fn hints_get_subtler_with_chain_depth() {
+        let mut iu: crate::item_universe::ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        let bastion_1 = iu.missions.get("bastion_1").unwrap();
+        // Entry mission: explicit — every offer planet named, plus the venue.
+        let h = derive_hint(bastion_1, &iu, 0);
+        for p in ["Iron March", "Bastion", "Coldforge"] {
+            assert!(h.contains(p), "entry hint should name {p}: {h}");
+        }
+        assert!(h.contains("bar"), "entry hint names the venue: {h}");
+        // Deep in the chain: only a system-level rumor.
+        let deep = derive_hint(bastion_1, &iu, 5);
+        assert!(deep.contains("system"), "deep hint is a rumor: {deep}");
+        assert!(!deep.contains("bar"), "deep hint hides the venue: {deep}");
+        // Authored hint always wins.
+        let mut d = bastion_1.clone();
+        d.hint = Some("Ask the quartermaster.".into());
+        assert_eq!(derive_hint(&d, &iu, 0), "Ask the quartermaster.");
     }
 
     #[test]
