@@ -2,6 +2,16 @@
 
 ## How to produce each track (~10 min per song)
 
+**Preferred route (BIAB 2020+, incl. UltraPAK 2026): MusicXML.** The
+`musicxml/` folder has one `.musicxml` lead sheet per song carrying
+title, key, tempo, AND the chord chart — everything the text paste
+drops. In BIAB: **File | Open**, set the file-type filter to MusicXML,
+open the song, confirm the chord import dialog, then jump to step 5
+below (style, choruses, generate, export). Regenerate the files any
+time with `python3 scripts/gen_biab_musicxml.py`.
+
+**Fallback route: text paste**, as follows:
+
 The `paste/` folder holds one `.txt` per song containing ONLY the chord
 chart — BIAB's text-paste reliably handles chords, but its title/tempo
 metadata format is undocumented, so set those by hand (three clicks):
@@ -49,6 +59,7 @@ slot is aiming at — worth a listen before each session.
 | **File** | `space_federation.wav` |
 | **Key / Tempo** | D major / 84 |
 | **Style** | Orchestral / film-score (try `_SOUNDTRK.STY` or any "Film Score" RealStyle with French horn or brass) |
+| **StylePicker (UltraPAK)** | Category: Soundtrack/Classical · even 8ths · ~84 · search "film score", "epic orchestral" |
 | **Mood** | Noble, unhurried — a navy patrolling calm space. Confident, never aggressive. |
 
 ```
@@ -68,6 +79,7 @@ b) | G | D/F# | Em | Bm |
 | **File** | `space_rebel.wav` |
 | **Key / Tempo** | E minor / 112 |
 | **Style** | Driving folk-rock / celtic rock (try `_IRISHRK.STY` or a 16th-note acoustic-rock RealStyle) |
+| **StylePicker (UltraPAK)** | Category: Country/Rock · even 16ths · 108-118 · search "celtic rock", "driving folk rock" |
 | **Mood** | Gritty, urgent, low strings and driving percussion — a cause worth losing for. Momentum without triumph. |
 
 ```
@@ -87,6 +99,7 @@ b) | C | G | D | Em |
 | **File** | `space_freefrontier.wav` |
 | **Key / Tempo** | G major / 76 |
 | **Style** | Slow country/americana ballad with pedal steel or dobro (try `_COUNTRYB.STY` or a "Campfire" style) |
+| **StylePicker (UltraPAK)** | Category: Country · even 8ths · 70-80 · search "americana", "pedal steel ballad" |
 | **Mood** | Sparse americana against the void — loneliness that's chosen, not suffered. |
 
 ```
@@ -106,6 +119,7 @@ b) | C | C | G | G |
 | **File** | `space_helios.wav` |
 | **Key / Tempo** | A minor / 100 |
 | **Style** | Minimal synth-pop / electronica (try `_ELECPOP.STY` or any "EuroDance/Synth" RealStyle) |
+| **StylePicker (UltraPAK)** | Category: Pop/Electronic · even 16ths · 95-105 · search "synth pop", "electro" |
 | **Mood** | Clean, automated, machine-precise with a faint melancholy. Repetition is the point. |
 
 ```
@@ -125,6 +139,7 @@ b) | F | F | Am | Am |
 | **File** | `space_bastion.wav` |
 | **Key / Tempo** | C minor / 92 |
 | **Style** | Heavy rock / metal (try `_HVYROCK.STY` or a "Heavy Rock 8ths" RealStyle) |
+| **StylePicker (UltraPAK)** | Category: Rock · even 8ths · 60-95 · search "heavy rock", "hard rock" |
 | **Mood** | Industrial, forge-rhythm, power chords like hammer blows. The faction that builds hulls hears its own foundries. |
 
 ```
@@ -144,6 +159,7 @@ b) | Fm | Fm | Cm | Cm |
 | **File** | `space_order.wav` |
 | **Key / Tempo** | F major / 66 |
 | **Style** | New-age / slow gospel-choir pad style (try `_NEWAGE.STY` or any slow style with a choir/organ RealTrack) |
+| **StylePicker (UltraPAK)** | Category: Pop/Jazz ballad · even 8ths · 60-70 · search "worship ballad", "gospel organ", "new age" |
 | **Mood** | Choral, liturgical, open fifths — a monastery in vacuum. More stillness than motion. |
 
 ```
@@ -163,6 +179,7 @@ b) | Dm | Dm | Bb | Bb |
 | **File** | `space_pirate.wav` |
 | **Key / Tempo** | B minor / 96 |
 | **Style** | Minor-key tango / gypsy-jazz / spy groove (try `_GYPSYJZ.STY` or a "Tango"/"Spy" flavored RealStyle) |
+| **StylePicker (UltraPAK)** | Category: Latin/Jazz · even 8ths · 90-100 · search "tango", "gypsy jazz", "spy" |
 | **Mood** | Tense, muted, coiled — an ostinato that never resolves. For pirate space AND contested systems: menace, not swashbuckling. |
 
 ```
