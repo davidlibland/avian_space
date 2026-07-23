@@ -341,3 +341,16 @@ mod tests {
         assert_eq!(*ship.cargo.get("iron").unwrap(), 4);
     }
 }
+
+#[cfg(test)]
+mod debt_tests {
+    #[test]
+    fn negative_credits_round_trip_through_the_save_format() {
+        // A rescued-into-debt pilot: credits go negative. serde_yaml must
+        // preserve i128 across the exact path PilotSave uses.
+        let v: i128 = -48_000;
+        let y = serde_yaml::to_string(&v).unwrap();
+        let back: i128 = serde_yaml::from_str(&y).unwrap();
+        assert_eq!(back, v);
+    }
+}
