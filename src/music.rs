@@ -34,6 +34,13 @@ const RENDERED: &[&str] = &[
     "space_bastion",
     "space_order",
     "space_pirate",
+    "surface_garden",
+    "surface_ice",
+    "surface_rocky",
+    "surface_desert",
+    "surface_interior",
+    "bar",
+    "menu",
 ];
 
 /// File stems for a slot, in rotation order (render first).

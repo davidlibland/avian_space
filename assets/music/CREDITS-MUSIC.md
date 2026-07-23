@@ -19,8 +19,8 @@ director alternates between song and pad in-game.
 
 | File | Status |
 |---|---|
-| menu.ogg | placeholder (synth) |
-| bar.ogg | placeholder (synth) |
+| menu.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
+| bar.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
 | space_federation.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
 | space_rebel.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
 | space_freefrontier.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
@@ -28,8 +28,8 @@ director alternates between song and pad in-game.
 | space_bastion.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
 | space_order.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
 | space_pirate.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
-| surface_garden.ogg | placeholder (synth) |
-| surface_ice.ogg | placeholder (synth) |
-| surface_rocky.ogg | placeholder (synth) |
-| surface_desert.ogg | placeholder (synth) |
-| surface_interior.ogg | placeholder (synth) |
+| surface_garden.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
+| surface_ice.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
+| surface_rocky.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
+| surface_desert.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
+| surface_interior.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
