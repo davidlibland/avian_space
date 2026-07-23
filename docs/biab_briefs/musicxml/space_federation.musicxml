@@ -21,27 +21,29 @@
         <root><root-step>D</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="2">
       <harmony>
         <root><root-step>D</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="3">
       <harmony>
         <root><root-step>G</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="4">
       <harmony>
@@ -49,41 +51,45 @@
         <kind>major</kind>
       </harmony>
       <note><pitch><step>A</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice></note>
-      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="5">
       <harmony>
         <root><root-step>B</root-step></root>
         <kind>minor</kind>
       </harmony>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="6">
       <harmony>
         <root><root-step>G</root-step></root>
         <kind>major</kind>
       </harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="7">
       <harmony>
         <root><root-step>A</root-step></root>
         <kind>major</kind>
       </harmony>
+      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="8">
       <harmony>
         <root><root-step>A</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="9">
@@ -91,9 +97,10 @@
         <root><root-step>D</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="10">
       <harmony>
@@ -101,26 +108,27 @@
         <kind>major</kind>
         <bass><bass-step>C</bass-step><bass-alter>1</bass-alter></bass>
       </harmony>
-      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="11">
       <harmony>
         <root><root-step>B</root-step></root>
         <kind>minor</kind>
       </harmony>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="12">
       <harmony>
         <root><root-step>G</root-step></root>
         <kind>major</kind>
       </harmony>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="13">
@@ -128,9 +136,10 @@
         <root><root-step>E</root-step></root>
         <kind>minor</kind>
       </harmony>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="14">
       <harmony>
@@ -147,7 +156,8 @@
         <kind>major</kind>
         <bass><bass-step>A</bass-step></bass>
       </harmony>
-      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
       <harmony>
         <root><root-step>A</root-step></root>
         <kind>major</kind>
@@ -159,7 +169,9 @@
         <root><root-step>D</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>D</step><octave>4</octave></pitch><duration>8</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="17">
       <direction placement="above">
@@ -169,9 +181,10 @@
         <root><root-step>G</root-step></root>
         <kind>major</kind>
       </harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>G</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
     </measure>
     <measure number="18">
       <harmony>
@@ -179,8 +192,8 @@
         <kind>major</kind>
         <bass><bass-step>F</bass-step><bass-alter>1</bass-alter></bass>
       </harmony>
-      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="19">
@@ -188,9 +201,10 @@
         <root><root-step>E</root-step></root>
         <kind>minor</kind>
       </harmony>
-      <note><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="20">
       <harmony>
@@ -198,7 +212,7 @@
         <kind>minor</kind>
       </harmony>
       <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="21">
@@ -206,9 +220,10 @@
         <root><root-step>G</root-step></root>
         <kind>major</kind>
       </harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>G</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
     </measure>
     <measure number="22">
       <harmony>
@@ -216,8 +231,8 @@
         <kind>major</kind>
         <bass><bass-step>F</bass-step><bass-alter>1</bass-alter></bass>
       </harmony>
-      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="23">
@@ -225,33 +240,37 @@
         <root><root-step>E</root-step></root>
         <kind>dominant</kind>
       </harmony>
-      <note><pitch><step>G</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>G</step><alter>1</alter><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>G</step><alter>1</alter><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="24">
       <harmony>
         <root><root-step>A</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
-      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="25">
       <harmony>
         <root><root-step>D</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="26">
       <harmony>
         <root><root-step>F</root-step><root-alter>1</root-alter></root>
         <kind>minor</kind>
       </harmony>
-      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="27">
@@ -259,16 +278,18 @@
         <root><root-step>G</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>G</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="28">
       <harmony>
         <root><root-step>G</root-step></root>
         <kind>minor</kind>
       </harmony>
-      <note><pitch><step>B</step><alter>-1</alter><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><alter>-1</alter><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>B</step><alter>-1</alter><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="29">
@@ -277,16 +298,17 @@
         <kind>major</kind>
         <bass><bass-step>A</bass-step></bass>
       </harmony>
-      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="30">
       <harmony>
         <root><root-step>A</root-step></root>
         <kind>dominant</kind>
       </harmony>
-      <note><pitch><step>E</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>3</duration><voice>1</voice></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice></note>
       <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>4</duration><voice>1</voice></note>
     </measure>
     <measure number="31">
@@ -294,7 +316,9 @@
         <root><root-step>D</root-step></root>
         <kind>major</kind>
       </harmony>
-      <note><pitch><step>D</step><octave>5</octave></pitch><duration>6</duration><voice>1</voice></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
       <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
     </measure>
     <measure number="32">
