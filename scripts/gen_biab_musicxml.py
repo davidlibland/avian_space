@@ -124,6 +124,17 @@ def measure_xml(n, chords, fifths, tempo):
             "      </attributes>\n"
             f'      <direction><sound tempo="{tempo}"/></direction>\n'
         )
+    # Section markers as rehearsal marks (BIAB maps these to its A/B part
+    # markers on import — its own MusicXML export writes them this way).
+    # All brief-pack forms are 16 + 16.
+    if n in (1, 17):
+        mark = "A" if n == 1 else "B"
+        x += (
+            "      <direction placement=\"above\">\n"
+            "        <direction-type><rehearsal>"
+            f"{mark}</rehearsal></direction-type>\n"
+            "      </direction>\n"
+        )
     # One chord: whole-bar rest under it. Two: half-bar rests (beats 1 and 3).
     durs = {1: [8], 2: [4, 4]}[len(chords)]
     for sym, d in zip(chords, durs):

@@ -14,6 +14,9 @@
         <clef><sign>G</sign><line>2</line></clef>
       </attributes>
       <direction><sound tempo="74"/></direction>
+      <direction placement="above">
+        <direction-type><rehearsal>A</rehearsal></direction-type>
+      </direction>
       <harmony>
         <root><root-step>C</root-step></root>
         <kind>major</kind>
@@ -128,6 +131,9 @@
       <note><rest/><duration>8</duration><voice>1</voice></note>
     </measure>
     <measure number="17">
+      <direction placement="above">
+        <direction-type><rehearsal>B</rehearsal></direction-type>
+      </direction>
       <harmony>
         <root><root-step>A</root-step></root>
         <kind>minor</kind>
