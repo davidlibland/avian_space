@@ -43,13 +43,21 @@ const RENDERED: &[&str] = &[
     "menu",
 ];
 
-/// File stems for a slot, in rotation order (render first).
+/// Slots with an additional alternate render (`<key>_alt.ogg`) in the
+/// rotation — e.g. The Fleet ships both takes.
+const ALT_RENDERED: &[&str] = &["space_federation"];
+
+/// File stems for a slot, in rotation order (main render, alternate
+/// render if any, then the synth pad).
 fn variant_stems(slot: &str) -> Vec<String> {
-    if RENDERED.contains(&slot) {
-        vec![slot.to_string(), format!("{slot}_pad")]
-    } else {
-        vec![slot.to_string()]
+    let mut v = vec![slot.to_string()];
+    if ALT_RENDERED.contains(&slot) {
+        v.push(format!("{slot}_alt"));
     }
+    if RENDERED.contains(&slot) {
+        v.push(format!("{slot}_pad"));
+    }
+    v
 }
 
 /// What should be playing: a track key (file stem) and a gain multiplier.
@@ -350,5 +358,17 @@ mod tests {
         let mut listed: Vec<String> = RENDERED.iter().map(|s| s.to_string()).collect();
         listed.sort();
         assert_eq!(on_disk, listed);
+        // Same for the alternate renders.
+        let mut alts_on_disk: Vec<String> = std::fs::read_dir("assets/music")
+            .unwrap()
+            .filter_map(|e| {
+                let name = e.ok()?.file_name().into_string().ok()?;
+                Some(name.strip_suffix("_alt.ogg")?.to_string())
+            })
+            .collect();
+        alts_on_disk.sort();
+        let mut alts: Vec<String> = ALT_RENDERED.iter().map(|s| s.to_string()).collect();
+        alts.sort();
+        assert_eq!(alts_on_disk, alts);
     }
 }

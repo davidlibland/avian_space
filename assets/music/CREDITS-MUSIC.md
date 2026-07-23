@@ -21,7 +21,7 @@ director alternates between song and pad in-game.
 |---|---|
 | menu.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
 | bar.ogg | BIAB render (2026-07-23) + `_pad` synth variant |
-| space_federation.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
+| space_federation.ogg | BIAB render take 2 (2026-07-23) + `_alt` (take 1) + `_pad` synth variant |
 | space_rebel.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
 | space_freefrontier.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
 | space_helios.ogg | BIAB render (2026-07-22) + `_pad` synth variant |
