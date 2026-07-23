@@ -49,8 +49,8 @@ tutorial_jump:
   - kind: pay
     credits: 300
 tutorial_trade:
-  briefing: "Last lesson: money. Land on Barnard Rock and open the market — the price tags read cheap or expensive against the galactic average. Buy what's cheap here, sell it where it's dear, and shift-click to trade in bulk. Your mission log is I; missions find you in bars and markets."
-  success_text: "That's the whole game, pilot: fly, fight, haul, and choose your friends carefully. A dockworker on Earth is already looking for a pilot like you — and when you want steadier work, Earth is where the stories start: the Mining Guild and Federation recruit in its bar, the Merchant Guild at its market."
+  briefing: "Last lesson: money. Land on Barnard Rock and open the market — the price tags read cheap or expensive against the galactic average. Buy what's cheap here, sell it where it's dear, and shift-click to trade in bulk."
+  success_text: "That's the whole game, pilot: fly, fight, haul, and choose your friends carefully. Work finds you in bars and markets — press I any time to read your mission log. A dockworker on Earth is already looking for a pilot like you, and Earth is where the stories start: the Mining Guild and Federation recruit in its bar, the Merchant Guild at its market."
   failure_text: "Tutorial ended. The market will miss you."
   preconditions:
   - kind: completed
