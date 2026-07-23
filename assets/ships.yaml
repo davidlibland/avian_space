@@ -1128,3 +1128,23 @@ precursor_gleaner:
     speed: 10.0
     size: 1.6
     color: [0.75, 0.5, 1.0]
+
+# Guild relief tanker — never sold (tech_level above the ceiling of 4);
+# spawned only by the fuel-rescue distress call to refuel a stranded ship.
+relief_tanker:
+  thrust: 90.0
+  max_speed: 190.0
+  torque: 10.0
+  max_health: 200
+  cargo_space: 40
+  item_space: 10
+  gun_mounts: 0
+  turret_mounts: 0
+  base_weapons: {}
+  radius: 34.0
+  price: 60000
+  sprite_path: sprites/ships/atlas/hauler.png
+  personality: Trader
+  fuel_capacity: 12
+  faction: Merchant
+  tech_level: 5

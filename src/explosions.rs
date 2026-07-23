@@ -132,6 +132,31 @@ struct Particle {
     velocity: Vec2,
 }
 
+/// Spawn a single free-flying spark particle (fades and decelerates via
+/// `tick_particles`). Shared with the fuel-shimmer effect.
+pub fn spawn_spark(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    pos: Vec2,
+    velocity: Vec2,
+    size: f32,
+    color: Color,
+    lifetime: f32,
+) {
+    commands.spawn((
+        DespawnOnExit(PlayState::Flying),
+        Particle {
+            lifetime,
+            max_lifetime: lifetime,
+            velocity,
+        },
+        Mesh2d(meshes.add(Circle::new(size))),
+        MeshMaterial2d(materials.add(ColorMaterial::from_color(color))),
+        Transform::from_xyz(pos.x, pos.y, 1.0),
+    ));
+}
+
 fn trigger_explosions(
     mut commands: Commands,
     mut reader: MessageReader<TriggerExplosion>,

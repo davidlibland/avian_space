@@ -338,7 +338,7 @@ pub(crate) fn surface_building_ui(
                         let cap = ship.data.fuel_capacity;
                         ui.label(format!("Fuel: {}/{} jumps", fuel, cap));
                         if fuel < cap {
-                            let per_unit = (ship.data.price / 100).max(20);
+                            let per_unit = ship.fuel_price_per_unit();
                             let cost = (per_unit * (cap - fuel) as i128).max(1);
                             ui.add_space(4.0);
                             ui.label(format!("Refuel cost: {} credits", cost));

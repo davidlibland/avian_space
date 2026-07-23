@@ -228,6 +228,15 @@ fn flying_controls() -> Vec<Group> {
                 ("L", "Land on nearby planet"),
             ],
         },
+        Group {
+            title: "Fuel",
+            bindings: &[
+                ("Jumps", "Each hyperspace jump burns one fuel"),
+                ("Refuel", "Fuel station when landed, or scoop"),
+                ("", "shimmering hydrogen-ice rocks"),
+                ("Dry tank", "Call a Guild tanker (a prompt appears)"),
+            ],
+        },
     ]
 }
 

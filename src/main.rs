@@ -8,6 +8,7 @@ mod companions;
 mod experiments;
 mod explosions;
 mod fbm;
+mod fuel;
 mod galaxy;
 mod game_save;
 mod help_ui;
@@ -469,6 +470,7 @@ fn build_app(
             #[cfg(feature = "bugreport")]
             bug_report::bug_report_plugin,
             explosions::ship_smoke_plugin, // damage smoke — rendering only
+            fuel::fuel_plugin,             // fuel shimmer + rescue (player-only)
         ));
     }
     // Explosions plugin registers messages used by game logic (asteroid shatter),

@@ -670,6 +670,7 @@ pub fn collect_problems(iu: &ItemUniverse) -> Vec<String> {
     check_ship_weapons_buyable(iu, &mut p);
     check_everything_sold_somewhere(iu, &mut p);
     check_fenced_carrier_items(iu, &mut p);
+    check_refuel_coverage(iu, &mut p);
     check_mission_graph(iu, &mut p);
     p
 }
@@ -841,6 +842,9 @@ fn check_fenced_carrier_items(iu: &ItemUniverse, p: &mut Vec<String>) {
 /// list IS the building, per `planet_has_building`). Licences may still gate
 /// the purchase — obtainability of those is checked separately. Run after
 /// `derive_market_catalogs`, so tech-level/faction coverage gaps surface here.
+/// Ships spawned by game systems, never sold in any shipyard.
+const INTERNAL_SHIPS: &[&str] = &["relief_tanker"];
+
 fn check_everything_sold_somewhere(iu: &ItemUniverse, p: &mut Vec<String>) {
     let mut sold_ships: HashSet<&str> = HashSet::new();
     let mut sold_items: HashSet<&str> = HashSet::new();
@@ -857,6 +861,10 @@ fn check_everything_sold_somewhere(iu: &ItemUniverse, p: &mut Vec<String>) {
         }
     }
     for name in iu.ships.keys() {
+        // Internal ships (spawned by systems, never bought) are exempt.
+        if INTERNAL_SHIPS.contains(&name.as_str()) {
+            continue;
+        }
         if !sold_ships.contains(name.as_str()) {
             p.push(format!(
                 "ship '{name}' is sold nowhere — no landable planet's tech level \
@@ -1263,5 +1271,29 @@ fn check_surface(
             "mission '{id}': {verb} '{planet}' at building '{b}', \
                  which that planet does not have"
         ));
+    }
+}
+
+/// Every star system must offer SOME way to refuel: a landable planet (all
+/// colonies have a fuel station) or a fuel-bearing asteroid field to scoop
+/// from. Otherwise a player who jumps in on their last unit of fuel is
+/// permanently stranded.
+fn check_refuel_coverage(iu: &ItemUniverse, p: &mut Vec<String>) {
+    for (name, sys) in &iu.star_systems {
+        if TRAINING_SYSTEMS.contains(&name.as_str()) {
+            continue;
+        }
+        let has_landable = sys.planets.values().any(is_landable);
+        let has_fuel_rocks = sys.astroid_fields.iter().any(|f| {
+            f.commodities
+                .get(crate::ship::FUEL_COMMODITY)
+                .is_some_and(|w| *w > 0.0)
+        });
+        if !has_landable && !has_fuel_rocks {
+            p.push(format!(
+                "system '{name}' has no landable planet and no fuel-bearing \
+                 asteroid field — a dry tank strands the player forever"
+            ));
+        }
     }
 }

@@ -215,6 +215,19 @@ pub struct ShatterAsteroid {
 pub struct Asteroid {
     pub size: f32,
     pub field: Entity,
+    /// A hydrogen-ice rock: shimmers (via `FuelShimmer`) and always drops
+    /// `fuel` when shot, so a dry ship can mine its way home.
+    pub fuel: bool,
+}
+
+/// Roll whether a rock spawned in `commodities` is a fuel rock, using the
+/// field's `fuel` weight as the probability (weight is a 0..1-ish share).
+pub(crate) fn rolls_fuel(commodities: &HashMap<String, f32>, rng: &mut impl Rng) -> bool {
+    let w = commodities
+        .get(crate::ship::FUEL_COMMODITY)
+        .copied()
+        .unwrap_or(0.0);
+    w > 0.0 && rng.gen_range(0.0..1.0) < w.min(1.0)
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -326,6 +339,7 @@ pub fn spawn_asteroid(
     pos: Vec2,
     vel: Vec2,
     colors: &[([f32; 3], f32)],
+    fuel: bool,
 ) -> Entity {
     let mut rng = rand::thread_rng();
     let rot = rng.gen_range(-(0.1 * PI)..(0.1 * PI));
@@ -334,7 +348,7 @@ pub fn spawn_asteroid(
 
     let mut entity_cmd = commands.spawn((
         DespawnOnExit(PlayState::Flying),
-        Asteroid { size, field },
+        Asteroid { size, field, fuel },
         rock,
         tumble.clone(),
         Transform::from_xyz(pos.x, pos.y, 0.0),
@@ -366,6 +380,9 @@ pub fn spawn_asteroid(
             Transform::from_xyz(0.0, 0.0, 0.01),
         ));
     });
+    if fuel {
+        entity_cmd.insert(crate::fuel::FuelShimmer);
+    }
     entity_cmd.id()
 }
 
@@ -403,6 +420,7 @@ pub fn build_asteroid_field(
         let vel = Vec2 { x: vx, y: vy } + random_velocity(ASTEROID_VELOCITY * 0.3);
         // Possibly orbit in other direction.
         let vel = if rng.gen_bool(0.5) { vel } else { -vel };
+        let fuel = rolls_fuel(&field_data.commodities, &mut rng);
         spawn_asteroid(
             commands,
             atlases,
@@ -411,6 +429,7 @@ pub fn build_asteroid_field(
             Vec2 { x, y } + field_data.location,
             vel,
             &colors,
+            fuel,
         );
     }
 }
@@ -442,6 +461,7 @@ pub fn shatter_asteroid(
                     pos + offset,
                     new_vel,
                     colors,
+                    asteroid.fuel,
                 );
             }
         }
@@ -479,24 +499,39 @@ fn handle_shatter(
             // shatters the rock but yields nothing, so miners must actually
             // shoot to mine (and thereby earn the asteroid_hit reward).
             if *drop_pickups {
-                let commodity = fields
-                    .get(asteroid.field)
-                    .ok()
-                    .and_then(|f| {
-                        let total: f32 = f.commodities.values().sum();
-                        if total <= 0.0 {
-                            return None;
-                        }
-                        let mut roll = rng.gen_range(0.0..total);
-                        for (c, &w) in &f.commodities {
-                            roll -= w;
-                            if roll <= 0.0 {
-                                return Some(c.clone());
+                // Fuel rocks always drop fuel; ordinary rocks roll the field's
+                // commodities with `fuel` EXCLUDED, so an iron rock never
+                // surprise-drops fuel (fuel comes only from shimmering rocks).
+                let commodity = if asteroid.fuel {
+                    crate::ship::FUEL_COMMODITY.to_string()
+                } else {
+                    fields
+                        .get(asteroid.field)
+                        .ok()
+                        .and_then(|f| {
+                            let total: f32 = f
+                                .commodities
+                                .iter()
+                                .filter(|(c, _)| c.as_str() != crate::ship::FUEL_COMMODITY)
+                                .map(|(_, w)| *w)
+                                .sum();
+                            if total <= 0.0 {
+                                return None;
                             }
-                        }
-                        f.commodities.keys().next().cloned()
-                    })
-                    .unwrap_or_else(|| "iron".to_string());
+                            let mut roll = rng.gen_range(0.0..total);
+                            for (c, &w) in &f.commodities {
+                                if c.as_str() == crate::ship::FUEL_COMMODITY {
+                                    continue;
+                                }
+                                roll -= w;
+                                if roll <= 0.0 {
+                                    return Some(c.clone());
+                                }
+                            }
+                            None
+                        })
+                        .unwrap_or_else(|| "iron".to_string())
+                };
                 let max_qty = ((asteroid.size * reward_cfg.asteroid_drop_scale) as u16).max(1);
                 let qty = rng.gen_range(1..=max_qty);
                 pickup_writer.write(PickupDrop {
@@ -526,6 +561,7 @@ pub fn spawn_growing_asteroid(
     pos: Vec2,
     vel: Vec2,
     colors: &[([f32; 3], f32)],
+    fuel: bool,
 ) {
     let mut rng = rand::thread_rng();
     let rot = rng.gen_range(-(0.1 * PI)..(0.1 * PI));
@@ -540,10 +576,10 @@ pub fn spawn_growing_asteroid(
     let inertia_value = 0.5 * mass_value * size * size;
 
     // Split across two inserts because Bevy's tuple Bundle limit is 15 items.
-    commands
+    let grown = commands
         .spawn((
             DespawnOnExit(PlayState::Flying),
-            Asteroid { size, field },
+            Asteroid { size, field, fuel },
             GrowingAsteroid { progress: 0.0 },
             rock,
             tumble.clone(),
@@ -582,7 +618,11 @@ pub fn spawn_growing_asteroid(
                 tumble.clone(),
                 Transform::from_xyz(0.0, 0.0, 0.01),
             ));
-        });
+        })
+        .id();
+    if fuel {
+        commands.entity(grown).insert(crate::fuel::FuelShimmer);
+    }
 }
 
 /// Advance the growth of all `GrowingAsteroid` entities.
@@ -643,6 +683,7 @@ fn respawn_asteroids(
             let v = (field.radius / r).sqrt() * ASTEROID_VELOCITY;
             let vel = Vec2::new(-s * v, c * v) + random_velocity(ASTEROID_VELOCITY * 0.3);
             let vel = if rng.gen_bool(0.5) { vel } else { -vel };
+            let fuel = rolls_fuel(&field.commodities, &mut rng);
             spawn_growing_asteroid(
                 &mut commands,
                 &atlases,
@@ -651,6 +692,7 @@ fn respawn_asteroids(
                 pos,
                 vel,
                 &colors,
+                fuel,
             );
         }
     }

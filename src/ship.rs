@@ -6,6 +6,9 @@ use crate::weapons::{WeaponSystem, WeaponSystems};
 use crate::{GameLayer, PlayState, Player, TravelContext, TravelPhase};
 use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
+
+/// The asteroid commodity that refills the jump tank instead of the hold.
+pub const FUEL_COMMODITY: &str = "fuel";
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f32::consts::PI;
@@ -647,6 +650,24 @@ impl Ship {
         let quantity_added = std::cmp::min(quantity_desired, self.remaining_cargo_space());
         *self.cargo.entry(commodity.to_string()).or_insert(0) += quantity_added;
         quantity_added
+    }
+    /// Take as much of a scooped pickup as fits. `fuel` tops up the jump
+    /// tank; everything else goes to cargo. Returns the quantity actually
+    /// taken — 0 means "leave it floating" (tank/hold full).
+    pub fn receive_pickup(&mut self, commodity: &str, quantity: u16) -> u16 {
+        if commodity == FUEL_COMMODITY {
+            let space = self.data.fuel_capacity.saturating_sub(self.fuel);
+            let taken = quantity.min(space);
+            self.fuel += taken;
+            taken
+        } else {
+            self.add_cargo(commodity, quantity)
+        }
+    }
+    /// Fuel-station price for one jump's worth of fuel: 1% of the hull
+    /// price, floored — a rescue tanker charges a multiple of this.
+    pub fn fuel_price_per_unit(&self) -> i128 {
+        (self.data.price / 100).max(20)
     }
     pub fn sell_cargo(&mut self, commodity: &str, quantity: u16, price: i128) {
         let held = *self.cargo.get(commodity).unwrap_or(&0u16);

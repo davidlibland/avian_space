@@ -106,7 +106,7 @@ fn spawn_pickups(
         };
         sprite.color = Color::srgb(r, g, b);
         sprite.custom_size = Some(Vec2::splat(21.0)); // 50% bigger
-        commands.spawn((
+        let mut e = commands.spawn((
             DespawnOnExit(PlayState::Flying),
             Pickup {
                 commodity: drop.commodity.clone(),
@@ -127,6 +127,10 @@ fn spawn_pickups(
             CollisionLayers::new(GameLayer::Pickup, [GameLayer::Ship]),
             sprite,
         ));
+        // Fuel pickups shimmer, exactly like the rock they came from.
+        if drop.commodity == crate::ship::FUEL_COMMODITY {
+            e.insert(crate::fuel::FuelShimmer);
+        }
     }
 }
 
@@ -165,14 +169,11 @@ fn collect_pickups(
             continue;
         };
 
-        let space = ship.remaining_cargo_space();
-        let qty = pickup.quantity.min(space);
+        let qty = ship.receive_pickup(&pickup.commodity, pickup.quantity);
         if qty == 0 {
             continue;
         }
         collected.insert(pickup_entity);
-
-        *ship.cargo.entry(pickup.commodity.clone()).or_insert(0) += qty;
         if players.contains(ship_entity) {
             pickup_collected_writer.write(PickupCollected {
                 commodity: pickup.commodity.clone(),

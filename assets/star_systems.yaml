@@ -1383,6 +1383,7 @@ the_rift:
       number: 10
       radius: 420.0
       commodities:
+        fuel: 0.6
         exotic_matter: 1.0
     -
       location: [300.0, 200.0]
@@ -1490,6 +1491,7 @@ the_silence:
       number: 9
       radius: 400.0
       commodities:
+        fuel: 0.6
         exotic_matter: 1.0
   ships:
     min: 1
@@ -1511,6 +1513,7 @@ the_monolith:
       number: 8
       radius: 380.0
       commodities:
+        fuel: 0.6
         exotic_matter: 1.1
   ships:
     min: 1
@@ -1532,6 +1535,7 @@ the_seedbed:
       number: 12
       radius: 460.0
       commodities:
+        fuel: 0.6
         exotic_matter: 1.3
   ships:
     min: 1
@@ -2092,6 +2096,7 @@ the_gyre:
     number: 24
     radius: 750.0
     commodities:
+      fuel: 0.6
       iron: 1.0
   - location: [-350.0, -250.0]
     number: 12
@@ -2106,3 +2111,6 @@ the_long_dark:
   - location: [0.0, 0.0]
     number: 15
     radius: 650.0
+    commodities:
+      iron: 1.0
+      fuel: 0.6
