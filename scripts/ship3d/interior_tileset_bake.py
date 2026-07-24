@@ -98,27 +98,34 @@ def bake_cap():
     render(os.path.join(OUT, "cap.png"), TILE * SS, TILE * SS)
 
 
-# ONE fixed axonometric camera: looking down from the FRONT and slightly to
-# the RIGHT. Ortho + fixed orientation → every tile renders identically, so
-# straight wall runs are the same sprite and tile trivially; the slight-right
-# offset gives the ¾ depth (we see the far wall's front, the left wall's
-# inner face broadside, the right wall's inner face foreshortened).
-CAM_ELEV = 50.0
-CAM_AZIM = 13.0   # + = from the right
-CAM_ORTHO = 2.6
+# PERSPECTIVE camera, orientation FIXED (azimuth 0, no yaw), translated a
+# little to the RIGHT and ABOVE the tile it renders. The look direction never
+# rotates about Z; the depth comes purely from the camera sitting right-and-
+# above each tile under perspective, so we catch the tile's right + top faces.
+# Because the camera moves WITH each tile (same relative offset every time),
+# every tile renders in an identical local frame — no global shear to stagger
+# straight runs — and pieces tile.
+CAM_ELEV = 50.0     # "above" — height of the look direction
+CAM_RIGHT = 1.7     # "a little to the right" — lateral camera offset (units)
+CAM_LENS = 40.0     # perspective focal length (mm)
+CAM_DIST = 12.0     # how close the camera sits (stronger perspective when small)
+CAM_TARGET_Z = 0.55
 
 
 def set_camera():
-    E, A = math.radians(CAM_ELEV), math.radians(CAM_AZIM)
-    d = 30
+    """Perspective, look direction fixed at azimuth 0 / elevation CAM_ELEV,
+    camera translated right by CAM_RIGHT. Camera AND its aim-point shift right
+    together, so the view direction stays azimuth 0 (no Z rotation) — the tile
+    just sits left of the view axis and is seen from its right."""
+    E = math.radians(CAM_ELEV)
     sc = bpy.context.scene
     cam = sc.camera
-    cam.data.type = "ORTHO"
-    cam.data.ortho_scale = CAM_ORTHO
+    cam.data.type = "PERSP"
+    cam.data.lens = CAM_LENS
     cam.constraints.clear()
-    cam.location = (d * math.cos(E) * math.sin(A), -d * math.cos(E) * math.cos(A), d * math.sin(E))
+    cam.location = (CAM_RIGHT, -CAM_DIST * math.cos(E), CAM_DIST * math.sin(E))
     tgt = bpy.data.objects.new("tgt", None)
-    tgt.location = (0, 0, 0.5)
+    tgt.location = (CAM_RIGHT, 0, CAM_TARGET_Z)  # aim shifted right too → yaw 0
     sc.collection.objects.link(tgt)
     c = cam.constraints.new("TRACK_TO")
     c.target = tgt
@@ -145,7 +152,7 @@ def bake_face(name, run_axis, room_dir):
     # base glow on the room-facing edge
     B.add_box("wallbase", (dx * 0.19, dy * 0.19, 0.06),
               (0.96 if dx == 0 else 0.03, 0.96 if dy == 0 else 0.03, 0.12), mt, bevel=0.0)
-    B.setup_scene(ortho=CAM_ORTHO, res=TILE * SS, freestyle_thick=1.2)
+    B.setup_scene(ortho=2.6, res=TILE * SS, freestyle_thick=1.2)  # overridden to persp
     set_camera()
     r = TILE * SS
     render(os.path.join(OUT, f"{name}.png"), r, r)
