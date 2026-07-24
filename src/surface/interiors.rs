@@ -486,26 +486,34 @@ fn png_dims(path: &str) -> Option<(u32, u32)> {
     Some((w, h))
 }
 
-/// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell
-/// from its neighbours' floor-adjacency. Mirrors `kind()` in the Python
-/// compose: convex jambs first (two orthogonal floors), then straight edges
-/// (one), then concave room corners (a diagonal floor), else a solid cap `V`.
+/// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell.
+///
+/// ONE rule, applied uniformly: **the wall body sits opposite every side that
+/// fronts floor**. A tile's name says where its body is, so floor to the south
+/// picks `N`; floor to the south *and* east picks `CNW`. That covers both
+/// corner families with the same art — the CONVEX outer corner (two orthogonal
+/// floors, e.g. a door jamb or pillar) and the CONCAVE inner corner (no
+/// orthogonal floor, one diagonal floor, e.g. a room's corner) — because in
+/// both cases the body belongs in the quadrant away from the floor.
+///
 /// Strip order: N=0 S=1 E=2 W=3 CNW=4 CNE=5 CSW=6 CSE=7 V=8.
 fn cabinet_tile_index(wall: impl Fn(i32, i32) -> bool, x: i32, y: i32) -> usize {
     let (f_n, f_s) = (!wall(x, y + 1), !wall(x, y - 1));
     let (f_e, f_w) = (!wall(x + 1, y), !wall(x - 1, y));
-    if f_n && f_e {
-        return 7; // CSE
-    }
-    if f_n && f_w {
-        return 6; // CSW
-    }
+    // Convex corners: two orthogonal floors → body in the opposite quadrant.
     if f_s && f_e {
-        return 5; // CNE
+        return 4; // floor S+E → body N+W = CNW
     }
     if f_s && f_w {
-        return 4; // CNW
+        return 5; // floor S+W → body N+E = CNE
     }
+    if f_n && f_e {
+        return 6; // floor N+E → body S+W = CSW
+    }
+    if f_n && f_w {
+        return 7; // floor N+W → body S+E = CSE
+    }
+    // Straight edges: one orthogonal floor → body on the far strip.
     if f_s {
         return 0; // N
     }
@@ -518,17 +526,18 @@ fn cabinet_tile_index(wall: impl Fn(i32, i32) -> bool, x: i32, y: i32) -> usize 
     if f_w {
         return 2; // E
     }
+    // Concave corners: no orthogonal floor, so a diagonal floor decides.
     if !wall(x + 1, y - 1) {
-        return 4; // floor to SE → CNW room corner
+        return 4; // floor SE → body NW = CNW
     }
     if !wall(x - 1, y - 1) {
-        return 5; // floor to SW → CNE
+        return 5; // floor SW → body NE = CNE
     }
     if !wall(x + 1, y + 1) {
-        return 6; // floor to NE → CSW
+        return 6; // floor NE → body SW = CSW
     }
     if !wall(x - 1, y + 1) {
-        return 7; // floor to NW → CSE
+        return 7; // floor NW → body SE = CSE
     }
     8 // V — solid cap (deep/thick wall)
 }
@@ -1199,10 +1208,24 @@ pub(crate) fn setup_interior(
         // floor-adjacency) leaning up-and-right under a single oblique shear,
         // all y-sorted so the walker moves among them. Bake:
         // scripts/ship3d/interior_cabinet_tiles.py + pack_interior_tiles.py.
+        // STRUCTURE only — the rock/steel the room is carved from. Furniture
+        // (`plan.solid`: containers, carts, barrels, pumps) is solid for
+        // COLLISION but must not become wall ART, or a crate grows a wall on
+        // top of itself and its neighbours autotile a corner around it.
+        let structural = |tx: u32, ty: u32| -> bool {
+            let tier = map2d[ty as usize][tx as usize];
+            tier >= plan.solid_min_tier
+                || biome
+                    .terrains
+                    .iter()
+                    .find(|t| t.row == tier)
+                    .map(|t| t.collision == 1)
+                    .unwrap_or(false)
+        };
         let bin: Vec<Vec<u32>> = (0..map_h)
             .map(|y| {
                 (0..map_w)
-                    .map(|x| if collidable(x, y) { 1 } else { 0 })
+                    .map(|x| if structural(x, y) { 1 } else { 0 })
                     .collect()
             })
             .collect();
@@ -2413,9 +2436,11 @@ mod tests {
         assert_eq!(idx(0, 3), 3, "west wall → W");
         assert_eq!(idx(6, 3), 2, "east wall → E");
         assert_eq!(idx(1, 0), 1, "south wall segment → S (floor to north)");
-        // Door jambs (convex, two orthogonal floors) — swapped per review:
-        assert_eq!(idx(2, 0), 7, "left of door → CSE");
-        assert_eq!(idx(4, 0), 6, "right of door → CSW");
+        // Door jambs (convex, two orthogonal floors): body goes to the
+        // quadrant AWAY from both floors, so the jamb left of the door (floor
+        // north + east) keeps its body south-west, and vice versa.
+        assert_eq!(idx(2, 0), 6, "left of door: floor N+E → body S+W = CSW");
+        assert_eq!(idx(4, 0), 7, "right of door: floor N+W → body S+E = CSE");
         // Deep wall cell (no floor anywhere adjacent) → solid cap V:
         let wall_all = |_x: i32, _y: i32| true;
         assert_eq!(cabinet_tile_index(wall_all, 5, 5), 8, "surrounded → V");
