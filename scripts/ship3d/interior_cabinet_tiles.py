@@ -41,23 +41,30 @@ WALL_T = 0.48       # wall thickness (fraction of a cell) — chunky, reads as s
 # so each maze reads as its own place: station panels, mine rock, warehouse
 # corrugation, substation conduit. Geometry is identical across venues (so
 # the autotiling still lines up); only colours + the face greeble change.
+# `floor_style`: "panel" = a tiled deck panel (one variant is plenty);
+# "dirt" = organic soil with scattered rock, baked in several interchangeable
+# variants so a dug-out floor never reads as a grid. `floors` = variant count.
 VENUES = {
     # station shops — clean cool panels, cyan baseboard glow
     "interior": dict(floor=(0.32, 0.36, 0.42), floor_hi=(0.39, 0.43, 0.50),
                      seam=(0.24, 0.27, 0.32), wall=(0.52, 0.55, 0.61),
-                     wall_top=(0.66, 0.69, 0.75), trim=(0.25, 0.72, 0.86), detail=None),
-    # mine — dirt floor, rough rock walls, warm lantern-amber trim
-    "mine": dict(floor=(0.30, 0.25, 0.20), floor_hi=(0.35, 0.29, 0.23),
+                     wall_top=(0.66, 0.69, 0.75), trim=(0.25, 0.72, 0.86),
+                     detail=None, floor_style="panel", floors=1),
+    # mine — dirt floor (4 rock-scatter variants), rough rock walls, amber trim
+    "mine": dict(floor=(0.34, 0.27, 0.20), floor_hi=(0.39, 0.31, 0.23),
                  seam=(0.19, 0.15, 0.11), wall=(0.45, 0.40, 0.35),
-                 wall_top=(0.55, 0.49, 0.43), trim=(0.96, 0.62, 0.24), detail="rock"),
+                 wall_top=(0.55, 0.49, 0.43), trim=(0.96, 0.62, 0.24),
+                 detail="rock", floor_style="dirt", floors=4),
     # warehouse — concrete deck, corrugated steel walls, safety-yellow trim
     "warehouse": dict(floor=(0.44, 0.45, 0.47), floor_hi=(0.50, 0.51, 0.53),
                       seam=(0.30, 0.31, 0.33), wall=(0.50, 0.54, 0.60),
-                      wall_top=(0.62, 0.66, 0.72), trim=(0.95, 0.80, 0.24), detail="ribs"),
+                      wall_top=(0.62, 0.66, 0.72), trim=(0.95, 0.80, 0.24),
+                      detail="ribs", floor_style="panel", floors=1),
     # substation — grating floor, dark conduit walls, electric-teal trim
     "substation": dict(floor=(0.24, 0.28, 0.30), floor_hi=(0.29, 0.34, 0.36),
                        seam=(0.15, 0.19, 0.21), wall=(0.38, 0.43, 0.48),
-                       wall_top=(0.48, 0.54, 0.60), trim=(0.30, 0.92, 0.72), detail="conduit"),
+                       wall_top=(0.48, 0.54, 0.60), trim=(0.30, 0.92, 0.72),
+                       detail="conduit", floor_style="panel", floors=1),
 }
 
 
@@ -174,20 +181,49 @@ def bake_tile(venue, pal, name, edges):
     B.render_to(os.path.join(OUT, f"_it_{venue}_{name}.png"))
 
 
-def bake_floor(venue, pal):
+def bake_floor(venue, pal, variant=0):
+    import random
     B.reset()
     mf = B.toon_material("floor", pal["floor"])
-    mfh = B.toon_material("floorhi", pal["floor_hi"])
-    ms = B.toon_material("seam", pal["seam"])
-    B.add_box("floor", (0, 0, -0.05), (1.0, 1.0, 0.1), mf)
-    B.add_box("panel", (0, 0, 0.005), (0.9, 0.9, 0.02), mfh, bevel=0.06)
-    # subtle recessed panel seams (a calm dark inset, not a glowing grid)
-    B.add_box("sx", (0, 0, 0.008), (0.03, 0.98, 0.006), ms)
-    B.add_box("sy", (0, 0, 0.008), (0.98, 0.03, 0.006), ms)
+    if pal.get("floor_style") == "dirt":
+        # Organic soil: a flat base with scattered rounded rock/clods whose
+        # placement varies per `variant`, so several tiles shuffle across the
+        # floor without a visible grid. No panel seams. Pebbles keep the ink
+        # outline (they read as stones); flat clods are rounded hard so their
+        # edges stay soft, not boxy.
+        rng = random.Random(9001 + variant * 17)
+        # Oversized base so its Freestyle outline falls OFF-frame — no grid
+        # line around each dirt tile, so neighbours blend seamlessly.
+        B.add_box("floor", (0, 0, -0.05), (1.5, 1.5, 0.1), mf)
+        light = tuple(min(1.0, c * 1.16) for c in pal["floor"])
+        dark = tuple(c * 0.82 for c in pal["floor"])
+        ml = B.toon_material(f"peblt{variant}", light)
+        md = B.toon_material(f"pebdk{variant}", dark)
+        # a few broad low clods (packed-earth patches), rounded so they blend
+        for i in range(5):
+            x, y = rng.uniform(-0.34, 0.34), rng.uniform(-0.34, 0.34)
+            s = rng.uniform(0.18, 0.30)
+            B.add_box(f"clod{i}", (x, y, 0.004), (s, s * rng.uniform(0.7, 1.3), 0.02),
+                      md if rng.random() < 0.5 else ml, bevel=0.5)
+        # scattered stones with a little height (kept off the tile edge so they
+        # don't get cut mid-stone where tiles meet)
+        for i in range(10):
+            x, y = rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4)
+            r = rng.uniform(0.025, 0.075)
+            B.add_box(f"peb{i}", (x, y, r * 0.4), (r * 2, r * 2 * rng.uniform(0.7, 1.2), r * 0.9),
+                      ml if rng.random() < 0.5 else md, bevel=0.45)
+    else:
+        mfh = B.toon_material("floorhi", pal["floor_hi"])
+        ms = B.toon_material("seam", pal["seam"])
+        B.add_box("floor", (0, 0, -0.05), (1.0, 1.0, 0.1), mf)
+        B.add_box("panel", (0, 0, 0.005), (0.9, 0.9, 0.02), mfh, bevel=0.06)
+        # subtle recessed panel seams (a calm dark inset, not a glowing grid)
+        B.add_box("sx", (0, 0, 0.008), (0.03, 0.98, 0.006), ms)
+        B.add_box("sy", (0, 0, 0.008), (0.98, 0.03, 0.006), ms)
     B.setup_scene(ortho=1.0, res=PXU, freestyle_thick=1.2)
     _topdown()
     bpy.context.scene.camera.data.ortho_scale = 1.0
-    B.render_to(os.path.join(OUT, f"_it_{venue}_floor.png"))
+    B.render_to(os.path.join(OUT, f"_it_{venue}_floor{variant}.png"))
 
 
 TILES = {
@@ -202,7 +238,8 @@ if __name__ == "__main__":
     only = sys.argv[1:] or list(VENUES)
     for venue in only:
         pal = VENUES[venue]
-        bake_floor(venue, pal)
+        for v in range(pal.get("floors", 1)):
+            bake_floor(venue, pal, v)
         for name, edges in TILES.items():
             bake_tile(venue, pal, name, edges)
         print("baked venue", venue)

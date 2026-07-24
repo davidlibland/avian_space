@@ -471,6 +471,17 @@ const CAB_SHEAR: f32 = 0.26 / 0.42;
 /// before giving way to the black void beyond — a room, not walls forever.
 const CAB_WALL_BAND: i32 = 2;
 
+/// How many interchangeable floor tiles a venue's floor atlas holds. One = a
+/// single repeated tile (clean decks); several = shuffled per cell so an
+/// organic floor (the mine's dirt) never reads as a grid. Must match the
+/// floor strip baked by pack_interior_tiles.py.
+fn cab_floor_variants(biome_name: &str) -> u32 {
+    match biome_name {
+        "mine" => 4,
+        _ => 1,
+    }
+}
+
 /// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell
 /// from its neighbours' floor-adjacency. Mirrors `kind()` in the Python
 /// compose: convex jambs first (two orthogonal floors), then straight edges
@@ -1219,6 +1230,17 @@ pub(crate) fn setup_interior(
             None,
             None,
         ));
+        // Floor atlas: N interchangeable variants in one row (N == 1 for a
+        // single-tile floor). Each cell is picked per grid position by a
+        // deterministic hash, so an organic floor shuffles without a pattern.
+        let floor_variants = cab_floor_variants(biome_name);
+        let floor_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::splat(CAB_ASSET_PXU as u32),
+            floor_variants,
+            1,
+            None,
+            None,
+        ));
         let cab_scale = tile_px / CAB_ASSET_PXU;
         let wall_size = Vec2::new(CAB_CELL_W as f32, CAB_CELL_H as f32) * cab_scale;
         for ty in 0..map_h {
@@ -1233,7 +1255,14 @@ pub(crate) fn setup_interior(
                 // Floor under everything the lean can reveal — but not under a
                 // deep solid cap (V), which fully covers its cell.
                 if idx != 8 {
-                    let mut floor = Sprite::from_image(floor_image.clone());
+                    let fv = (rng_ish(tx, ty) % floor_variants) as usize;
+                    let mut floor = Sprite::from_atlas_image(
+                        floor_image.clone(),
+                        TextureAtlas {
+                            layout: floor_layout.clone(),
+                            index: fv,
+                        },
+                    );
                     floor.custom_size = Some(Vec2::splat(tile_px));
                     floor.color = tint;
                     commands.spawn((

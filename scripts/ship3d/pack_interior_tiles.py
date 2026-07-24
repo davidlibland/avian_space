@@ -67,19 +67,31 @@ def main():
     aw = round(cw * SCALE)
     ah = round(ch * SCALE)
 
+    floor_counts = {}
     for v, suffix in VENUES.items():
         strip = Image.new("RGBA", (aw * len(ORDER), ah), (0, 0, 0, 0))
         for i, n in enumerate(ORDER):
             cell = imgs[(v, n)].crop((l, t, r, b)).resize((aw, ah), Image.LANCZOS)
             strip.paste(cell, (i * aw, 0))
         strip.save(os.path.join(WORLDS, f"interior_cabinet_walls{suffix}.png"))
-        floor = Image.open(os.path.join(TILES, f"_it_{v}_floor.png")).convert("RGBA")
-        floor.resize((ASSET_PXU, ASSET_PXU), Image.LANCZOS).save(
-            os.path.join(WORLDS, f"interior_cabinet_floor{suffix}.png"))
+        # Floor variants → a horizontal strip (1 cell for a single-tile floor,
+        # N interchangeable cells for organic floors like the mine's dirt).
+        variants = []
+        k = 0
+        while os.path.exists(os.path.join(TILES, f"_it_{v}_floor{k}.png")):
+            variants.append(Image.open(os.path.join(TILES, f"_it_{v}_floor{k}.png"))
+                            .convert("RGBA").resize((ASSET_PXU, ASSET_PXU), Image.LANCZOS))
+            k += 1
+        floor_counts[v] = len(variants)
+        fstrip = Image.new("RGBA", (ASSET_PXU * len(variants), ASSET_PXU), (0, 0, 0, 0))
+        for i, fim in enumerate(variants):
+            fstrip.paste(fim, (i * ASSET_PXU, 0))
+        fstrip.save(os.path.join(WORLDS, f"interior_cabinet_floor{suffix}.png"))
 
     ax = ox / aw - 0.5
     ay = 0.5 - oy / ah
     print(f"venues         = {', '.join(VENUES)}")
+    print(f"floor_variants = {floor_counts}")
     print(f"cell_px        = {aw} x {ah}")
     print(f"ground_origin  = ({ox:.1f}, {oy:.1f}) px  (from top-left of cell)")
     print(f"bevy_anchor    = ({ax:.5f}, {ay:.5f})")
