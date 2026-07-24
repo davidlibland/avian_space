@@ -98,19 +98,37 @@ def bake_cap():
     render(os.path.join(OUT, "cap.png"), TILE * SS, TILE * SS)
 
 
-# The isometric bake, per the design correction: ONE fixed elevation and a
-# constant camera z, with the camera placed a FIXED distance along each
-# wall's room-facing normal. So every wall is viewed straight down its own
-# normal at the same angle → each direction's faces are identical and tile
-# within a run, and the left wall is seen from its right / the right from
-# its left (the convergence) purely from where its normal points.
-ISO_ELEV = 34.0  # fixed for every wall
+# ONE fixed axonometric camera: looking down from the FRONT and slightly to
+# the RIGHT. Ortho + fixed orientation → every tile renders identically, so
+# straight wall runs are the same sprite and tile trivially; the slight-right
+# offset gives the ¾ depth (we see the far wall's front, the left wall's
+# inner face broadside, the right wall's inner face foreshortened).
+CAM_ELEV = 50.0
+CAM_AZIM = 13.0   # + = from the right
+CAM_ORTHO = 2.6
 
 
-def bake_face(name, run_axis, normal_azim):
-    """`run_axis`: 'x' wall runs east-west (N/S edges), 'y' runs north-south
-    (E/W edges). `normal_azim`: azimuth of the room-facing normal (deg) — the
-    camera sits along it at the fixed iso elevation."""
+def set_camera():
+    E, A = math.radians(CAM_ELEV), math.radians(CAM_AZIM)
+    d = 30
+    sc = bpy.context.scene
+    cam = sc.camera
+    cam.data.type = "ORTHO"
+    cam.data.ortho_scale = CAM_ORTHO
+    cam.constraints.clear()
+    cam.location = (d * math.cos(E) * math.sin(A), -d * math.cos(E) * math.cos(A), d * math.sin(E))
+    tgt = bpy.data.objects.new("tgt", None)
+    tgt.location = (0, 0, 0.5)
+    sc.collection.objects.link(tgt)
+    c = cam.constraints.new("TRACK_TO")
+    c.target = tgt
+
+
+def bake_face(name, run_axis, room_dir):
+    """`run_axis`: 'x' wall runs east-west (a N/S room edge), 'y' runs
+    north-south (an E/W edge). `room_dir`: unit (dx,dy) toward the room, so
+    the apron + base glow sit on the room-facing side. All from the one
+    fixed front-right camera."""
     B.reset()
     mw = B.toon_material("wall", WALL)
     mh = B.toon_material("wallhi", WALL_HI)
@@ -118,33 +136,17 @@ def bake_face(name, run_axis, normal_azim):
     mf = B.toon_material("floor", FLOOR)
     if run_axis == "x":
         wall_size = (1.0, 0.35, 1.4)
-        base = (0, -0.18, 0.09)
-        base_size = (0.96, 0.02, 0.18)
-        apron = (0, -0.9, -0.05)
-    else:  # 'y'
+    else:
         wall_size = (0.35, 1.0, 1.4)
-        base = (-0.18, 0, 0.09) if normal_azim < 0 else (0.18, 0, 0.09)
-        base_size = (0.02, 0.96, 0.18)
-        apron = (0.9 if normal_azim > 0 else -0.9, 0, -0.05)
+    dx, dy = room_dir
+    _ = mf  # apron dropped — walls bake on transparency, floor drawn separately
     B.add_box("wall", (0, 0, 0.7), wall_size, mw, bevel=0.03)
     B.add_box("wallcap", (0, 0, 1.42), (wall_size[0], wall_size[1], 0.06), mh, bevel=0.0)
-    B.add_box("wallbase", base, base_size, mt, bevel=0.0)  # room-facing base glow
-    B.add_box("apron", apron, (1.4, 1.4, 0.1), mf, bevel=0.0)
-    B.setup_scene(ortho=2.4, res=TILE * SS, freestyle_thick=1.2)
-    E, A = math.radians(ISO_ELEV), math.radians(normal_azim)
-    d = 30
-    sc = bpy.context.scene
-    cam = sc.camera
-    cam.data.type = "ORTHO"
-    cam.data.ortho_scale = 2.4
-    cam.constraints.clear()
-    # Camera along the room-facing normal, constant z.
-    cam.location = (d * math.cos(E) * math.sin(A), -d * math.cos(E) * math.cos(A), d * math.sin(E))
-    tgt = bpy.data.objects.new("tgt", None)
-    tgt.location = (0, 0, 0.6)
-    sc.collection.objects.link(tgt)
-    c = cam.constraints.new("TRACK_TO")
-    c.target = tgt
+    # base glow on the room-facing edge
+    B.add_box("wallbase", (dx * 0.19, dy * 0.19, 0.06),
+              (0.96 if dx == 0 else 0.03, 0.96 if dy == 0 else 0.03, 0.12), mt, bevel=0.0)
+    B.setup_scene(ortho=CAM_ORTHO, res=TILE * SS, freestyle_thick=1.2)
+    set_camera()
     r = TILE * SS
     render(os.path.join(OUT, f"{name}.png"), r, r)
 
@@ -153,9 +155,7 @@ if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     bake_floor()
     bake_cap()
-    # normal_azim = direction the room-facing wall surface points, so the
-    # camera views it head-on at the fixed iso elevation.
-    bake_face("face_n", "x", 0.0)     # far wall: room to south → south face
-    bake_face("face_w", "y", 90.0)    # left wall: room to east → east face (cam to its right)
-    bake_face("face_e", "y", -90.0)   # right wall: room to west → west face (cam to its left)
+    bake_face("face_n", "x", (0, -1))   # far wall: room to south
+    bake_face("face_w", "y", (1, 0))    # left wall: room to east (its inner face)
+    bake_face("face_e", "y", (-1, 0))   # right wall: room to west (its inner face)
     print("baked tiles →", os.path.abspath(OUT))
