@@ -55,11 +55,13 @@ VENUES = {
                  seam=(0.19, 0.15, 0.11), wall=(0.45, 0.40, 0.35),
                  wall_top=(0.55, 0.49, 0.43), trim=(0.96, 0.62, 0.24),
                  detail="rock", floor_style="dirt", floors=4, walls=3),
-    # warehouse — concrete deck, corrugated steel walls, safety-yellow trim
+    # warehouse — worn concrete deck (4 variants), corrugated steel walls with
+    # occasional I-beam / diagonal girders (variants 4 & 5), safety-yellow trim
     "warehouse": dict(floor=(0.44, 0.45, 0.47), floor_hi=(0.50, 0.51, 0.53),
                       seam=(0.30, 0.31, 0.33), wall=(0.50, 0.54, 0.60),
                       wall_top=(0.62, 0.66, 0.72), trim=(0.95, 0.80, 0.24),
-                      detail="ribs", floor_style="panel", floors=1, walls=1),
+                      detail="ribs", floor_style="concrete", floors=4, walls=6,
+                      gv_vert=4, gv_diag=5),
     # substation — grating floor, dark conduit walls, electric-teal trim
     "substation": dict(floor=(0.24, 0.28, 0.30), floor_hi=(0.29, 0.34, 0.36),
                        seam=(0.15, 0.19, 0.21), wall=(0.38, 0.43, 0.48),
@@ -168,6 +170,32 @@ def _edge_trim(edge):
     raise ValueError(edge)
 
 
+def _girder(edge, style, mat):
+    """A structural post on the room-facing face: a vertical I-beam, or a
+    segmented diagonal brace (segments read as a diagonal beam without needing
+    a rotated mesh under the shear)."""
+    run, (fax, fc), ns = _face(edge)
+    h = WALL_H
+
+    def place(name, along, z, sr, so, sz):
+        cf = fc + ns * 0.07
+        if run == "x":
+            loc, size = (along, cf, z), (sr, so, sz)
+        else:
+            loc, size = (cf, along, z), (so, sr, sz)
+        B.add_box(name, loc, size, mat, bevel=0.03)
+
+    if style == "vert":  # I-beam: web + top flange + base plate
+        place(f"gw{edge}", 0.0, h * 0.52, 0.12, 0.13, h * 0.96)
+        place(f"gt{edge}", 0.0, h * 0.99, 0.26, 0.15, 0.07)
+        place(f"gb{edge}", 0.0, h * 0.06, 0.26, 0.15, 0.08)
+    else:  # diagonal brace — overlapping segments corner-to-corner
+        n = 7
+        for i in range(n):
+            f = i / (n - 1)
+            place(f"gd{edge}{i}", -0.36 + 0.72 * f, (0.16 + 0.7 * f) * h, 0.18, 0.12, 0.18)
+
+
 def _cap_rock(variant, mat):
     """Bumpy top for a deep (V) cap — variant-seeded so caps vary too."""
     import random
@@ -201,6 +229,13 @@ def bake_tile(venue, pal, name, edges, variant=0):
             (tx, ty, tz), (tsx, tsy, tsz) = _edge_trim(e)
             B.add_box(f"tr_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
             _face_detail(e, pal["detail"], variant, md, mg)
+            # Occasional girders: a couple of designated variants carry a post
+            # (steel is a touch darker than the corrugation), shuffled per cell.
+            steel = B.toon_material("girder", tuple(c * 0.82 for c in pal["wall"]))
+            if variant == pal.get("gv_vert"):
+                _girder(e, "vert", steel)
+            elif variant == pal.get("gv_diag"):
+                _girder(e, "diag", steel)
     _shear()
     B.setup_scene(ortho=FRAME, res=RES, freestyle_thick=1.4)
     _topdown()
@@ -238,6 +273,20 @@ def bake_floor(venue, pal, variant=0):
             r = rng.uniform(0.025, 0.075)
             B.add_box(f"peb{i}", (x, y, r * 0.4), (r * 2, r * 2 * rng.uniform(0.7, 1.2), r * 0.9),
                       ml if rng.random() < 0.5 else md, bevel=0.45)
+    elif pal.get("floor_style") == "concrete":
+        # Worn concrete: seamless base (oversized so no grid line) with soft
+        # oil/scuff stains that vary per variant, and an occasional painted
+        # loading stripe. Reads as a busy depot deck, not a tiled panel.
+        rng = random.Random(5000 + variant * 29)
+        B.add_box("floor", (0, 0, -0.05), (1.5, 1.5, 0.1), mf)
+        dark = tuple(c * 0.84 for c in pal["floor"])
+        light = tuple(min(1.0, c * 1.08) for c in pal["floor"])
+        for i in range(6):  # soft rounded stains — high bevel keeps edges inkless
+            x, y = rng.uniform(-0.36, 0.36), rng.uniform(-0.36, 0.36)
+            s = rng.uniform(0.14, 0.34)
+            mm = B.toon_material(f"stain{variant}_{i}", dark if rng.random() < 0.65 else light)
+            B.add_box(f"stain{i}", (x, y, 0.003), (s, s * rng.uniform(0.6, 1.3), 0.008),
+                      mm, bevel=0.5)
     else:
         mfh = B.toon_material("floorhi", pal["floor_hi"])
         ms = B.toon_material("seam", pal["seam"])
