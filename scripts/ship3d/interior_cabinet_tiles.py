@@ -94,12 +94,18 @@ def bake_tile(name, edges):
     mw = B.toon_material("wall", WALL)
     mwt = B.toon_material("walltop", WALL_TOP)
     mt = B.glow_material("trim", TRIM, strength=2.6)
-    for e in edges:
-        (cx, cy, cz), (sx, sy, sz) = _edge_slab(e)
-        B.add_box(f"w_{e}", (cx, cy, cz), (sx, sy, sz), mw, bevel=0.03)
-        B.add_box(f"cap_{e}", (cx, cy, WALL_H + 0.03), (sx, sy, 0.08), mwt)
-        (tx, ty, tz), (tsx, tsy, tsz) = _edge_trim(e)
-        B.add_box(f"tr_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
+    if edges == ("V",):
+        # solid interior wall cell: a full-cell block seen only as its cap
+        # (its faces are covered by neighbouring walls). Fills deep/thick walls.
+        B.add_box("w_V", (0, 0, WALL_H / 2), (1.0, 1.0, WALL_H), mw, bevel=0.03)
+        B.add_box("cap_V", (0, 0, WALL_H + 0.03), (1.0, 1.0, 0.08), mwt)
+    else:
+        for e in edges:
+            (cx, cy, cz), (sx, sy, sz) = _edge_slab(e)
+            B.add_box(f"w_{e}", (cx, cy, cz), (sx, sy, sz), mw, bevel=0.03)
+            B.add_box(f"cap_{e}", (cx, cy, WALL_H + 0.03), (sx, sy, 0.08), mwt)
+            (tx, ty, tz), (tsx, tsy, tsz) = _edge_trim(e)
+            B.add_box(f"tr_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
     _shear()
     B.setup_scene(ortho=FRAME, res=RES, freestyle_thick=1.4)
     _topdown()
@@ -125,6 +131,7 @@ def bake_floor():
 TILES = {
     "N": ("N",), "S": ("S",), "E": ("E",), "W": ("W",),
     "CNW": ("N", "W"), "CNE": ("N", "E"), "CSW": ("S", "W"), "CSE": ("S", "E"),
+    "V": ("V",),
 }
 
 if __name__ == "__main__":

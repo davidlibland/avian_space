@@ -453,6 +453,65 @@ const T_FLOOR: u32 = 0;
 const T_PLATING: u32 = 1;
 const T_WALL: u32 = 3;
 
+// ── Cabinet interior tileset ────────────────────────────────────────────────
+// A 9-cell strip (N S E W CNW CNE CSW CSE V) baked under ONE oblique cabinet
+// shear, so floors stay a square grid and walls lean up-and-right. Numbers
+// come from scripts/ship3d/pack_interior_tiles.py (bake +
+// interior_cabinet_tiles.py). Each cell is oversized (the leaning wall spills
+// past the grid); it's placed by its GROUND ORIGIN (the cell centre at z=0)
+// via a Bevy anchor, then y-sorted like any prop.
+const CAB_CELL_W: u32 = 74;
+const CAB_CELL_H: u32 = 79;
+const CAB_ASSET_PXU: f32 = 64.0; // asset pixels per world unit (→ TILE_PX in game)
+const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.10127);
+
+/// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell
+/// from its neighbours' floor-adjacency. Mirrors `kind()` in the Python
+/// compose: convex jambs first (two orthogonal floors), then straight edges
+/// (one), then concave room corners (a diagonal floor), else a solid cap `V`.
+/// Strip order: N=0 S=1 E=2 W=3 CNW=4 CNE=5 CSW=6 CSE=7 V=8.
+fn cabinet_tile_index(wall: impl Fn(i32, i32) -> bool, x: i32, y: i32) -> usize {
+    let (f_n, f_s) = (!wall(x, y + 1), !wall(x, y - 1));
+    let (f_e, f_w) = (!wall(x + 1, y), !wall(x - 1, y));
+    if f_n && f_e {
+        return 7; // CSE
+    }
+    if f_n && f_w {
+        return 6; // CSW
+    }
+    if f_s && f_e {
+        return 5; // CNE
+    }
+    if f_s && f_w {
+        return 4; // CNW
+    }
+    if f_s {
+        return 0; // N
+    }
+    if f_n {
+        return 1; // S
+    }
+    if f_e {
+        return 3; // W
+    }
+    if f_w {
+        return 2; // E
+    }
+    if !wall(x + 1, y - 1) {
+        return 4; // floor to SE → CNW room corner
+    }
+    if !wall(x - 1, y - 1) {
+        return 5; // floor to SW → CNE
+    }
+    if !wall(x + 1, y + 1) {
+        return 6; // floor to NE → CSW
+    }
+    if !wall(x - 1, y + 1) {
+        return 7; // floor to NW → CSE
+    }
+    8 // V — solid cap (deep/thick wall)
+}
+
 /// One interior floor plan: a carved room in a full-size map (the blob47
 /// contract needs the map-wide tier gradient; everything outside the room
 /// ramps up to the border tier in ±1 rings).
@@ -1100,7 +1159,11 @@ pub(crate) fn setup_interior(
     };
 
     if is_proto {
-        // Binary terrain: 1 = wall (collidable structure), 0 = floor.
+        // Cabinet-projection interior: a square floor grid with oversized,
+        // foot-anchored wall sprites (one per wall cell, autotiled by
+        // floor-adjacency) leaning up-and-right under a single oblique shear,
+        // all y-sorted so the walker moves among them. Bake:
+        // scripts/ship3d/interior_cabinet_tiles.py + pack_interior_tiles.py.
         let bin: Vec<Vec<u32>> = (0..map_h)
             .map(|y| {
                 (0..map_w)
@@ -1108,50 +1171,69 @@ pub(crate) fn setup_interior(
                     .collect()
             })
             .collect();
-        let proto_atlas: Handle<Image> =
-            asset_server.load(format!("{WORLDS_DIR}/interior_proto_atlas.png"));
-        let proto_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
-            UVec2::splat(manifest.tile_size),
-            manifest.atlas_cols,
-            2,
-            None,
-            None,
-        ));
-        let face_image: Handle<Image> =
-            asset_server.load(format!("{WORLDS_DIR}/interior_proto_face.png"));
-        let face_h = 44u32;
-        let face_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
-            UVec2::new(manifest.tile_size, face_h),
-            4,
+        let wall = |x: i32, y: i32| -> bool {
+            x < 0
+                || y < 0
+                || x >= map_w as i32
+                || y >= map_h as i32
+                || bin[y as usize][x as usize] == 1
+        };
+        let walls_atlas: Handle<Image> =
+            asset_server.load(format!("{WORLDS_DIR}/interior_cabinet_walls.png"));
+        let floor_image: Handle<Image> =
+            asset_server.load(format!("{WORLDS_DIR}/interior_cabinet_floor.png"));
+        let walls_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
+            UVec2::new(CAB_CELL_W, CAB_CELL_H),
+            9,
             1,
             None,
             None,
         ));
+        let cab_scale = tile_px / CAB_ASSET_PXU;
+        let wall_size = Vec2::new(CAB_CELL_W as f32, CAB_CELL_H as f32) * cab_scale;
         for ty in 0..map_h {
             for tx in 0..map_w {
-                let index = crate::world_assets::tile_texture_index(
-                    &bin,
-                    tx as i32,
-                    ty as i32,
-                    map_w as i32,
-                    map_h as i32,
-                    &lut,
-                );
                 let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
-                let mut tile_sprite = Sprite::from_atlas_image(
-                    proto_atlas.clone(),
-                    TextureAtlas {
-                        layout: proto_layout.clone(),
-                        index: index as usize,
-                    },
-                );
-                tile_sprite.color = tint;
-                commands.spawn((
-                    DespawnOnExit(PlayState::Inside),
-                    InteriorScoped,
-                    tile_sprite,
-                    Transform::from_xyz(pos.x, pos.y, -10.0),
-                ));
+                let is_wall = bin[ty as usize][tx as usize] == 1;
+                let idx = if is_wall {
+                    cabinet_tile_index(wall, tx as i32, ty as i32)
+                } else {
+                    usize::MAX
+                };
+                // Floor under everything the lean can reveal — but not under a
+                // deep solid cap (V), which fully covers its cell.
+                if idx != 8 {
+                    let mut floor = Sprite::from_image(floor_image.clone());
+                    floor.custom_size = Some(Vec2::splat(tile_px));
+                    floor.color = tint;
+                    commands.spawn((
+                        DespawnOnExit(PlayState::Inside),
+                        InteriorScoped,
+                        floor,
+                        Transform::from_xyz(pos.x, pos.y, -10.0),
+                    ));
+                }
+                if is_wall {
+                    let mut w = Sprite::from_atlas_image(
+                        walls_atlas.clone(),
+                        TextureAtlas {
+                            layout: walls_layout.clone(),
+                            index: idx,
+                        },
+                    );
+                    w.custom_size = Some(wall_size);
+                    w.color = tint;
+                    // Sort by the wall's foot (its south edge, where it meets
+                    // the floor) so the walker and props interleave correctly.
+                    let foot_y = pos.y - tile_px * 0.5;
+                    commands.spawn((
+                        DespawnOnExit(PlayState::Inside),
+                        InteriorScoped,
+                        w,
+                        bevy::sprite::Anchor(CAB_ANCHOR),
+                        Transform::from_xyz(pos.x, pos.y, crate::surface_objects::depth_z(foot_y)),
+                    ));
+                }
                 if collidable(tx, ty) && in_band(tx, ty) {
                     commands.spawn((
                         DespawnOnExit(PlayState::Inside),
@@ -1163,34 +1245,6 @@ pub(crate) fn setup_interior(
                             [GameLayer::Surface, GameLayer::Character],
                         ),
                         Transform::from_xyz(pos.x, pos.y, 0.0),
-                    ));
-                }
-                // Wall FACE: a wall cell whose south neighbour (y-1, screen
-                // down) is floor shows a shaded vertical face hanging into
-                // the room, y-sorted so the walker occludes it.
-                let south_floor = ty == 0 || !collidable(tx, ty - 1);
-                if bin[ty as usize][tx as usize] == 1 && south_floor {
-                    let variant = ((tx * 7 + ty * 13) % 4) as usize;
-                    let top_y = pos.y - tile_px * 0.5; // south edge of the wall
-                    let bottom_y = top_y - face_h as f32;
-                    let mut face = Sprite::from_atlas_image(
-                        face_image.clone(),
-                        TextureAtlas {
-                            layout: face_layout.clone(),
-                            index: variant,
-                        },
-                    );
-                    face.color = tint;
-                    commands.spawn((
-                        DespawnOnExit(PlayState::Inside),
-                        InteriorScoped,
-                        face,
-                        bevy::sprite::Anchor(Vec2::new(0.0, 0.5)), // top-centre
-                        Transform::from_xyz(
-                            pos.x,
-                            top_y,
-                            crate::surface_objects::depth_z(bottom_y),
-                        ),
                     ));
                 }
             }
@@ -2264,6 +2318,42 @@ pub(crate) fn spawn_interior_npcs(
 mod tests {
     use super::*;
     use crate::surface_pathfinding::SurfaceCostMap;
+
+    /// The cabinet autotiler picks the right strip cell for a small walled
+    /// room with a south door. Strip: N=0 S=1 E=2 W=3 CNW=4 CNE=5 CSW=6
+    /// CSE=7 V=8. This mirrors the offline compose in pack_interior_tiles.py.
+    #[test]
+    fn cabinet_tiles_pick_edges_corners_jambs() {
+        // 7x6 map: floor rectangle (1..6, 1..5) with a door gap at x=3,y=0's
+        // wall — i.e. the south wall (y=0) open at x=3.
+        let (w, h) = (7i32, 6i32);
+        let wall = |x: i32, y: i32| -> bool {
+            if x < 0 || y < 0 || x >= w || y >= h {
+                return true; // out of bounds reads as wall
+            }
+            let inside = (1..6).contains(&x) && (1..5).contains(&y);
+            let door = x == 3 && y == 0; // gap in the south wall
+            !(inside || door)
+        };
+        let idx = |x, y| cabinet_tile_index(wall, x, y);
+
+        // Room corners (concave, diagonal floor):
+        assert_eq!(idx(0, 5), 4, "top-left → CNW");
+        assert_eq!(idx(6, 5), 5, "top-right → CNE");
+        assert_eq!(idx(0, 0), 6, "bottom-left → CSW");
+        assert_eq!(idx(6, 0), 7, "bottom-right → CSE");
+        // Straight edges (one orthogonal floor):
+        assert_eq!(idx(3, 5), 0, "north wall → N");
+        assert_eq!(idx(0, 3), 3, "west wall → W");
+        assert_eq!(idx(6, 3), 2, "east wall → E");
+        assert_eq!(idx(1, 0), 1, "south wall segment → S (floor to north)");
+        // Door jambs (convex, two orthogonal floors) — swapped per review:
+        assert_eq!(idx(2, 0), 7, "left of door → CSE");
+        assert_eq!(idx(4, 0), 6, "right of door → CSW");
+        // Deep wall cell (no floor anywhere adjacent) → solid cap V:
+        let wall_all = |_x: i32, _y: i32| true;
+        assert_eq!(cabinet_tile_index(wall_all, 5, 5), 8, "surrounded → V");
+    }
 
     fn iu() -> ItemUniverse {
         let mut iu: ItemUniverse =
