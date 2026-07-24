@@ -467,6 +467,9 @@ const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.10127);
 /// Foot-x weight for depth sorting = the bake's SHX/SHY lean ratio. Walls
 /// lean up-and-right, so left-of-same-row renders in front (see DepthShear).
 const CAB_SHEAR: f32 = 0.26 / 0.42;
+/// How many wall rings (Chebyshev, from walkable floor) a building draws
+/// before giving way to the black void beyond — a room, not walls forever.
+const CAB_WALL_BAND: i32 = 2;
 
 /// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell
 /// from its neighbours' floor-adjacency. Mirrors `kind()` in the Python
@@ -1189,6 +1192,14 @@ pub(crate) fn setup_interior(
                 || y >= map_h as i32
                 || bin[y as usize][x as usize] == 1
         };
+        // A building is a room floating in black, not walls-to-infinity: only
+        // draw wall cells within CAB_WALL_BAND of walkable floor (the edge
+        // tiles that front the room plus a ring or two of cap behind them);
+        // beyond that the black ClearColor shows through.
+        let near_floor = |tx: i32, ty: i32| -> bool {
+            let b = CAB_WALL_BAND;
+            (-b..=b).any(|dy| (-b..=b).any(|dx| !wall(tx + dx, ty + dy)))
+        };
         let walls_atlas: Handle<Image> =
             asset_server.load(format!("{WORLDS_DIR}/interior_cabinet_walls.png"));
         let floor_image: Handle<Image> =
@@ -1224,7 +1235,9 @@ pub(crate) fn setup_interior(
                         Transform::from_xyz(pos.x, pos.y, -10.0),
                     ));
                 }
-                if is_wall {
+                // Deep caps beyond the wall band are left as black void.
+                let hidden = idx == 8 && !near_floor(tx as i32, ty as i32);
+                if is_wall && !hidden {
                     let mut w = Sprite::from_atlas_image(
                         walls_atlas.clone(),
                         TextureAtlas {
