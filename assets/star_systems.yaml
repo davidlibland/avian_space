@@ -8,6 +8,7 @@ sol:
   planets:
     mercury:
       planet_type: rocky
+      tech_level: 3
       faction: Federation
       location: [120.0, 60.0]
       description: "A scorched rock barely above the sun. Iron ore practically falls out of the ground."
@@ -29,6 +30,7 @@ sol:
       outfitter: []
     venus:
       planet_type: cloud
+      tech_level: 3
       faction: Federation
       location: [280.0, -200.0]
       description: "Toxic atmosphere, crushing pressure, and the cheapest food in the system."
