@@ -47,14 +47,22 @@ def content_box(im, thr=12):
     return xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
 
 
+def wall_variant_count(v):
+    k = 0
+    while os.path.exists(os.path.join(TILES, f"_it_{v}_N_v{k}.png")):
+        k += 1
+    return max(k, 1)
+
+
 def main():
     os.makedirs(WORLDS, exist_ok=True)
-    # Load every wall tile of every venue.
-    imgs = {(v, n): Image.open(os.path.join(TILES, f"_it_{v}_{n}.png")).convert("RGBA")
-            for v in VENUES for n in ORDER}
+    wall_counts = {v: wall_variant_count(v) for v in VENUES}
+    # Load every wall tile of every venue and variant.
+    imgs = {(v, wv, n): Image.open(os.path.join(TILES, f"_it_{v}_{n}_v{wv}.png")).convert("RGBA")
+            for v in VENUES for wv in range(wall_counts[v]) for n in ORDER}
 
-    # ONE common box across ALL venues → shared canvas + shared ground origin,
-    # so the venue-specific greebles never shift the anchor.
+    # ONE common box across ALL venues/variants → shared canvas + shared ground
+    # origin, so venue greebles never shift the anchor.
     boxes = [content_box(im) for im in imgs.values()]
     l = min(b[0] for b in boxes)
     t = min(b[1] for b in boxes)
@@ -69,10 +77,13 @@ def main():
 
     floor_counts = {}
     for v, suffix in VENUES.items():
-        strip = Image.new("RGBA", (aw * len(ORDER), ah), (0, 0, 0, 0))
-        for i, n in enumerate(ORDER):
-            cell = imgs[(v, n)].crop((l, t, r, b)).resize((aw, ah), Image.LANCZOS)
-            strip.paste(cell, (i * aw, 0))
+        # Wall atlas: 9 tile-types across × N variants down.
+        nwv = wall_counts[v]
+        strip = Image.new("RGBA", (aw * len(ORDER), ah * nwv), (0, 0, 0, 0))
+        for wv in range(nwv):
+            for i, n in enumerate(ORDER):
+                cell = imgs[(v, wv, n)].crop((l, t, r, b)).resize((aw, ah), Image.LANCZOS)
+                strip.paste(cell, (i * aw, wv * ah))
         strip.save(os.path.join(WORLDS, f"interior_cabinet_walls{suffix}.png"))
         # Floor variants → a horizontal strip (1 cell for a single-tile floor,
         # N interchangeable cells for organic floors like the mine's dirt).
@@ -91,6 +102,7 @@ def main():
     ax = ox / aw - 0.5
     ay = 0.5 - oy / ah
     print(f"venues         = {', '.join(VENUES)}")
+    print(f"wall_variants  = {wall_counts}")
     print(f"floor_variants = {floor_counts}")
     print(f"cell_px        = {aw} x {ah}")
     print(f"ground_origin  = ({ox:.1f}, {oy:.1f}) px  (from top-left of cell)")

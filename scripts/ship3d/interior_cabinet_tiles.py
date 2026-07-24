@@ -49,22 +49,22 @@ VENUES = {
     "interior": dict(floor=(0.32, 0.36, 0.42), floor_hi=(0.39, 0.43, 0.50),
                      seam=(0.24, 0.27, 0.32), wall=(0.52, 0.55, 0.61),
                      wall_top=(0.66, 0.69, 0.75), trim=(0.25, 0.72, 0.86),
-                     detail=None, floor_style="panel", floors=1),
+                     detail=None, floor_style="panel", floors=1, walls=1),
     # mine — dirt floor (4 rock-scatter variants), rough rock walls, amber trim
     "mine": dict(floor=(0.34, 0.27, 0.20), floor_hi=(0.39, 0.31, 0.23),
                  seam=(0.19, 0.15, 0.11), wall=(0.45, 0.40, 0.35),
                  wall_top=(0.55, 0.49, 0.43), trim=(0.96, 0.62, 0.24),
-                 detail="rock", floor_style="dirt", floors=4),
+                 detail="rock", floor_style="dirt", floors=4, walls=3),
     # warehouse — concrete deck, corrugated steel walls, safety-yellow trim
     "warehouse": dict(floor=(0.44, 0.45, 0.47), floor_hi=(0.50, 0.51, 0.53),
                       seam=(0.30, 0.31, 0.33), wall=(0.50, 0.54, 0.60),
                       wall_top=(0.62, 0.66, 0.72), trim=(0.95, 0.80, 0.24),
-                      detail="ribs", floor_style="panel", floors=1),
+                      detail="ribs", floor_style="panel", floors=1, walls=1),
     # substation — grating floor, dark conduit walls, electric-teal trim
     "substation": dict(floor=(0.24, 0.28, 0.30), floor_hi=(0.29, 0.34, 0.36),
                        seam=(0.15, 0.19, 0.21), wall=(0.38, 0.43, 0.48),
                        wall_top=(0.48, 0.54, 0.60), trim=(0.30, 0.92, 0.72),
-                       detail="conduit", floor_style="panel", floors=1),
+                       detail="conduit", floor_style="panel", floors=1, walls=1),
 }
 
 
@@ -82,8 +82,10 @@ def _face(edge):
     raise ValueError(edge)
 
 
-def _face_detail(edge, kind, mat, glow):
-    """Add venue greebles on the room-facing wall face of one edge slab."""
+def _face_detail(edge, kind, variant, mat, glow):
+    """Add venue greebles on the room-facing wall face of one edge slab.
+    `variant` seeds the organic (rock) placement so several wall tiles shuffle
+    across a run without visibly repeating."""
     if kind is None:
         return
     run, (fax, fc), ns = _face(edge)
@@ -104,11 +106,22 @@ def _face_detail(edge, kind, mat, glow):
     elif kind == "conduit":  # substation — a pipe run + a glowing node
         place(f"pipe{edge}", 0.0, 0.05, h * 0.58, 0.92, 0.08, 0.1, mat)
         place(f"node{edge}", 0.26, 0.07, h * 0.58, 0.1, 0.06, 0.14, glow)
-    elif kind == "rock":  # mine — a couple of irregular boulders
-        for i, (p, z, s) in enumerate(((-0.28, h * 0.32, 0.26),
-                                       (0.14, h * 0.55, 0.22),
-                                       (0.36, h * 0.28, 0.18))):
-            place(f"rock{edge}{i}", p, 0.02, z, s, 0.1, s, mat)
+    elif kind == "rock":  # mine — rough dug rock, clustered lumps + cap bumps
+        import random
+        rng = random.Random(700 + variant * 37 + (ord(edge[-1]) * 13))
+        for i in range(7):  # lumps over the room-facing face
+            along = rng.uniform(-0.43, 0.43)
+            z = rng.uniform(0.12, 0.96) * h
+            s = rng.uniform(0.1, 0.26)
+            place(f"rk{edge}{i}", along, 0.02 + rng.uniform(0, 0.04), z,
+                  s, 0.12 + rng.uniform(0, 0.06), s * rng.uniform(0.7, 1.2), mat)
+        # a few bumps riding the top cap so the ridge isn't a clean edge
+        (cx, cy, _), _ = _edge_slab(edge)
+        for i in range(4):
+            along = rng.uniform(-0.4, 0.4)
+            s = rng.uniform(0.12, 0.24)
+            loc = (along, cy, h * 0.96) if run == "x" else (cx, along, h * 0.96)
+            B.add_box(f"rkc{edge}{i}", loc, (s, s, 0.14), mat, bevel=0.4)
 
 
 def _shear():
@@ -155,7 +168,18 @@ def _edge_trim(edge):
     raise ValueError(edge)
 
 
-def bake_tile(venue, pal, name, edges):
+def _cap_rock(variant, mat):
+    """Bumpy top for a deep (V) cap — variant-seeded so caps vary too."""
+    import random
+    rng = random.Random(311 + variant * 53)
+    for i in range(9):
+        x, y = rng.uniform(-0.42, 0.42), rng.uniform(-0.42, 0.42)
+        s = rng.uniform(0.12, 0.26)
+        B.add_box(f"vrk{i}", (x, y, WALL_H * 0.95 + rng.uniform(0, 0.08)),
+                  (s, s * rng.uniform(0.7, 1.3), 0.16), mat, bevel=0.4)
+
+
+def bake_tile(venue, pal, name, edges, variant=0):
     B.reset()
     mw = B.toon_material("wall", pal["wall"])
     mwt = B.toon_material("walltop", pal["wall_top"])
@@ -167,6 +191,8 @@ def bake_tile(venue, pal, name, edges):
         # (its faces are covered by neighbouring walls). Fills deep/thick walls.
         B.add_box("w_V", (0, 0, WALL_H / 2), (1.0, 1.0, WALL_H), mw, bevel=0.03)
         B.add_box("cap_V", (0, 0, WALL_H + 0.03), (1.0, 1.0, 0.08), mwt)
+        if pal["detail"] == "rock":
+            _cap_rock(variant, mw)
     else:
         for e in edges:
             (cx, cy, cz), (sx, sy, sz) = _edge_slab(e)
@@ -174,11 +200,11 @@ def bake_tile(venue, pal, name, edges):
             B.add_box(f"cap_{e}", (cx, cy, WALL_H + 0.03), (sx, sy, 0.08), mwt)
             (tx, ty, tz), (tsx, tsy, tsz) = _edge_trim(e)
             B.add_box(f"tr_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
-            _face_detail(e, pal["detail"], md, mg)
+            _face_detail(e, pal["detail"], variant, md, mg)
     _shear()
     B.setup_scene(ortho=FRAME, res=RES, freestyle_thick=1.4)
     _topdown()
-    B.render_to(os.path.join(OUT, f"_it_{venue}_{name}.png"))
+    B.render_to(os.path.join(OUT, f"_it_{venue}_{name}_v{variant}.png"))
 
 
 def bake_floor(venue, pal, variant=0):
@@ -240,7 +266,8 @@ if __name__ == "__main__":
         pal = VENUES[venue]
         for v in range(pal.get("floors", 1)):
             bake_floor(venue, pal, v)
-        for name, edges in TILES.items():
-            bake_tile(venue, pal, name, edges)
+        for wv in range(pal.get("walls", 1)):
+            for name, edges in TILES.items():
+                bake_tile(venue, pal, name, edges, wv)
         print("baked venue", venue)
     print("tiles →", os.path.abspath(OUT))

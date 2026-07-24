@@ -461,9 +461,9 @@ const T_WALL: u32 = 3;
 // past the grid); it's placed by its GROUND ORIGIN (the cell centre at z=0)
 // via a Bevy anchor, then y-sorted like any prop.
 const CAB_CELL_W: u32 = 74;
-const CAB_CELL_H: u32 = 79;
+const CAB_CELL_H: u32 = 80;
 const CAB_ASSET_PXU: f32 = 64.0; // asset pixels per world unit (→ TILE_PX in game)
-const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.10127);
+const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.10625);
 /// Foot-x weight for depth sorting = the bake's SHX/SHY lean ratio. Walls
 /// lean up-and-right, so left-of-same-row renders in front (see DepthShear).
 const CAB_SHEAR: f32 = 0.26 / 0.42;
@@ -471,15 +471,19 @@ const CAB_SHEAR: f32 = 0.26 / 0.42;
 /// before giving way to the black void beyond — a room, not walls forever.
 const CAB_WALL_BAND: i32 = 2;
 
-/// How many interchangeable floor tiles a venue's floor atlas holds. One = a
-/// single repeated tile (clean decks); several = shuffled per cell so an
-/// organic floor (the mine's dirt) never reads as a grid. Must match the
-/// floor strip baked by pack_interior_tiles.py.
-fn cab_floor_variants(biome_name: &str) -> u32 {
-    match biome_name {
-        "mine" => 4,
-        _ => 1,
+/// Read a PNG's `(width, height)` from its IHDR header without decoding the
+/// image. Lets the venue tilesets be self-describing: the number of floor /
+/// wall variants is simply how many cells fit across / down the packed strip
+/// (baked by pack_interior_tiles.py), so adding variety is a re-bake, no code.
+fn png_dims(path: &str) -> Option<(u32, u32)> {
+    let b = crate::embedded_assets::read_bytes(path).ok()?;
+    // 8-byte signature, then the IHDR chunk: 4-byte len, "IHDR", w, h (BE).
+    if b.len() < 24 || &b[12..16] != b"IHDR" {
+        return None;
     }
+    let w = u32::from_be_bytes([b[16], b[17], b[18], b[19]]);
+    let h = u32::from_be_bytes([b[20], b[21], b[22], b[23]]);
+    Some((w, h))
 }
 
 /// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell
@@ -1217,23 +1221,25 @@ pub(crate) fn setup_interior(
             let b = CAB_WALL_BAND;
             (-b..=b).any(|dy| (-b..=b).any(|dx| !wall(tx + dx, ty + dy)))
         };
-        let walls_atlas: Handle<Image> = asset_server.load(format!(
-            "{WORLDS_DIR}/interior_cabinet_walls{cab_suffix}.png"
-        ));
-        let floor_image: Handle<Image> = asset_server.load(format!(
-            "{WORLDS_DIR}/interior_cabinet_floor{cab_suffix}.png"
-        ));
+        let walls_rel = format!("{WORLDS_DIR}/interior_cabinet_walls{cab_suffix}.png");
+        let floor_rel = format!("{WORLDS_DIR}/interior_cabinet_floor{cab_suffix}.png");
+        let walls_atlas: Handle<Image> = asset_server.load(walls_rel.clone());
+        let floor_image: Handle<Image> = asset_server.load(floor_rel.clone());
+        // Variant counts come from the packed strips themselves (self-describing):
+        // the wall atlas is 9 tile-types across × N variants down; the floor
+        // atlas is M variants across. Each cell picks a variant by a
+        // deterministic hash, so organic surfaces shuffle without a pattern.
+        let wall_variants =
+            png_dims(&format!("assets/{walls_rel}")).map_or(1, |(_, h)| (h / CAB_CELL_H).max(1));
+        let floor_variants = png_dims(&format!("assets/{floor_rel}"))
+            .map_or(1, |(w, _)| (w / CAB_ASSET_PXU as u32).max(1));
         let walls_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::new(CAB_CELL_W, CAB_CELL_H),
             9,
-            1,
+            wall_variants,
             None,
             None,
         ));
-        // Floor atlas: N interchangeable variants in one row (N == 1 for a
-        // single-tile floor). Each cell is picked per grid position by a
-        // deterministic hash, so an organic floor shuffles without a pattern.
-        let floor_variants = cab_floor_variants(biome_name);
         let floor_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::splat(CAB_ASSET_PXU as u32),
             floor_variants,
@@ -1275,11 +1281,14 @@ pub(crate) fn setup_interior(
                 // Deep caps beyond the wall band are left as black void.
                 let hidden = idx == 8 && !near_floor(tx as i32, ty as i32);
                 if is_wall && !hidden {
+                    // Row = tile type (0..9), variant picks the row band.
+                    let wv = (rng_ish(tx.wrapping_add(101), ty.wrapping_add(53)) % wall_variants)
+                        as usize;
                     let mut w = Sprite::from_atlas_image(
                         walls_atlas.clone(),
                         TextureAtlas {
                             layout: walls_layout.clone(),
-                            index: idx,
+                            index: wv * 9 + idx,
                         },
                     );
                     w.custom_size = Some(wall_size);

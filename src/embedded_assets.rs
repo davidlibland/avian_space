@@ -38,6 +38,26 @@ pub fn read_to_string(path: &str) -> std::io::Result<String> {
     std::fs::read_to_string(path)
 }
 
+/// Read a binary asset (e.g. a PNG). `path` is relative to the project root.
+/// Transparently sources from the embedded archive when `bundle` is enabled.
+pub fn read_bytes(path: &str) -> std::io::Result<Vec<u8>> {
+    #[cfg(feature = "bundle")]
+    {
+        if let Some(rel) = path.strip_prefix("assets/") {
+            return EMBEDDED_ASSETS
+                .get_file(rel)
+                .map(|f| f.contents().to_vec())
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("embedded asset not found: {path}"),
+                    )
+                });
+        }
+    }
+    std::fs::read(path)
+}
+
 /// Recursively read every `*.yaml`/`*.yml` file under `dir`, returning a
 /// nested `serde_yaml::Mapping` keyed by file/directory *stems*. Mirrors the
 /// behavior of the disk walker in [`crate::item_universe::dir_to_yaml`] but
