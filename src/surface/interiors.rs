@@ -1141,15 +1141,21 @@ pub(crate) fn setup_interior(
             (hi_y + 4).min(map_h),
         )
     };
-    // The station "interior" biome renders through the cabinet-projection
-    // tileset; the other venues (mazes) keep the tiered path below until
-    // their own cabinet tilesets land (phase 2).
-    let is_proto = biome_name == "interior";
+    // Every venue now renders through the cabinet-projection tileset; each
+    // maze gets its own material set (mine rock, warehouse corrugation,
+    // substation conduit), shops the clean station panels.
+    let cab_suffix = match biome_name {
+        "mine" => "_mine",
+        "warehouse" => "_warehouse",
+        "substation" => "_substation",
+        _ => "",
+    };
+    let is_proto = matches!(biome_name, "interior" | "mine" | "warehouse" | "substation");
     // Cabinet interiors lean walls up-and-right, so depth sorting folds
     // foot-x in (see DepthShear): among things sharing a foot-y, the one
-    // further LEFT is nearer the oblique camera and renders in front. Mazes
-    // stay a plain y-sort. `cab_shear` bakes it into static geometry here;
-    // the resource carries the same factor to the per-frame character sorts.
+    // further LEFT is nearer the oblique camera and renders in front.
+    // `cab_shear` bakes it into static geometry here; the resource carries the
+    // same factor to the per-frame character sorts.
     let cab_shear = if is_proto { CAB_SHEAR } else { 0.0 };
     commands.insert_resource(crate::surface_objects::DepthShear(cab_shear));
     let depth = |x: f32, y: f32| crate::surface_objects::depth_z(y + cab_shear * x);
@@ -1200,10 +1206,12 @@ pub(crate) fn setup_interior(
             let b = CAB_WALL_BAND;
             (-b..=b).any(|dy| (-b..=b).any(|dx| !wall(tx + dx, ty + dy)))
         };
-        let walls_atlas: Handle<Image> =
-            asset_server.load(format!("{WORLDS_DIR}/interior_cabinet_walls.png"));
-        let floor_image: Handle<Image> =
-            asset_server.load(format!("{WORLDS_DIR}/interior_cabinet_floor.png"));
+        let walls_atlas: Handle<Image> = asset_server.load(format!(
+            "{WORLDS_DIR}/interior_cabinet_walls{cab_suffix}.png"
+        ));
+        let floor_image: Handle<Image> = asset_server.load(format!(
+            "{WORLDS_DIR}/interior_cabinet_floor{cab_suffix}.png"
+        ));
         let walls_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::new(CAB_CELL_W, CAB_CELL_H),
             9,

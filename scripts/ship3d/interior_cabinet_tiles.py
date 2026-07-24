@@ -37,12 +37,71 @@ SHX, SHY = 0.26, 0.42
 WALL_H = 1.1
 WALL_T = 0.48       # wall thickness (fraction of a cell) — chunky, reads as solid
 
-FLOOR = (0.32, 0.36, 0.42)
-FLOOR_HI = (0.39, 0.43, 0.50)
-FLOOR_SEAM = (0.24, 0.27, 0.32)   # recessed panel seam (darker, not a glow)
-WALL = (0.52, 0.55, 0.61)
-WALL_TOP = (0.66, 0.69, 0.75)
-TRIM = (0.25, 0.72, 0.86)
+# Per-venue palettes + a light material detail on the room-facing wall face,
+# so each maze reads as its own place: station panels, mine rock, warehouse
+# corrugation, substation conduit. Geometry is identical across venues (so
+# the autotiling still lines up); only colours + the face greeble change.
+VENUES = {
+    # station shops — clean cool panels, cyan baseboard glow
+    "interior": dict(floor=(0.32, 0.36, 0.42), floor_hi=(0.39, 0.43, 0.50),
+                     seam=(0.24, 0.27, 0.32), wall=(0.52, 0.55, 0.61),
+                     wall_top=(0.66, 0.69, 0.75), trim=(0.25, 0.72, 0.86), detail=None),
+    # mine — dirt floor, rough rock walls, warm lantern-amber trim
+    "mine": dict(floor=(0.30, 0.25, 0.20), floor_hi=(0.35, 0.29, 0.23),
+                 seam=(0.19, 0.15, 0.11), wall=(0.45, 0.40, 0.35),
+                 wall_top=(0.55, 0.49, 0.43), trim=(0.96, 0.62, 0.24), detail="rock"),
+    # warehouse — concrete deck, corrugated steel walls, safety-yellow trim
+    "warehouse": dict(floor=(0.44, 0.45, 0.47), floor_hi=(0.50, 0.51, 0.53),
+                      seam=(0.30, 0.31, 0.33), wall=(0.50, 0.54, 0.60),
+                      wall_top=(0.62, 0.66, 0.72), trim=(0.95, 0.80, 0.24), detail="ribs"),
+    # substation — grating floor, dark conduit walls, electric-teal trim
+    "substation": dict(floor=(0.24, 0.28, 0.30), floor_hi=(0.29, 0.34, 0.36),
+                       seam=(0.15, 0.19, 0.21), wall=(0.38, 0.43, 0.48),
+                       wall_top=(0.48, 0.54, 0.60), trim=(0.30, 0.92, 0.72), detail="conduit"),
+}
+
+
+# Room-facing face of an edge: (run_axis, (fixed_axis, coord), normal_sign).
+def _face(edge):
+    inner = 0.5 - WALL_T
+    if edge == "N":
+        return "x", ("y", inner), -1.0
+    if edge == "S":
+        return "x", ("y", -inner), 1.0
+    if edge == "E":
+        return "y", ("x", inner), -1.0
+    if edge == "W":
+        return "y", ("x", -inner), 1.0
+    raise ValueError(edge)
+
+
+def _face_detail(edge, kind, mat, glow):
+    """Add venue greebles on the room-facing wall face of one edge slab."""
+    if kind is None:
+        return
+    run, (fax, fc), ns = _face(edge)
+    h = WALL_H
+
+    def place(name, along, out, z, size_run, size_out, size_z, m):
+        # `along` runs down the face; `out` proud of the face by that much.
+        cf = fc + ns * out
+        if run == "x":
+            loc, size = (along, cf, z), (size_run, size_out, size_z)
+        else:
+            loc, size = (cf, along, z), (size_out, size_run, size_z)
+        B.add_box(name, loc, size, m, bevel=0.01)
+
+    if kind == "ribs":  # warehouse corrugation — vertical fins
+        for i, p in enumerate((-0.4, -0.2, 0.0, 0.2, 0.4)):
+            place(f"rib{edge}{i}", p, 0.03, h * 0.5, 0.05, 0.06, h * 0.9, mat)
+    elif kind == "conduit":  # substation — a pipe run + a glowing node
+        place(f"pipe{edge}", 0.0, 0.05, h * 0.58, 0.92, 0.08, 0.1, mat)
+        place(f"node{edge}", 0.26, 0.07, h * 0.58, 0.1, 0.06, 0.14, glow)
+    elif kind == "rock":  # mine — a couple of irregular boulders
+        for i, (p, z, s) in enumerate(((-0.28, h * 0.32, 0.26),
+                                       (0.14, h * 0.55, 0.22),
+                                       (0.36, h * 0.28, 0.18))):
+            place(f"rock{edge}{i}", p, 0.02, z, s, 0.1, s, mat)
 
 
 def _shear():
@@ -89,11 +148,13 @@ def _edge_trim(edge):
     raise ValueError(edge)
 
 
-def bake_tile(name, edges):
+def bake_tile(venue, pal, name, edges):
     B.reset()
-    mw = B.toon_material("wall", WALL)
-    mwt = B.toon_material("walltop", WALL_TOP)
-    mt = B.glow_material("trim", TRIM, strength=2.6)
+    mw = B.toon_material("wall", pal["wall"])
+    mwt = B.toon_material("walltop", pal["wall_top"])
+    mt = B.glow_material("trim", pal["trim"], strength=2.6)
+    md = B.toon_material("detail", pal["wall"])          # greebles match the wall
+    mg = B.glow_material("detailglow", pal["trim"], strength=3.2)
     if edges == ("V",):
         # solid interior wall cell: a full-cell block seen only as its cap
         # (its faces are covered by neighbouring walls). Fills deep/thick walls.
@@ -106,17 +167,18 @@ def bake_tile(name, edges):
             B.add_box(f"cap_{e}", (cx, cy, WALL_H + 0.03), (sx, sy, 0.08), mwt)
             (tx, ty, tz), (tsx, tsy, tsz) = _edge_trim(e)
             B.add_box(f"tr_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
+            _face_detail(e, pal["detail"], md, mg)
     _shear()
     B.setup_scene(ortho=FRAME, res=RES, freestyle_thick=1.4)
     _topdown()
-    B.render_to(os.path.join(OUT, f"_it_{name}.png"))
+    B.render_to(os.path.join(OUT, f"_it_{venue}_{name}.png"))
 
 
-def bake_floor():
+def bake_floor(venue, pal):
     B.reset()
-    mf = B.toon_material("floor", FLOOR)
-    mfh = B.toon_material("floorhi", FLOOR_HI)
-    ms = B.toon_material("seam", FLOOR_SEAM)
+    mf = B.toon_material("floor", pal["floor"])
+    mfh = B.toon_material("floorhi", pal["floor_hi"])
+    ms = B.toon_material("seam", pal["seam"])
     B.add_box("floor", (0, 0, -0.05), (1.0, 1.0, 0.1), mf)
     B.add_box("panel", (0, 0, 0.005), (0.9, 0.9, 0.02), mfh, bevel=0.06)
     # subtle recessed panel seams (a calm dark inset, not a glowing grid)
@@ -125,7 +187,7 @@ def bake_floor():
     B.setup_scene(ortho=1.0, res=PXU, freestyle_thick=1.2)
     _topdown()
     bpy.context.scene.camera.data.ortho_scale = 1.0
-    B.render_to(os.path.join(OUT, "_it_floor.png"))
+    B.render_to(os.path.join(OUT, f"_it_{venue}_floor.png"))
 
 
 TILES = {
@@ -135,9 +197,13 @@ TILES = {
 }
 
 if __name__ == "__main__":
+    import sys
     os.makedirs(OUT, exist_ok=True)
-    bake_floor()
-    for name, edges in TILES.items():
-        bake_tile(name, edges)
-        print("baked", name)
+    only = sys.argv[1:] or list(VENUES)
+    for venue in only:
+        pal = VENUES[venue]
+        bake_floor(venue, pal)
+        for name, edges in TILES.items():
+            bake_tile(venue, pal, name, edges)
+        print("baked venue", venue)
     print("tiles →", os.path.abspath(OUT))

@@ -30,6 +30,11 @@ TILES = os.path.join(HERE, "out", "tiles")
 WORLDS = os.path.join(HERE, "..", "..", "assets", "sprites", "worlds")
 
 ORDER = ["N", "S", "E", "W", "CNW", "CNE", "CSW", "CSE", "V"]
+# The station shop keeps the bare asset names the engine already loads; the
+# maze venues get a suffix. All share ONE bounding box (below), so the
+# engine's cell size + anchor constants are identical for every venue.
+VENUES = {"interior": "", "mine": "_mine", "warehouse": "_warehouse",
+          "substation": "_substation"}
 SRC_PXU = 256          # the bake renders 256 px per world unit
 ASSET_PXU = 64         # store at 64 px/unit (crisp 4x downscale; game is 32)
 SCALE = ASSET_PXU / SRC_PXU
@@ -44,36 +49,37 @@ def content_box(im, thr=12):
 
 def main():
     os.makedirs(WORLDS, exist_ok=True)
-    imgs = {n: Image.open(os.path.join(TILES, f"_it_{n}.png")).convert("RGBA")
-            for n in ORDER}
+    # Load every wall tile of every venue.
+    imgs = {(v, n): Image.open(os.path.join(TILES, f"_it_{v}_{n}.png")).convert("RGBA")
+            for v in VENUES for n in ORDER}
 
-    # union content box across every wall tile → one common canvas
-    boxes = [content_box(imgs[n]) for n in ORDER]
+    # ONE common box across ALL venues → shared canvas + shared ground origin,
+    # so the venue-specific greebles never shift the anchor.
+    boxes = [content_box(im) for im in imgs.values()]
     l = min(b[0] for b in boxes)
     t = min(b[1] for b in boxes)
     r = max(b[2] for b in boxes)
     b = max(b[3] for b in boxes)
     cw, ch = r - l, b - t
 
-    # ground origin relative to the common box, then to asset px
     ox = (ORIGIN - l) * SCALE
     oy = (ORIGIN - t) * SCALE
     aw = round(cw * SCALE)
     ah = round(ch * SCALE)
 
-    strip = Image.new("RGBA", (aw * len(ORDER), ah), (0, 0, 0, 0))
-    for i, n in enumerate(ORDER):
-        cell = imgs[n].crop((l, t, r, b)).resize((aw, ah), Image.LANCZOS)
-        strip.paste(cell, (i * aw, 0))
-    strip.save(os.path.join(WORLDS, "interior_cabinet_walls.png"))
+    for v, suffix in VENUES.items():
+        strip = Image.new("RGBA", (aw * len(ORDER), ah), (0, 0, 0, 0))
+        for i, n in enumerate(ORDER):
+            cell = imgs[(v, n)].crop((l, t, r, b)).resize((aw, ah), Image.LANCZOS)
+            strip.paste(cell, (i * aw, 0))
+        strip.save(os.path.join(WORLDS, f"interior_cabinet_walls{suffix}.png"))
+        floor = Image.open(os.path.join(TILES, f"_it_{v}_floor.png")).convert("RGBA")
+        floor.resize((ASSET_PXU, ASSET_PXU), Image.LANCZOS).save(
+            os.path.join(WORLDS, f"interior_cabinet_floor{suffix}.png"))
 
-    floor = Image.open(os.path.join(TILES, "_it_floor.png")).convert("RGBA")
-    floor = floor.resize((ASSET_PXU, ASSET_PXU), Image.LANCZOS)
-    floor.save(os.path.join(WORLDS, "interior_cabinet_floor.png"))
-
-    # Bevy Anchor is a fraction from centre, +Y up: origin at (ox,oy) top-left px
     ax = ox / aw - 0.5
     ay = 0.5 - oy / ah
+    print(f"venues         = {', '.join(VENUES)}")
     print(f"cell_px        = {aw} x {ah}")
     print(f"ground_origin  = ({ox:.1f}, {oy:.1f}) px  (from top-left of cell)")
     print(f"bevy_anchor    = ({ax:.5f}, {ay:.5f})")
