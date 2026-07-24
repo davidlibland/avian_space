@@ -146,10 +146,14 @@ pub fn spawn_civilians(
 }
 
 /// Update NPC z for depth sorting.
-pub fn depth_sort_npcs(mut npcs: Query<&mut Transform, (With<Npc>, Without<Walker>)>) {
+pub fn depth_sort_npcs(
+    shear: Option<Res<crate::surface_objects::DepthShear>>,
+    mut npcs: Query<&mut Transform, (With<Npc>, Without<Walker>)>,
+) {
+    let k = shear.map_or(0.0, |s| s.0);
     for mut tf in &mut npcs {
-        tf.translation.z =
-            depth_z(tf.translation.y - crate::surface_objects::CHARACTER_FOOT_OFFSET);
+        let foot_y = tf.translation.y - crate::surface_objects::CHARACTER_FOOT_OFFSET;
+        tf.translation.z = crate::surface_objects::depth_z_xy(tf.translation.x, foot_y, k);
     }
 }
 

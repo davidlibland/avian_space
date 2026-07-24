@@ -464,6 +464,9 @@ const CAB_CELL_W: u32 = 74;
 const CAB_CELL_H: u32 = 79;
 const CAB_ASSET_PXU: f32 = 64.0; // asset pixels per world unit (→ TILE_PX in game)
 const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.10127);
+/// Foot-x weight for depth sorting = the bake's SHX/SHY lean ratio. Walls
+/// lean up-and-right, so left-of-same-row renders in front (see DepthShear).
+const CAB_SHEAR: f32 = 0.26 / 0.42;
 
 /// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell
 /// from its neighbours' floor-adjacency. Mirrors `kind()` in the Python
@@ -1135,10 +1138,18 @@ pub(crate) fn setup_interior(
             (hi_y + 4).min(map_h),
         )
     };
-    // PROTOTYPE (station "interior" biome only): LimeZu-style binary
-    // floor/wall with real wall height. The other venues keep the tiered
-    // path below until this is proven and generalised.
+    // The station "interior" biome renders through the cabinet-projection
+    // tileset; the other venues (mazes) keep the tiered path below until
+    // their own cabinet tilesets land (phase 2).
     let is_proto = biome_name == "interior";
+    // Cabinet interiors lean walls up-and-right, so depth sorting folds
+    // foot-x in (see DepthShear): among things sharing a foot-y, the one
+    // further LEFT is nearer the oblique camera and renders in front. Mazes
+    // stay a plain y-sort. `cab_shear` bakes it into static geometry here;
+    // the resource carries the same factor to the per-frame character sorts.
+    let cab_shear = if is_proto { CAB_SHEAR } else { 0.0 };
+    commands.insert_resource(crate::surface_objects::DepthShear(cab_shear));
+    let depth = |x: f32, y: f32| crate::surface_objects::depth_z(y + cab_shear * x);
     let collidable = |tx: u32, ty: u32| -> bool {
         let tier = map2d[ty as usize][tx as usize];
         let idx = (ty * map_w + tx) as usize;
@@ -1231,7 +1242,7 @@ pub(crate) fn setup_interior(
                         InteriorScoped,
                         w,
                         bevy::sprite::Anchor(CAB_ANCHOR),
-                        Transform::from_xyz(pos.x, pos.y, crate::surface_objects::depth_z(foot_y)),
+                        Transform::from_xyz(pos.x, pos.y, depth(pos.x, foot_y)),
                     ));
                 }
                 if collidable(tx, ty) && in_band(tx, ty) {
@@ -1437,7 +1448,7 @@ pub(crate) fn setup_interior(
             Transform::from_xyz(
                 pos.x,
                 pos.y + 6.0,
-                crate::surface_objects::depth_z(pos.y - tile_px * 0.5) + 0.5,
+                depth(pos.x, pos.y - tile_px * 0.5) + 0.5,
             )
             .with_scale(Vec3::splat(size)),
         ));
@@ -1459,7 +1470,7 @@ pub(crate) fn setup_interior(
                 Transform::from_xyz(
                     pos.x,
                     pos.y - tile_px * 0.62,
-                    crate::surface_objects::depth_z(pos.y - tile_px * 0.5) + 0.4,
+                    depth(pos.x, pos.y - tile_px * 0.5) + 0.4,
                 )
                 .with_scale(Vec3::splat(0.45)),
             ));
@@ -1523,7 +1534,7 @@ pub(crate) fn setup_interior(
                     asset_server.load(format!("sprites/factions/banner_{stem}.png")),
                 ),
                 bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
-                Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
+                Transform::from_xyz(cx, front_y, depth(cx, front_y)),
             ));
             continue;
         }
@@ -1538,7 +1549,7 @@ pub(crate) fn setup_interior(
                 InteriorScoped,
                 Sprite::from_image(frames[0].clone()),
                 bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
-                Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
+                Transform::from_xyz(cx, front_y, depth(cx, front_y)),
                 JailGate {
                     frames,
                     pos: Vec2::new(cx, front_y),
@@ -1559,7 +1570,7 @@ pub(crate) fn setup_interior(
                 asset_server.load(format!("sprites/worlds/interior_props/{sprite_name}.png")),
             ),
             bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
-            Transform::from_xyz(cx, front_y, crate::surface_objects::depth_z(front_y)),
+            Transform::from_xyz(cx, front_y, depth(cx, front_y)),
         ));
         // The exit door ANIMATES: same roll-up overlay as building doors,
         // pixel-aligned frames baked with the static jamb sprite.
@@ -1576,11 +1587,7 @@ pub(crate) fn setup_interior(
                 InteriorScoped,
                 Sprite::from_image(frames[0].clone()),
                 bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
-                Transform::from_xyz(
-                    cx,
-                    front_y,
-                    crate::surface_objects::depth_z(front_y) + 0.0002,
-                ),
+                Transform::from_xyz(cx, front_y, depth(cx, front_y) + 0.0002),
                 super::BuildingDoor {
                     frames,
                     door_pos: Vec2::new(cx, front_y),

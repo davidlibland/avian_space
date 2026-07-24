@@ -27,6 +27,8 @@ pub(crate) fn setup_surface(
 ) {
     comms.send("");
     commands.insert_resource(ClearColor(Color::BLACK));
+    // The planet surface is a plain top-down y-sort (no cabinet lean).
+    commands.insert_resource(crate::surface_objects::DepthShear(0.0));
 
     if let Ok(ship_entity) = player_query.single() {
         commands.entity(ship_entity).insert(Visibility::Hidden);

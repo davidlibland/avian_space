@@ -32,6 +32,21 @@ pub fn depth_z(foot_y: f32) -> f32 {
     DEPTH_Z_BASE - foot_y / DEPTH_Z_SCALE
 }
 
+/// Extra foot-x weight folded into depth sorting inside cabinet interiors.
+/// The interior walls lean up-AND-right, so among things sharing a foot-y
+/// the one further LEFT is nearer the (up-left) oblique camera and must
+/// render in front. `0.0` on the flat planet surface (plain y-sort);
+/// `SHX/SHY` of the cabinet bake inside a shop interior. Set by
+/// `setup_interior` / surface setup, read by every depth-sorting system.
+#[derive(Resource, Clone, Copy, Default)]
+pub struct DepthShear(pub f32);
+
+/// `depth_z` with the cabinet x-lean folded in (see [`DepthShear`]).
+#[inline]
+pub fn depth_z_xy(foot_x: f32, foot_y: f32, shear: f32) -> f32 {
+    depth_z(foot_y + shear * foot_x)
+}
+
 // ── RON types ────────────────────────────────────────────────────────────
 
 #[derive(Deserialize, Debug)]
@@ -333,12 +348,16 @@ pub fn character_foot_collider(radius: f32) -> avian2d::prelude::Collider {
 }
 
 /// Update the walker's z for depth sorting (every frame).
-pub fn depth_sort_walker(mut walkers: Query<(&mut Transform, Option<&FootOffset>), With<Walker>>) {
+pub fn depth_sort_walker(
+    shear: Option<Res<DepthShear>>,
+    mut walkers: Query<(&mut Transform, Option<&FootOffset>), With<Walker>>,
+) {
     let Ok((mut tf, foot)) = walkers.single_mut() else {
         return;
     };
+    let k = shear.map_or(0.0, |s| s.0);
     let foot_y = tf.translation.y - foot.map_or(8.0, |f| f.0);
-    tf.translation.z = depth_z(foot_y);
+    tf.translation.z = depth_z_xy(tf.translation.x, foot_y, k);
 }
 
 /// Shy objects reset to frame 0 (hidden) when the walker is nearby.

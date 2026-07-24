@@ -503,12 +503,20 @@ pub fn run_fauna(
 
 /// Depth-sort fauna each frame: roamers y-sort with the ground (feet below
 /// sprite centre); fliers sort at a fixed high z, over ground and player.
-pub fn depth_sort_fauna(mut q: Query<(&mut Transform, &Fauna)>) {
+pub fn depth_sort_fauna(
+    shear: Option<Res<crate::surface_objects::DepthShear>>,
+    mut q: Query<(&mut Transform, &Fauna)>,
+) {
+    let k = shear.map_or(0.0, |s| s.0);
     for (mut tf, fauna) in &mut q {
         tf.translation.z = if fauna.flier {
             FLY_Z
         } else {
-            depth_z(tf.translation.y - fauna.foot_off)
+            crate::surface_objects::depth_z_xy(
+                tf.translation.x,
+                tf.translation.y - fauna.foot_off,
+                k,
+            )
         };
     }
 }
