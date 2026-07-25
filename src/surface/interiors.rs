@@ -500,6 +500,8 @@ const CAB_TILE_KINDS: u32 = 13;
 /// drawn at the plain tile centre floats off its corner. Derived from the
 /// shear applied over the case height (~0.9 units).
 const CASE_TOP_OFFSET: Vec2 = Vec2::new(0.26 * 0.9 * 32.0, 0.42 * 0.9 * 32.0);
+/// Same idea for the elongated ship pad, whose deck sits lower (~0.62 units).
+const SHIP_PAD_TOP_OFFSET: Vec2 = Vec2::new(0.26 * 0.62 * 32.0, 0.42 * 0.62 * 32.0);
 
 /// Read a PNG's `(width, height)` from its IHDR header without decoding the
 /// image. Lets the venue tilesets be self-describing: the number of floor /
@@ -1054,7 +1056,9 @@ pub(crate) fn build_plan(
                 }
                 bx += 1;
             }
-            perimeter(&mut props, &["parts_rack", "crate_stack", "barrel"], 4, 3);
+            // No perimeter pass here: the hull COLUMNS already run down both
+            // side walls, so wall dressing lands on the same tiles and parks a
+            // shelf under a pedestal. Unused slots (above) do the dressing.
         }
         BuildingKind::Outfitter => {
             props.push(("shelf_rack", (counter.0 - 1, counter.1)));
@@ -1739,14 +1743,21 @@ pub(crate) fn setup_interior(
             Sprite::from_color(pad_color, Vec2::splat(tile_px * 0.62)),
             Transform::from_xyz(pos.x, pos.y, -9.5),
         ));
+        // Each pedestal presents its top at a different height, and the cabinet
+        // shear turns that height into a screen offset — so the holo has to use
+        // ITS pad's figure or it drifts off the frame.
+        let top = match binding {
+            DisplayBinding::Ship(_) => SHIP_PAD_TOP_OFFSET,
+            DisplayBinding::OutfitterItem(_) => CASE_TOP_OFFSET,
+        };
         commands.spawn((
             DespawnOnExit(PlayState::Inside),
             InteriorScoped,
             binding.clone(),
             sprite,
             Transform::from_xyz(
-                pos.x + CASE_TOP_OFFSET.x,
-                pos.y + CASE_TOP_OFFSET.y,
+                pos.x + top.x,
+                pos.y + top.y,
                 depth(pos.x, pos.y - tile_px * 0.5) + 0.5,
             )
             .with_scale(Vec3::splat(size)),
@@ -1767,7 +1778,7 @@ pub(crate) fn setup_interior(
                 TextColor(Color::srgba(0.4, 0.9, 1.0, 0.85)),
                 bevy::text::TextLayout::new_with_justify(bevy::text::Justify::Center),
                 Transform::from_xyz(
-                    pos.x + CASE_TOP_OFFSET.x,
+                    pos.x + top.x,
                     pos.y - tile_px * 0.62,
                     depth(pos.x, pos.y - tile_px * 0.5) + 0.4,
                 )
@@ -1973,7 +1984,7 @@ fn display_sprite(
             let mut s =
                 Sprite::from_image(asset_server.load(format!("sprites/wireframes/{ship}.png")));
             s.color = Color::srgba(0.4, 0.9, 1.0, 0.9);
-            s.custom_size = Some(Vec2::splat(TILE_PX * 2.6));
+            s.custom_size = Some(Vec2::splat(TILE_PX * 2.15));
             (s, 1.0)
         }
         DisplayBinding::OutfitterItem(item) => {

@@ -863,11 +863,14 @@ pub(crate) fn setup_surface(
                                 custom_size: Some(Vec2::splat(tile_px * 0.42)),
                                 ..default()
                             },
-                            // Sits on the board: the post art is ~1.65 tiles
-                            // tall with the board centred near its top.
+                            // The post is baked under the cabinet shear, so
+                            // its board's HEIGHT maps to screen at SHY (0.42),
+                            // not 1:1 — and shifts right by SHX (0.26). Using
+                            // the raw height put the crest ~24px too high and
+                            // a whole board-width to the left.
                             Transform::from_xyz(
-                                sx,
-                                foot_y + tile_px * 1.32,
+                                sx + tile_px * (0.26 * 1.32),
+                                foot_y + tile_px * (0.42 * 1.32),
                                 crate::surface_objects::depth_z(foot_y) + 0.0005,
                             ),
                         ));
