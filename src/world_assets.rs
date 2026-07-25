@@ -374,15 +374,10 @@ pub fn spawn_collision_entities(
             let world_pos =
                 map_origin + Vec2::new(tx as f32 * tile_size + half, ty as f32 * tile_size + half);
             match code {
-                CollisionType::Solid => {
-                    commands.spawn((
-                        DespawnOnExit(crate::PlayState::Exploring),
-                        RigidBody::Static,
-                        Collider::rectangle(tile_size, tile_size),
-                        layers,
-                        Transform::from_translation(world_pos.extend(0.0)),
-                    ));
-                }
+                // Solid tiles are merged into row runs below, not spawned here:
+                // one static body per tile puts ~1200 of them on a surface and
+                // the broadphase pays for every one, every physics step.
+                CollisionType::Solid => {}
                 CollisionType::Slow | CollisionType::Damaging | CollisionType::Trigger => {
                     commands.spawn((
                         DespawnOnExit(crate::PlayState::Exploring),
@@ -398,6 +393,39 @@ pub fn spawn_collision_entities(
                 }
                 CollisionType::Walkable => {}
             }
+        }
+    }
+
+    // Merge consecutive solid tiles in each row into one wide box. Exactly
+    // equivalent for axis-aligned tile terrain, and typically an order of
+    // magnitude fewer static bodies.
+    for ty in 0..col_asset.height {
+        let mut tx = 0;
+        while tx < col_asset.width {
+            let solid = |x: u32| {
+                matches!(
+                    CollisionType::from(col_asset.data[(ty * col_asset.width + x) as usize]),
+                    CollisionType::Solid
+                )
+            };
+            if !solid(tx) {
+                tx += 1;
+                continue;
+            }
+            let start = tx;
+            while tx < col_asset.width && solid(tx) {
+                tx += 1;
+            }
+            let run = (tx - start) as f32;
+            let cx = map_origin.x + start as f32 * tile_size + run * half;
+            let cy = map_origin.y + ty as f32 * tile_size + half;
+            commands.spawn((
+                DespawnOnExit(crate::PlayState::Exploring),
+                RigidBody::Static,
+                Collider::rectangle(run * tile_size, tile_size),
+                layers,
+                Transform::from_translation(Vec3::new(cx, cy, 0.0)),
+            ));
         }
     }
 }

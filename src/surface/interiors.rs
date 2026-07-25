@@ -1463,19 +1463,6 @@ pub(crate) fn setup_interior(
                         Transform::from_xyz(pos.x, pos.y, depth(pos.x, foot_y)),
                     ));
                 }
-                if collidable(tx, ty) && in_band(tx, ty) {
-                    commands.spawn((
-                        DespawnOnExit(PlayState::Inside),
-                        InteriorScoped,
-                        RigidBody::Static,
-                        Collider::rectangle(tile_px, tile_px),
-                        CollisionLayers::new(
-                            GameLayer::Surface,
-                            [GameLayer::Surface, GameLayer::Character],
-                        ),
-                        Transform::from_xyz(pos.x, pos.y, 0.0),
-                    ));
-                }
             }
         }
     } else {
@@ -1504,20 +1491,41 @@ pub(crate) fn setup_interior(
                     tile_sprite,
                     Transform::from_xyz(pos.x, pos.y, -10.0),
                 ));
-                if collidable(tx, ty) && in_band(tx, ty) {
-                    let pos = super::tile_to_world(tx, ty, map_w, map_h, tile_px);
-                    commands.spawn((
-                        DespawnOnExit(PlayState::Inside),
-                        InteriorScoped,
-                        RigidBody::Static,
-                        Collider::rectangle(tile_px, tile_px),
-                        CollisionLayers::new(
-                            GameLayer::Surface,
-                            [GameLayer::Surface, GameLayer::Character],
-                        ),
-                        Transform::from_xyz(pos.x, pos.y, 0.0),
-                    ));
+            }
+        }
+    }
+
+    // ── Colliders: merged into ROW RUNS, not one box per tile.
+    // A maze fills most of the map with solid rock — measured at ~3000 tiles —
+    // and a static body each means the broadphase pays for all of them every
+    // physics step. Consecutive solid tiles in a row collapse into one wide
+    // box, exactly equivalent for axis-aligned tile walls.
+    {
+        for ty in 0..map_h {
+            let mut tx = 0;
+            while tx < map_w {
+                if !(collidable(tx, ty) && in_band(tx, ty)) {
+                    tx += 1;
+                    continue;
                 }
+                let start = tx;
+                while tx < map_w && collidable(tx, ty) && in_band(tx, ty) {
+                    tx += 1;
+                }
+                let run = tx - start;
+                let a = super::tile_to_world(start, ty, map_w, map_h, tile_px);
+                let b = super::tile_to_world(tx - 1, ty, map_w, map_h, tile_px);
+                commands.spawn((
+                    DespawnOnExit(PlayState::Inside),
+                    InteriorScoped,
+                    RigidBody::Static,
+                    Collider::rectangle(run as f32 * tile_px, tile_px),
+                    CollisionLayers::new(
+                        GameLayer::Surface,
+                        [GameLayer::Surface, GameLayer::Character],
+                    ),
+                    Transform::from_xyz((a.x + b.x) * 0.5, a.y, 0.0),
+                ));
             }
         }
     }
@@ -3449,5 +3457,73 @@ mod tests {
             Some(BuildingKind::Warehouse),
             "procyon prime trades"
         );
+    }
+}
+
+#[cfg(test)]
+mod perf_counts {
+    use super::*;
+
+    /// Interiors spawn ONE SPRITE PER TILE, unlike the surface which batches
+    /// through bevy_ecs_tilemap. This prints what each venue actually costs.
+    #[test]
+    #[ignore = "informational — run with --ignored to see interior entity counts"]
+    fn interior_entity_counts() {
+        let mut iu: ItemUniverse =
+            crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
+        iu.finalize();
+        let un = crate::missions::PlayerUnlocks::default();
+        for (kind, planet) in [
+            (BuildingKind::Bar, "earth"),
+            (BuildingKind::Outfitter, "earth"),
+            (BuildingKind::Market, "earth"),
+            (BuildingKind::Mine, "mars"),
+            (BuildingKind::Warehouse, "mercury"),
+            (BuildingKind::Substation, "earth"),
+        ] {
+            let plan = build_plan(kind, &iu, planet, 0, &un);
+            let (w, h) = (WORLD_WIDTH, WORLD_HEIGHT);
+            let structural = |x: u32, y: u32| {
+                let i = (y * w + x) as usize;
+                plan.terrain[i] >= plan.solid_min_tier || plan.solid[i]
+            };
+            let wall = |x: i32, y: i32| {
+                x < 0 || y < 0 || x >= w as i32 || y >= h as i32 || structural(x as u32, y as u32)
+            };
+            let (mut floors, mut walls, mut colliders) = (0, 0, 0);
+            let mut runs = 0;
+            for y in 0..h {
+                for x in 0..w {
+                    let is_wall = structural(x, y);
+                    let idx = if is_wall {
+                        cabinet_tile_index(wall, x as i32, y as i32)
+                    } else {
+                        usize::MAX
+                    };
+                    if idx != 8 {
+                        floors += 1;
+                    }
+                    let near = |b: i32| {
+                        (-b..=b).any(|dy| (-b..=b).any(|dx| !wall(x as i32 + dx, y as i32 + dy)))
+                    };
+                    if is_wall && !(idx == 8 && !near(CAB_WALL_BAND)) {
+                        walls += 1;
+                    }
+                    if is_wall {
+                        colliders += 1;
+                    }
+                    // merged run count: a run starts where the previous tile
+                    // was not solid
+                    if is_wall && (x == 0 || !structural(x - 1, y)) {
+                        runs += 1;
+                    }
+                }
+            }
+            println!(
+                "{kind:?}@{planet}: floor_sprites={floors} wall_sprites={walls} \
+                 collider_candidates={colliders} TOTAL={} | colliders_merged={runs}",
+                floors + walls
+            );
+        }
     }
 }
