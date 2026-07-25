@@ -637,6 +637,16 @@ def vending(M):
         add_box(f"row{i}", (-0.08, -0.12, z), (0.44, 0.03, 0.06), M["cloth_tan"])
 
 
+def sign_post(M):
+    """A post with a blank board. The faction crest is drawn onto the board at
+    spawn time, so it reads as MOUNTED on any building — pinning the crest to a
+    height guessed from the door left it hanging in the shipyard's open bay."""
+    add_box("foot", (0, 0, 0.07), (0.5, 0.34, 0.14), M["iron"], bevel=0.04)
+    add_cylinder("post", (0, 0, 0.62), 0.07, 1.1, M["iron"], axis="z")
+    add_box("board", (0, -0.06, 1.32), (0.78, 0.12, 0.66), M["wood_dark"], bevel=0.04)
+    add_box("frame", (0, -0.1, 1.32), (0.86, 0.05, 0.74), M["iron"], bevel=0.03)
+
+
 def planter(M):
     add_cylinder("pot", (0, 0, 0.26), 0.42, 0.52, M["wood_dark"], axis="z")
     add_cylinder("rim", (0, 0, 0.54), 0.46, 0.08, M["wood"], axis="z")
@@ -700,6 +710,7 @@ PROPS = [
     ("keg_stack", keg_stack, 1.5),
     ("neon_sign", neon_sign, 2.0),
     ("vending", vending, 1.9),
+    ("sign_post", sign_post, 1.9),
     ("planter", planter, 1.4),
 ]
 

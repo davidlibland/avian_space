@@ -837,18 +837,38 @@ pub(crate) fn setup_surface(
                             .is_some_and(|fd| !fd.neutral)
                     {
                         let stem = crate::galaxy::faction_asset_stem(&faction);
+                        // Mount it on a POST beside the door. Pinning the crest
+                        // to a height guessed from the doorway left it hanging
+                        // in mid-air inside the shipyard's open garage bay; a
+                        // post reads as deliberate signage on any building.
+                        let sx = fc.x - tile_px * 1.35;
+                        let foot_y = fc.y - tile_px * 0.1;
+                        commands.spawn((
+                            DespawnOnExit(PlayState::Exploring),
+                            Sprite::from_image(
+                                asset_server.load("sprites/worlds/interior_props/sign_post.png"),
+                            ),
+                            bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
+                            Transform::from_xyz(
+                                sx,
+                                foot_y,
+                                crate::surface_objects::depth_z(foot_y) + 0.0003,
+                            ),
+                        ));
                         commands.spawn((
                             DespawnOnExit(PlayState::Exploring),
                             Sprite {
                                 image: asset_server
                                     .load(format!("sprites/factions/crest_{stem}.png")),
-                                custom_size: Some(Vec2::splat(tile_px * 0.45)),
+                                custom_size: Some(Vec2::splat(tile_px * 0.42)),
                                 ..default()
                             },
+                            // Sits on the board: the post art is ~1.65 tiles
+                            // tall with the board centred near its top.
                             Transform::from_xyz(
-                                fc.x - tile_px * 0.95,
-                                fc.y + tile_px * 0.62,
-                                crate::surface_objects::depth_z(fc.y) + 0.0004,
+                                sx,
+                                foot_y + tile_px * 1.32,
+                                crate::surface_objects::depth_z(foot_y) + 0.0005,
                             ),
                         ));
                     }
