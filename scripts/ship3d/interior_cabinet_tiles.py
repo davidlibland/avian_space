@@ -84,14 +84,16 @@ def _face(edge):
     raise ValueError(edge)
 
 
-def _face_detail(edge, kind, variant, mat, glow):
+def _face_detail(edge, kind, variant, mat, glow, lo=-0.43, hi=0.43):
     """Add venue greebles on the room-facing wall face of one edge slab.
     `variant` seeds the organic (rock) placement so several wall tiles shuffle
-    across a run without visibly repeating."""
+    across a run without visibly repeating. `lo`/`hi` bound the run along the
+    face — quarter-cell corner posts only expose half of it."""
     if kind is None:
         return
     run, (fax, fc), ns = _face(edge)
     h = WALL_H
+    mid, half = (lo + hi) / 2, (hi - lo) / 2
 
     def place(name, along, out, z, size_run, size_out, size_z, m):
         # `along` runs down the face; `out` proud of the face by that much.
@@ -103,27 +105,31 @@ def _face_detail(edge, kind, variant, mat, glow):
         B.add_box(name, loc, size, m, bevel=0.01)
 
     if kind == "ribs":  # warehouse corrugation — vertical fins
-        for i, p in enumerate((-0.4, -0.2, 0.0, 0.2, 0.4)):
+        n = max(2, int(round((hi - lo) / 0.2)))
+        for i in range(n + 1):
+            p = lo + (hi - lo) * i / n
             place(f"rib{edge}{i}", p, 0.03, h * 0.5, 0.05, 0.06, h * 0.9, mat)
     elif kind == "conduit":  # substation — a pipe run + a glowing node
-        place(f"pipe{edge}", 0.0, 0.05, h * 0.58, 0.92, 0.08, 0.1, mat)
-        place(f"node{edge}", 0.26, 0.07, h * 0.58, 0.1, 0.06, 0.14, glow)
+        place(f"pipe{edge}", mid, 0.05, h * 0.58, half * 2.1, 0.08, 0.1, mat)
+        place(f"node{edge}", mid + half * 0.6, 0.07, h * 0.58, 0.1, 0.06, 0.14, glow)
     elif kind == "rock":  # mine — rough dug rock, clustered lumps + cap bumps
         import random
         rng = random.Random(700 + variant * 37 + (ord(edge[-1]) * 13))
-        for i in range(7):  # lumps over the room-facing face
-            along = rng.uniform(-0.43, 0.43)
+        for i in range(max(3, int(7 * (hi - lo) / 0.86))):  # lumps over the face
+            along = rng.uniform(lo, hi)
             z = rng.uniform(0.12, 0.96) * h
             s = rng.uniform(0.1, 0.26)
             place(f"rk{edge}{i}", along, 0.02 + rng.uniform(0, 0.04), z,
                   s, 0.12 + rng.uniform(0, 0.06), s * rng.uniform(0.7, 1.2), mat)
         # a few bumps riding the top cap so the ridge isn't a clean edge
-        (cx, cy, _), _ = _edge_slab(edge)
-        for i in range(4):
-            along = rng.uniform(-0.4, 0.4)
-            s = rng.uniform(0.12, 0.24)
-            loc = (along, cy, h * 0.96) if run == "x" else (cx, along, h * 0.96)
-            B.add_box(f"rkc{edge}{i}", loc, (s, s, 0.14), mat, bevel=0.4)
+        # (full-run edges only; corner posts get theirs from the face lumps)
+        if hi - lo > 0.8:
+            (cx, cy, _), _ = _edge_slab(edge)
+            for i in range(4):
+                along = rng.uniform(-0.4, 0.4)
+                s = rng.uniform(0.12, 0.24)
+                loc = (along, cy, h * 0.96) if run == "x" else (cx, along, h * 0.96)
+                B.add_box(f"rkc{edge}{i}", loc, (s, s, 0.14), mat, bevel=0.4)
 
 
 def _shear():
@@ -196,6 +202,37 @@ def _girder(edge, style, mat):
             place(f"gd{edge}{i}", -0.36 + 0.72 * f, (0.16 + 0.7 * f) * h, 0.18, 0.12, 0.18)
 
 
+# ── Convex (outer) corners ─────────────────────────────────────────────────
+# A wall run is inset from the floor it faces, so its body is a half-cell strip
+# on the far side. Where a run turns an OUTER corner, the body is the
+# INTERSECTION of the two strips — a quarter-cell post. Using their UNION (the
+# L-shaped CNW/CNE/CSW/CSE tiles) leaves the perpendicular strip running the
+# full cell and poking past the wall face: the "horns", and, on a 2x2 block,
+# four of them cutting the block into a cross.
+#
+# quad name → (body centre, the two exposed faces as (edge, run-span)).
+QUADS = {
+    "XNW": ((-0.5 + WALL_T / 2, 0.5 - WALL_T / 2),   # floor S+E
+            (("N", (-0.45, -0.06)), ("W", (0.06, 0.45)))),
+    "XNE": ((0.5 - WALL_T / 2, 0.5 - WALL_T / 2),    # floor S+W
+            (("N", (0.06, 0.45)), ("E", (0.06, 0.45)))),
+    "XSW": ((-0.5 + WALL_T / 2, -0.5 + WALL_T / 2),  # floor N+E
+            (("S", (-0.45, -0.06)), ("W", (-0.45, -0.06)))),
+    "XSE": ((0.5 - WALL_T / 2, -0.5 + WALL_T / 2),   # floor N+W
+            (("S", (0.06, 0.45)), ("E", (-0.45, -0.06)))),
+}
+
+
+def _quad_trim(edge, lo, hi):
+    """Base glow strip along the exposed part of a corner post's face."""
+    run, (_fax, fc), ns = _face(edge)
+    mid, length = (lo + hi) / 2, (hi - lo)
+    inner = fc + ns * 0.02
+    if run == "x":
+        return (mid, inner, 0.06), (length, 0.05, 0.10)
+    return (inner, mid, 0.06), (0.05, length, 0.10)
+
+
 def _cap_rock(variant, mat):
     """Bumpy top for a deep (V) cap — variant-seeded so caps vary too."""
     import random
@@ -221,6 +258,16 @@ def bake_tile(venue, pal, name, edges, variant=0):
         B.add_box("cap_V", (0, 0, WALL_H + 0.03), (1.0, 1.0, 0.08), mwt)
         if pal["detail"] == "rock":
             _cap_rock(variant, mw)
+    elif name in QUADS:
+        # Convex outer corner: a quarter-cell post (see QUADS).
+        (qx, qy), faces = QUADS[name]
+        B.add_box(f"w_{name}", (qx, qy, WALL_H / 2), (WALL_T, WALL_T, WALL_H), mw,
+                  bevel=0.03)
+        B.add_box(f"cap_{name}", (qx, qy, WALL_H + 0.03), (WALL_T, WALL_T, 0.08), mwt)
+        for e, (lo, hi) in faces:
+            (tx, ty, tz), (tsx, tsy, tsz) = _quad_trim(e, lo, hi)
+            B.add_box(f"tr_{name}_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
+            _face_detail(e, pal["detail"], variant, md, mg, lo, hi)
     else:
         for e in edges:
             (cx, cy, cz), (sx, sy, sz) = _edge_slab(e)
@@ -302,9 +349,14 @@ def bake_floor(venue, pal, variant=0):
 
 
 TILES = {
+    # straight runs
     "N": ("N",), "S": ("S",), "E": ("E",), "W": ("W",),
+    # concave (inner) corners — union of two strips
     "CNW": ("N", "W"), "CNE": ("N", "E"), "CSW": ("S", "W"), "CSE": ("S", "E"),
+    # deep fill
     "V": ("V",),
+    # convex (outer) corners — intersection of two strips (quarter-cell post)
+    "XNW": (), "XNE": (), "XSW": (), "XSE": (),
 }
 
 if __name__ == "__main__":

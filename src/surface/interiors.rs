@@ -461,15 +461,18 @@ const T_WALL: u32 = 3;
 // past the grid); it's placed by its GROUND ORIGIN (the cell centre at z=0)
 // via a Bevy anchor, then y-sorted like any prop.
 const CAB_CELL_W: u32 = 74;
-const CAB_CELL_H: u32 = 80;
+const CAB_CELL_H: u32 = 82;
 const CAB_ASSET_PXU: f32 = 64.0; // asset pixels per world unit (→ TILE_PX in game)
-const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.10625);
+const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.11890);
 /// Foot-x weight for depth sorting = the bake's SHX/SHY lean ratio. Walls
 /// lean up-and-right, so left-of-same-row renders in front (see DepthShear).
 const CAB_SHEAR: f32 = 0.26 / 0.42;
 /// How many wall rings (Chebyshev, from walkable floor) a building draws
 /// before giving way to the black void beyond — a room, not walls forever.
 const CAB_WALL_BAND: i32 = 2;
+/// Tile kinds per variant row of the wall atlas: 4 straight runs, 4 concave
+/// corners, the deep cap, 4 convex corner posts. See `cabinet_tile_index`.
+const CAB_TILE_KINDS: u32 = 13;
 
 /// Read a PNG's `(width, height)` from its IHDR header without decoding the
 /// image. Lets the venue tilesets be self-describing: the number of floor /
@@ -488,30 +491,36 @@ fn png_dims(path: &str) -> Option<(u32, u32)> {
 
 /// Pick the cabinet wall tile (index into the 9-cell strip) for a wall cell.
 ///
-/// ONE rule, applied uniformly: **the wall body sits opposite every side that
-/// fronts floor**. A tile's name says where its body is, so floor to the south
-/// picks `N`; floor to the south *and* east picks `CNW`. That covers both
-/// corner families with the same art — the CONVEX outer corner (two orthogonal
-/// floors, e.g. a door jamb or pillar) and the CONCAVE inner corner (no
-/// orthogonal floor, one diagonal floor, e.g. a room's corner) — because in
-/// both cases the body belongs in the quadrant away from the floor.
+/// ONE rule: **the wall body sits opposite every side that fronts floor** — a
+/// run is inset from the floor it faces, so its body is a half-cell strip on
+/// the far side. Where two of those constraints meet, the two corner families
+/// differ in HOW they combine:
 ///
-/// Strip order: N=0 S=1 E=2 W=3 CNW=4 CNE=5 CSW=6 CSE=7 V=8.
+/// * CONVEX outer corner (two orthogonal floors — a jamb, a block corner):
+///   the body is their INTERSECTION, a quarter-cell post (`X*`). Their union
+///   would leave the perpendicular strip running the full cell and poking past
+///   the wall face — the "horns", which on a 2×2 block cut it into a cross.
+/// * CONCAVE inner corner (no orthogonal floor, one diagonal floor — a room's
+///   corner): the body is their UNION (`C*`), because the cell has to carry
+///   both neighbouring runs through it; the missing quadrant is the miter.
+///
+/// Strip order: N=0 S=1 E=2 W=3 CNW=4 CNE=5 CSW=6 CSE=7 V=8
+///              XNW=9 XNE=10 XSW=11 XSE=12.
 fn cabinet_tile_index(wall: impl Fn(i32, i32) -> bool, x: i32, y: i32) -> usize {
     let (f_n, f_s) = (!wall(x, y + 1), !wall(x, y - 1));
     let (f_e, f_w) = (!wall(x + 1, y), !wall(x - 1, y));
-    // Convex corners: two orthogonal floors → body in the opposite quadrant.
+    // Convex corners: two orthogonal floors → quarter-cell post.
     if f_s && f_e {
-        return 4; // floor S+E → body N+W = CNW
+        return 9; // floor S+E → post NW = XNW
     }
     if f_s && f_w {
-        return 5; // floor S+W → body N+E = CNE
+        return 10; // floor S+W → post NE = XNE
     }
     if f_n && f_e {
-        return 6; // floor N+E → body S+W = CSW
+        return 11; // floor N+E → post SW = XSW
     }
     if f_n && f_w {
-        return 7; // floor N+W → body S+E = CSE
+        return 12; // floor N+W → post SE = XSE
     }
     // Straight edges: one orthogonal floor → body on the far strip.
     if f_s {
@@ -1208,12 +1217,29 @@ pub(crate) fn setup_interior(
         // floor-adjacency) leaning up-and-right under a single oblique shear,
         // all y-sorted so the walker moves among them. Bake:
         // scripts/ship3d/interior_cabinet_tiles.py + pack_interior_tiles.py.
-        // STRUCTURE only — the rock/steel the room is carved from. Furniture
-        // (`plan.solid`: containers, carts, barrels, pumps) is solid for
-        // COLLISION but must not become wall ART, or a crate grows a wall on
-        // top of itself and its neighbours autotile a corner around it.
+        // Wall ART = everything the walker can't enter EXCEPT furniture.
+        //
+        // `plan.solid` mixes two very different things: the sealed apron
+        // (walkable-tier tiles that aren't designed floor — real structure,
+        // and the bulk of a maze's wall mass) and furniture footprints
+        // (containers, carts, barrels, pumps). The apron must render as wall
+        // or unwalkable space reads as open floor; furniture must not, or a
+        // crate grows a wall on top of itself. So subtract just the furniture.
+        //
+        // Props standing ON structure (wall banners, jail bars) are unaffected:
+        // their tier already clears `solid_min_tier`, which is checked first.
+        let mut furniture = vec![false; (map_w * map_h) as usize];
+        for &(name, (px, py)) in &plan.props {
+            let (pw, ph, _) = prop_meta(name);
+            for y in py..(py + ph).min(map_h) {
+                for x in px..(px + pw).min(map_w) {
+                    furniture[(y * map_w + x) as usize] = true;
+                }
+            }
+        }
         let structural = |tx: u32, ty: u32| -> bool {
             let tier = map2d[ty as usize][tx as usize];
+            let i = (ty * map_w + tx) as usize;
             tier >= plan.solid_min_tier
                 || biome
                     .terrains
@@ -1221,6 +1247,7 @@ pub(crate) fn setup_interior(
                     .find(|t| t.row == tier)
                     .map(|t| t.collision == 1)
                     .unwrap_or(false)
+                || (plan.solid[i] && !furniture[i])
         };
         let bin: Vec<Vec<u32>> = (0..map_h)
             .map(|y| {
@@ -1258,7 +1285,7 @@ pub(crate) fn setup_interior(
             .map_or(1, |(w, _)| (w / CAB_ASSET_PXU as u32).max(1));
         let walls_layout = atlas_layouts.add(TextureAtlasLayout::from_grid(
             UVec2::new(CAB_CELL_W, CAB_CELL_H),
-            9,
+            CAB_TILE_KINDS,
             wall_variants,
             None,
             None,
@@ -1311,7 +1338,7 @@ pub(crate) fn setup_interior(
                         walls_atlas.clone(),
                         TextureAtlas {
                             layout: walls_layout.clone(),
-                            index: wv * 9 + idx,
+                            index: wv * CAB_TILE_KINDS as usize + idx,
                         },
                     );
                     w.custom_size = Some(wall_size);
@@ -2436,11 +2463,14 @@ mod tests {
         assert_eq!(idx(0, 3), 3, "west wall → W");
         assert_eq!(idx(6, 3), 2, "east wall → E");
         assert_eq!(idx(1, 0), 1, "south wall segment → S (floor to north)");
-        // Door jambs (convex, two orthogonal floors): body goes to the
-        // quadrant AWAY from both floors, so the jamb left of the door (floor
-        // north + east) keeps its body south-west, and vice versa.
-        assert_eq!(idx(2, 0), 6, "left of door: floor N+E → body S+W = CSW");
-        assert_eq!(idx(4, 0), 7, "right of door: floor N+W → body S+E = CSE");
+        // Door jambs (convex, two orthogonal floors): a quarter-cell POST in
+        // the quadrant away from both floors — not the L-shaped concave tile,
+        // whose perpendicular strip would poke past the wall face as a horn.
+        assert_eq!(idx(2, 0), 11, "left of door: floor N+E → post S+W = XSW");
+        assert_eq!(idx(4, 0), 12, "right of door: floor N+W → post S+E = XSE");
+        // The two families must stay distinct: a room corner (concave) and a
+        // jamb (convex) both "face" the same way but use different art.
+        assert_ne!(idx(0, 5), idx(4, 0), "concave and convex must differ");
         // Deep wall cell (no floor anywhere adjacent) → solid cap V:
         let wall_all = |_x: i32, _y: i32| true;
         assert_eq!(cabinet_tile_index(wall_all, 5, 5), 8, "surrounded → V");

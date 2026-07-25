@@ -29,7 +29,8 @@ HERE = os.path.dirname(__file__)
 TILES = os.path.join(HERE, "out", "tiles")
 WORLDS = os.path.join(HERE, "..", "..", "assets", "sprites", "worlds")
 
-ORDER = ["N", "S", "E", "W", "CNW", "CNE", "CSW", "CSE", "V"]
+ORDER = ["N", "S", "E", "W", "CNW", "CNE", "CSW", "CSE", "V",
+         "XNW", "XNE", "XSW", "XSE"]
 # The station shop keeps the bare asset names the engine already loads; the
 # maze venues get a suffix. All share ONE bounding box (below), so the
 # engine's cell size + anchor constants are identical for every venue.
