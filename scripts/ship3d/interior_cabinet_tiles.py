@@ -54,7 +54,11 @@ VENUES = {
     "mine": dict(floor=(0.34, 0.27, 0.20), floor_hi=(0.39, 0.31, 0.23),
                  seam=(0.19, 0.15, 0.11), wall=(0.45, 0.40, 0.35),
                  wall_top=(0.55, 0.49, 0.43), trim=(0.96, 0.62, 0.24),
-                 detail="rock", floor_style="dirt", floors=4, walls=3),
+                 detail="rock", floor_style="dirt", floors=4, walls=3,
+                 # Hewn rock is continuous, not panelled: inking each tile's
+                 # silhouette draws a seam down every join. Adjacent slabs abut
+                 # exactly, so with the ink off a run reads as one rock face.
+                 wall_ink=False, wall_bevel=0.0, wall_overhang=0.16),
     # warehouse — worn concrete deck (4 variants), corrugated steel walls with
     # occasional I-beam / diagonal girders (variants 4 & 5), safety-yellow trim
     "warehouse": dict(floor=(0.44, 0.45, 0.47), floor_hi=(0.50, 0.51, 0.53),
@@ -251,19 +255,24 @@ def bake_tile(venue, pal, name, edges, variant=0):
     mt = B.glow_material("trim", pal["trim"], strength=2.6)
     md = B.toon_material("detail", pal["wall"])          # greebles match the wall
     mg = B.glow_material("detailglow", pal["trim"], strength=3.2)
+    # Bevelling every slab rounds its edges into a groove, so a run of tiles
+    # shows a seam at each join even with the ink off. Venues that want a
+    # continuous face (hewn rock) bake flat: a zero-bevel butt joint between
+    # two coplanar faces of one colour is invisible.
+    wb = pal.get("wall_bevel", 0.03)
     if edges == ("V",):
         # solid interior wall cell: a full-cell block seen only as its cap
         # (its faces are covered by neighbouring walls). Fills deep/thick walls.
-        B.add_box("w_V", (0, 0, WALL_H / 2), (1.0, 1.0, WALL_H), mw, bevel=0.03)
-        B.add_box("cap_V", (0, 0, WALL_H + 0.03), (1.0, 1.0, 0.08), mwt)
+        B.add_box("w_V", (0, 0, WALL_H / 2), (1.0, 1.0, WALL_H), mw, bevel=wb)
+        B.add_box("cap_V", (0, 0, WALL_H + 0.03), (1.0, 1.0, 0.08), mwt, bevel=wb)
         if pal["detail"] == "rock":
             _cap_rock(variant, mw)
     elif name in QUADS:
         # Convex outer corner: a quarter-cell post (see QUADS).
         (qx, qy), faces = QUADS[name]
         B.add_box(f"w_{name}", (qx, qy, WALL_H / 2), (WALL_T, WALL_T, WALL_H), mw,
-                  bevel=0.03)
-        B.add_box(f"cap_{name}", (qx, qy, WALL_H + 0.03), (WALL_T, WALL_T, 0.08), mwt)
+                  bevel=wb)
+        B.add_box(f"cap_{name}", (qx, qy, WALL_H + 0.03), (WALL_T, WALL_T, 0.08), mwt, bevel=wb)
         for e, (lo, hi) in faces:
             (tx, ty, tz), (tsx, tsy, tsz) = _quad_trim(e, lo, hi)
             B.add_box(f"tr_{name}_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
@@ -271,9 +280,25 @@ def bake_tile(venue, pal, name, edges, variant=0):
     else:
         for e in edges:
             (cx, cy, cz), (sx, sy, sz) = _edge_slab(e)
-            B.add_box(f"w_{e}", (cx, cy, cz), (sx, sy, sz), mw, bevel=0.03)
-            B.add_box(f"cap_{e}", (cx, cy, WALL_H + 0.03), (sx, sy, 0.08), mwt)
+            # The shear tilts a slab's END faces up into view, and since the
+            # left/near tile paints over its neighbour, each tile would draw its
+            # own end face across the join. Butting them exactly leaves that to
+            # sub-pixel luck; seamless venues run the slab PAST the cell so the
+            # neighbour's body buries the end face with margin.
+            ov = pal.get("wall_overhang", 0.0)
+            if ov:
+                if e in ("N", "S"):
+                    sx += 2 * ov
+                else:
+                    sy += 2 * ov
+            B.add_box(f"w_{e}", (cx, cy, cz), (sx, sy, sz), mw, bevel=wb)
+            B.add_box(f"cap_{e}", (cx, cy, WALL_H + 0.03), (sx, sy, 0.08), mwt, bevel=wb)
             (tx, ty, tz), (tsx, tsy, tsz) = _edge_trim(e)
+            if ov:
+                if e in ("N", "S"):
+                    tsx += 2 * ov
+                else:
+                    tsy += 2 * ov
             B.add_box(f"tr_{e}", (tx, ty, tz), (tsx, tsy, tsz), mt)
             _face_detail(e, pal["detail"], variant, md, mg)
             # Occasional girders: a couple of designated variants carry a post
@@ -285,6 +310,8 @@ def bake_tile(venue, pal, name, edges, variant=0):
                 _girder(e, "diag", steel)
     _shear()
     B.setup_scene(ortho=FRAME, res=RES, freestyle_thick=1.4)
+    if not pal.get("wall_ink", True):
+        bpy.context.scene.render.use_freestyle = False
     _topdown()
     B.render_to(os.path.join(OUT, f"_it_{venue}_{name}_v{variant}.png"))
 

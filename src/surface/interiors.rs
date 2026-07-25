@@ -460,10 +460,10 @@ const T_WALL: u32 = 3;
 // interior_cabinet_tiles.py). Each cell is oversized (the leaning wall spills
 // past the grid); it's placed by its GROUND ORIGIN (the cell centre at z=0)
 // via a Bevy anchor, then y-sorted like any prop.
-const CAB_CELL_W: u32 = 74;
-const CAB_CELL_H: u32 = 82;
+const CAB_CELL_W: u32 = 95;
+const CAB_CELL_H: u32 = 100;
 const CAB_ASSET_PXU: f32 = 64.0; // asset pixels per world unit (→ TILE_PX in game)
-const CAB_ANCHOR: Vec2 = Vec2::new(-0.06419, -0.11890);
+const CAB_ANCHOR: Vec2 = Vec2::new(-0.05263, -0.08000);
 /// Foot-x weight for depth sorting = the bake's SHX/SHY lean ratio. Walls
 /// lean up-and-right, so left-of-same-row renders in front (see DepthShear).
 const CAB_SHEAR: f32 = 0.26 / 0.42;
