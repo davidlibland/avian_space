@@ -191,11 +191,15 @@ pub fn npc_chat_interact(
             };
             ChatContent::Dialogue { lines, current: 0 }
         }
-        Some(Behavior::Loiter) if barks.is_some_and(|b| !b.0.is_empty()) => ChatContent::Dialogue {
-            lines: barks.map(|b| b.0.clone()).unwrap_or_default(),
-            current: 0,
-        },
-        Some(Behavior::Loiter) => ChatContent::Dialogue {
+        Some(Behavior::Loiter | Behavior::Mill { .. })
+            if barks.is_some_and(|b| !b.0.is_empty()) =>
+        {
+            ChatContent::Dialogue {
+                lines: barks.map(|b| b.0.clone()).unwrap_or_default(),
+                current: 0,
+            }
+        }
+        Some(Behavior::Loiter | Behavior::Mill { .. }) => ChatContent::Dialogue {
             lines: vec![
                 "Good hunting out there.".to_string(),
                 format!("Fly safe, {}.", pilot),

@@ -569,14 +569,27 @@ def parts_rack(M):
 
 
 def repair_bay(M):
-    """Floor bay: hazard-outlined pad with a low lift — marks WHERE work
-    happens without blocking the room."""
-    add_box("pad", (0, 0, 0.03), (2.8, 2.8, 0.06), M["dark"])
-    for i, (dx, dy, sx, sy) in enumerate(((0, -1.3, 2.8, 0.2), (0, 1.3, 2.8, 0.2),
-                                          (-1.3, 0, 0.2, 2.8), (1.3, 0, 0.2, 2.8))):
-        add_box(f"stripe{i}", (dx, dy, 0.07), (sx, sy, 0.04), M["glow_warm"])
-    add_cylinder("ram", (0, 0, 0.22), 0.3, 0.44, M["iron"], axis="z")
-    add_box("plate", (0, 0, 0.48), (1.5, 0.9, 0.12), M["steel"], bevel=0.03)
+    """A hazard-striped pad alone is just a big rectangle — unreadable. What
+    says SHIP LIFT is the machinery: a scissor ram, two raised support arms
+    cradling a hull section above the floor, and chevrons pointing in."""
+    add_box("pad", (0, 0, 0.03), (2.7, 2.7, 0.06), M["dark"])
+    # chevron stripes on the near and far edges (they read as "drive in here")
+    for i in range(5):
+        x = -1.0 + i * 0.5
+        for sy, name in ((-1.15, "n"), (1.15, "f")):
+            add_box(f"chev{name}{i}", (x, sy, 0.07), (0.3, 0.16, 0.04),
+                    M["glow_warm"], bevel=0.01)
+    # scissor ram + platform
+    add_box("ram_a", (-0.2, 0, 0.34), (0.16, 0.5, 0.62), M["iron"], bevel=0.03)
+    add_box("ram_b", (0.2, 0, 0.34), (0.16, 0.5, 0.62), M["iron"], bevel=0.03)
+    add_box("plate", (0, 0, 0.72), (1.8, 1.1, 0.14), M["steel"], bevel=0.04)
+    # support arms holding a hull section clear of the plate
+    for i, x in enumerate((-0.7, 0.7)):
+        add_box(f"arm{i}", (x, 0, 1.0), (0.22, 1.3, 0.42), M["iron"], bevel=0.03)
+        add_box(f"grip{i}", (x, 0, 1.24), (0.3, 1.4, 0.12), M["cont_red"], bevel=0.03)
+    add_cylinder("hull", (0, 0, 1.6), 0.52, 2.0, M["steel"], axis="y", r2=0.36)
+    add_cylinder("hullring", (0, -0.5, 1.6), 0.55, 0.09, M["pipe"], axis="y")
+    add_sphere("diag", (0, -1.05, 1.72), (0.13, 0.13, 0.12), M["glow_cyan"])
 
 
 def bar_booth(M):

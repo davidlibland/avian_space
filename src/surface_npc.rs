@@ -106,6 +106,15 @@ pub enum Behavior {
         path: Vec<(u32, u32)>,
         current_idx: usize,
     },
+
+    /// Drift around a room: stand a while, wander somewhere else, repeat.
+    /// While standing they turn to face the player, which reads as noticing
+    /// you and is what makes a room feel inhabited rather than staged.
+    Mill {
+        pause: Timer,
+        path: Vec<(u32, u32)>,
+        current_idx: usize,
+    },
 }
 
 // ── Components ───────────────────────────────────────────────────────────
@@ -196,7 +205,13 @@ pub fn run_npc_behaviors(
     cost_map: Option<Res<SurfaceCostMap>>,
     surface_paths: Option<Res<SurfacePaths>>,
     mut npcs: Query<
-        (Entity, &mut NpcBehavior, &Transform, &mut LinearVelocity),
+        (
+            Entity,
+            &mut NpcBehavior,
+            &Transform,
+            &mut LinearVelocity,
+            Option<&mut crate::surface_character::CharacterAnim>,
+        ),
         (With<Npc>, Without<Walker>),
     >,
     landed_context: Res<crate::planet_ui::LandedContext>,
@@ -206,7 +221,7 @@ pub fn run_npc_behaviors(
     let planet_name = landed_context.planet_name.clone().unwrap_or_default();
     let walker_pos = walker_q.single().ok().map(|t| t.translation.truncate());
 
-    for (entity, mut npc, tf, mut vel) in &mut npcs {
+    for (entity, mut npc, tf, mut vel, mut anim) in &mut npcs {
         let pos = tf.translation.truncate();
         let speed = npc.speed;
 
@@ -258,6 +273,9 @@ pub fn run_npc_behaviors(
                 })
                 | Some(Behavior::MarchTo {
                     path, current_idx, ..
+                })
+                | Some(Behavior::Mill {
+                    path, current_idx, ..
                 }) => {
                     path.clear();
                     *current_idx = 0;
@@ -274,6 +292,65 @@ pub fn run_npc_behaviors(
         };
 
         match behavior {
+            Behavior::Mill {
+                pause,
+                path,
+                current_idx,
+            } => {
+                if *current_idx < path.len() {
+                    let (tx, ty) = path[*current_idx];
+                    let target = SurfaceCostMap::tile_to_world(tx, ty);
+                    if (target - foot(pos)).length() < WAYPOINT_ARRIVE_DIST {
+                        *current_idx += 1;
+                        if *current_idx >= path.len() {
+                            path.clear();
+                            *current_idx = 0;
+                            vel.0 = Vec2::ZERO;
+                        }
+                    } else {
+                        vel.0 = steer_to(target, pos, speed);
+                    }
+                    continue;
+                }
+                vel.0 = Vec2::ZERO;
+                // Turn toward the player while idle. `anim.facing` is only
+                // recomputed while MOVING, so setting it here sticks.
+                if let (Some(anim), Some(wp)) = (anim.as_mut(), walker_pos) {
+                    let d = wp - pos;
+                    if d.length_squared() > 1.0 {
+                        anim.facing = crate::surface_character::Facing::from_velocity(d);
+                    }
+                }
+                pause.tick(time.delta());
+                if !pause.is_finished() {
+                    continue;
+                }
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                // Reset the pause FIRST, so a failed search costs another wait
+                // rather than retrying the pathfinder every frame.
+                *pause = Timer::from_seconds(rng.r#gen_range(6.0..14.0), TimerMode::Once);
+                let Some(cm) = cost_map.as_ref() else {
+                    continue;
+                };
+                let my_tile = SurfaceCostMap::world_to_tile(foot(pos));
+                for _ in 0..8 {
+                    let nx = my_tile.0 as i32 + rng.r#gen_range(-5i32..=5);
+                    let ny = my_tile.1 as i32 + rng.r#gen_range(-5i32..=5);
+                    if nx < 1 || ny < 1 {
+                        continue;
+                    }
+                    let goal = (nx as u32, ny as u32);
+                    if goal == my_tile {
+                        continue;
+                    }
+                    if let Some(p) = cm.find_path(my_tile, goal).filter(|p| !p.is_empty()) {
+                        *path = p;
+                        *current_idx = 0;
+                        break;
+                    }
+                }
+            }
             Behavior::Patrol {
                 waypoints,
                 current_idx,
@@ -1194,9 +1271,18 @@ pub fn spawn_customer(
         crate::surface::interiors::InteriorScoped,
         Npc,
         crate::barks::Barks(lines),
-        NpcBehavior::with_behaviors(0.0, [Behavior::Loiter]),
+        NpcBehavior::with_behaviors(
+            52.0,
+            [Behavior::Mill {
+                // Short first pause so they don't all step off together.
+                pause: Timer::from_seconds(2.0, TimerMode::Once),
+                path: Vec::new(),
+                current_idx: 0,
+            }],
+        ),
         crate::surface_character::CharacterAnim::person(0.11),
-        RigidBody::Static,
+        // Kinematic, not Static: a milling NPC has to be able to move.
+        RigidBody::Kinematic,
         crate::surface_objects::character_foot_collider(5.0),
         CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
         Sprite::from_atlas_image(

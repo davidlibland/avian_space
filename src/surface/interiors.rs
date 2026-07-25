@@ -1001,8 +1001,22 @@ pub(crate) fn build_plan(
             // A showroom needs the yard's machinery, not a lone shelf: a hull
             // in a cradle being worked, gantries over the pads, parts around.
             props.push(("parts_rack", (counter.0 - 1, counter.1)));
-            props.push(("hull_cradle", (x0 + 1, y0 + 1)));
-            props.push(("gantry", (x0 + 1, y0 + 4)));
+            // A working bay in the bottom band, clear of BOTH the display grid
+            // (hulls hang at x0+3+col*5, and a 3-wide cradle parked at x0+1
+            // lands right on column 0) and the entry column. The gantry
+            // straddles it from the row behind.
+            let mut bx = x0 + 4;
+            while bx + 3 < x0 + rw - 1 {
+                let on_display =
+                    (bx..bx + 3).any(|x| x >= x0 + 3 && (x - (x0 + 3)).is_multiple_of(5));
+                let on_entry = (bx..bx + 3).contains(&door_x);
+                if !on_display && !on_entry {
+                    props.push(("hull_cradle", (bx, y0 + 1)));
+                    props.push(("gantry", (bx, y0 + 2)));
+                    break;
+                }
+                bx += 1;
+            }
             perimeter(&mut props, &["parts_rack", "crate_stack", "barrel"], 4, 3);
         }
         BuildingKind::Outfitter => {
