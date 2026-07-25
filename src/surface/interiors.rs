@@ -495,6 +495,11 @@ const CAB_WALL_BAND: i32 = 2;
 /// Tile kinds per variant row of the wall atlas: 4 straight runs, 4 concave
 /// corners, the deep cap, 4 convex corner posts. See `cabinet_tile_index`.
 const CAB_TILE_KINDS: u32 = 13;
+/// Where a display case's TOP lands relative to its tile centre. The case is
+/// foot-anchored and leans up-and-right with the cabinet shear, so a hologram
+/// drawn at the plain tile centre floats off its corner. Derived from the
+/// shear applied over the case height (~0.9 units).
+const CASE_TOP_OFFSET: Vec2 = Vec2::new(0.26 * 0.9 * 32.0, 0.42 * 0.9 * 32.0);
 
 /// Read a PNG's `(width, height)` from its IHDR header without decoding the
 /// image. Lets the venue tilesets be self-describing: the number of floor /
@@ -631,6 +636,17 @@ fn interior_wall_slots(w: u32, h: u32) -> usize {
 
 /// Shipyard hall: cradle pads in rows down the middle (4 per row), so the
 /// hulls read as a showroom rather than shelving.
+/// Shipyard hall: hulls stand in a COLUMN down each side wall, so the player
+/// walks the rows to reach the broker — the outfitter's layout, which reads
+/// better than a horizontal grid and leaves a clear central aisle. Ships are
+/// big, so slots sit 3 tiles apart instead of the outfitter's 2.
+pub(crate) fn yard_size_for(ships: usize) -> (u32, u32) {
+    let per_side = ships.div_ceil(2).max(1) as u32;
+    let h = (6 + per_side * 3).clamp(12, 30);
+    (16, h)
+}
+
+#[allow(dead_code)]
 pub(crate) fn hall_size_for(ships: usize) -> (u32, u32, usize) {
     let cols = 4usize.min(ships.max(1));
     let rows = ships.div_ceil(cols.max(1));
@@ -718,7 +734,9 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         // ── venue anchors ──
         "fuel_tank" | "holo_table" => (2, 2, true),
         "hull_cradle" => (3, 2, true),
-        "repair_bay" => (3, 3, false), // floor marking — walk onto it
+        // A hull in a lift is machinery, not a floor decal: walking through
+        // it looks like a bug. The pad edge stays walkable at 3x3.
+        "repair_bay" => (3, 3, true),
         "kiosk" | "parts_rack" | "bar_booth" => (2, 1, true),
         "gantry" => (2, 1, false), // you walk under it
         "pipe_manifold" | "bounty_board" => (2, 1, false), // wall-mounted
@@ -758,7 +776,8 @@ pub(crate) fn build_plan(
     };
 
     let (rw, rh, hall_cols) = if ship_hall {
-        hall_size_for(stock_len)
+        let (w, h) = yard_size_for(stock_len);
+        (w, h, 0)
     } else if stock_len > 0 {
         let (w, h) = room_size_for(stock_len);
         (w, h, 0)
@@ -824,6 +843,7 @@ pub(crate) fn build_plan(
 
     // Displays.
     let mut displays = Vec::new();
+    let mut unused_slots: Vec<(u32, u32)> = Vec::new();
     if hall_cols > 0 {
         // Cradle grid down the hall.
         let mut placed = 0;
@@ -847,16 +867,18 @@ pub(crate) fn build_plan(
         }
     } else if stock_len > 0 {
         // Wall slots: west wall, east wall, then north beside the counter.
+        // Ships need more room between them than hand weapons do.
+        let pitch = if ship_hall { 3 } else { 2 };
         let mut slots = Vec::new();
         let mut y = y0 + 2;
         while y < y0 + rh - 2 {
             slots.push((x0 + 1, y));
-            y += 2;
+            y += pitch;
         }
         let mut y = y0 + 2;
         while y < y0 + rh - 2 {
             slots.push((x0 + rw - 2, y));
-            y += 2;
+            y += pitch;
         }
         let mut x = x0 + 2;
         while x < x0 + rw - 3 {
@@ -865,6 +887,9 @@ pub(crate) fn build_plan(
             }
             x += 2;
         }
+        // Keep the leftovers: a shipyard column is rarely full, and an empty
+        // pad reads as a missing ship unless something else stands there.
+        unused_slots = slots.iter().skip(stock_len).copied().collect();
         displays = slots.into_iter().take(stock_len).collect();
         // Plating accents under the plinths.
         for &(px, py) in &displays {
@@ -1005,6 +1030,18 @@ pub(crate) fn build_plan(
             // (hulls hang at x0+3+col*5, and a 3-wide cradle parked at x0+1
             // lands right on column 0) and the entry column. The gantry
             // straddles it from the row behind.
+            // Columns are rarely full, so park yard machinery in the slots the
+            // stock didn't use — an empty pad reads as a missing ship.
+            for (i, &(sx, sy)) in unused_slots.iter().enumerate() {
+                props.push((
+                    match i % 3 {
+                        0 => "parts_rack",
+                        1 => "crate_stack",
+                        _ => "barrel",
+                    },
+                    (sx, sy),
+                ));
+            }
             let mut bx = x0 + 4;
             while bx + 3 < x0 + rw - 1 {
                 let on_display =
@@ -1665,16 +1702,35 @@ pub(crate) fn setup_interior(
         // has volume under the cabinet lean), foot-anchored and depth-sorted
         // like any prop, with the tinted pad kept only as the glow pooling
         // inside the glass.
-        if matches!(binding, DisplayBinding::OutfitterItem(_)) {
+        let case_art = match binding {
+            DisplayBinding::OutfitterItem(_) => Some("display_case"),
+            DisplayBinding::Ship(_) => Some("ship_pad"),
+        };
+        if let Some(art) = case_art {
             let foot_y = pos.y - tile_px * 0.5;
             commands.spawn((
                 DespawnOnExit(PlayState::Inside),
                 InteriorScoped,
                 Sprite::from_image(
-                    asset_server.load("sprites/worlds/interior_props/display_case.png"),
+                    asset_server.load(format!("sprites/worlds/interior_props/{art}.png")),
                 ),
                 bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
                 Transform::from_xyz(pos.x, foot_y, depth(pos.x, foot_y)),
+                // A case that LOOKS solid must BE solid — walking through it
+                // reads as a bug even though nothing depends on it.
+                RigidBody::Static,
+                Collider::rectangle(
+                    tile_px * 0.9,
+                    if art == "ship_pad" {
+                        tile_px * 1.9
+                    } else {
+                        tile_px * 0.9
+                    },
+                ),
+                CollisionLayers::new(
+                    GameLayer::Surface,
+                    [GameLayer::Surface, GameLayer::Character],
+                ),
             ));
         }
         commands.spawn((
@@ -1689,8 +1745,8 @@ pub(crate) fn setup_interior(
             binding.clone(),
             sprite,
             Transform::from_xyz(
-                pos.x,
-                pos.y + 6.0,
+                pos.x + CASE_TOP_OFFSET.x,
+                pos.y + CASE_TOP_OFFSET.y,
                 depth(pos.x, pos.y - tile_px * 0.5) + 0.5,
             )
             .with_scale(Vec3::splat(size)),
@@ -1711,7 +1767,7 @@ pub(crate) fn setup_interior(
                 TextColor(Color::srgba(0.4, 0.9, 1.0, 0.85)),
                 bevy::text::TextLayout::new_with_justify(bevy::text::Justify::Center),
                 Transform::from_xyz(
-                    pos.x,
+                    pos.x + CASE_TOP_OFFSET.x,
                     pos.y - tile_px * 0.62,
                     depth(pos.x, pos.y - tile_px * 0.5) + 0.4,
                 )

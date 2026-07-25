@@ -487,7 +487,9 @@ def kiosk(M):
     add_box("sill", (0, -0.1, 0.92), (2.1, 0.9, 0.1), M["steel"], bevel=0.02)
     for i, x in enumerate((-0.8, 0.8)):
         add_box(f"post{i}", (x, 0.2, 1.36), (0.12, 0.12, 0.8), M["iron"], bevel=0.02)
-    add_box("awning", (0, 0.2, 1.78), (2.1, 0.7, 0.1), M["cloth_red"], bevel=0.03)
+    # Half-width awning. A full-width one shears up over the tile BEHIND the
+    # counter, which is exactly where the clerk stands — they vanished under it.
+    add_box("awning", (-0.55, 0.2, 1.78), (1.0, 0.7, 0.1), M["cloth_red"], bevel=0.03)
     add_box("screen", (0.6, -0.1, 1.02), (0.5, 0.3, 0.1), M["glow_cyan"])
 
 
@@ -536,6 +538,18 @@ def display_case(M):
         add_box(f"mull{i}", (dx, dy, 1.02), (0.06, 0.06, 0.76), M["iron"], bevel=0.01)
     add_box("cap", (0, 0, 1.42), (0.84, 0.84, 0.08), M["iron"], bevel=0.03)
     add_box("plate", (0, -0.46, 0.7), (0.6, 0.06, 0.16), M["cloth_tan"], bevel=0.02)
+
+
+def ship_pad(M):
+    """A display case stretched for a ship hologram: same read as the
+    outfitter plinth (raised base, lit interior, name plate) but long enough
+    that a hull sits ON it rather than floating over a stub."""
+    add_box("plinth", (0, 0, 0.26), (0.9, 1.9, 0.52), M["iron"], bevel=0.05)
+    add_box("top", (0, 0, 0.56), (1.0, 2.0, 0.1), M["steel"], bevel=0.03)
+    add_box("glow", (0, 0, 0.64), (0.78, 1.8, 0.04), M["glow_cyan"])
+    for i, y in enumerate((-0.82, 0.82)):
+        add_box(f"post{i}", (0, y, 0.78), (0.12, 0.12, 0.36), M["iron"], bevel=0.02)
+    add_box("plate", (-0.5, 0, 0.42), (0.08, 0.8, 0.2), M["cloth_tan"], bevel=0.02)
 
 
 def hull_cradle(M):
@@ -677,6 +691,7 @@ PROPS = [
     ("holo_table", holo_table, 2.6),
     ("weapon_locker", weapon_locker, 1.9),
     ("display_case", display_case, 1.8),
+    ("ship_pad", ship_pad, 2.6),
     ("hull_cradle", hull_cradle, 3.6),
     ("gantry", gantry, 2.9),
     ("parts_rack", parts_rack, 2.3),
