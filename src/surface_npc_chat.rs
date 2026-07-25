@@ -52,7 +52,15 @@ const ADJACENT_DIST: f32 = 1.5 * TILE_PX;
 pub fn npc_chat_interact(
     keyboard: Res<ButtonInput<KeyCode>>,
     walker_q: Query<&Transform, With<Walker>>,
-    mut npcs: Query<(Entity, &mut NpcBehavior, &Transform), (With<Npc>, Without<Walker>)>,
+    mut npcs: Query<
+        (
+            Entity,
+            &mut NpcBehavior,
+            &Transform,
+            Option<&crate::barks::Barks>,
+        ),
+        (With<Npc>, Without<Walker>),
+    >,
     mut chat: ResMut<NpcChatState>,
     nearby_building: Res<crate::surface::NearbyBuilding>,
     mission_npcs: Query<(), With<crate::surface_npc::MissionNpc>>,
@@ -113,7 +121,7 @@ pub fn npc_chat_interact(
     // Nearest adjacent NPC — MISSION npcs (givers/objectives) outrank
     // ambient civilians and companion avatars at any distance.
     let mut best: Option<(Entity, f32, bool)> = None; // (entity, dist, is_mission)
-    for (entity, _, tf) in &npcs {
+    for (entity, _, tf, _) in &npcs {
         let dist = (tf.translation.truncate() - wp).length();
         if dist < ADJACENT_DIST {
             let is_mission = mission_npcs.contains(entity);
@@ -130,9 +138,11 @@ pub fn npc_chat_interact(
     }
 
     let Some((npc_entity, ..)) = best else { return };
-    let Ok((_, mut npc, _)) = npcs.get_mut(npc_entity) else {
+    let Ok((_, mut npc, _, barks)) = npcs.get_mut(npc_entity) else {
         return;
     };
+    let barks = barks.cloned();
+    let barks = barks.as_ref();
 
     // Determine content from front behavior.
     let content = match npc.queue.front() {
@@ -173,9 +183,18 @@ pub fn npc_chat_interact(
             }
         }
         Some(Behavior::Patrol { waypoints, .. }) => {
-            let lines = generate_patrol_dialogue(pilot, waypoints);
+            // An NPC carrying authored barks speaks those; otherwise fall back
+            // to the generic wander chatter.
+            let lines = match barks {
+                Some(b) if !b.0.is_empty() => b.0.clone(),
+                _ => generate_patrol_dialogue(pilot, waypoints),
+            };
             ChatContent::Dialogue { lines, current: 0 }
         }
+        Some(Behavior::Loiter) if barks.is_some_and(|b| !b.0.is_empty()) => ChatContent::Dialogue {
+            lines: barks.map(|b| b.0.clone()).unwrap_or_default(),
+            current: 0,
+        },
         Some(Behavior::Loiter) => ChatContent::Dialogue {
             lines: vec![
                 "Good hunting out there.".to_string(),

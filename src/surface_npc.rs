@@ -1172,6 +1172,48 @@ fn find_nearest_walkable(world_pos: Vec2, cm: &SurfaceCostMap) -> (u32, u32) {
 /// `NpcBehavior` (an empty queue would despawn them) and no chat — the
 /// counter itself opens the trade window. Static body so they hold their
 /// spot behind the till.
+/// A browsing customer: ambient, but their banter quotes REAL data (see
+/// [`crate::barks`]). They stand still so they never block a doorway, and
+/// carry pre-rendered lines so the chat system needs no economy access.
+pub fn spawn_customer(
+    commands: &mut Commands,
+    layers: &mut crate::character_compositor::CharacterLayers,
+    images: &mut Assets<Image>,
+    tile: (u32, u32),
+    lines: Vec<String>,
+    role: &str,
+) {
+    let mut rng = rand::thread_rng();
+    let spec = layers.random_spec(&mut rng, role);
+    let Some(image) = layers.composite(&spec, images) else {
+        return;
+    };
+    let pos = SurfaceCostMap::tile_to_world(tile.0, tile.1);
+    commands.spawn((
+        DespawnOnExit(crate::PlayState::Inside),
+        crate::surface::interiors::InteriorScoped,
+        Npc,
+        crate::barks::Barks(lines),
+        NpcBehavior::with_behaviors(0.0, [Behavior::Loiter]),
+        crate::surface_character::CharacterAnim::person(0.11),
+        RigidBody::Static,
+        crate::surface_objects::character_foot_collider(5.0),
+        CollisionLayers::new(crate::GameLayer::Character, [crate::GameLayer::Surface]),
+        Sprite::from_atlas_image(
+            image,
+            TextureAtlas {
+                layout: layers.layout.clone(),
+                index: 0,
+            },
+        ),
+        Transform::from_xyz(
+            pos.x,
+            pos.y,
+            crate::surface_objects::depth_z(pos.y - crate::surface_objects::CHARACTER_FOOT_OFFSET),
+        ),
+    ));
+}
+
 pub fn spawn_clerk(
     commands: &mut Commands,
     layers: &mut crate::character_compositor::CharacterLayers,

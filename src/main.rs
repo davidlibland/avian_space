@@ -2,6 +2,7 @@ use avian2d::{math::*, prelude::*};
 use bevy::prelude::*;
 
 mod asteroids;
+mod barks;
 mod carrier;
 mod comms;
 mod companions;
@@ -497,6 +498,7 @@ fn build_app(
     // ── State and resources ──────────────────────────────────────────────
     app.init_state::<PlayState>()
         .init_resource::<TravelContext>()
+        .insert_resource(crate::barks::BarkCatalog::load())
         .insert_resource(CurrentStarSystem(starting_system.to_string()))
         .insert_resource(Gravity(Vec2::NEG_Y * 0.0))
         .insert_resource(training.rewards.clone())

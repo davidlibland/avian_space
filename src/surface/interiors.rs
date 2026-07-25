@@ -1334,7 +1334,7 @@ pub(crate) fn setup_interior(
         }
         let structural = |tx: u32, ty: u32| -> bool {
             let tier = map2d[ty as usize][tx as usize];
-            let i = (ty * map_w + tx) as usize;
+            let i = (ty * WORLD_WIDTH + tx) as usize;
             tier >= plan.solid_min_tier
                 || biome
                     .terrains
@@ -2327,9 +2327,11 @@ pub(crate) fn spawn_interior_npcs(
     context: Option<Res<InteriorContext>>,
     landed: Res<crate::planet_ui::LandedContext>,
     iu: Res<ItemUniverse>,
-    offers: Res<crate::missions::MissionOffers>,
-    catalog: Res<crate::missions::MissionCatalog>,
-    mission_log: Res<crate::missions::MissionLog>,
+    (offers, catalog, mission_log): (
+        Res<crate::missions::MissionOffers>,
+        Res<crate::missions::MissionCatalog>,
+        Res<crate::missions::MissionLog>,
+    ),
     existing: Query<&crate::surface_npc::MissionNpc>,
     clerks: Query<(), With<Clerk>>,
     layers: Option<ResMut<crate::character_compositor::CharacterLayers>>,
@@ -2339,6 +2341,10 @@ pub(crate) fn spawn_interior_npcs(
     unlocks: Res<crate::missions::PlayerUnlocks>,
     existing_hires: Query<&HirePilot>,
     roster: Option<Res<crate::carrier::EscortRoster>>,
+    (barks, customers): (
+        Res<crate::barks::BarkCatalog>,
+        Query<(), With<crate::barks::Barks>>,
+    ),
 ) {
     let (Some(context), Some(mut layers), Some(cm)) = (context, layers, cost_map) else {
         return;
@@ -2357,6 +2363,67 @@ pub(crate) fn spawn_interior_npcs(
     {
         let tile = (counter.0, (counter.1 + 1).min(y0 + rh - 1));
         crate::surface_npc::spawn_clerk(&mut commands, &mut layers, &mut images, tile);
+    }
+
+    // Customers: ambient shoppers whose banter quotes a REAL commodity and the
+    // planet that actually pays best for it, so overhearing them teaches the
+    // trade loop without a tutorial. Placed on open floor away from the door
+    // so they never wall the entrance, and idempotent like the clerk.
+    if context.level == 0 && customers.is_empty() {
+        let role = match kind {
+            BuildingKind::Market => "customer_market",
+            BuildingKind::Shipyard => "customer_shipyard",
+            BuildingKind::Outfitter => "customer_outfitter",
+            BuildingKind::MechanicShop => "customer_mechanic",
+            BuildingKind::FuelStation => "customer_fuel",
+            BuildingKind::Bar => "customer_bar",
+            BuildingKind::Garrison => "customer_garrison",
+            _ => "generic",
+        };
+        let (x0, y0, rw, rh) = plan.room;
+        use rand::SeedableRng;
+        use rand::seq::SliceRandom;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(
+            super::mazes::planet_seed(&planet) ^ (kind as u64).wrapping_mul(0x9E37),
+        );
+        // Candidate spots: open floor, not the entry column, not adjacent to
+        // the door — checked against the solid mask so props never trap them.
+        let mut spots: Vec<(u32, u32)> = Vec::new();
+        for ty in (y0 + 2)..(y0 + rh - 1) {
+            for tx in (x0 + 2)..(x0 + rw - 2) {
+                let i = (ty * WORLD_WIDTH + tx) as usize;
+                if plan.solid[i] || plan.terrain[i] >= plan.solid_min_tier {
+                    continue;
+                }
+                if tx.abs_diff(plan.entry.0) < 2 && ty.abs_diff(plan.entry.1) < 3 {
+                    continue;
+                }
+                spots.push((tx, ty));
+            }
+        }
+        spots.shuffle(&mut rng);
+        // Two in a shop, three in the market (it should feel busy).
+        let want = if kind == BuildingKind::Market { 3 } else { 2 };
+        for (n, tile) in spots.into_iter().take(want).enumerate() {
+            // In the market some of them are shoppers moving between stalls,
+            // which is the role that carries the blunt price tips.
+            let r = if kind == BuildingKind::Market && n % 2 == 1 {
+                "shopper"
+            } else if kind == BuildingKind::Bar && n % 2 == 1 {
+                "regular"
+            } else {
+                role
+            };
+            let lines = barks.render(r, &iu, &planet, &mut rng);
+            crate::surface_npc::spawn_customer(
+                &mut commands,
+                &mut layers,
+                &mut images,
+                tile,
+                lines,
+                "civilian",
+            );
+        }
     }
 
     // Pilots for hire at the EAST tables (bar only) — one NPC per pool

@@ -1,0 +1,82 @@
+# Ambient NPC dialogue.
+#
+# Lines are grouped by ROLE. At spawn time the game picks a couple at random and
+# fills the {placeholders} from live game data, so a "customer" wishing aloud is
+# quoting a real trade route on a real planet — the player overhears genuine
+# information instead of being handed a tip.
+#
+# Placeholders (a line is SKIPPED if its data isn't available here):
+#   {here}      this planet's display name
+#   {commodity} a commodity actually traded on this planet
+#   {dest}      the planet in this system that pays best for {commodity}
+#   {ship}      a hull this planet's shipyard sells
+#   {item}      an item this planet's outfitter sells
+#   {faction}   the faction currently holding this planet
+#
+# Keep lines short — they show in a small chat box, and young players read them
+# aloud. Two lines per NPC is the sweet spot: a greeting, then the substance.
+
+roles:
+  # ── Customers: informative banter. They aren't advising you, they're
+  # thinking out loud — which is why it teaches without feeling like a tutorial.
+  customer_shipyard:
+    - "I keep eyeing that {ship}. With a hold that big I could run {commodity} out to {dest} and never look back."
+    - "Been saving two years for a {ship}. Two years!"
+    - "My old freighter's held together with tape and hope. Don't ask."
+    - "If I had the cargo space, {commodity} to {dest} would pay for the ship in a season."
+    - "They say a bigger hull just means bigger repair bills. They're not wrong."
+
+  customer_outfitter:
+    - "Thinking about a {item}. Space out past the lanes isn't as quiet as it used to be."
+    - "Everyone tells me to buy more guns. Nobody tells me where to put them."
+    - "I fitted a {item} last month. Wish I'd done it a year ago."
+    - "Cheaper to outrun trouble than outshoot it, that's my rule."
+
+  customer_mechanic:
+    - "Took a beating coming in. Rock the size of a house, right off the bow."
+    - "They quoted me a fortune. Worth it — a cracked hull won't fix itself."
+    - "Third time here this month. I'm starting to think I'm the problem."
+    - "Get your shields looked at before the run, not after. Learned that the hard way."
+
+  customer_fuel:
+    - "Filled up here, then ran dry two jumps out. Never again."
+    - "Fuel's the one thing you can't talk your way out of needing."
+    - "I always top off at {here}. Cheaper than being towed."
+    - "Saw a ship drifting out there last week. Out of fuel, out of luck."
+
+  customer_market:
+    - "{commodity} is going cheap here. I hear {dest} pays proper money for it."
+    - "Everything on {here} costs double what it should. Except {commodity}, oddly."
+    - "Buy low, sell high. Easy to say on an empty stomach."
+    - "If you've got hold space, {commodity} out to {dest} is the run I'd make."
+
+  customer_bar:
+    - "One more and I'm walking home. It's four systems, but I'll manage."
+    - "Best thing on {here} is this bar. That's not a compliment to {here}."
+    - "Everyone in here's got a story. Half of them are even true."
+
+  customer_garrison:
+    - "Signed up for the glory. Got paperwork instead."
+    - "{faction} pays on time, I'll give them that."
+    - "Quiet posting, this one. I'd like to keep it that way."
+
+  # ── Shoppers milling between stalls: the trade-route informants.
+  shopper:
+    - "{commodity}'s a bargain on {here} right now."
+    - "A hauler told me {dest} is desperate for {commodity}. Take that how you like."
+    - "Prices here move fast. Blink and you've missed the good run."
+    - "I only buy what I can carry. Learned that lesson twice."
+
+  # ── Bar regulars: pointers. They route you to content, not to prices.
+  regular:
+    - "If you're after work, ask around in here. Someone always needs something moved."
+    - "There's a fella been asking after a pilot. Might still be about."
+    - "Word is the garrison's posting bounties again."
+    - "The mechanic hears more than the bartender. Don't tell him I said so."
+
+  # ── Generic filler, safe anywhere.
+  generic:
+    - "Mind how you go."
+    - "Quiet day. I like it that way."
+    - "New face. We don't get many."
+    - "Safe travels, pilot."
