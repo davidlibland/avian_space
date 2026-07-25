@@ -11,7 +11,16 @@
 #   {dest}      the planet in this system that pays best for {commodity}
 #   {ship}      a hull this planet's shipyard sells
 #   {item}      an item this planet's outfitter sells
-#   {faction}   the faction currently holding this planet
+#   {faction}   the faction currently HOLDING this system (live, not the YAML)
+#   {enemy}     a faction at war with the holder
+#   {front}     a system with a live front right now
+#   {front_sponsor} / {front_enemy}   who is pushing, and against whom
+#   {intensity} how hard that front is being fought
+#   {regard}    what the holding faction makes of you ("wanted", "well regarded")
+#
+# NOTE: the war model tracks the PRESENT only — influence, holders and fronts
+# are live, but nothing records WHEN anything changed. So lines may say "the
+# front is here" or "they hold this system", never "they took it last month".
 #
 # Keep lines short — they show in a small chat box, and young players read them
 # aloud. Two lines per NPC is the sweet spot: a greeting, then the substance.
@@ -80,3 +89,48 @@ roles:
     - "Quiet day. I like it that way."
     - "New face. We don't get many."
     - "Safe travels, pilot."
+
+  # ── Politics & war. All of this is read from live influence, so it stays
+  # true as the war moves — and it moves on its own, not just when you act.
+  intel_officer:
+    - "Current picture: {faction} holds this system. {front_sponsor} is pushing on {front}."
+    - "{front} is the one to watch. {intensity}, and it isn't settling."
+    - "{faction} and {enemy} have been at each other's throats for years. Nothing new."
+    - "Officially the border is quiet. Officially."
+    - "You're {regard} around here, for whatever that's worth to you."
+
+  partisan:
+    - "{faction} calls this their system. Ask the people who live here what they call it."
+    - "Loyalty follows whoever's holding the guns that week."
+    - "{enemy} isn't finished. They never are."
+    - "Everyone picks a side eventually. Some of us just pick later."
+
+  veteran:
+    - "I flew the {front} line. {intensity} is a tidy way to put it."
+    - "Wars aren't won at the front. They're won at the fuel depot."
+    - "{faction} pays, {enemy} pays. Money spends the same either way."
+    - "Every side tells you they're the reasonable one."
+
+  war_correspondent:
+    - "The story right now is {front}. {front_sponsor} against {front_enemy}."
+    - "Nobody reports the quiet systems. That's where it starts, though."
+    - "{intensity} out there, and half of it never makes the reports."
+
+  # ── Advice. The tipsy pilot means well and garbles it; the old hand is
+  # oblique but never wrong. Both give REAL mechanical advice — the fun is
+  # in working out what they actually mean.
+  tipsy_pilot:
+    - "Listen — listen. The trick is... you hold the A key. Auto-aim. Best thing they ever built."
+    - "Fuel! Always the fuel. Scoop the... the shiny asteroids. The ones that look wet."
+    - "Press Q. Targets the nearest rock. Or was it the nearest... something. Q, anyway."
+    - "Don't fight the big ones head on. Go round. Round is good."
+    - "I once flew four systems on fumes. Do NOT do that. But I did it."
+
+  old_pilot:
+    - "A full hold and an empty tank is the same as no hold at all."
+    - "Everything in this bar will tell you to buy a gun. Buy the cargo space."
+    - "The map knows more than the map tells you. Look at who owns what before you fly."
+    - "Cheap on one world, dear on the next. That gap is the whole job."
+    - "Take the small work first. Nobody hands a stranger the good contracts."
+    - "If a system is being fought over, its markets go strange. Strange can pay."
+    - "Repair before the run. It always costs less than repair after it."

@@ -2341,9 +2341,11 @@ pub(crate) fn spawn_interior_npcs(
     unlocks: Res<crate::missions::PlayerUnlocks>,
     existing_hires: Query<&HirePilot>,
     roster: Option<Res<crate::carrier::EscortRoster>>,
-    (barks, customers): (
+    (barks, customers, galaxy, standings): (
         Res<crate::barks::BarkCatalog>,
         Query<(), With<crate::barks::Barks>>,
+        Res<crate::galaxy::GalaxyControl>,
+        Option<Res<crate::standing::FactionStandings>>,
     ),
 ) {
     let (Some(context), Some(mut layers), Some(cm)) = (context, layers, cost_map) else {
@@ -2402,19 +2404,31 @@ pub(crate) fn spawn_interior_npcs(
             }
         }
         spots.shuffle(&mut rng);
-        // Two in a shop, three in the market (it should feel busy).
-        let want = if kind == BuildingKind::Market { 3 } else { 2 };
+        // Two in a shop; three where there is most to say.
+        let want = match kind {
+            BuildingKind::Market | BuildingKind::Bar | BuildingKind::Garrison => 3,
+            _ => 2,
+        };
         for (n, tile) in spots.into_iter().take(want).enumerate() {
-            // In the market some of them are shoppers moving between stalls,
-            // which is the role that carries the blunt price tips.
-            let r = if kind == BuildingKind::Market && n % 2 == 1 {
-                "shopper"
-            } else if kind == BuildingKind::Bar && n % 2 == 1 {
-                "regular"
-            } else {
-                role
+            // Venue characters. The bar carries the ADVICE — an old hand whose
+            // tips are oblique but never wrong, and a tipsy pilot who means
+            // well and garbles it. The garrison carries the WAR, spoken by
+            // people who read the influence maps daily.
+            let r = match (kind, n % 3) {
+                (BuildingKind::Market, 1) => "shopper",
+                (BuildingKind::Bar, 1) => "old_pilot",
+                (BuildingKind::Bar, 2) => "tipsy_pilot",
+                (BuildingKind::Garrison, 1) => "intel_officer",
+                (BuildingKind::Garrison, 2) => "veteran",
+                _ => role,
             };
-            let lines = barks.render(r, &iu, &planet, &mut rng);
+            let ctx = crate::barks::BarkContext {
+                iu: &iu,
+                planet_key: &planet,
+                galaxy: Some(&galaxy),
+                standings: standings.as_deref(),
+            };
+            let lines = barks.render(r, &ctx, &mut rng);
             crate::surface_npc::spawn_customer(
                 &mut commands,
                 &mut layers,

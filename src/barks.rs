@@ -16,7 +16,9 @@ use rand::seq::SliceRandom;
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::galaxy::GalaxyControl;
 use crate::item_universe::ItemUniverse;
+use crate::standing::FactionStandings;
 
 /// Pre-rendered lines carried by an NPC, shown when you talk to them.
 /// Rendered at SPAWN time (where the economy is in scope) rather than at chat
@@ -27,6 +29,15 @@ pub struct Barks(pub Vec<String>);
 #[derive(Deserialize, Debug, Default)]
 struct BarkFile {
     roles: HashMap<String, Vec<String>>,
+}
+
+/// Everything a line may need to know about the here-and-now. Grouped so the
+/// render signature stays sane as more of the world becomes quotable.
+pub struct BarkContext<'a> {
+    pub iu: &'a ItemUniverse,
+    pub planet_key: &'a str,
+    pub galaxy: Option<&'a GalaxyControl>,
+    pub standings: Option<&'a FactionStandings>,
 }
 
 /// All authored lines, keyed by role.
@@ -51,14 +62,8 @@ impl BarkCatalog {
 
     /// Two lines for `role` on this planet, with placeholders filled. Falls
     /// back to the `generic` role so an NPC is never mute.
-    pub fn render(
-        &self,
-        role: &str,
-        iu: &ItemUniverse,
-        planet_key: &str,
-        rng: &mut impl Rng,
-    ) -> Vec<String> {
-        let facts = Facts::gather(iu, planet_key);
+    pub fn render(&self, role: &str, ctx: &BarkContext, rng: &mut impl Rng) -> Vec<String> {
+        let facts = Facts::gather(ctx);
         let mut usable: Vec<String> = self
             .roles
             .get(role)
@@ -86,10 +91,22 @@ struct Facts {
     ship: Option<String>,
     item: Option<String>,
     faction: Option<String>,
+    /// A faction at war with whoever holds this system.
+    enemy: Option<String>,
+    /// A live front: the contested system, who is pushing, against whom, and
+    /// how hard. All read from current influence — no history is stored, so
+    /// lines may describe the war NOW but never how it got here.
+    front: Option<String>,
+    front_sponsor: Option<String>,
+    front_enemy: Option<String>,
+    intensity: Option<String>,
+    /// How the holding faction regards the player, in words.
+    regard: Option<String>,
 }
 
 impl Facts {
-    fn gather(iu: &ItemUniverse, planet_key: &str) -> Self {
+    fn gather(ctx: &BarkContext) -> Self {
+        let (iu, planet_key) = (ctx.iu, ctx.planet_key);
         let Some((system, pd)) = iu.find_gameplay_planet(planet_key) else {
             return Self {
                 here: None,
@@ -98,6 +115,12 @@ impl Facts {
                 ship: None,
                 item: None,
                 faction: None,
+                enemy: None,
+                front: None,
+                front_sponsor: None,
+                front_enemy: None,
+                intensity: None,
+                regard: None,
             };
         };
         let here = Some(pd.display_name.clone());
@@ -146,13 +169,76 @@ impl Facts {
                 .map(|i| i.display_name().to_string())
                 .unwrap_or_else(|| k.clone())
         });
+        // ── politics: who holds this system, and who wants it ──
+        let holder = ctx
+            .galaxy
+            .and_then(|g| g.controller(system))
+            .map(|s| s.to_string())
+            .or_else(|| faction.clone());
+        let enemy = holder.as_ref().and_then(|h| {
+            iu.enemies
+                .get(h)
+                .and_then(|e| e.first())
+                .filter(|e| iu.faction_takes_sides(e))
+                .cloned()
+        });
+        // Fronts are derived from LIVE influence, so this is true right now.
+        let (mut front, mut front_sponsor, mut front_enemy, mut intensity) =
+            (None, None, None, None);
+        if let Some(galaxy) = ctx.galaxy {
+            let fronts = crate::war::detect_fronts(iu, galaxy);
+            // Prefer a front touching this system, else any front at all.
+            let pick = fronts
+                .iter()
+                .find(|f| f.target == system || f.home == system)
+                .or_else(|| fronts.first());
+            if let Some(f) = pick {
+                front = iu
+                    .star_systems
+                    .get(&f.target)
+                    .map(|s| s.display_name.clone())
+                    .or_else(|| Some(f.target.clone()));
+                front_sponsor = Some(f.sponsor.clone());
+                front_enemy = Some(f.enemy.clone());
+                intensity = Some(
+                    match crate::war::front_tier(galaxy, f) {
+                        1 => "raids and quiet work",
+                        2 => "squadron fighting",
+                        _ => "a decisive push",
+                    }
+                    .to_string(),
+                );
+            }
+        }
+        // What the holding faction makes of the player.
+        let regard = holder.as_ref().and_then(|h| {
+            let st = ctx.standings?.get(h);
+            Some(
+                if st <= crate::standing::ARREST_THRESHOLD {
+                    "wanted"
+                } else if st <= crate::standing::ENGAGE_THRESHOLD {
+                    "not welcome"
+                } else if st >= 25.0 {
+                    "well regarded"
+                } else {
+                    "an unknown"
+                }
+                .to_string(),
+            )
+        });
         Self {
             here,
             commodity,
             dest,
             ship,
             item,
-            faction,
+            faction: holder.or(faction),
+            enemy,
+            front,
+            front_sponsor,
+            front_enemy,
+            intensity,
+            regard,
         }
     }
 
@@ -167,6 +253,12 @@ impl Facts {
             ("{ship}", &self.ship),
             ("{item}", &self.item),
             ("{faction}", &self.faction),
+            ("{enemy}", &self.enemy),
+            ("{front}", &self.front),
+            ("{front_sponsor}", &self.front_sponsor),
+            ("{front_enemy}", &self.front_enemy),
+            ("{intensity}", &self.intensity),
+            ("{regard}", &self.regard),
         ] {
             if out.contains(token) {
                 let v = value.as_ref()?;
@@ -178,8 +270,28 @@ impl Facts {
                 }
             }
         }
-        Some(out)
+        Some(capitalise_sentences(&out))
     }
+}
+
+/// Uppercase the first letter of the line and of each sentence. A placeholder
+/// can land at a sentence start ("{intensity} out there..."), and the author
+/// can't know that when writing it, so fix it after substitution.
+fn capitalise_sentences(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut start = true;
+    for ch in text.chars() {
+        if start && ch.is_alphabetic() {
+            out.extend(ch.to_uppercase());
+            start = false;
+        } else {
+            out.push(ch);
+            if matches!(ch, '.' | '!' | '?') {
+                start = true;
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -206,7 +318,13 @@ mod tests {
             "regular",
             "generic",
         ] {
-            let lines = cat.render(role, &iu, "earth", &mut rng);
+            let ctx = BarkContext {
+                iu: &iu,
+                planet_key: "earth",
+                galaxy: None,
+                standings: None,
+            };
+            let lines = cat.render(role, &ctx, &mut rng);
             assert!(!lines.is_empty(), "{role} produced no lines on earth");
             for l in &lines {
                 assert!(!l.contains('{'), "{role}: unfilled placeholder in {l:?}");
@@ -218,7 +336,13 @@ mod tests {
     #[test]
     fn unresolvable_lines_are_skipped_not_shown() {
         let iu = iu();
-        let facts = Facts::gather(&iu, "definitely_not_a_planet");
+        let ctx = BarkContext {
+            iu: &iu,
+            planet_key: "definitely_not_a_planet",
+            galaxy: None,
+            standings: None,
+        };
+        let facts = Facts::gather(&ctx);
         assert_eq!(facts.fill("Nice weather on {here}."), None);
         assert_eq!(
             facts.fill("Mind how you go."),
@@ -239,9 +363,28 @@ mod sample {
             crate::item_universe::parse_dir(std::path::Path::new("assets")).unwrap();
         iu.finalize();
         let mut rng = rand::thread_rng();
+        // A real galaxy, so the war lines are exercised rather than skipped.
+        let galaxy = crate::galaxy::GalaxyControl::seeded_from(&iu);
+        let standings = crate::standing::FactionStandings::default();
         for planet in ["earth", "mars", "mercury"] {
-            for role in ["customer_market", "customer_shipyard", "shopper"] {
-                for l in cat.render(role, &iu, planet, &mut rng) {
+            for role in [
+                "customer_market",
+                "customer_shipyard",
+                "shopper",
+                "old_pilot",
+                "tipsy_pilot",
+                "intel_officer",
+                "veteran",
+                "war_correspondent",
+                "partisan",
+            ] {
+                let ctx = BarkContext {
+                    iu: &iu,
+                    planet_key: planet,
+                    galaxy: Some(&galaxy),
+                    standings: Some(&standings),
+                };
+                for l in cat.render(role, &ctx, &mut rng) {
                     println!("[{planet}/{role}] {l}");
                 }
             }
