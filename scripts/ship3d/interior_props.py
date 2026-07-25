@@ -18,7 +18,9 @@ import os
 import sys
 
 import bpy
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
+
+from mathutils import Matrix
 
 from blender_gen import (add_box, add_cylinder, add_sphere, glow_material,
                          render_to, reset, setup_scene, toon_material)
@@ -31,6 +33,17 @@ ELEV = 50.0
 RES = 512
 PX_PER_TILE = 34  # matches buildings3d — game downsamples to 32
 
+# Props stand in cabinet-projected rooms, so they must lean the SAME way as the
+# walls (scripts/ship3d/interior_cabinet_tiles.py) or they read as decals lying
+# on the floor instead of objects standing on it.
+SHX, SHY = 0.26, 0.42
+
+# Cel bands. The stock ramp (0.5 / 0.82 / 1.0) crushes everything a top-down
+# camera sees into the top band, so every surface came out the same value —
+# the "flat" look. Four wider-spread steps keep the hard-edged toon feel but
+# give tops, sides and shadowed faces distinct values.
+BANDS = ((0.0, 0.26), (0.30, 0.46), (0.56, 0.72), (0.82, 1.0))
+
 
 def C(*rgb):
     return tuple(v / 255.0 for v in rgb)
@@ -38,37 +51,57 @@ def C(*rgb):
 
 def mats():
     return {
-        "wood": toon_material("wood", C(122, 84, 52)),
-        "wood_dark": toon_material("wood_dark", C(84, 56, 36)),
-        "steel": toon_material("steel", C(150, 156, 166)),
-        "iron": toon_material("iron", C(72, 74, 80)),
-        "brass": toon_material("brass", C(180, 134, 62), spec=0.5),
-        "cloth_red": toon_material("cloth_red", C(168, 62, 48)),
-        "cloth_tan": toon_material("cloth_tan", C(196, 168, 120)),
-        "crate": toon_material("crate", C(146, 112, 66)),
-        "cont_red": toon_material("cont_red", C(150, 62, 44)),
-        "cont_blue": toon_material("cont_blue", C(52, 84, 130)),
+        "wood": toon_material("wood", C(122, 84, 52), bands=BANDS),
+        "wood_dark": toon_material("wood_dark", C(84, 56, 36), bands=BANDS),
+        "steel": toon_material("steel", C(150, 156, 166), bands=BANDS),
+        "iron": toon_material("iron", C(72, 74, 80), bands=BANDS),
+        "brass": toon_material("brass", C(180, 134, 62), spec=0.5, bands=BANDS),
+        "cloth_red": toon_material("cloth_red", C(168, 62, 48), bands=BANDS),
+        "cloth_tan": toon_material("cloth_tan", C(196, 168, 120), bands=BANDS),
+        "crate": toon_material("crate", C(146, 112, 66), bands=BANDS),
+        "cont_red": toon_material("cont_red", C(150, 62, 44), bands=BANDS),
+        "cont_blue": toon_material("cont_blue", C(52, 84, 130), bands=BANDS),
         "glow_warm": glow_material("glow_warm", C(255, 196, 96), 2.4),
         "glow_cyan": glow_material("glow_cyan", C(80, 220, 255), 2.4),
-        "pipe": toon_material("pipe", C(96, 110, 116)),
-        "bottle_g": toon_material("bottle_g", C(70, 140, 90), spec=0.6),
-        "dark": toon_material("dark", C(30, 30, 34)),
+        "pipe": toon_material("pipe", C(96, 110, 116), bands=BANDS),
+        "bottle_g": toon_material("bottle_g", C(70, 140, 90), spec=0.6, bands=BANDS),
+        "dark": toon_material("dark", C(30, 30, 34), bands=BANDS),
     }
 
 
 def cam_oblique():
-    scene = bpy.context.scene
-    cam = scene.camera
-    E = math.radians(ELEV)
-    dist = 14.0
-    cam.location = (0.0, -dist * math.cos(E), dist * math.sin(E))
-    tgt = bpy.data.objects.new("tgt", None)
-    scene.collection.objects.link(tgt)
-    tgt.location = (0, 0, 0.4)
-    tr = cam.constraints.new("TRACK_TO")
-    tr.target = tgt
-    tr.track_axis = "TRACK_NEGATIVE_Z"
-    tr.up_axis = "UP_Y"
+    """Straight-down ortho. Depth comes from the cabinet SHEAR applied to the
+    geometry, exactly as the wall tiles do it — never from tilting the camera,
+    which would disagree with the walls."""
+    cam = bpy.context.scene.camera
+    cam.data.type = "ORTHO"
+    cam.constraints.clear()
+    cam.location = (0.0, 0.0, 20.0)
+    cam.rotation_euler = (0.0, 0.0, 0.0)
+
+
+def apply_shear():
+    S = Matrix(((1, 0, SHX, 0), (0, 1, SHY, 0), (0, 0, 1, 0), (0, 0, 0, 1)))
+    for o in bpy.context.scene.objects:
+        if o.type == "MESH":
+            o.matrix_world = S @ o.matrix_world
+
+
+def light_for_contrast():
+    """Drop the key toward the horizon and pull the fill down. A high key plus
+    a strong fill lights tops and sides almost equally, which is what collapsed
+    them into one band; a lower key separates them."""
+    sc = bpy.context.scene
+    for o in sc.objects:
+        if o.type != "LIGHT":
+            continue
+        if o.name.startswith("key"):
+            o.rotation_euler = (math.radians(32), math.radians(-26), math.radians(18))
+            o.data.energy = 5.2
+        elif o.name.startswith("fill"):
+            o.data.energy = 0.7
+        elif o.name.startswith("rim"):
+            o.data.energy = 1.4
 
 
 # ── builders: geometry in tile units, front edge at y = -depth/2 ───────────
@@ -92,12 +125,16 @@ def stool(M):
 
 
 def shelf_rack(M):
-    add_box("frame", (0, 0, 0.7), (1.9, 0.5, 1.4), M["steel"], bevel=0.02)
-    for z in (0.35, 0.8, 1.25):
-        add_box(f"shelf{z}", (0, 0, z), (1.8, 0.46, 0.05), M["iron"])
-        for i in range(3):
-            add_box(f"box{z}{i}", (-0.6 + i * 0.6, 0, z + 0.14),
-                    (0.34, 0.3, 0.22), M["crate"], bevel=0.03)
+    """Open shelving: uprights + several visible shelf levels with stock on
+    them, so it reads as storage rather than a grey slab."""
+    for i, x in enumerate((-0.92, 0.92)):
+        add_box(f"up{i}", (x, 0, 0.85), (0.1, 0.5, 1.7), M["iron"], bevel=0.02)
+    for i, z in enumerate((0.36, 0.86, 1.36)):
+        add_box(f"shelf{i}", (0, 0, z), (1.92, 0.52, 0.07), M["steel"], bevel=0.02)
+        for j, x in enumerate((-0.6, -0.1, 0.5)):
+            box = M["crate"] if (i + j) % 2 else M["cont_blue"]
+            add_box(f"bx{i}{j}", (x + 0.1 * j, 0.0, z + 0.2),
+                    (0.34, 0.34, 0.3), box, bevel=0.03)
 
 
 def market_stall(M):
@@ -114,23 +151,61 @@ def market_stall(M):
 
 
 def engine_bench(M):
-    add_box("bench", (0, 0, 0.35), (1.9, 0.8, 0.7), M["iron"], bevel=0.03)
-    add_cylinder("block", (-0.3, 0, 0.95), 0.32, 0.9, M["steel"], axis="x")
-    add_cylinder("exhaust", (0.55, 0, 0.95), 0.12, 0.5, M["brass"], axis="x")
-    add_sphere("glow", (-0.75, 0, 0.95), (0.1, 0.1, 0.1), M["glow_cyan"])
+    """A workbench alone is an anonymous slab. What says REPAIR SHOP is an
+    engine cradled under a hoist, with tools on the bench and a lit readout."""
+    add_box("bench", (0, 0, 0.34), (1.9, 0.8, 0.68), M["iron"], bevel=0.03)
+    add_box("top", (0, 0, 0.71), (1.96, 0.86, 0.08), M["steel"], bevel=0.02)
+    # engine block being worked on, with nozzle + cyan diagnostic glow
+    add_cylinder("block", (-0.34, 0, 1.02), 0.3, 0.86, M["steel"], axis="x")
+    for i, x in enumerate((-0.62, -0.34, -0.06)):
+        add_cylinder(f"ring{i}", (x, 0, 1.02), 0.33, 0.06, M["iron"], axis="x")
+    add_cylinder("nozzle", (0.28, 0, 1.02), 0.2, 0.3, M["brass"], axis="x", r2=0.3)
+    add_sphere("glow", (-0.86, 0, 1.02), (0.1, 0.1, 0.1), M["glow_cyan"])
+    # hoist: upright + arm over the block, with a hanging chain
+    add_box("post", (0.86, 0.26, 0.9), (0.14, 0.14, 1.8), M["iron"], bevel=0.02)
+    add_box("arm", (0.1, 0.26, 1.74), (1.6, 0.12, 0.12), M["iron"], bevel=0.02)
+    add_cylinder("chain", (-0.34, 0.26, 1.44), 0.03, 0.5, M["dark"], axis="z")
+    add_box("hook", (-0.34, 0.26, 1.17), (0.08, 0.08, 0.12), M["steel"], bevel=0.02)
+    # a couple of tools on the bench so the top isn't bare
+    add_box("wrench", (0.62, -0.16, 0.78), (0.44, 0.09, 0.05), M["steel"], bevel=0.02)
+    add_box("tray", (0.5, 0.2, 0.78), (0.34, 0.26, 0.06), M["iron"], bevel=0.02)
 
 
 def tool_rack(M):
-    add_box("board", (0, 0.15, 0.8), (0.9, 0.1, 1.2), M["wood_dark"])
-    for i, z in enumerate((0.5, 0.85, 1.2)):
-        add_box(f"tool{i}", (-0.2 + (i % 2) * 0.4, 0.05, z),
-                (0.08, 0.06, 0.3), M["steel"])
+    """A pegboard reads as tools only if the tools have TOOL shapes: a wrench
+    with a head, a hammer with a claw, a driver, hung in a row over a bin."""
+    add_box("board", (0, 0.2, 0.86), (1.0, 0.08, 1.3), M["wood_dark"])
+    add_box("edge", (0, 0.2, 1.53), (1.04, 0.1, 0.06), M["iron"], bevel=0.02)
+    # wrench: shaft + open head
+    add_box("wr_shaft", (-0.32, 0.12, 1.02), (0.06, 0.05, 0.52), M["steel"], bevel=0.02)
+    add_box("wr_head", (-0.32, 0.12, 1.32), (0.17, 0.06, 0.16), M["steel"], bevel=0.04)
+    # hammer: handle + head across the top
+    add_box("hm_handle", (0.0, 0.12, 0.98), (0.05, 0.05, 0.46), M["wood"], bevel=0.02)
+    add_box("hm_head", (0.02, 0.12, 1.28), (0.24, 0.07, 0.11), M["iron"], bevel=0.03)
+    # driver: thin shaft + fat grip
+    add_box("dr_shaft", (0.32, 0.12, 1.1), (0.04, 0.04, 0.34), M["steel"], bevel=0.01)
+    add_box("dr_grip", (0.32, 0.12, 0.84), (0.09, 0.08, 0.24), M["cont_red"], bevel=0.04)
+    # parts bin along the bottom
+    add_box("bin", (0, 0.04, 0.16), (0.92, 0.3, 0.32), M["iron"], bevel=0.03)
+    for i, x in enumerate((-0.28, 0.0, 0.28)):
+        add_box(f"nut{i}", (x, -0.04, 0.34), (0.14, 0.14, 0.06), M["brass"], bevel=0.02)
 
 
 def fuel_pump(M):
-    add_box("body", (0, 0, 0.6), (0.6, 0.4, 1.2), M["cont_red"], bevel=0.06)
-    add_box("face", (0, -0.18, 0.85), (0.4, 0.06, 0.3), M["glow_warm"])
-    add_cylinder("hose", (0.32, 0, 0.5), 0.045, 0.8, M["dark"], axis="z")
+    """Read-at-32px checklist: tall body, lit display, and above all a HOSE
+    looping out to a nozzle — the one silhouette nothing else in the game has."""
+    add_box("base", (0, 0, 0.09), (0.72, 0.5, 0.18), M["iron"], bevel=0.04)
+    add_box("body", (0, 0, 0.78), (0.62, 0.42, 1.2), M["cont_red"], bevel=0.07)
+    add_box("face", (0, -0.23, 1.02), (0.48, 0.06, 0.46), M["glow_warm"])
+    # Under cabinet projection a tall prop shows a lot of TOP face, so keep the
+    # crown small — a wide cap plate just becomes a grey lid hiding the body.
+    add_box("cap", (0, -0.06, 1.42), (0.4, 0.26, 0.08), M["iron"], bevel=0.03)
+    # hose: an arc of short segments from the flank out and down to a nozzle
+    for i, (dx, dz) in enumerate(((0.36, 1.18), (0.52, 1.06), (0.60, 0.86),
+                                  (0.62, 0.62), (0.60, 0.40))):
+        add_cylinder(f"hose{i}", (dx, 0.0, dz), 0.05, 0.16, M["dark"], axis="z")
+    add_box("nozzle", (0.60, -0.02, 0.26), (0.13, 0.13, 0.3), M["brass"], bevel=0.03)
+    add_box("holster", (-0.36, -0.06, 0.62), (0.1, 0.16, 0.26), M["iron"], bevel=0.02)
 
 
 def war_desk(M):
@@ -420,9 +495,11 @@ PROPS = [
 
 def render_prop(name, builder, extent):
     reset()
+    builder(mats())
+    apply_shear()
     setup_scene(extent * 2.2, RES, freestyle_thick=1.4)
     cam_oblique()
-    builder(mats())
+    light_for_contrast()
     tmp = os.path.join(OUT, f"_prop_{name}.png")
     render_to(tmp)
     img = Image.open(tmp).convert("RGBA")
@@ -436,7 +513,23 @@ def render_prop(name, builder, extent):
         (max(1, round(img.width * scale)), max(1, round(img.height * scale))),
         Image.LANCZOS,
     )
-    return img
+    return add_contact_shadow(img)
+
+
+def add_contact_shadow(img):
+    """Soft ellipse where the prop meets the floor. Without one nothing looks
+    like it is TOUCHING the ground, no matter how well it is shaded."""
+    pad = max(3, img.width // 10)
+    w, h = img.width + 2 * pad, img.height + pad
+    sh = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(sh)
+    ew, eh = int(img.width * 0.92), max(4, int(img.width * 0.22))
+    cx, cy = w // 2, img.height + pad // 2
+    d.ellipse((cx - ew // 2, cy - eh // 2, cx + ew // 2, cy + eh // 2),
+              fill=(12, 14, 20, 115))
+    sh = sh.filter(ImageFilter.GaussianBlur(max(1.2, img.width / 26)))
+    sh.alpha_composite(img, (pad, 0))
+    return sh
 
 
 def main():
