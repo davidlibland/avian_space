@@ -445,6 +445,28 @@ pub(crate) struct ExitDoor;
 #[derive(Component)]
 pub(crate) struct Counter(pub BuildingKind);
 
+/// A prop you can actually WORK at: pressing E opens the same window the
+/// counter does. Refuel at the pump, repair in the bay, trade at a stall,
+/// take work off the board — distributing the counter's job across the
+/// furniture is what turns scenery into a reason to cross the room.
+#[derive(Component)]
+pub(crate) struct Station(pub BuildingKind);
+
+/// Which props are working stations in a given venue (see [`Station`]).
+fn station_for(name: &str, kind: BuildingKind) -> Option<BuildingKind> {
+    let k = match (name, kind) {
+        ("fuel_pump" | "kiosk", _) => BuildingKind::FuelStation,
+        ("repair_bay" | "engine_bench", _) => BuildingKind::MechanicShop,
+        ("market_stall", _) => BuildingKind::Market,
+        ("bounty_board", _) => BuildingKind::Garrison,
+        ("hull_cradle", BuildingKind::Shipyard) => BuildingKind::Shipyard,
+        ("parts_rack", BuildingKind::Shipyard) => BuildingKind::Shipyard,
+        ("parts_rack" | "tool_rack", BuildingKind::MechanicShop) => BuildingKind::MechanicShop,
+        _ => return None,
+    };
+    Some(k)
+}
+
 // ── Room geometry ─────────────────────────────────────────────────────────────
 
 /// Interior tile tiers (must match the "interior" biome terrain rows —
@@ -693,6 +715,15 @@ pub(crate) fn prop_meta(name: &str) -> (u32, u32, bool) {
         "pump_unit" => (2, 2, true),
         "pipe_valve" => (1, 1, true),
         "stairs_down" | "stairs_up" => (1, 1, false),
+        // ── venue anchors ──
+        "fuel_tank" | "holo_table" => (2, 2, true),
+        "hull_cradle" => (3, 2, true),
+        "repair_bay" => (3, 3, false), // floor marking — walk onto it
+        "kiosk" | "parts_rack" | "bar_booth" => (2, 1, true),
+        "gantry" => (2, 1, false), // you walk under it
+        "pipe_manifold" | "bounty_board" => (2, 1, false), // wall-mounted
+        "safety_cabinet" | "neon_sign" => (1, 1, false), // wall-mounted
+        "weapon_locker" | "display_case" | "keg_stack" | "vending" | "planter" => (1, 1, true),
         // Exit markers stand ON the walkable door tile.
         "exit_door" | "ladder_up" => (1, 1, false),
         // Venue clutter: mostly walk-over dressing; piles, drums and
@@ -842,64 +873,120 @@ pub(crate) fn build_plan(
     }
 
     // ── Furnishing: the props that make each shop ITS shop ──
+    //
+    // Two rules learned from the first pass, when big rooms came out empty:
+    //  * Rooms scale with STOCK but the furniture list used to be fixed, so
+    //    the richer the planet the barer the shop. Counts now scale with area.
+    //  * Dress the PERIMETER. Wall-hugging props cost no walkable floor, so
+    //    the room fills up without crowding out NPCs — keep the middle open
+    //    and the concourse from door to counter clear.
     let mut props: Vec<(&'static str, (u32, u32))> = vec![("exit_door", door)];
+    // Walk the side walls placing a prop every `step` tiles, alternating
+    // sides; `skip_hi` leaves the counter end clear.
+    let perimeter = |props: &mut Vec<(&'static str, (u32, u32))>,
+                     names: &[&'static str],
+                     step: u32,
+                     skip_hi: u32| {
+        if names.is_empty() {
+            return;
+        }
+        let mut n = 0usize;
+        let mut y = y0 + 2;
+        while y + skip_hi < y0 + rh - 1 {
+            for x in [x0 + 1, x0 + rw - 2] {
+                // Never dress over a display slot — the outfitter hangs its
+                // stock on exactly these wall columns, and burying one makes
+                // it unreachable (caught by the reachability test).
+                if displays.contains(&(x, y)) {
+                    continue;
+                }
+                props.push((names[n % names.len()], (x, y)));
+                n += 1;
+            }
+            y += step;
+        }
+    };
+    let area = rw * rh;
     match kind {
         BuildingKind::Bar => {
             props.push(("bar_counter", (counter.0 - 1, counter.1)));
-            // West booths: mission givers stand LEFT of their table facing
-            // it, with a free chair for you opposite (east of the table).
-            for row in 0..3u32 {
-                let ty = y0 + 3 + row * 2;
-                props.push(("table_round", (x0 + 3, ty)));
-                props.push(("stool", (x0 + 4, ty)));
+            props.push(("keg_stack", (counter.0 + 2, counter.1)));
+            props.push(("neon_sign", (counter.0 - 3, y0 + rh)));
+            // Booth seating along the side walls: bars are mostly seating, and
+            // benches fill wall space instead of the middle of the floor.
+            let booths = (rh / 4).clamp(1, 3);
+            for i in 0..booths {
+                let by = y0 + 3 + i * 3;
+                props.push(("bar_booth", (x0 + 1, by)));
+                props.push(("bar_booth", (x0 + rw - 3, by)));
             }
-            // East booths, mirrored: hire pilots stand RIGHT of their
-            // table facing it, free chair on the west side.
-            for row in 0..3u32 {
+            // Free-standing tables down the middle — mission givers and hire
+            // pilots stand beside these, with a stool left open opposite.
+            for row in 0..(rh / 3).clamp(2, 4) {
                 let ty = y0 + 3 + row * 2;
-                props.push(("table_round", (x0 + rw - 4, ty)));
-                props.push(("stool", (x0 + rw - 5, ty)));
+                props.push(("table_round", (x0 + 4, ty)));
+                props.push(("stool", (x0 + 5, ty)));
+                props.push(("table_round", (x0 + rw - 5, ty)));
+                props.push(("stool", (x0 + rw - 6, ty)));
             }
-            // One ambience table mid-room.
-            props.push(("table_round", (x0 + rw / 2 + 2, y0 + 4)));
-            props.push(("stool", (x0 + rw / 2 + 3, y0 + 4)));
+            props.push(("planter", (x0 + 1, y0 + 1)));
+            props.push(("planter", (x0 + rw - 2, y0 + 1)));
         }
         BuildingKind::Market => {
-            // Two stall rows facing a central aisle.
             for row in 0..2u32 {
                 let sy = y0 + 3 + row * 5;
                 let mut sx = x0 + 2;
                 while sx + 2 < x0 + rw - 2 {
                     props.push(("market_stall", (sx, sy)));
-                    // Loose crates dress the first aisle only — the second
-                    // row's aisle doubles as the counter walkway.
                     if row == 0 {
                         props.push(("crate_stack", (sx + rng_ish(sx, sy) % 2, sy + 2)));
                     }
                     sx += 4;
                 }
             }
+            props.push(("vending", (x0 + 1, y0 + 1)));
+            props.push(("planter", (x0 + rw - 2, y0 + 1)));
         }
         BuildingKind::MechanicShop => {
-            props.push(("engine_bench", (x0 + rw / 2 - 1, y0 + rh / 2)));
-            props.push(("tool_rack", (x0 + 1, y0 + 3)));
-            props.push(("tool_rack", (x0 + 1, y0 + 6)));
-            props.push(("crate_stack", (x0 + rw - 2, y0 + 2)));
+            // The bay IS the shop: a hazard-outlined pad with the lift, an
+            // engine under a gantry beside it, and parts round the edges.
+            let bx = x0 + rw / 2 - 1;
+            let by = y0 + rh / 2 - 1;
+            props.push(("repair_bay", (bx - 1, by - 1)));
+            props.push(("gantry", (bx, by + 2)));
+            props.push(("engine_bench", (x0 + 2, y0 + rh - 4)));
+            props.push(("parts_rack", (counter.0 - 1, counter.1)));
+            perimeter(&mut props, &["tool_rack", "crate_stack", "barrel"], 3, 2);
         }
         BuildingKind::FuelStation => {
-            for i in 0..3u32 {
-                props.push(("fuel_pump", (x0 + rw - 2, y0 + 2 + i * 3)));
+            // Tankage along the back wall is the anchor (a depot is mostly
+            // tanks), pumps sit in an island, safety gear lines the walls.
+            // Tanks are 2x2 and sit on the counter's row, so keep them WEST of
+            // the counter aisle or they wall the clerk off (reachability test).
+            let mut tx = x0 + 2;
+            while tx + 2 < counter.0 - 1 {
+                props.push(("fuel_tank", (tx, y0 + rh - 3)));
+                tx += 3;
             }
+            props.push(("pipe_manifold", (x0 + 2, y0 + rh)));
+            let pumps = (rh / 3).clamp(2, 4);
+            for i in 0..pumps {
+                props.push(("fuel_pump", (x0 + rw / 2 + 1, y0 + 2 + i * 2)));
+            }
+            props.push(("kiosk", (counter.0 - 1, counter.1)));
+            perimeter(&mut props, &["safety_cabinet", "pallet", "barrel"], 3, 3);
         }
         BuildingKind::Garrison => {
             props.push(("war_desk", (counter.0 - 1, counter.1)));
             props.push(("flag_stand", (counter.0 - 3, counter.1)));
             props.push(("flag_stand", (counter.0 + 2, counter.1)));
-            // Crest banners on the back wall, flanking the desk above the
-            // flag stands (the wall row sits one tile above the top floor
-            // row; sprites resolve to the controlling faction at spawn).
             props.push(("faction_banner", (counter.0 - 3, y0 + rh)));
             props.push(("faction_banner", (counter.0 + 2, y0 + rh)));
+            // A tactical holo-table holds the middle of the room, and the
+            // bounty board turns wall space into a reason to walk over.
+            props.push(("holo_table", (x0 + rw / 2 - 1, y0 + rh / 2 - 1)));
+            props.push(("bounty_board", (x0 + 2, y0 + rh)));
+            perimeter(&mut props, &["weapon_locker", "crate_stack"], 3, 3);
             // The holding cell: flush against the room's back and east
             // walls (no gap row — the room wall IS the cell's back wall),
             // bars on the west flank and corner, and an ANIMATED gate on
@@ -907,17 +994,25 @@ pub(crate) fn build_plan(
             // marching prisoner (a collider seals it while closed).
             props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 1)));
             props.push(("jail_bars", (x0 + rw - 3, y0 + rh - 2)));
-            // The cell's own back bars, drawn on the cell row itself so
-            // they LINE UP with the west column's back panel (non-solid —
-            // the prisoner stands in front of them).
             props.push(("jail_bars_back", (x0 + rw - 2, y0 + rh - 1)));
             props.push(("jail_gate", (x0 + rw - 2, y0 + rh - 2)));
         }
-        BuildingKind::Outfitter | BuildingKind::Shipyard => {
+        BuildingKind::Shipyard => {
+            // A showroom needs the yard's machinery, not a lone shelf: a hull
+            // in a cradle being worked, gantries over the pads, parts around.
+            props.push(("parts_rack", (counter.0 - 1, counter.1)));
+            props.push(("hull_cradle", (x0 + 1, y0 + 1)));
+            props.push(("gantry", (x0 + 1, y0 + 4)));
+            perimeter(&mut props, &["parts_rack", "crate_stack", "barrel"], 4, 3);
+        }
+        BuildingKind::Outfitter => {
             props.push(("shelf_rack", (counter.0 - 1, counter.1)));
+            props.push(("vending", (x0 + 1, y0 + 1)));
+            perimeter(&mut props, &["weapon_locker", "crate_stack"], 3, 3);
         }
         _ => {}
     }
+    let _ = area;
 
     // Furniture solidity → the solid mask (kept out of doorways by layout).
     let mut solid = vec![false; (map_w * map_h) as usize];
@@ -1543,10 +1638,27 @@ pub(crate) fn setup_interior(
                 .unwrap_or(Color::srgba(0.4, 0.9, 1.0, 0.22)),
             DisplayBinding::Ship(_) => Color::srgba(0.4, 0.9, 1.0, 0.22),
         };
+        // A flat tinted square on the floor reads as a RUG. Outfitter stock
+        // stands in a real case: a baked plinth with visible side faces (so it
+        // has volume under the cabinet lean), foot-anchored and depth-sorted
+        // like any prop, with the tinted pad kept only as the glow pooling
+        // inside the glass.
+        if matches!(binding, DisplayBinding::OutfitterItem(_)) {
+            let foot_y = pos.y - tile_px * 0.5;
+            commands.spawn((
+                DespawnOnExit(PlayState::Inside),
+                InteriorScoped,
+                Sprite::from_image(
+                    asset_server.load("sprites/worlds/interior_props/display_case.png"),
+                ),
+                bevy::sprite::Anchor(Vec2::new(0.0, -0.5)),
+                Transform::from_xyz(pos.x, foot_y, depth(pos.x, foot_y)),
+            ));
+        }
         commands.spawn((
             DespawnOnExit(PlayState::Inside),
             InteriorScoped,
-            Sprite::from_color(pad_color, Vec2::splat(tile_px * 0.88)),
+            Sprite::from_color(pad_color, Vec2::splat(tile_px * 0.62)),
             Transform::from_xyz(pos.x, pos.y, -9.5),
         ));
         commands.spawn((
@@ -1666,6 +1778,24 @@ pub(crate) fn setup_interior(
                 },
             ));
             continue;
+        }
+        // Working furniture gets an interaction marker at its tile, so E at
+        // the pump/bay/stall/board does what the counter would.
+        if let Some(ui) = station_for(name, kind) {
+            let (pw, ph, _) = prop_meta(name);
+            let cpos = super::tile_to_world(
+                px + pw.saturating_sub(1) / 2,
+                py + ph.saturating_sub(1) / 2,
+                map_w,
+                map_h,
+                tile_px,
+            );
+            commands.spawn((
+                DespawnOnExit(PlayState::Inside),
+                InteriorScoped,
+                Station(ui),
+                Transform::from_xyz(cpos.x, cpos.y, 0.0),
+            ));
         }
         // Aliased sprites (same art, different placement semantics).
         let sprite_name = match name {
@@ -1797,6 +1927,7 @@ pub(crate) fn interior_interact(
     stairs_down: Query<&Transform, (With<StairsDown>, Without<Walker>)>,
     stairs_up: Query<&Transform, (With<StairsUp>, Without<Walker>)>,
     counters: Query<(&Counter, &Transform), Without<Walker>>,
+    stations: Query<(&Station, &Transform), Without<Walker>>,
     mut active_ui: ResMut<ActiveBuildingUI>,
     context: Option<ResMut<InteriorContext>>,
     mut commands: Commands,
@@ -1836,6 +1967,10 @@ pub(crate) fn interior_interact(
     }
     if let Some((counter, _)) = counters.iter().find(|(_, t)| near(t)) {
         active_ui.0 = Some(counter.0);
+        return;
+    }
+    if let Some((station, _)) = stations.iter().find(|(_, t)| near(t)) {
+        active_ui.0 = Some(station.0);
     }
 }
 
@@ -1847,6 +1982,7 @@ pub(crate) fn interior_interact_prompt(
     stairs_down: Query<&Transform, (With<StairsDown>, Without<Walker>)>,
     stairs_up: Query<&Transform, (With<StairsUp>, Without<Walker>)>,
     counters: Query<(&Counter, &Transform), Without<Walker>>,
+    stations: Query<(&Station, &Transform), Without<Walker>>,
     active_ui: Res<ActiveBuildingUI>,
     mut comms: ResMut<crate::hud::CommsChannel>,
     mut last: Local<Option<&'static str>>,
@@ -1865,6 +2001,15 @@ pub(crate) fn interior_interact_prompt(
         Some("Press E to climb up")
     } else if counters.iter().any(|(_, t)| near(t)) {
         Some("Press E to talk to the clerk")
+    } else if let Some((station, _)) = stations.iter().find(|(_, t)| near(t)) {
+        Some(match station.0 {
+            BuildingKind::FuelStation => "Press E to refuel",
+            BuildingKind::MechanicShop => "Press E to work on your ship",
+            BuildingKind::Market => "Press E to trade",
+            BuildingKind::Garrison => "Press E to read the board",
+            BuildingKind::Shipyard => "Press E to browse hulls",
+            _ => "Press E to use",
+        })
     } else {
         None
     };

@@ -452,6 +452,172 @@ def gauge_panel(M):
     add_box("conduit", (0, 0.14, 0.05), (0.1, 0.08, 0.2), M["pipe"])
 
 
+# ── venue anchors added in the interiors pass ──────────────────────────────
+def fuel_tank(M):
+    """Cryo tank: the visual anchor of a depot (a station is mostly tankage).
+    Tall, so keep the crown small and let the frost banding read from above."""
+    add_cylinder("tank", (0, 0, 1.05), 0.62, 2.1, M["steel"], axis="z")
+    for i, z in enumerate((0.45, 1.05, 1.65)):
+        add_cylinder(f"band{i}", (0, 0, z), 0.66, 0.12, M["pipe"], axis="z")
+    add_cylinder("frost", (0, 0, 0.24), 0.65, 0.3, M["cloth_tan"], axis="z")
+    add_cylinder("cap", (0, 0, 2.16), 0.34, 0.14, M["iron"], axis="z")
+    add_box("valve", (0.0, -0.6, 1.5), (0.18, 0.14, 0.18), M["brass"], bevel=0.03)
+
+
+def pipe_manifold(M):
+    """Pipe run + valve wheels: ties tanks to pumps so the room reads as one
+    system instead of scattered objects."""
+    add_cylinder("main", (0, 0.28, 0.62), 0.12, 1.9, M["pipe"], axis="x")
+    add_cylinder("main2", (0, 0.28, 0.34), 0.09, 1.9, M["pipe"], axis="x")
+    for i, x in enumerate((-0.6, 0.0, 0.6)):
+        add_cylinder(f"riser{i}", (x, 0.28, 0.9), 0.07, 0.5, M["pipe"], axis="z")
+        add_cylinder(f"wheel{i}", (x, 0.28, 1.16), 0.16, 0.05, M["brass"], axis="z")
+
+
+def safety_cabinet(M):
+    add_box("box", (0, 0.2, 0.62), (0.6, 0.28, 1.0), M["cont_red"], bevel=0.04)
+    add_box("glass", (0, 0.04, 0.72), (0.42, 0.04, 0.6), M["glow_warm"])
+    add_box("foot", (0, 0.2, 0.06), (0.64, 0.32, 0.12), M["iron"], bevel=0.02)
+
+
+def kiosk(M):
+    """Attendant booth: a windowed counter, so the owner NPC has a post and
+    the pay/refuel interaction has somewhere to live."""
+    add_box("base", (0, 0, 0.44), (2.0, 0.8, 0.88), M["wood_dark"], bevel=0.03)
+    add_box("sill", (0, -0.1, 0.92), (2.1, 0.9, 0.1), M["steel"], bevel=0.02)
+    for i, x in enumerate((-0.8, 0.8)):
+        add_box(f"post{i}", (x, 0.2, 1.36), (0.12, 0.12, 0.8), M["iron"], bevel=0.02)
+    add_box("awning", (0, 0.2, 1.78), (2.1, 0.7, 0.1), M["cloth_red"], bevel=0.03)
+    add_box("screen", (0.6, -0.1, 1.02), (0.5, 0.3, 0.1), M["glow_cyan"])
+
+
+def bounty_board(M):
+    """Wall board of postings — the single most useful thing to add to a
+    garrison, because it turns wall space into a reason to walk over."""
+    add_box("board", (0, 0.22, 0.92), (1.7, 0.1, 1.3), M["wood_dark"])
+    add_box("frame", (0, 0.22, 1.6), (1.76, 0.12, 0.1), M["iron"], bevel=0.02)
+    import random
+    rng = random.Random(4242)
+    for i in range(7):
+        x = rng.uniform(-0.68, 0.68)
+        z = rng.uniform(0.45, 1.42)
+        w = rng.uniform(0.2, 0.32)
+        add_box(f"note{i}", (x, 0.14, z), (w, 0.03, w * 1.3),
+                M["cloth_tan"] if i % 3 else M["glow_warm"])
+
+
+def holo_table(M):
+    """Tactical map table: a garrison centrepiece that fills mid-floor without
+    being a wall of grey."""
+    add_cylinder("pedestal", (0, 0, 0.28), 0.42, 0.56, M["iron"], axis="z")
+    add_cylinder("rim", (0, 0, 0.62), 1.0, 0.14, M["steel"], axis="z")
+    add_cylinder("plate", (0, 0, 0.7), 0.92, 0.05, M["dark"], axis="z")
+    add_cylinder("holo", (0, 0, 0.82), 0.72, 0.12, M["glow_cyan"], axis="z")
+    add_sphere("world", (0, 0, 1.06), (0.26, 0.26, 0.24), M["glow_cyan"])
+
+
+def weapon_locker(M):
+    add_box("body", (0, 0.16, 0.82), (0.86, 0.36, 1.6), M["iron"], bevel=0.03)
+    add_box("split", (0, -0.02, 0.82), (0.05, 0.06, 1.5), M["dark"])
+    for i, x in enumerate((-0.24, 0.24)):
+        add_box(f"vent{i}", (x, -0.02, 1.36), (0.3, 0.04, 0.24), M["pipe"])
+        add_box(f"hndl{i}", (x + (0.1 if i else -0.1), -0.04, 0.8),
+                (0.06, 0.05, 0.22), M["brass"], bevel=0.02)
+
+
+def display_case(M):
+    """Glass case for an outfitter item: a raised plinth with visible side
+    faces, a lit interior and a name plate — a flat tinted square reads as a rug."""
+    add_box("plinth", (0, 0, 0.3), (0.86, 0.86, 0.6), M["iron"], bevel=0.04)
+    add_box("top", (0, 0, 0.63), (0.94, 0.94, 0.08), M["steel"], bevel=0.03)
+    add_box("glass", (0, 0, 1.02), (0.76, 0.76, 0.72), M["glow_cyan"])
+    for i, (dx, dy) in enumerate(((-0.36, -0.36), (0.36, -0.36),
+                                  (-0.36, 0.36), (0.36, 0.36))):
+        add_box(f"mull{i}", (dx, dy, 1.02), (0.06, 0.06, 0.76), M["iron"], bevel=0.01)
+    add_box("cap", (0, 0, 1.42), (0.84, 0.84, 0.08), M["iron"], bevel=0.03)
+    add_box("plate", (0, -0.46, 0.7), (0.6, 0.06, 0.16), M["cloth_tan"], bevel=0.02)
+
+
+def hull_cradle(M):
+    """Shipyard centrepiece: a hull section resting in a cradle under gantry
+    arms — a showroom, not shelving."""
+    for i, x in enumerate((-1.1, 1.1)):
+        add_box(f"cradle{i}", (x, 0, 0.3), (0.5, 1.6, 0.6), M["iron"], bevel=0.04)
+        add_box(f"pad{i}", (x, 0, 0.66), (0.6, 1.7, 0.12), M["cont_red"], bevel=0.03)
+    add_cylinder("hull", (0, 0, 1.15), 0.72, 2.6, M["steel"], axis="x", r2=0.5)
+    add_cylinder("ring", (-0.7, 0, 1.15), 0.76, 0.1, M["pipe"], axis="x")
+    add_box("fin", (0.4, 0, 1.9), (0.9, 0.1, 0.7), M["cont_blue"], bevel=0.03)
+    add_sphere("port", (-1.1, -0.5, 1.35), (0.16, 0.16, 0.14), M["glow_cyan"])
+
+
+def gantry(M):
+    add_box("leg_a", (-0.9, 0, 1.0), (0.18, 0.5, 2.0), M["iron"], bevel=0.02)
+    add_box("leg_b", (0.9, 0, 1.0), (0.18, 0.5, 2.0), M["iron"], bevel=0.02)
+    add_box("beam", (0, 0, 2.1), (2.1, 0.3, 0.22), M["steel"], bevel=0.03)
+    add_box("trolley", (0.2, 0, 1.92), (0.4, 0.36, 0.2), M["cont_red"], bevel=0.03)
+    add_cylinder("cable", (0.2, 0, 1.5), 0.03, 0.7, M["dark"], axis="z")
+    add_box("hook", (0.2, 0, 1.12), (0.12, 0.12, 0.18), M["steel"], bevel=0.02)
+
+
+def parts_rack(M):
+    add_box("frame", (0, 0.18, 0.8), (1.8, 0.4, 1.6), M["iron"], bevel=0.03)
+    for i, z in enumerate((0.42, 0.96, 1.48)):
+        add_box(f"sh{i}", (0, 0.1, z), (1.84, 0.5, 0.07), M["steel"], bevel=0.02)
+    add_cylinder("noz1", (-0.5, 0.05, 0.62), 0.2, 0.34, M["brass"], axis="z", r2=0.12)
+    add_cylinder("noz2", (0.1, 0.05, 1.16), 0.18, 0.3, M["pipe"], axis="z", r2=0.1)
+    add_box("crate", (0.6, 0.05, 1.68), (0.4, 0.34, 0.34), M["crate"], bevel=0.03)
+
+
+def repair_bay(M):
+    """Floor bay: hazard-outlined pad with a low lift — marks WHERE work
+    happens without blocking the room."""
+    add_box("pad", (0, 0, 0.03), (2.8, 2.8, 0.06), M["dark"])
+    for i, (dx, dy, sx, sy) in enumerate(((0, -1.3, 2.8, 0.2), (0, 1.3, 2.8, 0.2),
+                                          (-1.3, 0, 0.2, 2.8), (1.3, 0, 0.2, 2.8))):
+        add_box(f"stripe{i}", (dx, dy, 0.07), (sx, sy, 0.04), M["glow_warm"])
+    add_cylinder("ram", (0, 0, 0.22), 0.3, 0.44, M["iron"], axis="z")
+    add_box("plate", (0, 0, 0.48), (1.5, 0.9, 0.12), M["steel"], bevel=0.03)
+
+
+def bar_booth(M):
+    """Padded bench seating — bars are mostly seating, and benches fill wall
+    space without eating the middle of the room."""
+    add_box("seat", (0, 0.1, 0.32), (1.9, 0.7, 0.16), M["cloth_red"], bevel=0.05)
+    add_box("base", (0, 0.1, 0.14), (1.8, 0.62, 0.28), M["wood_dark"], bevel=0.03)
+    add_box("back", (0, 0.42, 0.72), (1.9, 0.16, 0.8), M["cloth_red"], bevel=0.06)
+    for i, x in enumerate((-0.9, 0.9)):
+        add_box(f"arm{i}", (x, 0.1, 0.5), (0.12, 0.66, 0.2), M["wood"], bevel=0.03)
+
+
+def keg_stack(M):
+    for i, (x, y, z) in enumerate(((-0.22, 0, 0.3), (0.24, 0.06, 0.3),
+                                   (0.0, -0.04, 0.86))):
+        add_cylinder(f"keg{i}", (x, y, z), 0.26, 0.56, M["brass"], axis="z")
+        add_cylinder(f"lip{i}", (x, y, z + 0.3), 0.28, 0.06, M["iron"], axis="z")
+
+
+def neon_sign(M):
+    add_box("back", (0, 0.24, 1.15), (1.5, 0.1, 0.6), M["dark"])
+    add_box("tube", (0, 0.14, 1.15), (1.24, 0.06, 0.34), M["glow_warm"])
+    add_box("bracket", (0, 0.3, 1.5), (0.1, 0.2, 0.16), M["iron"], bevel=0.02)
+
+
+def vending(M):
+    add_box("body", (0, 0.14, 0.86), (0.8, 0.4, 1.7), M["cont_blue"], bevel=0.04)
+    add_box("window", (-0.08, -0.08, 1.06), (0.5, 0.06, 1.0), M["glow_cyan"])
+    add_box("tray", (0, -0.12, 0.34), (0.5, 0.14, 0.12), M["dark"], bevel=0.02)
+    for i, z in enumerate((1.28, 1.02, 0.76)):
+        add_box(f"row{i}", (-0.08, -0.12, z), (0.44, 0.03, 0.06), M["cloth_tan"])
+
+
+def planter(M):
+    add_cylinder("pot", (0, 0, 0.26), 0.42, 0.52, M["wood_dark"], axis="z")
+    add_cylinder("rim", (0, 0, 0.54), 0.46, 0.08, M["wood"], axis="z")
+    add_sphere("bush", (0, 0, 0.86), (0.44, 0.4, 0.38), M["bottle_g"])
+    add_sphere("bush2", (0.18, -0.1, 1.04), (0.24, 0.22, 0.22), M["bottle_g"])
+
+
+
 PROPS = [
     ("exit_door", exit_door, 2.0),
     ("pebbles_a", lambda M: pebbles(M, 1), 1.0),
@@ -490,6 +656,23 @@ PROPS = [
     ("pipe_valve", pipe_valve, 1.3),
     ("stairs_down", lambda M: stairs(M, True), 1.3),
     ("stairs_up", lambda M: stairs(M, False), 1.3),
+    ("fuel_tank", fuel_tank, 2.6),
+    ("pipe_manifold", pipe_manifold, 2.4),
+    ("safety_cabinet", safety_cabinet, 1.5),
+    ("kiosk", kiosk, 2.8),
+    ("bounty_board", bounty_board, 2.3),
+    ("holo_table", holo_table, 2.6),
+    ("weapon_locker", weapon_locker, 1.9),
+    ("display_case", display_case, 1.8),
+    ("hull_cradle", hull_cradle, 3.6),
+    ("gantry", gantry, 2.9),
+    ("parts_rack", parts_rack, 2.3),
+    ("repair_bay", repair_bay, 3.4),
+    ("bar_booth", bar_booth, 2.3),
+    ("keg_stack", keg_stack, 1.5),
+    ("neon_sign", neon_sign, 2.0),
+    ("vending", vending, 1.9),
+    ("planter", planter, 1.4),
 ]
 
 
