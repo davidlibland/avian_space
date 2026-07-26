@@ -90,7 +90,7 @@
         (
             name: "cave_bat", sheet: "sprites/fauna/cave_bat.png",
             biome: "mine", terrains: ["floor", "plating"],
-            tile_w: 24, tile_h: 24,
+            tile_w: 28, tile_h: 28,
             speed: 54.0, flee_speed: 54.0,
             group: 2, flier: true,
         ),
@@ -111,7 +111,7 @@
         (
             name: "inventory_drone", sheet: "sprites/fauna/inventory_drone.png",
             biome: "warehouse", terrains: ["floor", "plating"],
-            tile_w: 28, tile_h: 28,
+            tile_w: 34, tile_h: 34,
             speed: 42.0, flee_speed: 42.0,
             group: 1, flier: true,
         ),
@@ -125,7 +125,7 @@
         (
             name: "service_drone", sheet: "sprites/fauna/service_drone.png",
             biome: "substation", terrains: ["floor", "plating"],
-            tile_w: 28, tile_h: 28,
+            tile_w: 34, tile_h: 34,
             speed: 38.0, flee_speed: 38.0,
             group: 1, flier: true,
         ),
@@ -167,7 +167,7 @@
         (
             name: "drone", sheet: "sprites/fauna/drone.png",
             biome: "interior", terrains: ["floor", "plating"],
-            tile_w: 26, tile_h: 26,
+            tile_w: 34, tile_h: 34,
             speed: 40.0, flee_speed: 40.0,
             group: 1, flier: true,
         ),

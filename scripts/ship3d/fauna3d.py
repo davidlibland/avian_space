@@ -19,15 +19,42 @@ OUT = os.path.join(os.path.dirname(__file__), "out")
 FAUNA = os.path.abspath(os.path.join(OUT, "..", "..", "..", "assets", "sprites", "fauna"))
 RES = 160
 
+# ── Readability at 24-40 px ───────────────────────────────────────────────
+# Three things decide whether a critter reads at sprite size, and all three
+# were wrong before:
+#
+# 1. BANDS — the stock cel ramp (0.5/0.82/1.0) plus a hot key pushed almost
+#    every lit surface into the top band, so animals came out as flat
+#    single-colour blobs.  Four wider steps give top / flank / belly distinct
+#    values.  Same fix as the interior props.
+# 2. KEY_ENERGY — the ramp clamps its input to [0,1], so a sun bright enough
+#    to saturate (the old 4.6) makes the bands moot no matter how they are
+#    spread.  A sun of about pi reaches 1.0 at normal incidence, which puts
+#    the falloff across a curved body INSIDE the ramp where it can band.
+# 3. INK — freestyle at 1.0 px on a 160 px render survives the downscale to a
+#    ~30 px tile as roughly a fifth of a pixel, i.e. not at all.  Scaled to
+#    RES/TARGET it lands as a real 1 px outline, which is what separates a
+#    critter from the terrain underneath it.
+BANDS = ((0.0, 0.26), (0.30, 0.46), (0.56, 0.72), (0.82, 1.0))
+KEY_ENERGY, KEY_AZIM = 3.2, -40.0
+FILL_ENERGY, RIM_ENERGY = 0.40, 0.70
+# The key rides with the camera, trailing it by this much.  A fixed low key
+# works for the 50-degree ground-animal camera but leaves the near-top-down
+# flier and drone cameras staring at unlit top faces — which is what turned
+# every drone into a grey smudge.  Trailing the camera keeps the surfaces we
+# actually see lit, while the offset still throws one flank into shadow.
+KEY_TRAIL_DEG = 22.0
+INK_TARGET_PX = 30.0  # ink is scaled so it lands ~1 px at this sprite size
+
 
 def C(r, g, b, **kw):
-    return B.toon_material(f"m{r}{g}{b}{kw}", (r / 255, g / 255, b / 255), **kw)
+    return B.toon_material(f"m{r}{g}{b}{kw}", (r / 255, g / 255, b / 255), bands=BANDS, **kw)
 
 
 def mats():
     return dict(
-        dark=B.toon_material("fdark", (0.15, 0.15, 0.17)),
-        eye=B.toon_material("feye", (0.1, 0.1, 0.12)),
+        dark=C(38, 38, 44),
+        eye=C(26, 26, 31),
         # garden
         deer=C(170, 120, 78), deer_d=C(126, 86, 54), deer_l=C(206, 162, 116),
         cream=C(232, 214, 188), antler=C(150, 130, 96),
@@ -41,15 +68,17 @@ def mats():
         liz=C(150, 140, 90), liz_d=C(108, 96, 62), liz_l=C(190, 178, 120),
         ratf=C(120, 110, 104), ratf_d=C(84, 76, 72), ratbel=C(176, 166, 158),
         scar=C(58, 70, 56, spec=0.5, spec_sharp=0.7), scar_l=C(110, 128, 100),
-        dmetal=C(150, 156, 166, spec=0.8, spec_sharp=0.85), dmetal_d=C(96, 100, 112),
-        dmetal_l=C(196, 200, 208), dlens=B.glow_material("fdlens", (0.4, 0.85, 0.95), strength=2.2),
+        dmetal=C(178, 184, 196, spec=0.8, spec_sharp=0.85), dmetal_d=C(110, 116, 130),
+        dmetal_l=C(224, 230, 238), drotor=C(102, 108, 122),
+        dlens=B.glow_material("fdlens", (0.4, 0.85, 0.95), strength=2.2),
+        dstrobe=B.glow_material("fdstrobe", (1.0, 0.35, 0.3), strength=2.4),
         # fliers
         bird=C(96, 130, 196), bird_d=C(64, 96, 160), beak=C(228, 176, 80),
         petrel=C(236, 240, 246), petrel_d=C(150, 160, 175),
         mothw=C(184, 130, 92), vult=C(66, 60, 56), vult_d=C(42, 38, 36), vbeak=C(200, 170, 90),
         bfly_o=C(238, 150, 50), bfly_p=C(220, 90, 130),
         # venue interiors (mine / warehouse / substation)
-        batf=C(70, 62, 66), batw=C(50, 44, 50), bat_l=C(110, 98, 104),
+        batf=C(96, 82, 90), batw=C(132, 116, 132), bat_rib=C(58, 50, 58), bat_l=C(168, 150, 162),
         crab=C(112, 102, 92), crab_d=C(78, 70, 62), crab_ore=B.glow_material("fcrabore", (1.0, 0.75, 0.3), strength=1.6),
         sweep=C(196, 176, 60), sweep_d=C(120, 110, 44),
         geck=C(80, 170, 150), geck_d=C(52, 120, 106), geck_l=C(140, 214, 190),
@@ -170,15 +199,34 @@ def build_vulture(m, frame):
 
 
 def build_drone(m, frame):
-    rot = {0: 0.0, 1: 0.5, 2: 1.0}[frame]    # rotor spin phase
-    B.add_box("dbody", (0, 0, 0.4), (0.2, 0.26, 0.12), m["dmetal"], bevel=0.03)
-    B.add_box("dcam", (0, -0.16, 0.38), (0.08, 0.06, 0.08), m["dmetal_d"], bevel=0.02)
-    B.add_sphere("dlight", (0, -0.16, 0.34), (0.04, 0.04, 0.03), m["dlens"])
+    """Quadcopter, read from almost straight above.  The earlier version put a
+    small pill between four bare hubs and it came out as four unrelated dots —
+    what makes it legible is a fuselage with mass, ARMS joining it to the
+    rotors, and solid rotor discs rather than two hairline blades."""
+    # Value order matters more than detail at this size: the fuselage is the
+    # LIGHTEST thing and the rotor discs are dark, so the eye lands on the body
+    # first.  Bright discs the size of the body just read as four loose blobs.
+    # COMPACT, not spread.  A true quadcopter layout — small body, long arms,
+    # rotors out at the corners — resolves at 28 px as four unrelated dots with
+    # scratches between them.  Pulling the rotors in until they touch the hull
+    # makes the whole thing one connected silhouette, which is the only way it
+    # reads.  Value order does the rest: hull lightest, rotor discs darkest.
+    rot = {0: 0.0, 1: 0.42, 2: 0.84}[frame]      # rotor spin phase
+    B.add_box("dbody", (0, 0.02, 0.40), (0.26, 0.34, 0.14), m["dmetal"], bevel=0.06)
+    B.add_box("ddeck", (0, 0.06, 0.56), (0.17, 0.23, 0.02), m["dmetal_l"], bevel=0.01)
+    B.add_sphere("dstrobe", (0, 0.24, 0.59), (0.045, 0.045, 0.035), m["dstrobe"])
+    # Sensor head slung forward so the drone has a readable "front".
+    B.add_box("dcam", (0, -0.36, 0.36), (0.12, 0.11, 0.10), m["dmetal_d"], bevel=0.02)
+    B.add_sphere("dlens", (0, -0.45, 0.34), (0.06, 0.05, 0.055), m["dlens"])
     for i, (ax, ay) in enumerate([(-1, -1), (1, -1), (1, 1), (-1, 1)]):
-        B.add_cylinder(f"dhub{i}", (ax * 0.24, ay * 0.28, 0.46), 0.09, 0.02, m["dmetal_d"], axis="z", seg=12, r2=0.09)
-        th = rot + i * 0.9
-        B.add_box(f"dbl{i}", (ax * 0.24 + 0.09 * math.cos(th), ay * 0.28 + 0.09 * math.sin(th), 0.47),
-                  (0.14, 0.02, 0.01), m["dmetal_l"])
+        hx, hy = ax * 0.30, ay * 0.36
+        B.add_cylinder(f"ddisc{i}", (hx, hy, 0.50), 0.17, 0.02, m["drotor"],
+                       axis="z", seg=16, r2=0.17)
+        for k in range(2):                        # blades ride on top of the disc
+            a = rot + i * 0.9 + k * math.pi
+            bl = B.add_box(f"dbl{i}{k}", (hx + 0.085 * math.cos(a), hy + 0.085 * math.sin(a), 0.525),
+                           (0.085, 0.018, 0.006), m["dmetal_l"])
+            bl.rotation_euler = (0, 0, a)
 
 
 # ── ice / rocky / desert / station roamers ────────────────────────────────
@@ -269,15 +317,25 @@ def build_rat(m, frame):                         # station vermin — scurries
 
 
 def build_cave_bat(m, frame):                    # flutters through the tunnels
+    # Mine tunnels are dark, so the membrane is PALER than the body — a bat in
+    # true bat colours simply vanished against the floor.  Ribs give the wing
+    # some internal structure at 24 px, where a bare panel read as a smudge.
+    # Wings that are wide AND thin resolve as a horizontal scratch.  Shorter
+    # and deeper gives the bat area to be seen, and one rib per wing is all
+    # that survives; the rest was noise.
     tip = _flap(frame)
-    B.add_sphere("body", (0, 0.02, 0.4), (0.09, 0.14, 0.08), m["batf"])
-    B.add_sphere("head", (0, -0.12, 0.42), (0.07, 0.07, 0.06), m["batf"])
+    B.add_sphere("body", (0, 0.06, 0.4), (0.13, 0.20, 0.11), m["batf"])
+    B.add_sphere("head", (0, -0.15, 0.44), (0.10, 0.10, 0.09), m["batf"])
+    B.add_box("snout", (0, -0.26, 0.42), (0.045, 0.06, 0.035), m["bat_l"])
     for sx in (-1, 1):
-        B.add_sphere(f"ear{sx}", (sx * 0.05, -0.12, 0.5), (0.03, 0.02, 0.05), m["batw"])
-        B.add_sphere(f"eye{sx}", (sx * 0.035, -0.17, 0.43), (0.015, 0.015, 0.015), m["eye"])
-        # webbed wing: a thin swept panel, tip driven by the flap phase
-        wing = B.add_box(f"wing{sx}", (sx * 0.22, 0.02, 0.42 + tip * 0.5), (0.34, 0.2, 0.015), m["batw"])
+        B.add_box(f"ear{sx}", (sx * 0.07, -0.12, 0.54), (0.04, 0.025, 0.08), m["bat_l"])
+        B.add_sphere(f"eye{sx}", (sx * 0.05, -0.21, 0.46), (0.018, 0.018, 0.018), m["eye"])
+        wing = B.add_box(f"wing{sx}", (sx * 0.30, 0.03, 0.41 + tip * 0.5),
+                         (0.30, 0.30, 0.014), m["batw"])
         wing.rotation_euler = (0, sx * tip * 1.1, 0)
+        rib = B.add_box(f"rib{sx}", (sx * 0.30, 0.03, 0.428 + tip * 0.5),
+                        (0.024, 0.28, 0.014), m["bat_rib"])
+        rib.rotation_euler = (0, 0, sx * 0.34)
 
 
 def build_rock_crab(m, frame):                   # deep-shaft lumberer, ore on its back
@@ -348,17 +406,17 @@ SPECIES = [
          biome="mine", terrains=["floor", "plating"], speed=44.0, flee_speed=122.0, group=2, flier=False),
     dict(name="rock_crab", builder=build_rock_crab, ortho=1.8, target_z=0.35, tile=32, elev=50,
          biome="mine", terrains=["floor"], speed=14.0, flee_speed=26.0, group=1, flier=False),
-    dict(name="cave_bat", builder=build_cave_bat, ortho=1.4, target_z=0.4, tile=24, elev=68,
+    dict(name="cave_bat", builder=build_cave_bat, ortho=1.35, target_z=0.4, tile=28, elev=58,
          biome="mine", terrains=["floor", "plating"], speed=54.0, flee_speed=54.0, group=2, flier=True),
     dict(name="warehouse_rat", builder=build_rat, ortho=1.4, target_z=0.25, tile=24, elev=50,
          biome="warehouse", terrains=["floor", "plating"], speed=44.0, flee_speed=122.0, group=2, flier=False),
     dict(name="sweeper_bot", builder=build_sweeper_bot, ortho=1.4, target_z=0.2, tile=26, elev=50,
          biome="warehouse", terrains=["floor"], speed=20.0, flee_speed=20.0, group=1, flier=False),
-    dict(name="inventory_drone", builder=build_drone, ortho=1.6, target_z=0.45, tile=28, elev=70,
+    dict(name="inventory_drone", builder=build_drone, ortho=1.25, target_z=0.45, tile=34, elev=64,
          biome="warehouse", terrains=["floor", "plating"], speed=42.0, flee_speed=42.0, group=1, flier=True),
     dict(name="pipe_gecko", builder=build_pipe_gecko, ortho=1.6, target_z=0.25, tile=26, elev=50,
          biome="substation", terrains=["floor", "plating"], speed=30.0, flee_speed=80.0, group=2, flier=False),
-    dict(name="service_drone", builder=build_drone, ortho=1.6, target_z=0.45, tile=28, elev=70,
+    dict(name="service_drone", builder=build_drone, ortho=1.25, target_z=0.45, tile=34, elev=64,
          biome="substation", terrains=["floor", "plating"], speed=38.0, flee_speed=38.0, group=1, flier=True),
     # fliers (flier=True): drift/circle above ground, sort over the player, no flee
     dict(name="butterfly", builder=build_butterfly, ortho=1.2, target_z=0.3, tile=22, elev=72,
@@ -371,7 +429,7 @@ SPECIES = [
          biome="rocky", terrains=["lava", "basalt"], speed=32.0, flee_speed=32.0, group=2, flier=True),
     dict(name="vulture", builder=build_vulture, ortho=2.2, target_z=0.42, tile=32, elev=74,
          biome="desert", terrains=["mesa", "sandstone"], speed=44.0, flee_speed=44.0, group=1, flier=True),
-    dict(name="drone", builder=build_drone, ortho=1.6, target_z=0.42, tile=26, elev=74,
+    dict(name="drone", builder=build_drone, ortho=1.25, target_z=0.42, tile=34, elev=64,
          biome="interior", terrains=["floor", "plating"], speed=40.0, flee_speed=40.0, group=1, flier=True),
 ]
 BUILDERS = {s["name"]: s["builder"] for s in SPECIES}
@@ -380,8 +438,25 @@ BUILDERS = {s["name"]: s["builder"] for s in SPECIES}
 FACINGS = [("down", 0.0), ("left", 270.0), ("right", 90.0), ("up", 180.0)]
 
 
-def setup_cam(ortho, target_z, elev):
-    B.setup_scene(ortho, RES, freestyle_thick=1.0)
+def light_for_contrast(elev):
+    """Dim the key to where the cel ramp can still see a gradient, and aim it
+    just behind the camera.  A hot key saturates every band; a key that ignores
+    the camera leaves the visible faces unlit."""
+    for o in bpy.context.scene.objects:
+        if o.type != "LIGHT":
+            continue
+        if o.name.startswith("key"):
+            key_elev = max(20.0, elev - KEY_TRAIL_DEG)
+            o.rotation_euler = (math.radians(key_elev), math.radians(KEY_AZIM), math.radians(20))
+            o.data.energy = KEY_ENERGY
+        elif o.name.startswith("fill"):
+            o.data.energy = FILL_ENERGY
+        elif o.name.startswith("rim"):
+            o.data.energy = RIM_ENERGY
+
+
+def setup_cam(ortho, target_z, elev, tile):
+    B.setup_scene(ortho, RES, freestyle_thick=RES / tile * (INK_TARGET_PX / 30.0))
     cam = bpy.context.scene.camera
     cam.constraints.clear()
     E = math.radians(elev)
@@ -390,22 +465,56 @@ def setup_cam(ortho, target_z, elev):
     tgt = bpy.data.objects.new("tgt", None); tgt.location = (0, 0, target_z)
     bpy.context.scene.collection.objects.link(tgt)
     c = cam.constraints.new("TRACK_TO"); c.target = tgt
+    light_for_contrast(elev)
 
 
-def render_cell(builder, frame, facing_deg, ortho, target_z, elev):
+def ground_px(ortho, target_z, elev):
+    """Where the z=0 ground plane lands in the rendered cell, in pixels from
+    the top.  The camera tracks (0,0,target_z), so the origin sits target_z *
+    cos(elev) world-units below frame centre along the camera's up axis."""
+    return RES / 2 + RES * target_z * math.cos(math.radians(elev)) / ortho
+
+
+def add_contact_shadow(img, ground_y):
+    """Soft ellipse where the animal meets the ground.  Without one a critter
+    reads as hovering over the terrain however well it is shaded — the same
+    fix the interior props needed."""
+    from PIL import Image, ImageDraw, ImageFilter
+    bbox = img.getbbox()
+    if bbox is None:
+        return img
+    cx = (bbox[0] + bbox[2]) / 2
+    ew = max(6.0, (bbox[2] - bbox[0]) * 0.78)
+    eh = max(3.0, ew * 0.30)
+    sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ImageDraw.Draw(sh).ellipse(
+        (cx - ew / 2, ground_y - eh / 2, cx + ew / 2, ground_y + eh / 2),
+        fill=(10, 12, 18, 120),
+    )
+    sh = sh.filter(ImageFilter.GaussianBlur(RES / 40.0))
+    sh.alpha_composite(img)
+    return sh
+
+
+def render_cell(s, frame, facing_deg):
     from PIL import Image
     B.reset()
-    builder(mats(), frame)
+    s["builder"](mats(), frame)
     scene = bpy.context.scene
     facer = bpy.data.objects.new("facer", None); scene.collection.objects.link(facer)
     for o in list(scene.objects):
         if o.type == "MESH" and o.parent is None:
             o.parent = facer
     facer.rotation_euler = (0, 0, math.radians(facing_deg))
-    setup_cam(ortho, target_z, elev)
+    setup_cam(s["ortho"], s["target_z"], s["elev"], s["tile"])
     tmp = os.path.join(OUT, "_fauna_tmp.png")
     B.render_to(tmp)
-    return Image.open(tmp).convert("RGBA")
+    img = Image.open(tmp).convert("RGBA")
+    # Fliers get a shadow cast on the ground BELOW them at runtime (it has to
+    # track their altitude), so they must not carry one in the sprite.
+    if not s["flier"]:
+        img = add_contact_shadow(img, ground_px(s["ortho"], s["target_z"], s["elev"]))
+    return img
 
 
 def render_sheet(name):
@@ -415,12 +524,26 @@ def render_sheet(name):
     sheet = Image.new("RGBA", (3 * tile, 4 * tile), (0, 0, 0, 0))
     for row, (_fname, deg) in enumerate(FACINGS):
         for col in range(3):                         # still, w1, w2
-            cell = render_cell(s["builder"], col, deg, s["ortho"], s["target_z"], s["elev"])
-            cell = cell.resize((tile, tile), Image.LANCZOS)
+            cell = render_cell(s, col, deg).resize((tile, tile), Image.LANCZOS)
             sheet.paste(cell, (col * tile, row * tile), cell)
     os.makedirs(FAUNA, exist_ok=True)
     sheet.save(os.path.join(FAUNA, f"{name}.png"))
     print(f"{name}: sheet {3 * tile}x{4 * tile} (tile {tile}, flier={s['flier']})")
+
+
+def write_flier_shadow(px=48):
+    """The blob a flier drops on the ground.  Spawned as a child of the flier
+    and offset down by its altitude, so it slides out from under the animal as
+    it climbs — which is what actually sells "above" rather than "in front"."""
+    from PIL import Image, ImageDraw, ImageFilter
+    img = Image.new("RGBA", (px, px // 2), (0, 0, 0, 0))
+    m = px // 8
+    # Part-transparent, not solid: the terrain under a shadow still has to
+    # read, and a black hole sliding across the grass looks like a sprite bug.
+    ImageDraw.Draw(img).ellipse((m, m // 2, px - m, px // 2 - m // 2), fill=(10, 12, 18, 115))
+    img = img.filter(ImageFilter.GaussianBlur(px / 22.0))
+    img.save(os.path.join(FAUNA, "flier_shadow.png"))
+    print(f"flier_shadow: {px}x{px // 2}")
 
 
 def write_manifest():
@@ -448,4 +571,5 @@ if __name__ == "__main__":
     for n in names:
         render_sheet(n)
     if not args:
+        write_flier_shadow()
         write_manifest()
